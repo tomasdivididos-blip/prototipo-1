@@ -1,0 +1,314 @@
+[
+  {
+    "name": "Puerta acustica",
+    "category": "Madera",
+    "description": "Puerta con funcion de absorcion acustica",
+    "source": "",
+    "absorption_coef": [
+      0.37,
+      0.37,
+      0.4,
+      0.45,
+      0.51,
+      0.55,
+      0.55,
+      0.52
+    ],
+    "scatter_coef": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+    ]
+  },
+  {
+    "name": "Aglomerado con respaldo de lana mineral",
+    "category": "Madera",
+    "description": "Panel de aglomerado de 22 mm de espesor con 50 mm de lana mineral por detras",
+    "source": "",
+    "absorption_coef": [
+      0.13,
+      0.09,
+      0.07,
+      0.06,
+      0.06,
+      0.06,
+      0.06,
+      0.06
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Tablero de fibras, respaldo solido",
+    "category": "Madera",
+    "description": "Tablero de fibras montado sobre respaldo solido",
+    "source": "",
+    "absorption_coef": [
+      0.02,
+      0.04,
+      0.11,
+      0.2,
+      0.26,
+      0.28,
+      0.29,
+      0.29
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Puerta de nucleo hueco",
+    "category": "Madera",
+    "description": "Puerta de madera con nucleo hueco",
+    "source": "",
+    "absorption_coef": [
+      0.31,
+      0.29,
+      0.24,
+      0.16,
+      0.11,
+      0.08,
+      0.08,
+      0.08
+    ],
+    "scatter_coef": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+    ]
+  },
+  {
+    "name": "Parquet sobre hormigon",
+    "category": "Madera",
+    "description": "Piso de parquet colocado sobre hormigon",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.04,
+      0.05,
+      0.06,
+      0.06,
+      0.07,
+      0.07,
+      0.08
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Panel de contrachapado, 1 cm de espesor",
+    "category": "Madera",
+    "description": "Panel de contrachapado de 1 cm de espesor",
+    "source": "",
+    "absorption_coef": [
+      0.32,
+      0.24,
+      0.17,
+      0.14,
+      0.13,
+      0.13,
+      0.13,
+      0.13
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Piso de escenario",
+    "category": "Madera",
+    "description": "Tarima de madera de dos capas con camara de aire de 27 mm por debajo",
+    "source": "",
+    "absorption_coef": [
+      0.31,
+      0.3,
+      0.28,
+      0.23,
+      0.16,
+      0.1,
+      0.07,
+      0.04
+    ],
+    "scatter_coef": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+    ]
+  },
+  {
+    "name": "Madera",
+    "category": "Madera",
+    "description": "Madera de 50 mm de espesor",
+    "source": "",
+    "absorption_coef": [
+      0.02,
+      0.02,
+      0.03,
+      0.04,
+      0.08,
+      0.15,
+      0.2,
+      0.22
+    ],
+    "scatter_coef": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+    ]
+  },
+  {
+    "name": "Panel de madera con camara de aire por detras",
+    "category": "Madera",
+    "description": "Panel de madera de 9,5-12,7 mm con camara de aire de 5-10 cm por detras",
+    "source": "",
+    "absorption_coef": [
+      0.34,
+      0.3,
+      0.25,
+      0.2,
+      0.17,
+      0.14,
+      0.1,
+      0.07
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Madera de 50 mm de espesor",
+    "category": "Madera",
+    "description": "Madera maciza de 50 mm de espesor",
+    "source": "",
+    "absorption_coef": [
+      0.02,
+      0.02,
+      0.03,
+      0.04,
+      0.04,
+      0.04,
+      0.04,
+      0.04
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Puerta de madera",
+    "category": "Madera",
+    "description": "Puerta de madera maciza",
+    "source": "",
+    "absorption_coef": [
+      0.18,
+      0.15,
+      0.12,
+      0.1,
+      0.1,
+      0.09,
+      0.09,
+      0.09
+    ],
+    "scatter_coef": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+    ]
+  },
+  {
+    "name": "Piso de madera",
+    "category": "Madera",
+    "description": "Piso de madera maciza",
+    "source": "",
+    "absorption_coef": [
+      0.16,
+      0.15,
+      0.12,
+      0.09,
+      0.08,
+      0.08,
+      0.08,
+      0.07
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  }
+]

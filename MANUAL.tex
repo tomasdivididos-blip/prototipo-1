@@ -1,0 +1,2160 @@
+
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{geometry}
+\geometry{margin=2.4cm, top=2.8cm, bottom=2.8cm}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, backgrounds}
+\usepackage{tcolorbox}
+\tcbuselibrary{skins, breakable}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true, linkcolor=blue!60!black,
+    urlcolor=blue!60!black, citecolor=gray
+}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{parskip}
+\usepackage[final, protrusion=false, expansion=false]{microtype}
+\usepackage{mdframed}
+\usepackage{fancyhdr}
+\setlength{\headheight}{13pt}   % silencia el warning de fancyhdr
+\usepackage{titlesec}
+
+% ---- Fix glue warning: babel-spanish redefine \% con su macro de espaciado
+% \es@sppercent, que choca con el glue de los boxes de changelog ("Incompatible
+% glue units"). Restauramos el \% plano de LaTeX (los porcentajes del texto ya
+% llevan \, explicito, asi que no se pierde el espacio fino). ----
+\makeatletter
+\AtBeginDocument{\def\%{\@percentchar}}
+\makeatother
+
+% ---- Colores ----
+\definecolor{cBlue}{RGB}{30,100,180}
+\definecolor{cTeal}{RGB}{30,180,160}
+\definecolor{cOrange}{RGB}{200,100,20}
+\definecolor{cGreen}{RGB}{40,140,60}
+\definecolor{cRed}{RGB}{180,40,40}
+\definecolor{cGray}{RGB}{80,80,80}
+\definecolor{cLight}{RGB}{240,245,255}
+\definecolor{cWarn}{RGB}{255,248,230}
+\definecolor{cTip}{RGB}{230,248,240}
+
+% ---- Cajas de aviso ----
+\tcbset{
+  mybox/.style={
+    enhanced, breakable,
+    colframe=#1, colback=#1!8,
+    boxrule=0.8pt, arc=4pt,
+    fonttitle=\bfseries\small,
+    left=6pt, right=6pt, top=4pt, bottom=4pt,
+  }
+}
+\newenvironment{nota}[1][Nota]{%
+  \begin{tcolorbox}[mybox=cBlue, title={#1}]%
+}{\end{tcolorbox}}
+
+\newenvironment{consejo}[1][Consejo]{%
+  \begin{tcolorbox}[mybox=cTeal, title={#1}]%
+}{\end{tcolorbox}}
+
+\newenvironment{atención}[1][Atención]{%
+  \begin{tcolorbox}[mybox=cOrange, title={#1}]%
+}{\end{tcolorbox}}
+
+% ---- Encabezados ----
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{cGray}{Prototipo 1 — Manual de Usuario}}
+\fancyhead[R]{\small\textcolor{cGray}{\leftmark}}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ---- Títulos ----
+\titleformat{\section}{\Large\bfseries\color{cBlue}}{{\thesection.}}{0.5em}{}
+\titleformat{\subsection}{\large\bfseries\color{cBlue!70!black}}{{\thesubsection}}{0.5em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{cGray}}{{\thesubsubsection}}{0.5em}{}
+
+% ---- Tecla ----
+\newcommand{\tecla}[1]{\texttt{\small\fbox{#1}}}
+
+% ---- Menú ----
+\newcommand{\menu}[1]{\textbf{\guillemotleft #1\guillemotright}}
+
+% ============================================================
+\begin{document}
+% ============================================================
+
+% ---- Portada ----
+\begin{titlepage}
+  \centering
+  \vspace*{3cm}
+
+  {\Huge\bfseries\color{cBlue} Prototipo 1\par}
+  \vspace{0.4cm}
+  {\LARGE Modelador de Recintos 3D\par}
+  {\Large con Simulación Acústica FEM\par}
+  \vspace{1.2cm}
+  \hrule height 1.5pt
+  \vspace{0.5cm}
+  {\Large\bfseries Manual de Usuario\par}
+  \vspace{0.5cm}
+  \hrule height 0.5pt
+  \vspace{2cm}
+
+  \begin{tikzpicture}
+    \draw[cBlue, thick, fill=cBlue!8, rounded corners=6pt]
+      (0,0) rectangle (10,5);
+    \draw[cBlue!40, thick]
+      (1,0.5) -- (9,0.5) -- (7,4) -- (3,4) -- cycle;
+    \draw[cBlue!60, dashed]
+      (5,0.5) -- (5,4);
+    \fill[cTeal!70, opacity=0.5]
+      (2.5,2) rectangle (7.5,3);
+    \node[font=\small\color{cGray}] at (5,2.5) {plano de corte};
+    \node[cOrange, font=\large] at (3,3.2) {$\bullet$};
+    \node[cTeal, font=\large]   at (7,1.5) {$\times$};
+    \node[font=\scriptsize\color{cGray}] at (3,3.5)   {fuente};
+    \node[font=\scriptsize\color{cGray}] at (7,1.2) {receptor};
+  \end{tikzpicture}
+
+  \vspace{2cm}
+  {\large Ingeniería en Sonido\par}
+  \vspace{0.3cm}
+  {\normalsize Versión del Manual 2.16 — 5 de Julio de 2026\par}
+  \vspace{0.5cm}
+  {\small\color{cGray} con importación CAD y router de mallado best-effort\par}
+  \vfill
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ============================================================
+\section{Introducción}
+% ============================================================
+
+\textbf{Prototipo 1} es una herramienta de escritorio para diseñar recintos
+acústicos en tres dimensiones, visualizarlos interactivamente y calcular su
+comportamiento modal usando el Método de Elementos Finitos (FEM).
+
+\subsection*{¿Qué se puede hacer con este software?}
+
+\begin{itemize}[itemsep=3pt]
+  \item Modelar recintos con geometría arbitraria: polígonos de $N$ lados,
+        techos planos, de arco, a dos aguas o inclinados.
+  \item Visualizar los \textbf{modos acústicos} del recinto en 3D (nube de
+        puntos coloreada) y en cortes 2D (mapas de calor).
+  \item Posicionar \textbf{fuentes} y un \textbf{receptor}, configurar las
+        fuentes por su sensibilidad en dB (como en una ficha técnica).
+  \item Asignar \textbf{materiales acústicos} (hormigón, yeso, alfombra, etc.)
+        a piso, techo y paredes, y calcular el RT60 y el amortiguamiento modal
+        resultante.
+  \item Obtener la \textbf{FRF} (Respuesta en Frecuencia) en el receptor.
+  \item \textbf{Escuchar} cómo afecta la sala al sonido usando ruido rosa
+        filtrado con la FRF.
+\end{itemize}
+
+\subsection*{Requisitos del sistema}
+
+\begin{tabular}{ll}
+  \toprule
+  Sistema operativo  & Windows 10 / 11 (64 bits) \\
+  Python             & 3.12 (Anaconda) \\
+  Dependencias extra & \texttt{pip install pyqtgraph PyOpenGL matplotlib} \\
+  Audio              & \texttt{winsound} (incluido en Python) + \texttt{scipy} \\
+  \bottomrule
+\end{tabular}
+
+% ============================================================
+\section{Inicio rápido}
+% ============================================================
+
+\begin{enumerate}[itemsep=4pt]
+  \item Abrir el archivo \texttt{run.bat} (doble clic). La aplicación arranca
+        con un recinto rectangular de 6 $\times$ 8 $\times$ 3 m.
+  \item En la pestaña \menu{Geometría}, ajustar los sliders de dimensiones y
+        forma del recinto.
+  \item Cambiar a la pestaña \menu{Acústica}. Colocar una fuente con
+        \tecla{Ctrl}\,+\,clic derecho en el visor 3D.
+  \item Presionar \menu{Calcular modos (FEM)}.
+  \item Presionar \menu{Actualizar campo 3D} (o \tecla{Enter}) para visualizar
+        la distribución de presión modal.
+  \item Presionar \menu{Calcular FRF} para ver la respuesta en frecuencia y
+        \menu{\textbf{[Audio]}~Escuchar} para oír la sala.
+\end{enumerate}
+
+% ============================================================
+\section{Interfaz general}
+% ============================================================
+
+La ventana principal se divide en dos áreas:
+
+\begin{center}
+\begin{tikzpicture}[font=\small]
+  \draw[cBlue, thick, fill=cLight, rounded corners=4pt]
+    (0,0) rectangle (4.5,6);
+  \node[font=\bfseries\color{cBlue}] at (2.25,5.6) {Panel izquierdo};
+  \node at (2.25,5.1) {Pestañas:};
+  \draw[fill=cBlue!20, rounded corners=3pt] (0.3,4.4) rectangle (2.1,4.9);
+  \node at (1.2,4.65) {\textbf{Geometría}};
+  \draw[fill=cTeal!20, rounded corners=3pt] (2.2,4.4) rectangle (4.2,4.9);
+  \node at (3.2,4.65) {\textbf{Acústica}};
+  \draw[cGray, dashed, rounded corners=3pt] (0.2,0.2) rectangle (4.3,4.3);
+  \node[align=center, color=cGray] at (2.25,2.25)
+    {Controles activos\\según pestaña};
+
+  \draw[cBlue, thick, fill=cLight, rounded corners=4pt]
+    (5,0) rectangle (12,6);
+  \node[font=\bfseries\color{cBlue}] at (8.5,5.6) {Visor 3D};
+  \draw[cBlue!40, thick, fill=cBlue!5]
+    (5.5,0.8) -- (11.5,0.8) -- (10,5) -- (7,5) -- cycle;
+  \fill[cTeal!40] (7.5,2.5) circle (0.2);
+  \node[font=\scriptsize\color{cTeal}] at (7.5,2.0) {receptor};
+  \fill[cOrange!80] (9,3.5) circle (0.18);
+  \node[font=\scriptsize\color{cOrange}] at (9,3.9) {fuente};
+  \node[font=\scriptsize\color{cGray}] at (8.5,0.4) {barra de métricas};
+\end{tikzpicture}
+\end{center}
+
+% ============================================================
+\section{Diseño del recinto (pestaña Geometría)}
+% ============================================================
+
+\subsection{Parámetros básicos}
+
+\begin{tabular}{>{\ttfamily}lll}
+  \toprule
+  Parámetro & Rango & Descripción \\
+  \midrule
+  Ancho / Largo / Alto & 0.5 – 50 m & Dimensiones del paralelepípedo base \\
+  N° de lados & 3 – 32 & Polígono de la planta \\
+  Afinamiento & 0 – 1 & Estrechamiento del techo respecto a la planta \\
+  Giro & 0° – 360° & Rotación del techo sobre su eje vertical \\
+  \bottomrule
+\end{tabular}
+
+\begin{consejo}
+  Doble clic sobre el valor numérico de cualquier slider para ingresar
+  un valor exacto con el teclado.
+  Doble clic sobre el slider mismo lo resetea a cero.
+\end{consejo}
+
+\subsection{Tipos de techo}
+
+\begin{tabular}{ll}
+  \toprule
+  Tipo & Descripción \\
+  \midrule
+  Plano       & Techo horizontal (default) \\
+  Arco        & Bóveda de cañón; el slider "Altura de arco" controla la curvatura \\
+  Dos aguas   & Techo con caballete; "Offset del caballete" lo descentra \\
+  Inclinado   & Un solo plano inclinado (shed) \\
+  \bottomrule
+\end{tabular}
+
+\subsection{Inclinación de paredes}
+
+Con \tecla{Clic derecho}\,+\,arrastrar sobre una pared en el visor 3D se
+inclina esa pared de forma interactiva.
+
+\subsection{Polígono personalizado}
+
+El botón \menu{Dibujar forma} abre un editor de polígono 2D:
+\begin{itemize}[itemsep=2pt]
+  \item \textbf{Clic izquierdo} sobre una arista $\to$ inserta un vértice.
+  \item \textbf{Clic derecho} sobre un vértice $\to$ lo elimina.
+  \item Selector de grilla: ajusta el paso de cuadrícula (0.25 m – 5 m).
+\end{itemize}
+
+\subsection{Modos de visualización}
+
+\begin{tabular}{ll}
+  \toprule
+  Modo & Descripción \\
+  \midrule
+  Aristas   & Mesh traslúcido + aristas visibles (default) \\
+  Externa   & Mesh opaco, sin aristas \\
+  Contorno  & Solo aristas \\
+  \bottomrule
+\end{tabular}
+
+% ============================================================
+\section{Controles del visor 3D}
+% ============================================================
+
+\subsection{Navegación}
+
+\begin{tabular}{ll}
+  \toprule
+  Acción & Efecto \\
+  \midrule
+  \tecla{Botón central} + arrastrar & Órbita libre \\
+  \tecla{Shift} + \tecla{botón central} + arrastrar & Órbita horizontal (yaw) \\
+  \tecla{Botón derecho} + arrastrar & Paneo \\
+  Rueda del mouse & Zoom \\
+  \tecla{0} & Reset a vista isométrica \\
+  \bottomrule
+\end{tabular}
+
+\subsection{Interacciones acústicas}
+
+\begin{tabular}{lp{9cm}}
+  \toprule
+  Acción & Efecto \\
+  \midrule
+  \tecla{Ctrl}\,+\,\tecla{clic derecho} &
+    Coloca una fuente acústica en el punto del piso bajo el cursor
+    (sensibilidad default: 90 dB). \\
+  \tecla{Shift}\,+\,\tecla{clic izquierdo} + arrastrar &
+    Mueve la fuente o el receptor más cercano al cursor.
+    La fuente se desplaza en su plano horizontal (z constante).
+    El receptor ídem. \\
+  \tecla{Doble clic} sobre una fuente &
+    Abre el diálogo de edición de esa fuente. \\
+  \bottomrule
+\end{tabular}
+
+% ============================================================
+\section{Módulo acústico (pestaña Acústica)}
+% ============================================================
+
+\subsection{Fuentes omnidireccionales}
+
+Cada fuente es un monopolo acústico puntual. Se puede colocar:
+\begin{itemize}[itemsep=2pt]
+  \item Con \tecla{Ctrl}\,+\,clic derecho en el visor 3D.
+  \item Con el botón \menu{Añadir} del panel.
+\end{itemize}
+
+\subsubsection{Configuración de la fuente}
+
+Al agregar o editar una fuente aparece el siguiente diálogo:
+
+\begin{center}
+\begin{tikzpicture}[font=\small]
+  \draw[cBlue, thick, fill=cLight, rounded corners=6pt]
+    (0,0) rectangle (9,4.5);
+  \node[font=\bfseries, color=cBlue] at (4.5,4.1) {Fuente acústica};
+  \draw[cGray, fill=white] (0.3,3.3) rectangle (8.7,3.8);
+  \node[left,font=\small\color{cGray}] at (2.5,3.55) {Etiqueta:};
+  \node[right] at (2.5,3.55) {\texttt{src\_0}};
+  \draw[cGray, fill=white] (0.3,2.5) rectangle (8.7,3.0);
+  \node[left,font=\small\color{cGray}] at (2.5,2.75) {Posición (m):};
+  \node at (5,2.75) {X: 1.00 \quad Y: 1.00 \quad Z: 1.00};
+  \draw[cBlue!40, fill=cBlue!10] (0.3,1.6) rectangle (8.7,2.2);
+  \node[left,font=\small\color{cGray}] at (3,1.9) {Sensibilidad (1W/1m):};
+  \node[font=\bfseries] at (6.2,1.9) {90.0 \; dB SPL};
+  \draw[cGray, dashed] (0.3,0.9) rectangle (8.7,1.45);
+  \node[font=\scriptsize\color{cGray},align=left] at (4.5,1.17)
+    {dB SPL medido a 1 W de potencia eléctrica y 1 m de distancia};
+  \node[font=\small\color{cTeal}] at (4.5,0.5)
+    {$\to$ Q equivalente: $|Q|$ = 1.045$\times$10$^{-3}$ m³/s \;(monopolo @ 1000 Hz, 1 W)};
+\end{tikzpicture}
+\end{center}
+
+\textbf{Sensibilidad}: es el único parámetro de intensidad.
+Ingresá el valor que figura en la ficha técnica del altavoz:
+\emph{nivel de presión sonora a 1 W de potencia eléctrica y a 1 m de
+distancia}, en dB SPL.
+
+\begin{tabular}{ll}
+  \toprule
+  Tipo de altavoz & Sensibilidad típica \\
+  \midrule
+  Subwoofer        & 85 – 90 dB/W/m \\
+  Woofer/full-range & 88 – 96 dB/W/m \\
+  Tweeter de compresión & 100 – 110 dB/W/m \\
+  Altavoz de línea (line array) & 105 – 115 dB/W/m \\
+  \bottomrule
+\end{tabular}
+
+El software convierte internamente la sensibilidad a caudal volumétrico $Q$
+usando el modelo de monopolo:
+
+\[
+  p_0 = 20\,\mu\text{Pa} \cdot 10^{S/20}, \qquad
+  |Q| = \frac{p_0 \cdot 4\pi}{\omega_\text{ref}\,\rho_0}
+\]
+
+donde $\omega_\text{ref} = 2\pi \times 1000\ \text{rad/s}$ y
+$\rho_0 = 1.21\ \text{kg/m}^3$.
+
+\begin{nota}
+  Un incremento de 10 dB en la sensibilidad equivale a multiplicar $|Q|$ por
+  $\sqrt{10} \approx 3.16$, lo cual es coherente con la relación entre potencia
+  y presión acústica.
+\end{nota}
+
+\subsection{Receptor}
+
+El receptor es el punto donde se evalúa la FRF. Se puede mover:
+\begin{itemize}[itemsep=2pt]
+  \item Con los spinboxes X/Y/Z del panel.
+  \item Con \tecla{Shift}\,+\,arrastrar sobre la cruz cian en el visor 3D.
+\end{itemize}
+
+\subsection{Materiales por cara (estilo EASE)}
+
+\textbf{Novedad v2.3.} La asignación de materiales ya \emph{no} se hace
+por zona (piso/techo/paredes) sino \textbf{por grupo de caras planares},
+igual que en EASE. El recinto se descompone automáticamente en regiones
+planares conexas y cada una recibe su propio material. El panel de
+Acústica muestra un único botón \menu{Materiales\ldots}
+en lugar de los tres combos antiguos:
+
+\begin{center}
+\begin{tikzpicture}[font=\small, node distance=0.6cm]
+  \draw[cBlue, thick, fill=cLight, rounded corners=4pt] (0,0) rectangle (8,3.0);
+  \node[font=\bfseries, color=cBlue] at (4,2.7) {Materiales de superficie};
+  \draw[fill=cBlue!20, cBlue, thick, rounded corners=3pt] (1.5,1.95) rectangle (6.5,2.4);
+  \node at (4,2.18) {\textbf{Materiales\ldots}};
+  \node[font=\small, color=cGray] at (4,1.55)
+    {6 grupos \textperiodcentered\ 6 con material \;
+     (Piso 48 \textperiodcentered\ Techo 48 \textperiodcentered\ Paredes 84 m²)};
+  \node[font=\small\color{cTeal}] at (4,0.9)
+    {RT60 medio: 1.24 s \;\textperiodcentered\; @500 Hz: 1.18 s \;\;(V=144 m³)};
+  \node[font=\scriptsize, color=cGray] at (4,0.25)
+    {[ Ver RT60 calculado ] \quad
+     [ Recargar materiales ]};
+\end{tikzpicture}
+\end{center}
+
+\subsubsection*{Cómo abre el diálogo}
+
+Apretar \menu{Materiales\ldots} abre una ventana modal con
+una tabla. Una fila por grupo de caras. Columnas: indicador de color,
+etiqueta automática, número de caras, área en m², categoría
+(Piso/Techo/Pared/Inclinada) y un combo con el material a aplicar:
+
+\begin{center}
+\begin{tabular}{p{0.4cm} l r r l l}
+  \toprule
+  & \textbf{Grupo} & \textbf{Caras} & \textbf{Área (m²)} & \textbf{Categ.} & \textbf{Material} \\
+  \midrule
+  \textcolor{green!60!black}{$\blacksquare$} & Piso              & 2 & 48,00 & Piso  & Madera \;$\blacktriangledown$ \\
+  \textcolor{blue!60!black}{$\blacksquare$}  & Techo             & 2 & 48,00 & Techo & Yeso \;$\blacktriangledown$  \\
+  \textcolor{orange!80!black}{$\blacksquare$}& Pared 1 ($-$X (W))  & 2 & 24,00 & Pared & Hormigón \;$\blacktriangledown$ \\
+  \textcolor{orange!80!black}{$\blacksquare$}& Pared 2 ($+$X (E))  & 2 & 24,00 & Pared & Hormigón \;$\blacktriangledown$ \\
+  \textcolor{orange!80!black}{$\blacksquare$}& Pared 3 ($+$Y (N))  & 2 & 18,00 & Pared & Alfombra \;$\blacktriangledown$ \\
+  \textcolor{orange!80!black}{$\blacksquare$}& Pared 4 ($-$Y (S))  & 2 & 18,00 & Pared & Vidrio \;$\blacktriangledown$ \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection*{Cómo se detectan los grupos}
+
+El agrupador (\texttt{face\_materials.group\_faces\_by\_planar\_region})
+hace dos pasos:
+
+\begin{enumerate}
+  \item \textbf{Cluster greedy por normal de la cara}: todas las caras
+        cuya normal queda dentro de $\pm 15^{\circ}$ de un mismo eje
+        quedan en el mismo cluster.
+  \item \textbf{Componentes conexas por cluster}: dentro de cada
+        cluster se separan los grupos no conexos (dos paredes
+        paralelas son dos grupos distintos).
+\end{enumerate}
+
+Cada grupo recibe automáticamente una etiqueta legible:
+
+\begin{itemize}
+  \item \textbf{Piso / Techo} si la normal apunta hacia abajo/arriba
+        ($\lvert n_z\rvert > 0,\!85$).
+  \item \textbf{Pared $N$} (con la dirección cardinal aproximada:
+        $+$X, NE, $+$Y, NW, $-$X, SW, $-$Y, SE) para paredes verticales.
+  \item \textbf{Cara inclinada $N$} para superficies oblicuas
+        (tribunas, plafones inclinados).
+\end{itemize}
+
+Sala 6 $\times$ 8 $\times$ 3 m: 6 grupos. Pentágono regular: 7. Un
+auditorio CAD importado puede tener \textbf{decenas} de grupos.
+
+\subsubsection*{Persistencia automática}
+
+\begin{itemize}
+  \item Mientras la app esté abierta, las asignaciones quedan en
+        memoria: cerrar el diálogo y abrirlo de nuevo muestra
+        exactamente las mismas selecciones (no se borran al salir).
+  \item Al \textbf{guardar} el \texttt{.room}, las asignaciones se
+        serializan en \texttt{acoustic.face\_materials.assignments}
+        como \texttt{\{signature: material\_name\}}, donde
+        \texttt{signature} es un hash estable de
+        (normal, centroide, área) redondeados --- sobrevive
+        recompilaciones del agrupador y cambios menores de geometría.
+  \item Al abrir un \texttt{.room} viejo (v2 o v3) sin asignaciones,
+        todos los grupos arrancan con un material por defecto rígido
+        ($\alpha \approx 0,\!03$).
+\end{itemize}
+
+\subsubsection*{Botones de acción rápida}
+
+\begin{itemize}
+  \item \menu{Asignar a todos\ldots} aplica el material elegido a
+        \emph{todos} los grupos a la vez --- útil como punto de partida.
+  \item \menu{Preset piso/techo/paredes\ldots} replica el esquema
+        clásico: pide tres materiales y los aplica automáticamente
+        según la categoría de cada grupo.
+  \item \menu{Recalcular RT60} fuerza el cómputo de RT60 con la
+        asignación actual sin cerrar el diálogo.
+\end{itemize}
+
+Materiales incluidos:
+
+\begin{tabular}{lll}
+  \toprule
+  Material & $\alpha$ a 500 Hz & Uso típico \\
+  \midrule
+  Hormigón visto  & 0.02 & Muros crudos \\
+  Yeso pintado    & 0.03 & Paredes y techos revocados \\
+  Ladrillo visto  & 0.04 & Mampostería sin revocar \\
+  Madera dura     & 0.05 & Pisos y paneles \\
+  Vidrio          & 0.03 & Ventanas y mamparas \\
+  Alfombra fina   & 0.20 & Alfombra de pelo corto \\
+  Alfombra gruesa & 0.40 & Alfombra de lana con subpiso \\
+  Panel acústico  & 0.70 & Espuma de melamina / lana mineral \\
+  \bottomrule
+\end{tabular}
+
+\textbf{Para agregar materiales propios:} copiar un archivo \texttt{.json}
+a la carpeta \texttt{materials/} y presionar \menu{Recargar materiales}.
+
+Formato del JSON:
+\begin{verbatim}
+[{
+  "name":           "Mi material",
+  "category":       "Porosos",
+  "absorption_coef": [0.05, 0.10, 0.20, 0.40, 0.60, 0.70, 0.75, 0.75],
+  "scatter_coef":    [0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.35, 0.35]
+}]
+\end{verbatim}
+
+Los 8 valores corresponden a las bandas de octava:
+63 / 125 / 250 / 500 / 1000 / 2000 / 4000 / 8000 Hz.
+
+El botón \menu{Ver RT60 calculado} abre un gráfico de la curva RT60(f)
+resultante (fórmula de Sabine), con exportación a PNG, SVG, CSV, TXT y PDF.
+
+% ============================================================
+\section{Cálculo de modos FEM}
+% ============================================================
+
+\subsection{Parámetros}
+
+\begin{tabular}{lp{9cm}}
+  \toprule
+  Parámetro & Descripción \\
+  \midrule
+  N\textordmasculine{} de modos & Cantidad de modos a calcular (2 – 500). Más modos = más
+    tiempo. Recomendado: 12 para exploración, 30+ para FRF detallada. \\
+  Densidad de malla & Nodos por metro para la malla tetraédrica interna
+    (0.5 – 10 m$^{-1}$). A mayor densidad, mayor precisión pero mayor tiempo. \\
+  \bottomrule
+\end{tabular}
+
+\begin{atención}
+  La \textbf{densidad de malla} controla la precisión del cálculo FEM,
+  no la cantidad de puntos visibles en la nube 3D. Para más puntos de
+  visualización, usar el spinner \menu{Resolución campo 3D}.
+\end{atención}
+
+\subsection{Procedimiento}
+
+\begin{enumerate}[itemsep=3pt]
+  \item Verificar que hay al menos una fuente posicionada dentro del recinto.
+  \item Presionar \menu{Calcular modos (FEM)}.
+  \item Esperar (de segundos a 1–2 minutos según tamaño y densidad).
+  \item El panel muestra: número de nodos/tetraedros, volumen aproximado y
+        frecuencia máxima de validez del modelo.
+\end{enumerate}
+
+La \textbf{frecuencia máxima de validez} es:
+\[
+  f_\text{max} = \frac{c}{6 \cdot h_\text{max}}, \qquad c = 343\ \text{m/s}
+\]
+Los modos calculados por encima de esta frecuencia tienen errores
+significativos.
+
+\begin{nota}[El peor tet define la validez de la malla]
+La validez la fija el \textbf{tetraedro más grande} ($h_\text{max}$), no el
+promedio. \textbf{Voxel}: celda uniforme, $h_\text{max} = 1/\text{npm}$ exacto.
+\textbf{Gmsh}: recibe \texttt{MeshSizeMax} $= h_\text{target}$ pero el peor tet
+sale $h_\text{max} \approx 1{,}5\,h_\text{target}$ (medido 1,42--1,51). Por eso,
+en modo \emph{Automático}, el auto-tuner le pide a gmsh una malla $1{,}5\times$
+más fina ($h_\text{target} = c/(6 \cdot 1{,}5 \cdot f_S)$, constante
+\texttt{\_GMSH\_HMAX\_OVER\_HTARGET} en \texttt{mesh\_router.py}) para que la
+validez \emph{real} alcance $f_S$ y no se quede en $f_S/1{,}5$. Consecuencia: con
+gmsh el badge ``válido hasta'' puede dar un poco \textbf{por encima} de $f_S$
+(el 1,5 es el peor caso; si los tets salen mejores, valida más alto) --- correcto
+y del lado seguro. Lo que nunca debe pasar es validar \emph{por debajo} de $f_S$.
+\end{nota}
+
+\begin{nota}[Frecuencia de Schroeder]
+  Presionar \menu{Calcular f\_Schroeder} para ver cuál es la frecuencia límite
+  del régimen modal: por debajo de ella los modos son discretos (FEM es
+  exacto); por encima el campo es estadístico.
+\end{nota}
+
+% ============================================================
+\section{Visualización del campo acústico}
+% ============================================================
+
+\subsection{Nube de puntos 3D}
+
+Luego de calcular los modos, presionar \menu{Actualizar campo 3D} (o
+\tecla{Enter} estando en la pestaña Acústica).
+
+El selector \menu{Campo} cambia lo que se muestra:
+
+\begin{tabular}{lp{10cm}}
+  \toprule
+  Opción & Descripción \\
+  \midrule
+  \textbf{Forma modal} &
+    Muestra la forma de vibración $\varphi_n(\mathbf{x})$ del modo
+    seleccionado. \textbf{No depende de la posición de la fuente.}
+    Colormap: azul = fase negativa, blanco = nodo, rojo = fase positiva. \\
+  \addlinespace
+  \textbf{Presión |p|} &
+    Muestra la amplitud $|p(\mathbf{x}, f_n)|$ generada por las fuentes
+    a la frecuencia del modo seleccionado.
+    \textbf{Cambia al mover la fuente} (actualización automática a los 350 ms).
+    Colormap: azul = mínimo, rojo = máximo. \\
+  \bottomrule
+\end{tabular}
+
+\begin{nota}
+  En la frecuencia de resonancia, la distribución de $|p|$ se parece mucho
+  a la forma modal porque el modo dominante escala el patrón. La diferencia
+  se nota al mover la fuente a un \emph{nodo} del modo: $\varphi_n(\mathbf{x}_s) = 0$,
+  la excitación de ese modo cae a cero y el patrón cambia completamente.
+\end{nota}
+
+El spinner \menu{Resolución campo 3D} controla la densidad de puntos:
+
+\begin{tabular}{ll}
+  \toprule
+  Valor & Puntos aprox. (sala 6$\times$8$\times$3) \\
+  \midrule
+  20 (default) & 600 – 1500 pts (rápido) \\
+  40           & 5000 – 8000 pts (medio) \\
+  60           & 12000+ pts (detallado, lento) \\
+  \bottomrule
+\end{tabular}
+
+\subsection{Plano de corte 2D — flujo interactivo}
+
+El plano de corte permite ver la distribución modal o de presión en una
+sección transversal del recinto.
+
+\begin{enumerate}[itemsep=4pt]
+  \item En \menu{Plano de corte} elegir la orientación:
+        \textbf{XY} (z = cte), \textbf{XZ} (y = cte) o \textbf{YZ} (x = cte).
+  \item Presionar \textbf{\menu{$\oplus$ Activar plano interactivo}}.
+  \item Mover el cursor sobre el recinto 3D $\to$ aparece un plano celeste
+        translúcido que sigue el cursor.
+  \item \tecla{Clic izquierdo} $\to$ confirma la posición y \textbf{abre automáticamente
+        el mapa de calor 2D}.
+  \item \tecla{Clic derecho} $\to$ cancela sin confirmar.
+\end{enumerate}
+
+\textbf{Alternativa:} tipear el valor directamente en el spinner de posición
+y presionar \menu{Ver mapa de calor 2D}.
+
+\subsubsection{Mapa de calor 2D}
+
+Se abre una ventana \textbf{no modal} (puede quedar abierta mientras se sigue
+trabajando). Si se confirma un nuevo plano, la ventana se actualiza sin abrir
+una nueva.
+
+\begin{tabular}{lp{9cm}}
+  \toprule
+  Modo \menu{Forma modal} &
+    Colormap divergente (azul–blanco–rojo). La leyenda muestra "Amplitud
+    modal (normalizada)". \\
+  Modo \menu{Presión |p|} &
+    Colormap inferno (negro–naranja–blanco). La leyenda muestra el nivel en
+    \textbf{dB SPL (re 20 \textmu{}Pa)}. \\
+  \bottomrule
+\end{tabular}
+
+La zona fuera del recinto aparece en gris. Se puede exportar a
+\textbf{PNG, SVG, PDF} (imagen) o \textbf{CSV / TXT} (valores numéricos
+del corte en formato largo: \texttt{x; y; amplitud\_modal} en forma modal,
+o \texttt{x; y; presion\_pa; spl\_db} en presión).
+
+% ============================================================
+\section{Respuesta en Frecuencia (FRF)}
+% ============================================================
+
+\subsection{Cálculo}
+
+Presionar \menu{Calcular FRF} en el grupo "FRF (Respuesta en frecuencia)".
+Parámetros:
+
+\begin{tabular}{lp{9cm}}
+  \toprule
+  Parámetro & Descripción \\
+  \midrule
+  f mín / f máx & Rango de frecuencias del gráfico. \\
+  N\textordmasculine{} de puntos & Resolución en frecuencia (10 – 1000). Más puntos = curva más
+    suave pero más tiempo de cálculo. \\
+  \bottomrule
+\end{tabular}
+
+\subsection{Gráfico de FRF}
+
+El eje Y muestra \textbf{nivel de presión en dB SPL} (referencia 20 \textmu{}Pa)
+asumiendo una fuente de 1 W de potencia eléctrica.
+
+Las \textbf{líneas naranjas discontinuas} marcan las frecuencias de los modos
+calculados por FEM.
+
+\begin{consejo}
+  Doble clic en el gráfico $\to$ resetea el zoom al rango completo.
+  La barra de herramientas permite hacer zoom, panear y guardar la figura.
+\end{consejo}
+
+\textbf{Exportar} (v2.8): imagen (PNG / SVG / PDF) o datos crudos
+(CSV / TXT). Los archivos de datos llevan columnas
+\texttt{freq\_hz; spl\_db; abs\_H\_pa; phase\_deg} para reabrir en
+Excel, Python o MATLAB. CSV usa \texttt{;} con coma decimal
+(Excel-es); TXT usa tabulador con punto decimal.
+
+\subsection{Escucha — ruido rosa filtrado por la sala}
+
+El botón \textbf{Escuchar} permite oír cómo afecta la sala al sonido:
+
+\begin{enumerate}[itemsep=3pt]
+  \item Se generan 4 segundos de \textbf{ruido rosa} (densidad espectral
+        $\propto 1/f$).
+  \item Se filtra con la FRF calculada usando convolución en frecuencia.
+  \item Se aplica \textbf{boost de ganancia $+6$ dB equivalente} con
+        soft-clipping tanh (v2.5).
+  \item Se ponen \textbf{fade-in $10$ ms} y \textbf{fade-out $50$ ms}
+        lineales para eliminar el \emph{pop} al iniciar y al terminar.
+  \item Se anexan \textbf{$100$ ms de silencio} al final del WAV para que
+        el buffer del DAC termine en cero (anti-chasquido extra).
+  \item Se reproduce por los parlantes del sistema.
+\end{enumerate}
+
+El audio resultante es un archivo WAV de:
+\textbf{16 bits / 44 100 Hz / estéreo} (L = R, campo mono).
+
+El botón \menu{Detener} interrumpe la reproducción.
+
+\begin{nota}
+  El ruido rosa solo tiene coloración de sala en el rango [f\_mín, f\_máx]
+  calculado. Para incluir más rango de frecuencias, ampliar esos parámetros
+  antes de calcular la FRF.
+\end{nota}
+
+% ============================================================
+\section{RT60 y materiales --- comparativa de métodos}
+% ============================================================
+
+El botón \menu{Ver RT60 calculado} abre un diálogo \textbf{multi-curva}
+donde se pueden combinar dos métodos de predicción (Sabine y Eyring),
+agregar y quitar curvas para comparar, y exportar a
+\textbf{PNG / SVG / PDF} (imagen) o \textbf{CSV / TXT} (valores numéricos:
+una columna \texttt{banda\_hz} y una por cada curva activa, ej.
+\texttt{Sabine RT60\_s}).
+
+\begin{nota}
+En la v2.5 se simplificó el diálogo: se removieron de la UI el método
+Fitzroy y las métricas T20 / T30. El código Fitzroy permanece en
+\texttt{face\_materials.compute\_fitzroy\_rt60\_per\_face} por si
+quiero re-habilitarlo; T20 = T30 = T60 en predicciones teóricas
+(decaimiento exponencial puro), por lo que sólo se grafica T60.
+\end{nota}
+
+\subsection{Métodos de predicción}
+
+\textbf{Sabine} (clásico):
+\[
+  A(f) = \sum_g \alpha_g(f)\, S_g, \qquad
+  \text{RT}_{60}(f) = \frac{0{,}161 \cdot V}{A(f)}
+\]
+Asume $\alpha \ll 1$. Sobreestima RT60 para $\alpha$ alta (no llega a cero
+en sala anecoica).
+
+\textbf{Norris--Eyring} (corrige absorción alta):
+\[
+  \bar{\alpha}(f) = \frac{A(f)}{S_\text{total}}, \qquad
+  \text{RT}_{60}(f) = \frac{0{,}161 \cdot V}{-\,S_\text{total}\,\ln\bigl(1-\bar{\alpha}(f)\bigr)}
+\]
+Cuando $\bar{\alpha} \to 1$, $-\ln(1-\bar{\alpha}) \to \infty$ y RT60 $\to 0$
+(sala anecoica), que es lo físicamente correcto. En el límite
+$\bar{\alpha} \ll 1$, $-\ln(1-\bar{\alpha}) \approx \bar{\alpha}$ y la
+fórmula colapsa a Sabine.
+
+\subsection{Diálogo comparativo}
+
+Lado izquierdo: gráfico matplotlib con todas las curvas activas
+(eje X logarítmico de 63 a 8000 Hz; eje Y en segundos).
+
+Lado derecho: lista de curvas con \textbf{casilla de visibilidad por
+curva} (ocultar sin borrar) y botón \menu{Quitar curva seleccionada}.
+Más abajo, un combo para elegir método (\textit{Sabine} o
+\textit{Eyring}) y un botón \menu{Agregar curva con la asignación
+actual}. Botón final \menu{Borrar todas las curvas}.
+
+Cada curva guarda un \textbf{snapshot numérico} de la materialización
+en el momento de agregarla. Esto permite que el usuario cambie los
+materiales en la ventana \menu{Materiales} entre clics y compare
+variantes (la curva nueva se llama \menu{Sabine RT60 \#2}, etc.). Las
+curvas viejas no se modifican al cambiar materiales.
+
+\subsection{Código de colores}
+
+\begin{tabular}{ll}
+  \toprule
+  Visual & Significado \\
+  \midrule
+  Azul (\#1f77b4), sólida con círculos & Sabine RT60 \\
+  Rojo (\#d62728), sólida con círculos & Eyring RT60 \\
+  \bottomrule
+\end{tabular}
+
+\subsection{Amortiguamiento modal}
+
+El amortiguamiento $\xi_n$ usado por el FEM para anchar los picos de la
+FRF se calcula a partir del RT60 \textbf{de Sabine} (por compatibilidad
+con los valores históricos del solver):
+\[
+  \xi_n = \frac{1{,}1}{f_n \cdot \text{RT}_{60}(f_n)}
+\]
+
+Esto hace que los picos de la FRF sean más o menos anchos según la
+absorción del recinto: materiales muy absorbentes $\to$ RT60 corto
+$\to$ $\xi_n$ grande $\to$ picos anchos.
+
+Si querés que el amortiguamiento modal use Eyring en vez de Sabine,
+basta con cambiar la llamada a
+\texttt{compute\_sabine\_rt60\_per\_face} en
+\texttt{acoustic\_panel.\_compute\_xi\_from\_materials} por
+\texttt{compute\_eyring\_rt60\_per\_face}.
+
+% ============================================================
+\section{Flujo de trabajo completo}
+% ============================================================
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance=0.7cm,
+  box/.style={draw, rounded corners=4pt, fill=cLight, minimum width=7cm,
+              minimum height=0.7cm, text centered, font=\small},
+  arr/.style={-{Stealth[length=5pt]}, thick, cBlue},
+]
+  \node[box] (a) {1. Diseñar recinto (pestaña Geometría)};
+  \node[box, below=of a] (b) {2. Asignar materiales (piso / techo / paredes)};
+  \node[box, below=of b] (c) {3. Colocar fuentes (Ctrl+clic) y receptor};
+  \node[box, below=of c] (d) {4. Configurar sensibilidad de cada fuente};
+  \node[box, below=of d] (e) {5. \textbf{Calcular modos (FEM)}};
+  \node[box, below=of e] (f) {6. Visualizar campo 3D / planos de corte};
+  \node[box, below=of f] (g) {7. Mover fuentes $\to$ ver cambios en \textit{Presión |p|}};
+  \node[box, below=of g] (h) {8. \textbf{Calcular FRF} $\to$ ver curva + escuchar};
+  \foreach \x/\y in {a/b, b/c, c/d, d/e, e/f, f/g, g/h}
+    \draw[arr] (\x) -- (\y);
+\end{tikzpicture}
+\end{center}
+
+% ============================================================
+\section{Referencia rápida de atajos}
+% ============================================================
+
+\begin{tabular}{ll}
+  \toprule
+  Atajo & Acción \\
+  \midrule
+  \tecla{Ctrl}\,+\,\tecla{Z} & Deshacer \\
+  \tecla{Ctrl}\,+\,\tecla{Y} & Rehacer \\
+  \tecla{Ctrl}\,+\,\tecla{S} & Guardar recinto \\
+  \tecla{Ctrl}\,+\,\tecla{Shift}\,+\,\tecla{S} & Guardar como \\
+  \tecla{Ctrl}\,+\,\tecla{O} & Abrir recinto \\
+  \tecla{0} & Reset cámara vista isométrica \\
+  \tecla{Enter} (pestaña Acústica) & Actualizar campo 3D \\
+  \tecla{Ctrl}\,+\,clic derecho (visor) & Colocar fuente en el piso \\
+  \tecla{Shift}\,+\,clic izquierdo + arrastrar & Mover fuente/receptor \\
+  Doble clic en fuente & Editar fuente \\
+  \bottomrule
+\end{tabular}
+
+% ============================================================
+\section{Solución de problemas frecuentes}
+% ============================================================
+
+\begin{tabular}{p{5cm}p{8.5cm}}
+  \toprule
+  Problema & Solución \\
+  \midrule
+  La aplicación no arranca &
+    Verificar que se usa \texttt{run.bat} (no \texttt{python main.py}
+    directamente). El bat usa la ruta de Anaconda explícitamente. \\
+  \addlinespace
+  La nube 3D no aparece &
+    Verificar que se calcularon los modos primero. Verificar que hay
+    al menos una fuente en modo "Presión |p|". \\
+  \addlinespace
+  Las fuentes no se ven en el visor &
+    Cambiar a modo de visualización \textbf{Aristas} (mesh traslúcido).
+    En modo "Externa" (opaco) las fuentes interiores quedan tapadas por
+    las paredes. \\
+  \addlinespace
+  "Forma modal" y "Presión |p|" lucen igual &
+    Es física: en resonancia, $|p| \propto |\varphi_n|$. Mover la fuente
+    a un nodo del modo para ver la diferencia. \\
+  \addlinespace
+  El audio no suena &
+    Verificar que los parlantes del sistema están activos y el volumen de
+    Windows no está en cero. El audio usa la API nativa de Windows. \\
+  \addlinespace
+  FRF tarda mucho &
+    Reducir el número de modos o el número de puntos de la FRF. Para
+    exploración rápida: 8 modos, 200 puntos. \\
+  \addlinespace
+  Geometría cambia $\to$ modos se borran &
+    Comportamiento esperado: al cambiar el recinto la malla FEM anterior
+    ya no corresponde. Recalcular modos con \menu{Calcular modos (FEM)}. \\
+  \bottomrule
+\end{tabular}
+
+% ============================================================
+\section{Conceptos físicos clave}
+% ============================================================
+
+\subsection{Modos acústicos}
+
+Los modos son las frecuencias naturales del recinto: a esas frecuencias la
+presión se distribuye de forma estacionaria (patrón fijo de nodos y antinodos).
+La forma modal $\varphi_n(\mathbf{x})$ muestra dónde hay máxima presión (antinodos)
+y dónde la presión es cero (nodos).
+
+\subsection{Sensibilidad vs. caudal volumétrico Q}
+
+\begin{align*}
+  S &= \text{sensibilidad en dB SPL @ 1W/1m} \\
+  p_0 &= 20\,\mu\text{Pa} \cdot 10^{S/20} \quad \text{(presión a 1W/1m)} \\
+  |Q| &= \frac{p_0 \cdot 4\pi}{\omega_\text{ref}\,\rho_0}
+         \quad \text{con } f_\text{ref} = 1\,\text{kHz}
+\end{align*}
+
+Para una fuente de 90 dB/W/m: $|Q| \approx 1.05 \times 10^{-3}\ \text{m}^3/\text{s}$.
+
+\subsection{Amortiguamiento modal y RT60}
+
+El amortiguamiento $\xi_n$ es la fracción de energía que se pierde por ciclo
+en el modo $n$. Un recinto con paredes de hormigón tiene $\xi_n \approx 0.005$
+(picos muy agudos en la FRF, RT60 largo). Una sala tratada acústicamente puede
+llegar a $\xi_n \approx 0.05$ (picos anchos, RT60 corto).
+
+\subsection{Frecuencia de Schroeder}
+
+Es la frecuencia límite entre el régimen modal (modos individuales) y el campo
+estadístico (muchos modos superpuestos):
+
+\[
+  f_S = 2000 \sqrt{\frac{\text{RT}_{60}}{V}}
+\]
+
+El FEM es válido y útil por debajo de $f_S$. Por encima, los modos son tan
+densos que el campo parece continuo.
+
+% ============================================================
+\section{Importar CAD y motor de mallado}
+% ============================================================
+
+A partir de la versión 2.0, Prototipo 1 puede trabajar con \textbf{geometrías
+arbitrarias importadas desde CAD} (auditorios, salas con curvas complejas,
+modelos arquitectónicos profesionales) y elige automáticamente el motor de
+mallado más apropiado para cada caso. La versión 2.1 añade el modo
+\textbf{best-effort} con fallback automático.
+
+\subsection{Por qué hay dos motores}
+
+El cálculo modal FEM requiere descomponer el volumen del recinto en
+tetraedros. Hay dos estrategias para hacerlo:
+
+\begin{itemize}[itemsep=4pt]
+  \item \textbf{Voxel}: rejilla estructurada de cubos partida en tetraedros,
+        filtrando los que caen fuera del recinto. Ideal para recintos
+        \textit{axis-aligned}: paredes verticales, techo plano, aristas
+        paralelas a los ejes $X$/$Y$. En ese caso, las celdas voxel coinciden
+        \textbf{exactamente} con las paredes y el motor es \textbf{exacto sin
+        overhead}.
+  \item \textbf{Gmsh} (boundary-fitted): mallador profesional con kernel
+        OpenCASCADE que genera tetraedros que se ajustan \textbf{exactamente}
+        a la geometría, por curva que sea. Necesario para recintos con
+        paredes curvas, oblicuas o cualquier malla importada de CAD.
+\end{itemize}
+
+\begin{nota}[Evidencia experimental — cilindro $R=4$ m, $H=4$ m]
+\begin{tabular}{lccc}
+  \toprule
+  Motor & Volumen calculado & $t_{\text{total}}$ & Split modos 1/2 \\
+  \midrule
+  Gmsh boundary-fitted & 200.26 m³ (err $-0.4\%$) & \textbf{0.51 s} & \textbf{0.0017 Hz} \\
+  Voxel forzado        & 201.39 m³ (err $+0.16\%$) & 2.99 s & 0.0275 Hz \\
+  \bottomrule
+\end{tabular}
+
+\vspace{0.3em}
+Los modos 1 y 2 son \textbf{físicamente degenerados} (igual frecuencia por
+simetría rotacional). Gmsh preserva esa degeneración con un split numérico
+de 0.0017 Hz; voxel la rompe con 0.0275 Hz. En geometría curva,
+\textbf{gmsh es 6\(\times\) más rápido y 16\(\times\) mejor para preservar
+simetrías físicas}.
+\end{nota}
+
+\subsection{El badge de estado}
+
+En la pestaña \textbf{Acústica}, dentro del grupo \textit{FEM modal}, hay un
+\textbf{badge coloreado} que indica qué motor se va a usar y por qué:
+
+\vspace{0.4em}
+\begin{tabular}{p{1.4cm}p{4.5cm}p{8.5cm}}
+  \toprule
+  \textbf{Color} & \textbf{Texto} & \textbf{Significado} \\
+  \midrule
+  \textcolor{green!50!black}{\textbf{verde}}
+    & \texttt{voxel $\cdot$ exacto}
+    & Recinto axis-aligned: voxel coincide con la frontera. Sin error de
+      escalera. \textbf{Óptimo}. \\
+  \textcolor{blue!60!black}{\textbf{azul}}
+    & \texttt{gmsh $\cdot$ boundary-fitted}
+    & Geometría curva o CAD importado: gmsh ajusta la malla a las paredes
+      exactas. \textbf{Óptimo}. \\
+  \textcolor{orange!70!black}{\textbf{amarillo}}
+    & \texttt{voxel $\cdot$ escalera} \newline
+      \texttt{voxel $\cdot$ fallback}
+    & Geometría curva con voxel: error sistemático. Si dice
+      \texttt{fallback}, gmsh fue intentado y falló. Tooltip con la razón
+      exacta. \\
+  \textcolor{cOrange}{\textbf{naranja}}
+    & \texttt{gmsh $\cdot$ forzado}
+    & Forzaste gmsh donde voxel sería exacto. Sin perjuicio. \\
+  \bottomrule
+\end{tabular}
+
+\subsection{Importar un archivo CAD}
+
+Tres formas de invocar el importador:
+
+\begin{enumerate}[itemsep=2pt]
+  \item Botón \menu{\textbf{[+]} Importar CAD\ldots} en el grupo \textit{FEM modal}.
+  \item Atajo de teclado \tecla{Ctrl} + \tecla{I}.
+  \item Arrastrá un \texttt{.stl}/\texttt{.obj}/\texttt{.step} sobre el
+        ejecutable (en una futura versión).
+\end{enumerate}
+
+Al elegir un archivo, el soft hace tres cosas:
+
+\begin{enumerate}[itemsep=2pt]
+  \item \textbf{Carga} la malla (\texttt{trimesh} para mallas triangulares,
+        \texttt{gmsh}+OpenCASCADE para B-rep como STEP/IGES).
+  \item \textbf{Diagnostica} la malla: cuenta vértices, triángulos, calcula
+        el volumen, mide si es \textit{watertight} (cerrada), si tiene caras
+        degeneradas, si hay aristas no-manifold, y \textbf{lista todos los
+        huecos}.
+  \item Si la malla está perfecta $\to$ la usa directamente. Si tiene
+        problemas $\to$ abre el \textbf{diálogo de reparación guiada}
+        (sección~\ref{sec:repair}).
+\end{enumerate}
+
+\subsection{Diálogo de reparación guiada}\label{sec:repair}
+
+Cuando el CAD tiene problemas (huecos, T-junctions, vértices duplicados),
+aparece una ventana con tres zonas: resumen de la malla, lista de huecos
+con preview 3D y acciones de reparación.
+
+\textbf{Acciones por hueco:}
+\begin{itemize}[itemsep=2pt]
+  \item \textbf{Cerrar hueco (auto)}: triangulación por abanico desde el
+        centroide. Funciona para huecos planos chicos.
+  \item \textbf{Soldar a vecinos}: fusiona vértices del borde del hueco con
+        vértices cercanos del resto de la malla (T-junctions, duplicados).
+  \item \textbf{Mover vértice}: sub-diálogo donde elegís un vértice del
+        ciclo del hueco y le asignás una nueva posición XYZ exacta.
+  \item \textbf{Omitir}: pasa al siguiente hueco sin tocar.
+\end{itemize}
+
+\textbf{Acciones globales:}
+\begin{itemize}[itemsep=2pt]
+  \item \textbf{Reparar TODO automáticamente}: cierra todos los huecos en
+        cadena.
+  \item \textbf{Fusionar vértices duplicados}: junta vértices a distancia
+        < 0.1 mm. Común en STL.
+  \item \textbf{Normalizar (winding/normales)}: orienta normales hacia
+        afuera y arregla winding inconsistente.
+\end{itemize}
+
+El preview 3D muestra el hueco actual en rojo grueso, con esferas naranjas
+en los vértices del ciclo y una esfera amarilla en el centroide.
+
+\subsection{Override manual del motor}
+
+Junto al badge hay un combo \menu{Motor de mallado} con tres opciones:
+
+\begin{itemize}[itemsep=2pt]
+  \item \textbf{Automático} (\textit{default}): el router decide según las
+        reglas de la sección~\ref{sec:cuando}.
+  \item \textbf{Voxel}: fuerza voxel.
+  \item \textbf{Gmsh}: fuerza gmsh.
+\end{itemize}
+
+El override se persiste por proyecto (campo \texttt{acoustic.mesh\_engine}
+en el \texttt{.room}) y como default global (en
+\texttt{\%APPDATA\%\textbackslash Prototipo1\textbackslash settings.json}).
+
+\begin{atención}[Override "Gmsh" + fallo de gmsh]
+Si forzás \textbf{Gmsh} y la malla no es topológicamente válida, el sistema
+\textbf{lanza una excepción explícita} en lugar de caer silenciosamente a
+voxel. La razón: vos pediste gmsh expresamente, no querés un fallback sin
+darte cuenta. Para fallback automático, dejá el motor en \textbf{Automático}.
+\end{atención}
+
+\subsection{Formatos soportados}
+
+\begin{tabular}{p{4cm}p{7cm}p{3.5cm}}
+  \toprule
+  \textbf{Familia} & \textbf{Formatos} & \textbf{Loader interno} \\
+  \midrule
+  Mallas triangulares
+    & STL (ASCII y binario), OBJ, PLY, glTF/GLB, 3MF, COLLADA, OFF, XYZ
+    & \texttt{trimesh} \\
+  B-rep paramétrico (CAD profesional)
+    & STEP, STP, IGES, IGS, BREP
+    & \texttt{gmsh} (OpenCASCADE) \\
+  \bottomrule
+\end{tabular}
+
+\vspace{0.4em}
+Los formatos B-rep se teselan automáticamente al cargar. Un STEP de un
+auditorio importado desde Revit o SolidWorks llega al motor FEM
+\textbf{sin pérdida geométrica}.
+
+\subsection{Persistencia en \texttt{.room} v3}
+
+El formato \texttt{.room} evolucionó de v2 a v3 para guardar:
+
+\begin{verbatim}
+{
+  "format": "prototipo1.room",
+  "version": 3,
+  "params": { ... },          // sliders de geometría
+  "acoustic": {
+    "mesh_engine": "auto",    // "auto" / "voxel" / "gmsh"
+    "h_target": 0.40,         // tamaño de tetraedro para gmsh
+    "n_per_meter": 2.5,       // densidad para voxel
+    "n_modes": 12,
+    "sources": [...],
+    "receiver": [3.0, 4.0, 1.5]
+  },
+  "external_geometry": {       // solo si hay CAD importado
+    "kind": "embedded_mesh",
+    "vertices": [[x,y,z], ...],
+    "faces":    [[i,j,k], ...]
+  }
+}
+\end{verbatim}
+
+\textbf{Importante:} el \texttt{.room} \textbf{embebe una copia completa de
+la malla CAD importada}. Eso lo hace \textbf{autocontenido y portable}:
+podés mandar el \texttt{.room} por mail sin necesidad de adjuntar el
+STEP/STL original. Tamaño extra típico: 5--500 KB.
+
+Los archivos \texttt{.room} v2 antiguos siguen abriéndose sin problema
+(los campos nuevos son opcionales).
+
+\subsection{Cuándo usa cada motor el router automático}\label{sec:cuando}
+
+A partir de v2.1 el router opera en modo \textbf{best-effort}: para
+geometrías curvas intenta gmsh primero y, solo si falla por
+incompatibilidad topológica, cae a voxel reportando la razón.
+
+\begin{tabular}{p{4.2cm}p{3cm}p{3.4cm}p{3.4cm}}
+  \toprule
+  \textbf{Geometría} & \textbf{Auto-decisión} & \textbf{Si gmsh OK} & \textbf{Si gmsh falla} \\
+  \midrule
+  Shoebox axis-aligned, techo plano & voxel directo & \textcolor{green!50!black}{\textbullet} voxel exacto & n/a \\
+  Pentágono regular techo plano    & voxel directo & \textcolor{green!50!black}{\textbullet} voxel exacto & n/a \\
+  \texttt{arch\_height > 0}        & intenta gmsh  & \textcolor{blue!60!black}{\textbullet} gmsh boundary-fitted & \textcolor{orange!70!black}{\textbullet} voxel fallback \\
+  \texttt{twist}/\texttt{taper}/\texttt{pitch} $\neq 0$ & intenta gmsh & \textcolor{blue!60!black}{\textbullet} gmsh & \textcolor{orange!70!black}{\textbullet} voxel fallback \\
+  Polígono custom no axis-aligned  & intenta gmsh  & \textcolor{blue!60!black}{\textbullet} gmsh & \textcolor{orange!70!black}{\textbullet} voxel fallback \\
+  CAD importado (cualquiera)       & intenta gmsh  & \textcolor{blue!60!black}{\textbullet} gmsh & \textcolor{orange!70!black}{\textbullet} voxel fallback \\
+  \bottomrule
+\end{tabular}
+
+\subsection{Workflow recomendado para auditorios complejos}
+
+\begin{enumerate}[itemsep=3pt]
+  \item \textbf{Modelar en CAD externo} (Revit, SketchUp, SolidWorks,
+        Blender, FreeCAD\ldots).
+  \item Exportar como \textbf{STEP} (mejor calidad) o \textbf{STL}
+        (universal).
+  \item En Prototipo 1, \tecla{Ctrl} + \tecla{I} $\to$ seleccionar el
+        archivo.
+  \item Si hay huecos, reparar con el diálogo guiado.
+  \item Posicionar fuentes y receptor.
+  \item Asignar materiales (piso/techo/paredes).
+  \item \menu{Calcular modos (FEM)} — el router elige gmsh
+        automáticamente.
+  \item Visualizar modos en 3D, hacer FRF, escuchar la sala.
+  \item \tecla{Ctrl} + \tecla{S} para guardar el proyecto completo
+        (con CAD embebido).
+\end{enumerate}
+
+\subsection{El sistema best-effort y el fallback}
+
+El router funciona en modo \textbf{best-effort}: para cualquier geometría
+no axis-aligned, intenta gmsh primero. Solo si gmsh detecta una
+incompatibilidad topológica (T-junctions, normales inconsistentes), cae
+automáticamente a voxel y muestra un badge amarillo
+\texttt{voxel $\cdot$ fallback} con la razón exacta en el tooltip.
+
+\begin{nota}[Por qué existe el fallback]
+Una malla puede ser \textbf{visualmente correcta} pero
+\textbf{topológicamente inválida} para un mallador profesional. Ejemplos:
+T-junctions (dos triángulos comparten arista, un tercero tiene un vértice
+sobre esa arista que los otros no conocen), aristas no-manifold (3+
+triángulos compartiendo una arista), normales inconsistentes.
+
+Para el render OpenGL estos problemas son irrelevantes. Para gmsh, son
+fatales. La opción anterior era abortar; con best-effort, el sistema sigue
+funcionando con voxel y avisa qué pasó.
+\end{nota}
+
+\subsubsection*{Cómo se ve en la UI cuando hay fallback}
+
+Después de presionar \menu{Calcular modos (FEM)}:
+
+\begin{enumerate}[itemsep=2pt]
+  \item El log de estado muestra:
+\begin{verbatim}
+\textcolor{cOrange}{\textbf{!}} Gmsh intentado pero falló (PLC Error: A segment and a facet
+  intersect at point). Cayendo a voxel.
+FEM listo (voxel). Malla: 2386 nodos, 9504 tets, V$\approx$177.84 m³.
+\end{verbatim}
+  \item El badge cambia de \textcolor{blue!60!black}{\textbullet} \texttt{gmsh $\cdot$ boundary-fitted} a
+        \textcolor{orange!70!black}{\textbullet} \texttt{voxel $\cdot$ fallback}.
+  \item El tooltip del badge muestra la razón completa del fallo.
+\end{enumerate}
+
+\subsubsection*{Qué hacer cuando ves \texttt{voxel $\cdot$ fallback}}
+
+\begin{enumerate}[itemsep=2pt]
+  \item \textbf{Mirá la razón en el tooltip del badge}. Si dice
+        "PLC Error" o "T-junctions", tu malla tiene aristas mal conectadas.
+  \item \textbf{Opción rápida}: aceptás el voxel con error de escalera
+        ($\sim 0.5$--$1\%$ en frecuencias, degeneraciones rotas).
+  \item \textbf{Opción profesional}: re-importás el CAD con
+        \tecla{Ctrl} + \tecla{I} y aplicás reparación guiada.
+  \item \textbf{Opción exhaustiva}: revisás la malla en el CAD original
+        (re-exportar con "merge close vertices" activado en STL).
+\end{enumerate}
+
+% ============================================================
+\section{Escala y orientación al importar}
+% ============================================================
+
+Cuando se carga un archivo CAD con \tecla{Ctrl} + \tecla{I}, antes del
+diálogo de reparación aparece un \textbf{diálogo de escala y orientación}.
+Resuelve dos problemas frecuentes al importar geometría externa: unidades
+desconocidas y eje vertical no coincidente.
+
+\subsection{Escala — unidades del archivo}
+
+Los formatos CAD no llevan información de unidades estandarizada. Un STL
+puede estar dibujado en milímetros, centímetros, metros o pulgadas. Si el
+archivo viene en milímetros y el soft lo interpreta como metros, el
+recinto queda mil veces más grande de lo esperado y se sale completamente
+de la grilla.
+
+El diálogo detecta automáticamente la unidad probable midiendo la
+\textbf{diagonal del AABB}:
+
+\vspace{0.3em}
+\begin{tabular}{lll}
+  \toprule
+  \textbf{Diagonal del AABB} & \textbf{Sugerencia} & \textbf{Razón} \\
+  \midrule
+  $> 5\,000$ m  & $\div 1\,000$ (mm $\to$ m) & Archivo en milímetros \\
+  $> 500$ m     & $\div 100$ (cm $\to$ m)   & Archivo en centímetros \\
+  $> 60$ m      & $\div 10$                  & Grande para recinto típico \\
+  $0{,}5$ -- $60$ m & $\times 1$            & Rango plausible \\
+  $< 0{,}5$ m   & $\times 100$ o $\times 1\,000$ & Demasiado pequeño \\
+  \bottomrule
+\end{tabular}
+
+\vspace{0.4em}
+El usuario puede aceptar la sugerencia, elegir un preset (mm/cm/dm/m,
+pulgadas, pies), ingresar un factor manual con precisión, o usar el
+botón \menu{Auto-encajar diagonal a 20 m} para forzar la diagonal a ese
+valor sin importar las unidades originales.
+
+\subsection{Orientación — eje vertical del archivo}
+
+Los formatos CAD también difieren en qué eje consideran \textbf{vertical}:
+
+\vspace{0.3em}
+\begin{tabular}{ll}
+  \toprule
+  \textbf{Formato} & \textbf{Convención típica} \\
+  \midrule
+  Prototipo 1, FreeCAD, AutoCAD, STEP, IGES, STL técnico & Z$+$ up \\
+  OBJ, glTF, GLB, COLLADA, FBX, 3MF (Blender, Unity, Unreal) & Y$+$ up \\
+  \bottomrule
+\end{tabular}
+
+\vspace{0.4em}
+Si un OBJ Y-up se importa sin reorientar, la pared trasera queda como
+piso. El combo de orientación permite elegir la convención del archivo y
+aplica internamente una rotación rígida 3D que lleva el eje seleccionado
+al Z$+$ del soft.
+
+\begin{nota}[Sugerencia automática por extensión]
+Si el archivo termina en \texttt{.obj}, \texttt{.gltf}, \texttt{.glb},
+\texttt{.dae}, \texttt{.fbx} o \texttt{.3mf}, el combo arranca
+preseleccionado en \textbf{Y+ up}. Para el resto (STL, STEP, IGES, BREP,
+PLY) arranca en \textbf{Z+ up}. El usuario siempre puede cambiar el
+default si la convención del archivo no es la habitual del formato.
+\end{nota}
+
+Al confirmar el diálogo, se aplica primero la \textbf{reorientación} y
+después la \textbf{escala}, de modo que las nuevas dimensiones del
+preview ya están expresadas en los ejes del soft (X, Y horizontales;
+Z vertical).
+
+\subsection{Tres botones del diálogo de escala (v2.8)}
+
+\begin{tabular}{lp{9cm}}
+  \toprule
+  Botón & Qué hace \\
+  \midrule
+  \menu{Aplicar escala} & Usa el factor + orientación elegidos y
+    continúa la importación. \\
+  \menu{No escalar} & Saltea el escalado (factor $=1{,}0$) pero
+    \textbf{igual continúa la importación}. Útil cuando ya sabés que el
+    archivo está en metros. \\
+  \menu{Cancelar import} & Aborta toda la importación. \texttt{Esc} y el
+    botón $\times$ de la ventana hacen lo mismo. \\
+  \bottomrule
+\end{tabular}
+
+\begin{nota}[Cambio en v2.8]
+Antes ``No escalar'' cancelaba la importación entera (bug histórico ---
+el botón decía ``Cancelar'' con texto ``No escalar''). Ahora son tres
+opciones explícitas con semántica clara.
+\end{nota}
+
+\subsection{Optimizaciones del reparador de mallas}
+
+Las funciones de reparación en \texttt{geom\_import.py} se reescribieron
+para escalar bien con mallas grandes:
+
+\begin{itemize}[itemsep=2pt]
+  \item \textbf{\texttt{find\_holes}} vectorizada con \texttt{numpy.unique}.
+        Para mallas de $\sim 100$ k caras: $\sim 50$ ms en vez de
+        $\sim 3$ s del bucle Python.
+  \item \textbf{\texttt{fill\_all\_holes\_auto}} en un único pase: detecta
+        todos los huecos, construye los parches en arrays NumPy y
+        materializa el \texttt{Trimesh} una sola vez. Para $K$ huecos
+        sobre $N$ triángulos: $O(N + K)$ en vez de $O(N \cdot K)$.
+  \item \textbf{\texttt{snap\_hole\_vertices}} usa
+        \texttt{scipy.spatial.cKDTree} para nearest-neighbor en lote.
+        Para mallas con $> 10$ k vértices: $\sim 100\times$ más rápido.
+\end{itemize}
+
+En la práctica: un cilindro de $\sim 4$ k triángulos con $50$ huecos
+forzados se repara completo en $\sim 350$ ms.
+
+% ============================================================
+\section{Indicador de ejes y rotación con eje fijo}
+% ============================================================
+
+En la \textbf{esquina inferior derecha} del visor 3D aparece un pequeño
+rectángulo con tres cuadrados etiquetados \texttt{X}, \texttt{Y},
+\texttt{Z}. Es el \textbf{indicador de ejes} y sirve para restringir la
+rotación de la cámara a un eje mundial específico.
+
+\subsection{Fijar un eje}
+
+Dos formas equivalentes:
+
+\begin{enumerate}[itemsep=2pt]
+  \item \textbf{Click izquierdo} sobre el cuadrado X, Y o Z.
+  \item \textbf{Atajo de teclado}: \tecla{Ctrl} + \tecla{Shift} +
+        \tecla{Alt} + \tecla{X} (o \tecla{Y}, o \tecla{Z}).
+\end{enumerate}
+
+Ambos comportamientos son \textbf{toggle}: aplicar de nuevo el mismo
+libera el eje. Cuando un eje queda fijo, su cuadrado se ilumina con un
+color asociado a la flecha del eje en la escena:
+
+\vspace{0.3em}
+\begin{tabular}{ll}
+  \toprule
+  \textbf{Eje} & \textbf{Color del cuadrado al activarse} \\
+  \midrule
+  X & rojo  \\
+  Y & azul  \\
+  Z & verde \\
+  \bottomrule
+\end{tabular}
+
+\subsection{Comportamiento de la rueda del mouse con eje fijo}
+
+\begin{itemize}[itemsep=2pt]
+  \item \textbf{Sin eje fijo} (comportamiento original): rueda presionada
+        + arrastrar = orbit libre (cambia azimuth y elevation).
+  \item \textbf{Con eje fijo}: rueda presionada + arrastrar
+        \textbf{horizontalmente} = el recinto rota únicamente alrededor
+        del eje mundial fijado. El componente vertical del mouse se
+        ignora para que el control sea predecible.
+\end{itemize}
+
+Internamente: el visor calcula la posición actual de la cámara en
+coordenadas esféricas, aplica una matriz de rotación 3D alrededor del
+eje fijo y recalcula \texttt{azimuth} / \texttt{elevation} /
+\texttt{distance} para los nuevos valores.
+
+\begin{consejo}[Cuándo usar esta función]
+\begin{itemize}[itemsep=2pt]
+  \item Inspeccionar el \textbf{perfil lateral} del recinto: fijar Y o X
+        y rotar horizontalmente preserva la altura (Z).
+  \item Mantener una \textbf{vista superior} mientras se rota la planta:
+        fijar Z, sólo cambia el azimuth.
+  \item Documentar la geometría desde un eje específico para una figura
+        del informe.
+  \item Comparar \textbf{perfiles simétricos} del recinto entre
+        rotaciones controladas.
+\end{itemize}
+\end{consejo}
+
+% ============================================================
+\section{Rendimiento y benchmarks}
+% ============================================================
+
+A partir de la versión 2.3, el repositorio incluye \texttt{benchmark\_v2.py},
+una suite \emph{headless} (sin GUI) que mide los principales caminos
+de la app y deja un reporte completo en \textbf{\texttt{BENCHMARK\_RESULTS.md}}.
+
+\subsection{Cómo correr los benchmarks}
+
+\begin{verbatim}
+"%USERPROFILE%\anaconda3\python.exe" benchmark_v2.py
+\end{verbatim}
+
+El script demora 2--5 minutos (depende del CPU). Mientras corre
+imprime cada bloque en consola y al final escribe
+\texttt{BENCHMARK\_RESULTS.md} en la raíz del proyecto.
+
+\subsection{Qué mide}
+
+\begin{tabular}{ll}
+  \toprule
+  Bloque & Qué evalúa \\
+  \midrule
+  B1 & Tiempo de FEM completo (mallado + K/M + Lanczos). \\
+  B2 & Campo 3D a resoluciones 20, 30, 40, 50, 60, 70. \\
+  B3 & Comparativa loop Python (antes) vs KDTree (ahora). \\
+  B4 & Agrupación de caras por región planar. \\
+  B5 & Importación CAD descompuesta en fases. \\
+  B6 & RT60 con asignación por grupo. \\
+  B7 & Memoria del KDTree del FieldEvaluator. \\
+  \bottomrule
+\end{tabular}
+
+Cada test corre tres veces y reporta mediana + min/max.
+
+\subsection{Resultados de referencia}
+
+Los números varían con el equipo, pero estos son representativos en
+una CPU de 16 hilos con 64 GB de RAM:
+
+\begin{itemize}
+  \item \textbf{Campo 3D a resolución 50} (62\,500 puntos): $\sim$ 280 ms.
+        Antes de la optimización: 15--25 s.
+  \item \textbf{Campo 3D a resolución 70} (170\,000 puntos): $\sim$ 740 ms.
+  \item \textbf{Comparativa loop vs KDTree}: 50--170$\times$ más rápido,
+        diferencia numérica $< 10^{-15}$ (redondeo IEEE-754).
+  \item \textbf{Agrupación de caras}: $< 2{,}5$ ms para cualquier
+        recinto paramétrico.
+  \item \textbf{Importación CAD}: 20 ms (5 k tris) $\to$ 1{,}2 s (327 k tris).
+  \item \textbf{Cálculo de RT60 por grupo}: $< 1$ ms.
+\end{itemize}
+
+\subsection{Cuellos de botella restantes}
+
+Una vez vectorizada la evaluación del campo (el cuello histórico),
+el tiempo dominante del cálculo FEM está en el \textbf{mallado
+volumétrico} (\texttt{acoustic\_mesh.build\_volume\_mesh}):
+
+\begin{tabular}{lrrr}
+  \toprule
+  Sala & npm & tets & mallado \\
+  \midrule
+  $6\times 8\times 3$  & 2{,}5 & 14\,400 & 1{,}2 s \\
+  $6\times 8\times 3$  & 3{,}5 & 35\,280 & 3{,}0 s \\
+  $10\times 10\times 4$ & 2{,}5 & 28\,140 & 3{,}4 s \\
+  \bottomrule
+\end{tabular}
+
+Por eso \texttt{BENCHMARK\_RESULTS.md} recomienda mantener
+\textbf{npm $\leq 3{,}0$} para diseño cotidiano. Subir a 3{,}5--4{,}0
+sólo cuando se necesita precisión arriba de 300 Hz y se acepte
+esperar 5--10 s por cada recálculo de modos.
+
+\subsection{Recomendaciones operativas}
+
+\begin{enumerate}
+  \item \textbf{Resolución del campo 3D}: \textbf{40--50} para
+        exploración ($< 0{,}3$ s); subir a \textbf{70} solo para
+        figuras finales ($\sim 0{,}7$ s).
+  \item \textbf{Densidad de malla FEM} (\texttt{n\_per\_meter}):
+        \textbf{2{,}5} para el día a día; \textbf{3{,}0--3{,}5}
+        cuando se requiera precisión a alta frecuencia.
+  \item \textbf{Importación de CADs grandes}: archivos de $> 100$ k
+        triángulos van a tardar 0{,}5--1{,}5 s por la fase de
+        \texttt{diagnose}. El nuevo \texttt{QProgressDialog} muestra
+        qué está pasando y permite cancelar.
+  \item \textbf{Materiales por cara}: el diálogo se puede abrir y
+        cerrar libremente; cambiar asignaciones recomputa RT60 en
+        menos de 1 ms (UI totalmente reactiva).
+\end{enumerate}
+
+% ============================================================
+\section{Predicción de geometría (pestaña Predicción)}
+% ============================================================
+
+A partir de \textbf{v2.6} hay una tercera pestaña, \textbf{Predicción},
+que invierte el flujo de trabajo: en vez de diseñar una sala y después
+medir si es buena, le decís al soft \textbf{qué necesitás} (uso,
+capacidad, restricciones del local) y te propone \textbf{3 alternativas
+de dimensiones} que cumplen tus objetivos, scoreadas por
+\textbf{13 criterios} acústicos y prácticos.
+
+\subsection{Inputs --- describir el recinto}
+
+El panel tiene 4 grupos de controles:
+
+\paragraph{Uso del recinto.}
+Combo con 8 presets (Sala de conferencias, Aula, Estudio control room,
+Estudio live room, Home theater, Sala de música cámara, Sala sinfónica,
+Sala polivalente). Cada uno tiene RT60 objetivo y V/persona típicos
+basados en Beranek / ANSI / Long. Combo dependiente de \emph{Programa}
+(voz hablada / amplificada / música / cine) y slider de
+\emph{Prioridad} Inteligibilidad $\leftrightarrow$ Envoltura.
+
+\paragraph{Audiencia.}
+Capacidad (personas), $\mathrm{m}^{2}$ por persona (default \emph{auto}:
+0,80 para voz, 1,00 para música, 1,20 para cine), área total calculada.
+
+\paragraph{Restricciones del local (opcional).}
+Caps de ancho/largo máx; \textbf{override de altura} (v2.8: por defecto los
+candidatos tienen muros entre 2,5 y 4,0 m por motivo constructivo --- ver
+nota abajo; activar para forzar otro techo máximo, mayor o menor); combo
+de paredes paralelas \emph{Permitir / Evitar} (este último agrega
+\texttt{taper=0.15}); combo de forma de techo (Plano / Inclinado /
+Abovedado).
+
+\begin{nota}[Por qué 2,5--4 m por defecto (v2.8)]
+Una jornada típica de albañilería coloca $\sim 13$ hiladas de ladrillo
+($\approx 10$ cm cada una), o sea $1{,}3$ m/día. Un muro de 5 m son 3
+jornadas + apuntalamiento + riesgo de derrumbe. Si tu volumen objetivo
+daría una H más alta (ej.\ 200 personas $\times$ 6 m\textsuperscript{3}/p
+$\to V = 1200$ m\textsuperscript{3}, Bolt sugiere $H \approx 7{,}7$ m),
+el clamp lleva H a 4,0 m y \textbf{reescala W y L preservando su
+proporción W:L} para mantener el volumen. Si efectivamente querés un
+techo de 10 m (sala sinfónica, iglesia), activá \menu{Override altura}
+y subí el spinbox.
+\end{nota}
+
+\paragraph{Objetivos acústicos (auto-llenado por uso).}
+RT60 @ 500 Hz y V por persona; se rellenan del preset pero se pueden
+editar.
+
+\subsection{Apretar ``Predecir'' --- qué pasa internamente}
+
+\begin{enumerate}
+  \item Volumen objetivo: $V = \text{capacidad} \times V/\text{persona}$.
+  \item Se generan \textbf{3 candidatos} con ratios clásicos
+        (Bolt $1{,}9{:}1{,}4{:}1$, Bonello $1{,}59{:}1{,}26{:}1$,
+        Louden $2{,}33{:}1{,}6{:}1$), escalados para llegar a $V$ y
+        respetando las restricciones de planta/altura. \textbf{Clamp
+        constructivo} (v2.8): si la H del ratio textbook cae fuera de
+        $[2{,}5;\ 4{,}0]$ m (o del override del usuario), se recorta H y
+        se reescalan W y L preservando su proporción para conservar V.
+        Esto rompe deliberadamente el ratio L:W:H textbook a favor de
+        una sala construible; la proporción L:W (la que más afecta la
+        distribución modal lateral) se mantiene intacta.
+  \item Sobre cada candidato se corre un \textbf{FEM ligero en
+        paralelo} (\texttt{ThreadPoolExecutor} con 3 workers, malla
+        coarse, 40 modos) que cubre hasta $\sim 125$ Hz.
+  \item Se calculan los \textbf{13 sub-scores} y un total ponderado
+        por grupo.
+  \item Si los 3 candidatos quedan dentro de $\pm 5$ puntos, se agrega
+        una \textbf{4\textsuperscript{a} card ``Control Negativo
+        (Cubo $1{:}1{:}1$)''} con border rojo punteado.
+\end{enumerate}
+
+Tiempo total: \textbf{$\sim 4$ segundos} con \texttt{QProgressDialog}.
+
+\subsection{Las cards --- 5 secciones agrupadas}
+
+Cada card se organiza en 5 bloques (algunos se ocultan según el uso):
+
+\begin{itemize}
+  \item \textbf{MODAL} (siempre): RT60 feasibility (qué $\alpha$
+        requiere la sala), Bolt-spacing por bins de 5 Hz (buenos /
+        grumos / huecos), Modal Q audibility (modos con $Q > 30$,
+        audibles individualmente), Schroeder coverage.
+  \item \textbf{VOZ} (oculto para usos de música pura): STI por
+        Bradley, \%Alcons por Peutz, distancia crítica vs receptor
+        típico.
+  \item \textbf{MÚSICA} (oculto para usos de voz pura): soporte de
+        bajos geométrico. La BR real depende mucho de materiales;
+        este proxy mide sólo el aporte geométrico.
+  \item \textbf{PRÁCTICO} (siempre): Forma (L/W y H/W con etiquetas
+        ``ok'', ``túnel'', ``pozo'', ``pancake''), aprovechamiento de
+        planta, constructabilidad.
+  \item \textbf{ROBUSTEZ} (siempre): margen del $\alpha$ requerido
+        respecto al rango razonable $[0{,}08\,;\,0{,}30]$.
+\end{itemize}
+
+Cada sub-score aparece como un chip de color al final de cada sección:
+\textcolor{cGreen}{verde} ($\geq 80$), \textcolor{cOrange}{amarillo}
+($50$--$80$), rojo ($< 50$).
+
+\subsection{Pesos condicionales por uso}
+
+\begin{verbatim}
+Voz:    Modal 40% + Voz 30% + Música 0%  + Práctico 25% + Robustez 5%
+Música: Modal 45% + Voz 0%  + Música 20% + Práctico 25% + Robustez 10%
+Mixto:  Modal 40% + Voz 15% + Música 10% + Práctico 25% + Robustez 10%
+\end{verbatim}
+
+Dentro de \textbf{MODAL}: $40\%$ Bolt + $25\%$ RT60-feas + $20\%$ Modal-Q
++ $15\%$ Schroeder. Bolt-spacing pesa más porque es la única métrica
+modal que discrimina la geometría real (las otras dependen mayormente
+de $V$/RT60 que son constantes para los 3 candidatos).
+
+\subsection{Aplicar un candidato}
+
+El botón \menu{Aplicar $\blacktriangledown$} de cada card abre un menú:
+
+\begin{enumerate}
+  \item \textbf{Como parámetros (editable)}: setea los sliders de la
+        pestaña Geometría y te lleva ahí.
+  \item \textbf{Como CAD (geometría fija)}: construye la malla y la
+        inyecta como geometría externa.
+\end{enumerate}
+
+Debajo del botón aparece una leyenda
+\texttt{Render: 0,12 s $\cdot$ 6,0$\times$8,2$\times$4,3 m} con el
+tiempo del último apply. La card de \textbf{Control Negativo} tiene
+\menu{Aplicar} deshabilitado (con tooltip explicativo).
+
+\subsection{Evaluar tu diseño actual}
+
+Debajo de \menu{Predecir} hay un segundo botón:
+\menu{Evaluar mi diseño actual}. Toma la geometría que tenés diseñada
+en la pestaña Geometría y la corre por el \textbf{mismo pipeline de
+scoring}. Útil para:
+
+\begin{itemize}
+  \item Validar un diseño propio contra los 13 criterios objetivos.
+  \item Comparar versiones iterando sobre los sliders.
+  \item Saber si un CAD importado vale la pena antes de simular.
+\end{itemize}
+
+El resultado se muestra como \textbf{una card individual}. Si después
+querés ver alternativas, apretás \menu{Predecir} y aparecen las 3
+sugerencias para comparar visualmente.
+
+% ============================================================
+\section*{Apéndice --- Optimizaciones internas v2.3}
+% ============================================================
+
+Para usuarios técnicos que quieran inspeccionar el código:
+
+\subsection*{Evaluación vectorizada del campo}
+
+\textbf{Antes (loop Python en \texttt{FieldEvaluator.evaluate\_many})}:
+
+\begin{verbatim}
+def evaluate_many(self, field_nodal, points):
+    out = np.full(len(points), np.nan, dtype=complex)
+    for i, x in enumerate(points):
+        e, N = _locate_one(self.v0, self.A_inv, self.tets, x)
+        if e is not None:
+            out[i] = complex(np.dot(field_nodal[self.tets[e]], N))
+    return out
+\end{verbatim}
+
+Para \texttt{len(points) = 62\,500} y \texttt{Ne = 14\,400}, esto
+generaba 62\,500 llamadas a \texttt{\_locate\_one}, cada una
+computando barycentric contra TODOS los tetraedros = $O(N_p \cdot N_e)$
+bajo el intérprete de Python. En la práctica: \textbf{15--25 segundos}
+por refresh del campo.
+
+\textbf{Ahora (KDTree + numpy vectorizado)}:
+
+\begin{verbatim}
+# En __init__: precomputar centroides + cKDTree.
+self._centroids = self.nodes[self.tets].mean(axis=1)
+self._tree = cKDTree(self._centroids)
+
+# En evaluate_many: para cada punto, K=12 candidatos via KDTree,
+# despues barycentric vectorizada en arrays (Np, K, 3, 3).
+_, cand = self._tree.query(points, k=12)
+stu = np.einsum("pcij,pcj->pci", A_inv[cand], rel_pc)
+# ... un solo argmax por punto, sin loops.
+\end{verbatim}
+
+Resultado medido: \textbf{50--170$\times$ más rápido}, diferencia
+numérica $< 1\times 10^{-15}$. El algoritmo es idéntico, sólo cambia
+cómo se busca el tet contenedor. Si más del 1\,\% de los puntos no
+se localiza con $K=12$ (puede pasar en bordes con tetraedros muy
+alargados), se reintenta con $K=48$ solo para esos puntos.
+
+\subsection*{Importación CAD con \texttt{QProgressDialog}}
+
+El flujo de import en \texttt{main.MainWindow.\_open\_cad\_import()}
+ahora:
+
+\begin{enumerate}
+  \item Abre un \texttt{QProgressDialog} modal con
+        \texttt{setMinimumDuration(200)} --- sólo aparece si la
+        importación realmente tarda.
+  \item Pasa un callback \texttt{progress(msg)} a
+        \texttt{geom\_import.load\_geometry} para que mensajes de
+        gmsh/trimesh aparezcan en vivo.
+  \item Mide cada fase con \texttt{time.time()} y al final reporta
+        el desglose en la barra de estado:
+        \texttt{load 230 ms $\cdot$ scale 5 ms $\cdot$ diagnose 410 ms $\cdot$ render 12 ms}.
+  \item Para mallas limpias (\texttt{diag.ok == True})
+        \textbf{salta el QMessageBox de confirmación}: antes había un
+        \emph{«¿Usar esta geometría? Sí/No»} que el usuario siempre
+        aceptaba.
+\end{enumerate}
+
+\vfill
+
+\begin{center}
+  \small\textcolor{cGray}{%
+    Prototipo 1 --- Modelador de Recintos 3D con Simulación Acústica FEM\\
+    Manual de Usuario $\cdot$ v2.14 $\cdot$ 27 de Junio de 2026\\[2pt]
+    \textbf{Cambios v2.0}: import CAD (STL/OBJ/PLY/STEP/IGES/glTF), motor
+    boundary-fitted con gmsh, router automático con badge UI, diálogo de
+    reparación guiada, persistencia \texttt{.room} v3.\\[2pt]
+    \textbf{Cambios v2.1}: router best-effort con fallback automático
+    gmsh $\to$ voxel.\\[2pt]
+    \textbf{Cambios v2.2}: diálogo de escala y orientación al importar
+    (resuelve Y-up $\to$ Z-up de OBJ/glTF), reparador de mallas
+    vectorizado en un solo pase ($\sim 50$--$100\times$ más rápido) e
+    indicador de ejes clicable con atajo
+    \tecla{Ctrl}+\tecla{Shift}+\tecla{Alt}+\tecla{X/Y/Z}.\\[2pt]
+    \textbf{Cambios v2.3}: (1) materiales \textbf{por cara} con
+    diálogo dedicado (estilo EASE, sección 6.3), persistencia entre
+    aperturas y serialización en \texttt{.room} v4;
+    (2) campo 3D 50--170$\times$ más rápido vía
+    \texttt{cKDTree}+\texttt{numpy.einsum} (sección 18);
+    (3) importación CAD con \texttt{QProgressDialog} y desglose de
+    tiempos por fase; (4) suite de benchmarks \texttt{benchmark\_v2.py}
+    que produce \texttt{BENCHMARK\_RESULTS.md}.\\[2pt]
+    \textbf{Cambios v2.4}: diálogo de RT \textbf{multi-curva} con
+    tres métodos de predicción (Sabine, Eyring, Fitzroy) y tres
+    métricas (T60, T30, T20). Curvas agregables y quitables para
+    comparar materializaciones distintas; cada curva guarda un
+    snapshot numérico. Código de colores deterministico (azul/rojo/verde
+    por método; sólida/discontinua/punteada por métrica). Sección 10.\\[2pt]
+    \textbf{Cambios v2.5}: (1) diálogo de RT simplificado: se removieron
+    Fitzroy y T20 / T30 de la UI (el código Fitzroy queda como
+    \texttt{compute\_fitzroy\_rt60\_per\_face}); quedan Sabine y Eyring
+    en T60; (2) botón \menu{Materiales} sin emoji; (3) audio con boost
+    de $+6$ dB equivalente vía soft-clipping tanh, fade-in $10$ ms /
+    fade-out $50$ ms y cola de $100$ ms de silencio para eliminar el
+    \emph{pop} al finalizar; (4) herramienta \texttt{check\_materials\_coverage.py}
+    que cruza un listado externo de materiales contra la librería interna
+    con matching difuso (stemming español + sinónimos en/es) y produce
+    \texttt{MATERIALS\_COVERAGE.md}; (5) bug fix: \texttt{UnboundLocalError}
+    por sombreado de \texttt{fm} en \texttt{acoustic\_panel.\_build\_ui}
+    (renombrado el \texttt{QFormLayout} local a \texttt{fmode}) y limpieza
+    de la propiedad CSS \texttt{font-variant-numeric} no soportada
+    por Qt5.\\[2pt]
+    \textbf{Cambios v2.6} (24--25 de mayo):
+    (1) \textbf{Pestaña Predicción} con 3 candidatos (Bolt/Bonello/Louden)
+    scoreados por \textbf{13 sub-scores} agrupados en 5 categorías
+    (Modal, Voz, Música, Práctico, Robustez), pesos condicionales por uso
+    (voz / música / mixto), control negativo automático cuando los 3
+    quedan parecidos (sección 19);
+    (2) botón \menu{Evaluar mi diseño actual} que aplica el mismo scoring
+    a la geometría diseñada en la pestaña Geometría;
+    (3) \textbf{auto-tuner de densidad FEM}: cuando el motor está en
+    \emph{Automático}, calcula la densidad necesaria para cubrir hasta
+    $f_\text{Schroeder}$ dentro de un budget de tiempo
+    ($5$ s shoebox, $10$ s CAD/curvas) con diálogo de cobertura parcial
+    si no entra; estimaciones recalibradas (voxel $\sim 7\,000$ tets/s,
+    safety factor $1{,}30$);
+    (4) skip de gmsh para techos curvos paramétricos (T-junctions);
+    (5) \textbf{leyendas de tiempo} \texttt{Último: X,XX s} persistentes
+    bajo botones de cómputo;
+    (6) nuevos colormaps de la nube 3D: \emph{rainbow} 7 paradas
+    (azul-celeste-turquesa-verde-amarillo-naranja-rojo) para
+    $|p|$ con fuente, y \emph{signed vivid} azul-gris-rojo (gris en vez
+    de blanco) para forma modal sin fuente;
+    (7) bug-fixes: slice plane interactivo invisible para shoebox
+    (z-fighting con paredes), auto-tuner desactivaba fallback gmsh,
+    paneles con texto recortado en bordes.\\[2pt]
+    \textbf{Cambios v2.7} (25--26 de mayo): saneamiento profundo.
+    (1) Vectorización del voxel mesher \texttt{points\_inside\_surface}:
+    $\sim 44\times$ más rápido en mediana, \texttt{Calcular modos (FEM)}
+    pasó de $1{,}3$ s a $180$ ms para shoebox típica;
+    (2) eliminado el diálogo \emph{cobertura parcial/completa/cancelar}:
+    \texttt{auto\_density} se llama siempre con \texttt{budget=}$\infty$,
+    cobertura completa hasta $f_\text{Schroeder}$ garantizada;
+    (3) \texttt{QProgressDialog} pulsante durante el FEM con label
+    dinámico por fase;
+    (4) shift+drag de fuentes/receptor mucho más confiable
+    (sincronización viewer$\leftrightarrow$panel arreglada, drag fantasma
+    eliminado);
+    (5) nuevo modo \tecla{Ctrl}+\tecla{Shift}+drag para mover en altura.\\[2pt]
+    \textbf{Cambios v2.8} (27 de mayo):
+    (1) \textbf{Solver BEM removido por completo} del proyecto
+    (\texttt{acoustic\_bem.py}, \texttt{bem\_modal.py},
+    \texttt{benchmark.py}, paper FEM/BEM, y todas las referencias
+    cruzadas). El pipeline ahora es 100\,\% FEM; la función
+    \texttt{schroeder\_frequency} se mantiene como frontera campo modal
+    / campo difuso.
+    (2) \textbf{Export CSV/TXT en los tres diálogos de gráfico}
+    (FRF, heatmap, RT60). CSV usa \texttt{;} con coma decimal (Excel-es);
+    TXT usa tabulador con punto decimal.
+    (3) \textbf{Clamp constructivo} en el predictor: la altura de los
+    candidatos se confina a $[2{,}5;\ 4{,}0]$ m por defecto (13 hiladas
+    de ladrillo / jornada $\times$ 10 cm $= 1{,}3$ m/día). Activar
+    \menu{Override altura} si querés un techo de 10 m. Cuando hay clamp,
+    W y L se reescalan preservando su proporción para mantener V\_target.
+    (4) \textbf{Fix UX import CAD}: el ``Cargando'' fantasma que
+    aparecía $\sim 3$ s después del diálogo de escala ya no aparece
+    (causa: \texttt{QProgressDialog.hide()} no cancelaba el
+    \texttt{forceTimer}; ahora se usa \texttt{close()}).
+    (5) El botón \menu{No escalar} del diálogo de escala ahora sí
+    saltea el escalado y \textbf{sigue} la importación (antes
+    cancelaba todo). Tres botones explícitos: \menu{Aplicar escala},
+    \menu{No escalar}, \menu{Cancelar import}.\\[2pt]
+    \textbf{Cambios v2.9} (28--29 de mayo): documentación interna
+    profunda + robustez del solver FEM.
+    (1) \texttt{acoustic\_mesh\_explicado.md} nuevo y
+    \texttt{acoustic\_fem\_explicado.md} profundizado: explicadores
+    línea-a-línea con cajas de \texttt{nodes[tets]} (fancy indexing)
+    y \emph{KDTree desde cero}, glosario de patrones NumPy/SciPy
+    (broadcasting, einsum, \texttt{coo\_matrix} con suma automática)
+    y referencias bibliográficas.
+    (2) \texttt{cuestionario\_acoustic.html}: autoevaluación
+    interactiva, \textbf{86 preguntas en 13 categorías}
+    (física, mesh, ensamblaje, autovalores, barycentric, KDTree, FRF,
+    NumPy, capciosas, código, numéricas) con desglose por categoría
+    coloreado para identificar qué reforzar.
+    (3) \textbf{Filtro de slivers} en \texttt{build\_volume\_mesh}:
+    tetraedros con $V_e < 10^{-6} \cdot \bar V$ se descartan tras el
+    filtro por centroide. Evita las entradas mal escaladas en K y M
+    que son la causa principal de no-convergencia en Lanczos para
+    mallas no axis-aligned.
+    (4) \texttt{mesh\_info} reporta tres claves nuevas:
+    \texttt{h\_min}, \texttt{h\_ratio} (heterogeneidad: $> 50$ indica
+    slivers o tets alargados) y \texttt{n\_slivers} (umbral más laxo
+    que el filtro, para detectar también casos borderline).
+    (5) \texttt{solve\_modes} robusto: try/except
+    \texttt{ArpackNoConvergence} con tres planes
+    (usar parciales si alcanzan / reintentar con $\sigma\times 10$ /
+    \texttt{RuntimeError} con mensaje accionable que sugiere
+    chequear \texttt{n\_slivers}, reducir \texttt{n\_modes} o cambiar
+    \texttt{sigma}). \texttt{maxiter} subido de
+    $10\cdot N$ a $\max(300,\ 20 \cdot n_\text{request})$.
+    (6) \textbf{Simetrización forzada}
+    $K = (K + K^\top)/2$, ídem $M$, al final de \texttt{build\_KM}:
+    cancela asimetrías residuales del orden de $10^{-15}$ que el
+    scatter de \texttt{coo\_matrix} puede dejar y que ensucian el
+    shift-invert. Costo $O(\text{nnz})$, despreciable.
+    Cero cambio en API pública; demo de caja $5\times 4\times 3$ m
+    produce las mismas frecuencias y el mismo pico de FRF.\\[2pt]
+    \textbf{Cambios v2.10} (29 de mayo): evaluación de FEM P2 (elementos
+    cuadráticos) --- explorada, validada, y \textbf{descartada por
+    costo/beneficio}.
+    (1) Nuevas primitivas \texttt{shape="circle"} / \texttt{"ellipse"} en
+    \texttt{make\_room}: planta circular o elíptica muestreada en 96
+    puntos por defecto (desviación $<0{,}05\,\%$ vs curva real).
+    Helper \texttt{sample\_room\_curve} expone la curva paramétrica para
+    futuros consumers (visualizador, mallador isoparamétrico).
+    (2) Implementación completa de \textbf{P2 subparamétrico} (10 nodos
+    por tet, shape functions Lagrange en baricéntricas) con upgrade de
+    malla P1$\to$P2, cuadratura Keast 5-pt para K, y forma cerrada
+    multinomial para M (la cuadratura introducía $M_{ij}$ negativos por
+    el peso central negativo del Keast 5-pt sobre integrandos de grado 4).
+    (3) Implementación de \textbf{P2 isoparamétrico} con Jacobiano por
+    punto de cuadratura, snap radial de midpoints a la curva real, y
+    sanity check $\|K_\text{iso} - K_\text{sub}\|_F < 10^{-13}$ cuando
+    los midpoints están en promedios aritméticos.
+    (4) \textbf{Validación numérica}: caja $5\times 4\times 3$, P1 da
+    error $0{,}4$--$3{,}2\,\%$ vs analítico; P2 sub reduce a $<0{,}05\,\%$
+    ($\sim 100\times$ mejora). En 5 salas $\times$ 30 modos, P2 cuesta
+    $5\times$ a $36\times$ más tiempo que P1.
+    (5) \textbf{Conclusión}: \textbf{P1 se mantiene como solver de
+    producción}. El error de P1 con \texttt{n\_per\_meter=2} ya está
+    por debajo del ruido del modelado físico (RT60 estimado, posiciones
+    de fuentes, $\alpha(f)$ de materiales) y de la frecuencia de Schroeder;
+    invertir $5$--$36\times$ más tiempo de cómputo para reducir un error
+    que ya no afecta ninguna decisión acústica práctica no se justifica.
+    Los archivos \texttt{acoustic\_fem\_p2.py},
+    \texttt{bench\_p1\_p2.py}, \texttt{bench\_p2\_iso.py} y
+    \texttt{planP2.md} se removieron tras esta evaluación. El trabajo
+    queda registrado en este changelog como evidencia de que la
+    elección de P1 es deliberada y medida.\\[2pt]
+    \textbf{Cambios v2.11} (30 de mayo): auditoría física del solver
+    modal. Dos resultados.
+    (A) \textbf{Benchmark modal damping vs matriz $C$ de impedancia}
+    (\texttt{bench\_modal\_vs\_impedance.py}). Shoebox $5\times 4\times 3$,
+    $\alpha=0{,}30$, \texttt{n\_per\_meter=2}, 12 modos. Modal damping
+    pipeline 26 ms vs C-matrix directo 242 ms (\textbf{ratio $9{,}5\times$};
+    crece a $10^2$--$10^3 \times$ con $Z(\omega)$ compleja). Ambos métodos
+    localizan los mismos picos modales; en banda 30--100 Hz la diferencia
+    es \textbf{RMS 1{,}6 dB} (dentro del ruido del problema). Conclusión:
+    modal damping con $\xi_n = 1{,}1/(f_n \cdot RT60)$ se queda como
+    modelo de absorción de producción --- la matriz $C$ sólo ganaría con
+    $Z(\omega)$ medida en tubo de Kundt, no con $\alpha$ de catálogo.
+    Detalle en \texttt{acoustic\_fem\_explicado.md} §16.
+    (B) \textbf{Fix de calibración: factor $c^2$} en la fórmula modal
+    (\texttt{frequency\_response} y \texttt{modal\_pressure\_field} de
+    \texttt{acoustic\_fem.py}, y \texttt{frequency\_response} de
+    \texttt{fem\_modal.py}). La derivación canónica de la Green function
+    modal de Helmholtz da
+    $p = i\omega\rho_0 c^2 \sum_n \varphi_n(x_r)\varphi_n(x_s)/(\omega_n^2 - \omega^2)$
+    (porque $\omega_n^2 = c^2 \lambda_n$ y $k^2 = \omega^2/c^2$); el
+    código histórico omitía el $c^2$ resultando en \textbf{toda la FRF y
+    todos los campos de presión modales $\sim 101$ dB por debajo del SPL
+    físico real}. No se había notado porque (i) la FRF se usaba para
+    forma relativa, (ii) la auralización normaliza a peak antes del DAC.
+    \textbf{Fix}: prefactor multiplicado por \texttt{c**2}; validado
+    contra cálculo analítico (74{,}8 dB esperado vs 74{,}2 dB medido) y
+    contra C-matrix (RMS 1{,}6 dB post-fix). Smoke test agregado a
+    \texttt{acoustic\_fem.\_\_main\_\_} (assert SPL pico $\in [50, 100]$
+    dB) como guardia de regresión. \textbf{Compatibilidad rota}: exports
+    CSV/TXT pre-v2.11 quedan $+101$ dB desfasados de los nuevos.
+    Auralización inafectada.\\[2pt]
+    \textbf{Cambios v2.12} (30 de mayo): UX del solver modal $+$ un bug
+    físico de validez escondido. Seis ejes.
+    (A) \textbf{Picker de modos con filtro $f_\text{min}$/$f_\text{max}$ y
+    leyenda dinámica} debajo del combo \texttt{Modo:}. La leyenda muestra
+    total de modos calculados, rango real ($f_0$--$f_n$) y cuántos quedan
+    filtrados. Si el filtro pasa por encima del rango calculado, lo avisa.
+    Indice real preservado vía \texttt{userData} del combo --- slice y
+    heatmap siguen recibiendo el modo correcto aunque la posición en
+    pantalla no coincida con el índice absoluto.
+    (B) \textbf{Spinbox \texttt{N\textordmasculine{} modos}} subido de $(2, 80)$ a $(2, 500)$
+    para permitir cobertura completa hasta \texttt{f\_Schroeder} en salas
+    chicas con $f_S$ alta (un cuarto de 60 m\textsuperscript{3} con
+    RT60 $\approx 1$\,s tiene $f_S \approx 270$\,Hz y necesita
+    $\sim$170 modos por ley de Weyl). Label \texttt{$\approx$ N modos
+    hasta f\_Schroeder (Weyl)} debajo del spinbox.
+    (C) \textbf{Sugerencia de \texttt{n\_per\_meter}} (compromiso D4): label
+    \texttt{npm sugerido: X.XX} y botón \texttt{[Aplicar]} debajo del
+    slider de densidad. El valor surge de \texttt{npm = ppw $\cdot$ f\_S
+    / c} y carga la malla exactamente válida hasta f\_Schroeder. El
+    slider sigue editable: preview rápido ignora la sugerencia, análisis
+    riguroso la aplica.
+    (D) \textbf{Fix de validez de malla}: \texttt{solve\_modes} devolvía
+    los $N$ modos más bajos sin chequear si superaban
+    \texttt{f\_max\_malla = c / (ppw $\cdot$ h\_max)}. Modos arriba del
+    techo de la malla son numéricamente sucios (dispersión, plegado de
+    onda). Desde v2.12 hay un \textbf{post-clip automático} en el panel
+    tras cada solve: los modos con \texttt{f > f\_max\_malla} se
+    descartan y se reporta al log
+    (\texttt{"pediste 256 modos, 210 son válidos, 46 excedían...}").
+    (E) \textbf{Fixes estéticos}: botones largos del diálogo de
+    importar/reparar CAD (\texttt{\checkmark{} Cerrar este hueco}, etc.) se
+    recortaban por el clipping de texto centrado con sizeHint
+    subestimado por el Unicode al inicio. Triple defensa: minimumWidth
+    del panel ($440$ px), minimumWidth por botón ($380$ px), y
+    \texttt{text-align:\ left; padding-left:\ 16px} via styleSheet
+    local. Botones \texttt{Exportar PNG/SVG/PDF/CSV/TXT} en FRF, RT60 y
+    Slice heatmap bumpeados a minimumWidth $140$.
+    (F) \textbf{Lo que no cambió}: solver FEM intacto (cambios sólo en
+    panel UI y post-procesamiento), API pública intacta, decisión D4
+    vigente, auralización igual.\\[2pt]
+    \textbf{Cambios v2.13} (junio): batch grande post-v2.12 --- criterios de
+    diseño bibliográficos, fuentes reales, geometría no-prismática, optimizador
+    de ubicación de fuentes y diagnóstico de corregibilidad por EQ. Once ejes.
+    (A) \textbf{Fuentes con respuesta $Q(f)$ + fase}: cargan mediciones FRD
+    (\texttt{frd.py}); la respuesta es una ganancia compleja \texttt{g(f)}
+    \emph{relativa} al $Q$ baseline (sin curva $\to$ FRF idéntica, calibración
+    $c^2$ intacta); anclaje absoluto/relativo, atajo delay$+$polaridad$+$offset
+    de fase; \texttt{SourceResponse} en \texttt{sources.py}, UI en
+    \texttt{SourceEditDialog}, persistencia \texttt{.room} v5.
+    (B) \textbf{Ratios}: corrección de nombres en \texttt{RATIO\_LIBRARY}
+    (Louden/Bolt/Sepmeyer) $+$ Cox (1:1.56:1.86); \texttt{predict()} recorta al
+    top-3.
+    (C) \textbf{Altura por uso} en \texttt{USE\_PRESETS} (3--12 m según uso), sin
+    el cap duro de 4 m, con override del usuario.
+    (D) \textbf{Geometría lofteada}: recinto no-prismático
+    (\texttt{make\_lofted\_room}), wizard de cortes laterales
+    (\texttt{section\_dialog.py}), \texttt{.room} v6, watertight.
+    (E) \textbf{Bafle orientado} (azimut/pitch/montaje, puramente visual: la
+    fuente sigue omni), wireframe en el viewer 3D, gesto Alt$+$Ctrl$+$arrastrar.
+    (F) \textbf{SBIR} (\texttt{sbir.py}): fuentes imagen de 1er orden, dB
+    relativo al directo, notches en $c/(4d)$; \texttt{SBIRDialog}.
+    (G) \textbf{Métricas de respuesta forzada} (\texttt{modal\_metrics.py}):
+    \texttt{FoM\_flat}/\texttt{FoM\_espacial} (planitud media y consistencia
+    asiento-a-asiento sobre una grilla, banda válida) y cruce modal numérico
+    \texttt{f\_cross} (estilo MDCF, ve la forma); cableadas a la UI.
+    (H) \textbf{Optimizador de ubicación de fuentes}
+    (\texttt{location\_opt.py}): modo de Predicción Geometría/Ubicación/Combinado,
+    objetivo FoM$+$SBIR$+$suavidad modal con pesos por uso.
+    (I) \textbf{Criterios al score}: minado bibliográfico
+    (\texttt{criterios\_room\_geom\_fuente.md}) $\to$ FSI $\psi(25)$ de Rindel
+    (A6) y densidad Bonello (A3) al grupo MODAL; damping per-modo por cara (A36),
+    Bass Ratio (D5), umbral de Fazenda (C9, reemplaza el $Q>30$ fijo).
+    (J) \textbf{Corregibilidad por EQ} (\texttt{eq\_correctability}): clasifica
+    por frecuencia qué arregla un EQ global y qué exige acústica, vía consistencia
+    espacial (cota irreducible \texttt{fom\_espacial}, invariante a EQ global) $+$
+    envolvente sin cancelación (fase mínima sin cepstrum); loop cerrado que mide
+    \texttt{improvement\_flat}; sub-banda confiable (ppw$\geq$15); overlay rojo en
+    la FRF. Validado vs teoría y vs Welti 2003.
+    (K) \textbf{Fix del auto-tuner de malla} (\texttt{mesh\_router}): presupuesto
+    infinito y sub-entrega de validez de gmsh
+    ($h_\text{max}\approx 1{,}5\,h_\text{target}$); 81 $\to$ 308 modos válidos.
+    (L) \textbf{Lo que no cambió}: solver FEM intacto, decisiones D1/D2/D4/D5b
+    vigentes, calibración $c^2$ y API pública intactas.\\[2pt]
+    \textbf{Cambios v2.14} (27 de junio): features post-batch v2.13.
+    (A) \textbf{Undo/redo GLOBAL} (Ctrl$+$Z / Ctrl$+$Y, 10 acciones): deshace
+    \emph{cualquier} acción (fuentes, receptor, materiales, CAD, geometría,
+    aplicar predicción) por \textbf{snapshot del estado completo} reusando la
+    serialización \texttt{.room}; un timer de polling ($\sim$400 ms) hace
+    dirty-check $\to$ global por construcción, sin instrumentar cada mutación.
+    Drag $=$ 1 acción (settle); snapshot $=$ inputs, no resultados FEM; límite
+    10. En \texttt{main.py} (\texttt{\_capture\_state} / \texttt{\_restore\_state}).
+    (B) \textbf{Gate de materiales en Predicción}: al Predecir sin elegir
+    absorción, aviso con 3 caminos --- que elija el programa (RT por uso),
+    \emph{preset} piso madera/paredes ladrillo/techo madera, o coeficiente
+    $\alpha$ uniforme. En preset/uniforme los materiales \textbf{determinan el
+    RT60 por candidato} (Sabine hacia adelante, \texttt{effective\_rt60} en
+    \texttt{prediction.py}). La asignación fina por cara sigue en Acústica.
+    (C) \textbf{Fix}: labels de diagnóstico de la FRF a blanco (eran ilegibles
+    sobre el fondo oscuro).
+    (D) \textbf{Editor de forma}: edición numérica exacta. En la planta
+    (\texttt{shape\_dialog.py}) cada arista muestra su \textbf{longitud} en un
+    chip clickeable (click $\to$ valor exacto; el primer vértice queda fijo y el
+    otro desliza en la dirección de la arista) y el origen $(0,0)$ se corre del
+    centro a la \textbf{esquina inferior-izquierda} (cuadrante positivo). En los
+    cortes laterales (\texttt{section\_dialog.py}) cada punto del perfil muestra
+    su \textbf{altura} clickeable, y la relación con la pared opuesta pasa a un
+    selector \emph{Libre / Espejo / Igual} (espejo en $t$ vs copia directa).
+    (E) \textbf{Sistema de presets de materiales} (compartido Predicción$+$
+    Acústica, en \texttt{material\_library.py}): presets con nombre (Reflectante /
+    Estudio tratado / Home theatre / Aula / Neutra) que mapean piso/paredes/techo a
+    materiales reales del catálogo ($\alpha$ por banda), resueltos por nombre sin
+    acentos. En Predicción el gate de absorción ofrece preset $+$ armar-el-tuyo (3
+    combos) y el RT60 por candidato sale de esos materiales
+    (\texttt{effective\_rt60} modo materials); el botón ``Aplicar a Acústica''
+    asigna por zona (deshacible). En Acústica, botón ``Preset nombrado''. Fix:
+    word-wrap en el status del main (un nombre largo estiraba y cortaba el panel).
+    (F) \textbf{Documentado} (sin código nuevo) un fix de fondo del router de
+    mallado: la validez la define el peor tet ($h_\text{max}$); gmsh entrega
+    $h_\text{max} \approx 1{,}5\,h_\text{target}$, así que el auto-tuner le pide a
+    gmsh una malla $1{,}5\times$ más fina (\texttt{\_GMSH\_HMAX\_OVER\_HTARGET})
+    para que la validez real alcance $f_S$ en vez de $f_S/1{,}5$; un guard
+    \texttt{np.isfinite} evita que el tuner muera con \texttt{budget}$=\infty$.
+    Verificado en GUI (voxel valida $\approx f_S$; gmsh $\geq f_S$). Ver
+    \S\,``Cálculo de modos FEM''.\\[2pt]
+    \textbf{Cambios v2.15} (30 de junio): correcciones de la pestaña Predicción
+    al evaluar el diseño propio, geometría irregular en la evaluación, y dos
+    fixes de UI.
+    (A) \textbf{``Evaluar mi diseño actual'' respeta el criterio}: antes
+    scoreaba siempre la geometría ignorando el combo \emph{Optimizar} y las
+    fuentes; ahora respeta el eje --- Geometría (la forma), Ubicación (tu
+    layout REAL de fuentes vía \texttt{evaluate\_layout}, no optimiza) o
+    Combinado. Lee las fuentes del recinto (callback \texttt{get\_sources});
+    sin fuentes avisa (Ubicación) o degrada a geometría (Combinado).
+    \texttt{prediction.evaluate\_design}.
+    (B) \textbf{Geometría irregular}: evaluar una planta dibujada
+    (\texttt{base\_polygon}) o con cortes (\texttt{wall\_profiles}) reconstruía
+    una caja con \texttt{make\_room} e ignoraba la forma; ahora el FEM corre
+    sobre la malla REAL renderizada (callback \texttt{get\_surface}). Como el
+    score de geometría es de cajas, un diálogo ofrece \emph{aproximar por la
+    caja envolvente (AABB)} o \emph{no ponderar la forma} (que impide predecir
+    por geometría). Corrige además el aviso espurio de ``fuentes fuera del
+    recinto'' al evaluar una forma dibujada.
+    (C) \textbf{Slider de Alto}: con forma personalizada se bloqueaban Ancho y
+    Largo pero no el Alto; ahora el Alto se deshabilita cuando hay cortes
+    laterales (la altura la definen los perfiles) y queda editable con
+    solo-planta. \texttt{controls.py}.
+    (D) \textbf{Receptor reubicado}: el editor de forma corre el origen a la
+    esquina inferior-izquierda, así que el receptor por defecto en $(0,0)$
+    caía fuera de una planta dibujada y disparaba el aviso al calcular modos;
+    ahora, al cambiar la geometría o cargar un \texttt{.room}, si el receptor
+    está fuera se reubica a un punto interior.
+    \texttt{acoustic\_panel.\_relocate\_receiver\_if\_outside}.
+    (E) \textbf{Tooltips legibles}: regla \texttt{QToolTip} (fondo blanco,
+    texto negro) --- antes heredaban texto claro sobre el fondo amarillo de Qt.
+    \texttt{style.py}.\\[2pt]
+    \textbf{Cambios v2.16} (5 de julio): origen configurable, análisis
+    multi-punto con mute por fuente, mediciones \texttt{.trf}, $f_S$ desde
+    materiales, y fixes de Predicción y estabilidad.
+    (A) \textbf{Origen $(0,0,0)$ configurable} (combo en Dimensiones): Auto
+    (convención histórica de cada camino) / Centro de planta / Esquina
+    inf.-izq., para paramétrico, planta dibujada y CAD. Fuentes, receptor y
+    puntos de escucha se trasladan CON el recinto (solo cambia el sistema de
+    coordenadas); se guarda en el \texttt{.room}.
+    \texttt{geometry.origin\_offset}/\texttt{anchor\_vertices};
+    \texttt{bench\_origin\_mode.py}. Fix asociado: el loader re-centraba el
+    CAD embebido incondicionalmente y pisaba el frame guardado; ahora re-ancla
+    según el \texttt{origin\_mode} del archivo.
+    (B) \textbf{$f_S$ desde materiales} $+$ panel propio entre Materiales y
+    FEM: punto fijo $f_S = 2000\sqrt{RT(f_S)/V}$ interpolando el RT60 de
+    Sabine por bandas de los materiales asignados ($\alpha{=}0{,}05$ solo como
+    fallback; el log dice qué usó).
+    (C) \textbf{Hover en Materiales}: la fila bajo el cursor resalta sus caras
+    en el 3D (aditivo, visible aun ocluido).
+    (D) \textbf{Carga de \texttt{.trf}} (transfer function binaria, firma
+    \texttt{JACKREF!}; magnitud/fase/coherencia, eje MTW): detección por
+    contenido, anclaje auto-\emph{Relativo} (la TF es relativa, no SPL), aviso
+    si la coherencia mediana $<0{,}7$. \texttt{frd.load\_trf};
+    \texttt{bench\_trf.py}.
+    (E) \textbf{Mute por fuente}: checkbox en la lista; silenciada no radia
+    (FRF/SBIR/FoM/campo 3D/Comparar) pero conserva todo; persistido
+    (\texttt{active}).
+    (F) \textbf{Puntos de escucha nombrados} (Sweet Spot, Mic~$N$): lista en
+    el grupo Receptor, esferas cyan en 3D, persistidos, doble click mueve el
+    receptor.
+    (G) \textbf{Comparar\ldots}: tabla FoM por posición (planitud local $+$
+    desvío vs promedio; fila CONJUNTO con \textbf{VSA} $=\sigma_f$ del
+    promedio espacial y \textbf{MSV} $=$ media del $\sigma$ entre posiciones,
+    sobre las posiciones REALES del usuario) $+$ curvas FRF y SBIR
+    superpuestas por punto, con las fuentes activas; export CSV/TXT/PNG.
+    (H) \textbf{Marcadores en el heatmap 2D}: fuentes activas $\circ$ y
+    receptores $\times$ con nombre debajo (blanco con borde negro);
+    semi-transparente si está a $>0{,}5$ m del plano de corte.
+    (I) \textbf{Predicción de ubicación irregular}: el FEM corre sobre la
+    malla real (leyenda ``malla real''); las semillas del AABB que caen fuera
+    de la sala se REPARAN por bisección hacia un ancla interior
+    (\texttt{LocationContext.inside\_fn}/\texttt{repair\_layout}).
+    (J) \textbf{Estabilidad}: fix del freeze al silenciar (rebuild de la lista
+    desde su propio evento colgaba el mouse-grab de Qt); puntos de escucha con
+    esferas \texttt{GLMeshItem} en vez de scatter GL persistente; watchdog
+    opcional \texttt{PROTO1\_WATCHDOG=1} (stacks en consola si la GUI se
+    cuelga $>20$ s).%
+  }
+\end{center}
+
+\end{document}

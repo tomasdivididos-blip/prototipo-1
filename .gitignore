@@ -1,0 +1,35 @@
+# --- Build / distribución (regenerable, pesado) ---
+dist/
+build/
+*.zip
+*.exe
+*.pkg
+*.pyz
+
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv_mac/
+
+# --- Referencias de terceros (copyright + pesadas) ---
+# Se conservan solo las notas propias (.md/.py); NO los libros/slides.
+referencias/*.pdf
+referencias/*.pptx
+referencias/*.djvu
+referencias/*.epub
+
+# --- LaTeX auxiliares ---
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+
+# --- Sistema operativo ---
+.DS_Store
+Thumbs.db
+desktop.ini

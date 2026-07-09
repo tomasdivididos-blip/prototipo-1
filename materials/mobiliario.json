@@ -1,0 +1,418 @@
+[
+  {
+    "name": "Audiencia sobre asientos de madera (1/m2)",
+    "category": "Mobiliario",
+    "description": "Audiencia sentada sobre asientos de madera con densidad de 1 persona por metro cuadrado",
+    "source": "",
+    "absorption_coef": [
+      0.14,
+      0.18,
+      0.3,
+      0.52,
+      0.7,
+      0.78,
+      0.8,
+      0.79
+    ],
+    "scatter_coef": [
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8
+    ]
+  },
+  {
+    "name": "Audiencia sobre asientos de madera (2/m2)",
+    "category": "Mobiliario",
+    "description": "Audiencia sentada sobre asientos de madera con densidad de 2 personas por metro cuadrado",
+    "source": "",
+    "absorption_coef": [
+      0.24,
+      0.29,
+      0.44,
+      0.73,
+      0.9,
+      0.92,
+      0.91,
+      0.91
+    ],
+    "scatter_coef": [
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8
+    ]
+  },
+  {
+    "name": "Sillas de concierto muy tapizadas",
+    "category": "Mobiliario",
+    "description": "Sillas de concierto muy tapizadas",
+    "source": "",
+    "absorption_coef": [
+      0.61,
+      0.73,
+      0.79,
+      0.82,
+      0.82,
+      0.82,
+      0.81,
+      0.77
+    ],
+    "scatter_coef": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ]
+  },
+  {
+    "name": "Asientos de teatro ocupados",
+    "category": "Mobiliario",
+    "description": "Absorcion media de asientos de teatro ocupados",
+    "source": "",
+    "absorption_coef": [
+      0.34,
+      0.43,
+      0.62,
+      0.79,
+      0.87,
+      0.9,
+      0.93,
+      0.82
+    ],
+    "scatter_coef": [
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8
+    ]
+  },
+  {
+    "name": "Orquesta con instrumentos",
+    "category": "Mobiliario",
+    "description": "Orquesta con instrumentos (1,5 m2/persona)",
+    "source": "",
+    "absorption_coef": [
+      0.36,
+      0.44,
+      0.6,
+      0.76,
+      0.83,
+      0.85,
+      0.86,
+      0.86
+    ],
+    "scatter_coef": [
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8
+    ]
+  },
+  {
+    "name": "Sillas de plastico",
+    "category": "Mobiliario",
+    "description": "Sillas de plastico sin almohadon",
+    "source": "",
+    "absorption_coef": [
+      0.06,
+      0.07,
+      0.09,
+      0.14,
+      0.19,
+      0.22,
+      0.22,
+      0.23
+    ],
+    "scatter_coef": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ]
+  },
+  {
+    "name": "Audiencia de pie (2,7 personas/m2)",
+    "category": "Mobiliario",
+    "description": "Audiencia de pie, densidad: 2,7 personas/m2",
+    "source": "",
+    "absorption_coef": [
+      0.27,
+      0.3,
+      0.54,
+      0.88,
+      0.93,
+      0.93,
+      0.93,
+      0.92
+    ],
+    "scatter_coef": [
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8
+    ]
+  },
+  {
+    "name": "Asientos de teatro, desocupados",
+    "category": "Mobiliario",
+    "description": "Asientos de teatro basados en la absorcion media de disenos modernos. Separacion entre filas de 0,9 m.",
+    "source": "",
+    "absorption_coef": [
+      0.27,
+      0.34,
+      0.48,
+      0.62,
+      0.7,
+      0.78,
+      0.87,
+      0.89
+    ],
+    "scatter_coef": [
+      0.6,
+      0.6,
+      0.6,
+      0.6,
+      0.6,
+      0.6,
+      0.6,
+      0.6
+    ]
+  },
+  {
+    "name": "Sillas de concierto tapizadas",
+    "category": "Mobiliario",
+    "description": "Sillas de concierto tapizadas",
+    "source": "",
+    "absorption_coef": [
+      0.42,
+      0.52,
+      0.68,
+      0.8,
+      0.84,
+      0.83,
+      0.75,
+      0.56
+    ],
+    "scatter_coef": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ]
+  },
+  {
+    "name": "Asientos tapizados",
+    "category": "Mobiliario",
+    "description": "Asientos tapizados",
+    "source": "",
+    "absorption_coef": [
+      0.37,
+      0.47,
+      0.61,
+      0.69,
+      0.72,
+      0.73,
+      0.76,
+      0.67
+    ],
+    "scatter_coef": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ]
+  },
+  {
+    "name": "Asientos tapizados, cubiertos en cuero",
+    "category": "Mobiliario",
+    "description": "Asientos tapizados con funda de cuero",
+    "source": "",
+    "absorption_coef": [
+      0.33,
+      0.43,
+      0.52,
+      0.56,
+      0.57,
+      0.56,
+      0.55,
+      0.5
+    ],
+    "scatter_coef": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ]
+  },
+  {
+    "name": "Asientos tapizados, muy tapizados",
+    "category": "Mobiliario",
+    "description": "Asientos tapizados, muy bien tapizados",
+    "source": "",
+    "absorption_coef": [
+      0.46,
+      0.52,
+      0.64,
+      0.75,
+      0.81,
+      0.82,
+      0.8,
+      0.74
+    ],
+    "scatter_coef": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ]
+  },
+  {
+    "name": "Sillas de madera",
+    "category": "Mobiliario",
+    "description": "Sillas de madera sin almohadon (2 asientos por metro cuadrado)",
+    "source": "",
+    "absorption_coef": [
+      0.05,
+      0.05,
+      0.08,
+      0.1,
+      0.11,
+      0.12,
+      0.12,
+      0.12
+    ],
+    "scatter_coef": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ]
+  },
+  {
+    "name": "Sillas de madera (100% de ocupacion)",
+    "category": "Mobiliario",
+    "description": "Sillas de madera con 100% de ocupacion",
+    "source": "",
+    "absorption_coef": [
+      0.55,
+      0.63,
+      0.78,
+      0.88,
+      0.92,
+      0.92,
+      0.89,
+      0.77
+    ],
+    "scatter_coef": [
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8
+    ]
+  },
+  {
+    "name": "Bancos de madera (75% de ocupacion)",
+    "category": "Mobiliario",
+    "description": "Bancos de madera (como en iglesia) con 75% de ocupacion",
+    "source": "",
+    "absorption_coef": [
+      0.39,
+      0.46,
+      0.57,
+      0.66,
+      0.69,
+      0.7,
+      0.72,
+      0.66
+    ],
+    "scatter_coef": [
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7
+    ]
+  },
+  {
+    "name": "Bancos de madera (100% de ocupacion)",
+    "category": "Mobiliario",
+    "description": "Bancos de madera (como en iglesia) con 100% de ocupacion",
+    "source": "",
+    "absorption_coef": [
+      0.59,
+      0.65,
+      0.72,
+      0.77,
+      0.81,
+      0.86,
+      0.9,
+      0.82
+    ],
+    "scatter_coef": [
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8
+    ]
+  }
+]

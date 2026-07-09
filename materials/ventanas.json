@@ -1,0 +1,132 @@
+[
+  {
+    "name": "Doble vidrio de 2-3 mm, camara de aire de 10 mm",
+    "category": "Ventanas",
+    "description": "Doble capa de vidrio de 2-3 mm con camara de aire de 10 mm entre ambas",
+    "source": "",
+    "absorption_coef": [
+      0.13,
+      0.08,
+      0.05,
+      0.04,
+      0.03,
+      0.03,
+      0.03,
+      0.03
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Doble vidrio de 2-3 mm, camara de aire >30 mm",
+    "category": "Ventanas",
+    "description": "Doble capa de vidrio de 2-3 mm con camara de aire de mas de 30 mm entre ambas",
+    "source": "",
+    "absorption_coef": [
+      0.2,
+      0.13,
+      0.06,
+      0.03,
+      0.02,
+      0.02,
+      0.02,
+      0.02
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Vidrio simple, 3-4 mm",
+    "category": "Ventanas",
+    "description": "Vidrio simple delgado. Espesor: 3-4 mm",
+    "source": "",
+    "absorption_coef": [
+      0.26,
+      0.19,
+      0.14,
+      0.1,
+      0.06,
+      0.05,
+      0.05,
+      0.05
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Vidrio simple, >4 mm",
+    "category": "Ventanas",
+    "description": "Vidrio simple grueso. Espesor mayor a 4 mm",
+    "source": "",
+    "absorption_coef": [
+      0.13,
+      0.08,
+      0.05,
+      0.04,
+      0.03,
+      0.03,
+      0.03,
+      0.03
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Vidrio de ventana",
+    "category": "Ventanas",
+    "description": "Vidrio de ventana comun",
+    "source": "",
+    "absorption_coef": [
+      0.4,
+      0.34,
+      0.25,
+      0.17,
+      0.11,
+      0.07,
+      0.05,
+      0.04
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  }
+]

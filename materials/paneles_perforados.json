@@ -1,0 +1,3044 @@
+[
+  {
+    "name": "Panel microperforado, 6% abierto, absorbente de 20 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con microperforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 0.5 [mm], area de 700 [mm2] por orificio, y la razon de apertura es 6%., \r\n2: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.02,
+      0.06,
+      0.24,
+      0.83,
+      0.57,
+      0.2,
+      0.09,
+      0.05
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel microperforado, 6% abierto, absorbente de 30 mm a 81 kg/m3, cavidad de 20 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con microperforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 0.5 [mm], area de 700 [mm2] por orificio, y la razon de apertura es 6%., \r\n2: Absorbente poroso (lana de roca) de espesor 30 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 20 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.09,
+      0.29,
+      0.77,
+      0.84,
+      0.48,
+      0.25,
+      0.11,
+      0.02
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel microperforado, 6% abierto, absorbente de 30 mm a 81 kg/m3, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con microperforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 0.5 [mm], area de 700 [mm2] por orificio, y la razon de apertura es 6%., \r\n2: Absorbente poroso (lana de roca) de espesor 30 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.4,
+      0.79,
+      0.88,
+      0.68,
+      0.54,
+      0.2,
+      0.08,
+      0.04
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel microperforado, 6% abierto, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con microperforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 0.5 [mm], area de 700 [mm2] por orificio, y la razon de apertura es 6%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.07,
+      0.25,
+      0.7,
+      0.87,
+      0.48,
+      0.22,
+      0.09,
+      0.05
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel microperforado, 6% abierto, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con microperforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 0.5 [mm], area de 700 [mm2] por orificio, y la razon de apertura es 6%., \r\n2: Air cavidad de espesor 100 [mm]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.35,
+      0.87,
+      0.65,
+      0.25,
+      0.22,
+      0.1,
+      0.08
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel microperforado, 7% abierto, absorbente de 10 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con microperforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 0.25 [mm], area de 700 [mm2] por orificio, y la razon de apertura es 7%., \r\n2: Absorbente poroso (lana de roca) de espesor 10 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.04,
+      0.14,
+      0.44,
+      0.74,
+      0.35,
+      0.13,
+      0.08
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel microperforado, 7% abierto, absorbente de 20 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con microperforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 0.25 [mm], area de 700 [mm2] por orificio, y la razon de apertura es 7%., \r\n2: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.14,
+      0.4,
+      0.72,
+      0.62,
+      0.3,
+      0.14,
+      0.08
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel microperforado, 7% abierto, cavidad de 20 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con microperforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 0.25 [mm], area de 700 [mm2] por orificio, y la razon de apertura es 7%., \r\n2: Air cavidad de espesor 20 [mm]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.02,
+      0.07,
+      0.23,
+      0.65,
+      0.69,
+      0.29,
+      0.12,
+      0.05
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel microperforado, 7% abierto, absorbente de 30 mm a 81 kg/m3, cavidad de 20 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con microperforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 0.25 [mm], area de 700 [mm2] por orificio, y la razon de apertura es 7%., \r\n2: Absorbente poroso (lana de roca) de espesor 30 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 20 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.21,
+      0.48,
+      0.7,
+      0.69,
+      0.53,
+      0.3,
+      0.14,
+      0.06
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel microperforado, 7% abierto, absorbente de 30 mm a 81 kg/m3, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con microperforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 0.25 [mm], area de 700 [mm2] por orificio, y la razon de apertura es 7%., \r\n2: Absorbente poroso (lana de roca) de espesor 30 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.59,
+      0.72,
+      0.69,
+      0.61,
+      0.52,
+      0.29,
+      0.13,
+      0.08
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel microperforado, 7% abierto, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con microperforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 0.25 [mm], area de 700 [mm2] por orificio, y la razon de apertura es 7%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.17,
+      0.43,
+      0.68,
+      0.7,
+      0.53,
+      0.3,
+      0.14,
+      0.08
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel microperforado, 7% abierto, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con microperforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 0.25 [mm], area de 700 [mm2] por orificio, y la razon de apertura es 7%., \r\n2: Air cavidad de espesor 100 [mm]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.38,
+      0.67,
+      0.81,
+      0.72,
+      0.44,
+      0.29,
+      0.12,
+      0.09
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel perforado, 4% abierto, absorbente de 40 mm a 47 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 3 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 4%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 47.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.03,
+      0.11,
+      0.51,
+      0.63,
+      0.16,
+      0.06,
+      0.04,
+      0.03
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel perforado, 4% abierto, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 3 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 4%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.16,
+      0.67,
+      0.69,
+      0.23,
+      0.07,
+      0.03,
+      0.01
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel perforado, 4% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 3 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 4%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.4,
+      0.87,
+      0.86,
+      0.61,
+      0.34,
+      0.05,
+      0.02,
+      0.02
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel perforado, 5% abierto, absorbente de 20 mm a 47 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 6 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 5%., \r\n2: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 47.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.03,
+      0.11,
+      0.67,
+      0.2,
+      0.05,
+      0.03,
+      0.02
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel perforado, 5% abierto, absorbente de 20 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 6 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 5%., \r\n2: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.03,
+      0.13,
+      0.78,
+      0.23,
+      0.05,
+      0.02,
+      0.01
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel perforado, 5% abierto, absorbente de 20 mm a 149 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 6 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 5%., \r\n2: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 149.3 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.04,
+      0.18,
+      0.9,
+      0.3,
+      0.08,
+      0.03,
+      0.01
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel perforado, 5% abierto, absorbente de 40 mm a 47 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 6 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 5%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 47.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.03,
+      0.1,
+      0.44,
+      0.67,
+      0.16,
+      0.04,
+      0.01,
+      0.01
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel perforado, 5% abierto, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 6 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 5%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.15,
+      0.6,
+      0.75,
+      0.25,
+      0.08,
+      0.03,
+      0.01
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel perforado, 12% abierto, absorbente de 20 mm a 30 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 10 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 12%., \r\n2: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 30.1 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.02,
+      0.03,
+      0.08,
+      0.27,
+      0.61,
+      0.1,
+      0.04,
+      0.02
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel perforado, 12% abierto, absorbente de 20 mm a 47 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 10 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 12%., \r\n2: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 47.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.03,
+      0.09,
+      0.32,
+      0.65,
+      0.13,
+      0.06,
+      0.04
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel perforado, 12% abierto, absorbente de 20 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 10 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 12%., \r\n2: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.05,
+      0.06,
+      0.12,
+      0.42,
+      0.75,
+      0.22,
+      0.11,
+      0.07
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel perforado, 12% abierto, absorbente de 20 mm a 149 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 10 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 12%., \r\n2: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 149.3 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.04,
+      0.15,
+      0.57,
+      0.79,
+      0.27,
+      0.12,
+      0.09
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel perforado, 12% abierto, absorbente de 40 mm a 47 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 10 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 12%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 47.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.03,
+      0.09,
+      0.3,
+      0.81,
+      0.49,
+      0.2,
+      0.11,
+      0.09
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel perforado, 12% abierto, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 10 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 12%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.13,
+      0.44,
+      0.93,
+      0.64,
+      0.31,
+      0.12,
+      0.01
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel perforado, 12% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 20 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 8 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 12%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 20 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.26,
+      0.71,
+      0.94,
+      0.71,
+      0.35,
+      0.06,
+      0.06
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel perforado, 12% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 8 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 12%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.37,
+      0.78,
+      0.93,
+      0.86,
+      0.82,
+      0.31,
+      0.13,
+      0.05
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel perforado, 12% abierto, absorbente de 40 mm a 149 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 10 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 12%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 149.3 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.07,
+      0.22,
+      0.64,
+      0.93,
+      0.76,
+      0.37,
+      0.06,
+      0.04
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel perforado, 18% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 20 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 10 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 18%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 20 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.26,
+      0.66,
+      0.95,
+      0.85,
+      0.54,
+      0.13,
+      0.11
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel perforado, 18% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 10 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 18%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.37,
+      0.76,
+      0.93,
+      0.89,
+      0.91,
+      0.47,
+      0.19,
+      0.03
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel perforado, 20% abierto, absorbente de 20 mm a 30 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 15 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 20%., \r\n2: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 30.1 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.03,
+      0.08,
+      0.22,
+      0.63,
+      0.19,
+      0.07,
+      0.05
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel perforado, 20% abierto, absorbente de 20 mm a 47 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 15 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 20%., \r\n2: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 47.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.03,
+      0.08,
+      0.25,
+      0.73,
+      0.26,
+      0.11,
+      0.08
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel perforado, 20% abierto, absorbente de 20 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 15 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 20%., \r\n2: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.03,
+      0.05,
+      0.1,
+      0.33,
+      0.84,
+      0.37,
+      0.15,
+      0.06
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel perforado, 20% abierto, absorbente de 20 mm a 149 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 15 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 20%., \r\n2: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 149.3 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.04,
+      0.14,
+      0.48,
+      0.93,
+      0.48,
+      0.23,
+      0.16
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel perforado, 20% abierto, absorbente de 40 mm a 30 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 15 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 20%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 30.1 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.07,
+      0.1,
+      0.21,
+      0.56,
+      0.59,
+      0.24,
+      0.21,
+      0.04
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel perforado, 20% abierto, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 15 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 20%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.13,
+      0.4,
+      0.87,
+      0.82,
+      0.48,
+      0.17,
+      0.09
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel perforado, 20% abierto, absorbente de 40 mm a 149 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 15 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 20%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 149.3 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.07,
+      0.22,
+      0.6,
+      0.91,
+      0.88,
+      0.59,
+      0.19,
+      0.1
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel perforado, 24% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 20 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 8 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 24%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 20 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.25,
+      0.64,
+      0.94,
+      0.92,
+      0.73,
+      0.25,
+      0.19
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel perforado, 24% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 8 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 24%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.38,
+      0.74,
+      0.93,
+      0.9,
+      0.93,
+      0.66,
+      0.34,
+      0.09
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel perforado, 30% abierto, absorbente de 20 mm a 30 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 20 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 30%., \r\n2: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 30.1 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.02,
+      0.03,
+      0.07,
+      0.19,
+      0.51,
+      0.32,
+      0.12,
+      0.09
+    ],
+    "scatter_coef": [
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4
+    ]
+  },
+  {
+    "name": "Panel perforado, 30% abierto, absorbente de 20 mm a 47 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 20 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 30%., \r\n2: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 47.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.02,
+      0.03,
+      0.07,
+      0.21,
+      0.64,
+      0.43,
+      0.19,
+      0.11
+    ],
+    "scatter_coef": [
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4
+    ]
+  },
+  {
+    "name": "Panel perforado, 30% abierto, absorbente de 20 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 20 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 30%., \r\n2: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.06,
+      0.11,
+      0.3,
+      0.78,
+      0.56,
+      0.25,
+      0.12
+    ],
+    "scatter_coef": [
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4
+    ]
+  },
+  {
+    "name": "Panel perforado, 30% abierto, absorbente de 20 mm a 149 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 20 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 30%., \r\n2: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 149.3 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.04,
+      0.14,
+      0.44,
+      0.91,
+      0.68,
+      0.37,
+      0.27
+    ],
+    "scatter_coef": [
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4
+    ]
+  },
+  {
+    "name": "Panel perforado, 30% abierto, absorbente de 40 mm a 30 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 20 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 30%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 30.1 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.06,
+      0.09,
+      0.19,
+      0.48,
+      0.7,
+      0.37,
+      0.3,
+      0.07
+    ],
+    "scatter_coef": [
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4
+    ]
+  },
+  {
+    "name": "Panel perforado, 30% abierto, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 20 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 30%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.13,
+      0.39,
+      0.82,
+      0.91,
+      0.67,
+      0.3,
+      0.14
+    ],
+    "scatter_coef": [
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4
+    ]
+  },
+  {
+    "name": "Panel perforado, 30% abierto, absorbente de 40 mm a 149 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones circulares de espesor 12 [mm], densidad de 700 [kg/m3], diametro de orificio de 20 [mm],  area de 700 [mm2] por orificio, y la razon de apertura es 30%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 149.3 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.22,
+      0.57,
+      0.89,
+      0.92,
+      0.79,
+      0.35,
+      0.16
+    ],
+    "scatter_coef": [
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4
+    ]
+  },
+  {
+    "name": "Panel ranurado, 12% abierto, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 25 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 50 [mm], y la razon de apertura es 12%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.13,
+      0.43,
+      0.91,
+      0.71,
+      0.34,
+      0.1,
+      0.05
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 12% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 30 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 25 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 50 [mm], y la razon de apertura es 12%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.34,
+      0.79,
+      0.94,
+      0.77,
+      0.37,
+      0.08,
+      0.07
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 12% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 25 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 50 [mm], y la razon de apertura es 12%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.37,
+      0.77,
+      0.93,
+      0.87,
+      0.86,
+      0.35,
+      0.16,
+      0.07
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 15% abierto, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 25 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 40 [mm], y la razon de apertura es 15%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.13,
+      0.41,
+      0.88,
+      0.8,
+      0.44,
+      0.15,
+      0.08
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 15% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 30 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 25 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 40 [mm], y la razon de apertura es 15%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.33,
+      0.76,
+      0.95,
+      0.84,
+      0.48,
+      0.12,
+      0.1
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 15% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 25 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 40 [mm], y la razon de apertura es 15%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.37,
+      0.76,
+      0.93,
+      0.89,
+      0.91,
+      0.46,
+      0.24,
+      0.12
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 17% abierto, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 25 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 35 [mm], y la razon de apertura es 17%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.13,
+      0.4,
+      0.86,
+      0.84,
+      0.51,
+      0.18,
+      0.1
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 17% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 30 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 25 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 35 [mm], y la razon de apertura es 17%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.33,
+      0.75,
+      0.95,
+      0.87,
+      0.55,
+      0.15,
+      0.12
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 17% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 25 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 35 [mm], y la razon de apertura es 17%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.37,
+      0.75,
+      0.93,
+      0.89,
+      0.92,
+      0.5,
+      0.21,
+      0.03
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 18% abierto, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 25 [mm], longitud de orificio en direccion y de 60 [mm], distancia entre orificios, direccion y de 65 [mm], y la razon de apertura es 18%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.13,
+      0.4,
+      0.85,
+      0.87,
+      0.55,
+      0.21,
+      0.11
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 18% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 30 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 25 [mm], longitud de orificio en direccion y de 60 [mm], distancia entre orificios, direccion y de 65 [mm], y la razon de apertura es 18%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.33,
+      0.75,
+      0.95,
+      0.89,
+      0.59,
+      0.17,
+      0.14
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 19% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 20 [mm], longitud de orificio en direccion y de 60 [mm], distancia entre orificios, direccion y de 80 [mm], y la razon de apertura es 19%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.38,
+      0.75,
+      0.93,
+      0.89,
+      0.93,
+      0.55,
+      0.24,
+      0.04
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 20% abierto, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 15 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 50 [mm], y la razon de apertura es 20%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.13,
+      0.39,
+      0.84,
+      0.88,
+      0.59,
+      0.24,
+      0.12
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 20% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 30 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 15 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 50 [mm], y la razon de apertura es 20%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.33,
+      0.74,
+      0.95,
+      0.9,
+      0.64,
+      0.2,
+      0.15
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 20% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 15 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 50 [mm], y la razon de apertura es 20%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.38,
+      0.75,
+      0.93,
+      0.9,
+      0.93,
+      0.58,
+      0.27,
+      0.05
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 21% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 20 [mm], longitud de orificio en direccion y de 60 [mm], distancia entre orificios, direccion y de 70 [mm], y la razon de apertura es 21%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.38,
+      0.75,
+      0.93,
+      0.9,
+      0.93,
+      0.61,
+      0.3,
+      0.06
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 23% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 20 [mm], longitud de orificio en direccion y de 60 [mm], distancia entre orificios, direccion y de 65 [mm], y la razon de apertura es 23%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.38,
+      0.74,
+      0.93,
+      0.9,
+      0.93,
+      0.65,
+      0.33,
+      0.08
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 25% abierto, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 15 [mm], longitud de orificio en direccion y de 60 [mm], distancia entre orificios, direccion y de 80 [mm], y la razon de apertura es 25%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.13,
+      0.39,
+      0.81,
+      0.92,
+      0.7,
+      0.33,
+      0.15
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 25% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 30 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 15 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 40 [mm], y la razon de apertura es 25%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.33,
+      0.73,
+      0.94,
+      0.93,
+      0.75,
+      0.28,
+      0.21
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 25% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 15 [mm], longitud de orificio en direccion y de 60 [mm], distancia entre orificios, direccion y de 80 [mm], y la razon de apertura es 25%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.38,
+      0.74,
+      0.92,
+      0.9,
+      0.93,
+      0.69,
+      0.36,
+      0.1
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 29% abierto, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 15 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 35 [mm], y la razon de apertura es 29%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.05,
+      0.13,
+      0.38,
+      0.79,
+      0.93,
+      0.76,
+      0.39,
+      0.18
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 29% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 30 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 15 [mm], longitud de orificio en direccion y de 60 [mm], distancia entre orificios, direccion y de 70 [mm], y la razon de apertura es 29%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.33,
+      0.72,
+      0.94,
+      0.93,
+      0.8,
+      0.34,
+      0.25
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 29% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 15 [mm], longitud de orificio en direccion y de 60 [mm], distancia entre orificios, direccion y de 70 [mm], y la razon de apertura es 29%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.39,
+      0.74,
+      0.92,
+      0.9,
+      0.93,
+      0.75,
+      0.43,
+      0.14
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 30% abierto, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 10 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 50 [mm], y la razon de apertura es 30%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.05,
+      0.13,
+      0.38,
+      0.79,
+      0.94,
+      0.77,
+      0.42,
+      0.19
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 30% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 30 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 10 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 50 [mm], y la razon de apertura es 30%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.33,
+      0.72,
+      0.94,
+      0.94,
+      0.82,
+      0.36,
+      0.27
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 30% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 10 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 50 [mm], y la razon de apertura es 30%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.4,
+      0.74,
+      0.92,
+      0.9,
+      0.93,
+      0.77,
+      0.45,
+      0.15
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 31% abierto, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 15 [mm], longitud de orificio en direccion y de 60 [mm], distancia entre orificios, direccion y de 65 [mm], y la razon de apertura es 31%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.05,
+      0.14,
+      0.38,
+      0.79,
+      0.94,
+      0.78,
+      0.43,
+      0.2
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 31% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 30 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 15 [mm], longitud de orificio en direccion y de 60 [mm], distancia entre orificios, direccion y de 65 [mm], y la razon de apertura es 31%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.33,
+      0.72,
+      0.94,
+      0.94,
+      0.83,
+      0.38,
+      0.28
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 31% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 15 [mm], longitud de orificio en direccion y de 60 [mm], distancia entre orificios, direccion y de 65 [mm], y la razon de apertura es 31%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.4,
+      0.74,
+      0.92,
+      0.9,
+      0.93,
+      0.78,
+      0.46,
+      0.16
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel ranurado, 38% abierto, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 10 [mm], longitud de orificio en direccion y de 60 [mm], distancia entre orificios, direccion y de 80 [mm], y la razon de apertura es 38%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.13,
+      0.37,
+      0.77,
+      0.95,
+      0.87,
+      0.52,
+      0.33
+    ],
+    "scatter_coef": [
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45
+    ]
+  },
+  {
+    "name": "Panel ranurado, 38% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 30 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 10 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 40 [mm], y la razon de apertura es 38%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.33,
+      0.71,
+      0.93,
+      0.94,
+      0.89,
+      0.47,
+      0.35
+    ],
+    "scatter_coef": [
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45
+    ]
+  },
+  {
+    "name": "Panel ranurado, 38% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 10 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 40 [mm], y la razon de apertura es 38%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.47,
+      0.77,
+      0.91,
+      0.91,
+      0.92,
+      0.85,
+      0.54,
+      0.37
+    ],
+    "scatter_coef": [
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45
+    ]
+  },
+  {
+    "name": "Panel ranurado, 43% abierto, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 10 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 35 [mm], y la razon de apertura es 43%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.13,
+      0.37,
+      0.76,
+      0.95,
+      0.89,
+      0.58,
+      0.39
+    ],
+    "scatter_coef": [
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45
+    ]
+  },
+  {
+    "name": "Panel ranurado, 43% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 30 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 10 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 35 [mm], y la razon de apertura es 43%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.33,
+      0.71,
+      0.93,
+      0.94,
+      0.91,
+      0.55,
+      0.41
+    ],
+    "scatter_coef": [
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45
+    ]
+  },
+  {
+    "name": "Panel ranurado, 43% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 10 [mm], longitud de orificio en direccion y de 30 [mm], distancia entre orificios, direccion y de 35 [mm], y la razon de apertura es 43%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.47,
+      0.76,
+      0.91,
+      0.91,
+      0.91,
+      0.88,
+      0.62,
+      0.43
+    ],
+    "scatter_coef": [
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45
+    ]
+  },
+  {
+    "name": "Panel ranurado, 46% abierto, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 10 [mm], longitud de orificio en direccion y de 60 [mm], distancia entre orificios, direccion y de 65 [mm], y la razon de apertura es 46%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.13,
+      0.37,
+      0.76,
+      0.95,
+      0.91,
+      0.61,
+      0.42
+    ],
+    "scatter_coef": [
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45
+    ]
+  },
+  {
+    "name": "Panel ranurado, 46% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 30 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 10 [mm], longitud de orificio en direccion y de 60 [mm], distancia entre orificios, direccion y de 65 [mm], y la razon de apertura es 46%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.33,
+      0.7,
+      0.93,
+      0.94,
+      0.92,
+      0.6,
+      0.46
+    ],
+    "scatter_coef": [
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45
+    ]
+  },
+  {
+    "name": "Panel ranurado, 46% abierto, absorbente de 40 mm a 81 kg/m3, cavidad de 100 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel con perforaciones ranuradas de espesor 12 [mm], densidad de 700 [kg/m3], longitud de orificio en direccion x de 5 [mm], distancia entre orificios, direccion x de 10 [mm], longitud de orificio en direccion y de 60 [mm], distancia entre orificios, direccion y de 65 [mm], y la razon de apertura es 46%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.47,
+      0.76,
+      0.91,
+      0.91,
+      0.91,
+      0.9,
+      0.65,
+      0.47
+    ],
+    "scatter_coef": [
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 3,0 mm a intervalos de 10,0 mm, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 3 [mm], distancia entre ranuras de 10 [mm], y la razon de apertura es 30%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.05,
+      0.14,
+      0.38,
+      0.78,
+      0.94,
+      0.8,
+      0.47,
+      0.22
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 3,0 mm a intervalos de 10,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 30,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 3 [mm], distancia entre ranuras de 10 [mm], y la razon de apertura es 30%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.33,
+      0.72,
+      0.94,
+      0.94,
+      0.85,
+      0.41,
+      0.3
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 3,0 mm a intervalos de 10,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 100,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 3 [mm], distancia entre ranuras de 10 [mm], y la razon de apertura es 30%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.4,
+      0.74,
+      0.92,
+      0.9,
+      0.92,
+      0.8,
+      0.49,
+      0.19
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 3,0 mm a intervalos de 20,0 mm, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 3 [mm], distancia entre ranuras de 20 [mm], y la razon de apertura es 15%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.13,
+      0.41,
+      0.88,
+      0.8,
+      0.44,
+      0.15,
+      0.08
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 3,0 mm a intervalos de 20,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 30,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 3 [mm], distancia entre ranuras de 20 [mm], y la razon de apertura es 15%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.33,
+      0.77,
+      0.95,
+      0.84,
+      0.48,
+      0.12,
+      0.1
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 3,0 mm a intervalos de 20,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 100,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 3 [mm], distancia entre ranuras de 20 [mm], y la razon de apertura es 15%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.37,
+      0.76,
+      0.93,
+      0.88,
+      0.9,
+      0.43,
+      0.17,
+      0.02
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 3,0 mm a intervalos de 40,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 30,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 3 [mm], distancia entre ranuras de 40 [mm], y la razon de apertura es 8%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.36,
+      0.87,
+      0.83,
+      0.5,
+      0.16,
+      0.02,
+      0.03
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 3,0 mm a intervalos de 40,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 100,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 3 [mm], distancia entre ranuras de 40 [mm], y la razon de apertura es 8%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.38,
+      0.81,
+      0.92,
+      0.78,
+      0.59,
+      0.12,
+      0.03,
+      0.01
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 3,0 mm a intervalos de 80,0 mm, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 3 [mm], distancia entre ranuras de 80 [mm], y la razon de apertura es 4%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.16,
+      0.74,
+      0.5,
+      0.14,
+      0.04,
+      0.02,
+      0.01
+    ],
+    "scatter_coef": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 3,0 mm a intervalos de 80,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 100,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 3 [mm], distancia entre ranuras de 80 [mm], y la razon de apertura es 4%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.39,
+      0.9,
+      0.8,
+      0.5,
+      0.22,
+      0.02,
+      0.01,
+      0.01
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 6,0 mm a intervalos de 20,0 mm, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 6 [mm], distancia entre ranuras de 20 [mm], y la razon de apertura es 30%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.05,
+      0.13,
+      0.38,
+      0.79,
+      0.94,
+      0.77,
+      0.41,
+      0.19
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 6,0 mm a intervalos de 20,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 30,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 6 [mm], distancia entre ranuras de 20 [mm], y la razon de apertura es 30%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.33,
+      0.72,
+      0.94,
+      0.94,
+      0.82,
+      0.36,
+      0.26
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 6,0 mm a intervalos de 20,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 100,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 6 [mm], distancia entre ranuras de 20 [mm], y la razon de apertura es 30%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.39,
+      0.74,
+      0.92,
+      0.9,
+      0.93,
+      0.76,
+      0.44,
+      0.15
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 6,0 mm a intervalos de 40,0 mm, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 6 [mm], distancia entre ranuras de 40 [mm], y la razon de apertura es 15%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.13,
+      0.42,
+      0.9,
+      0.73,
+      0.36,
+      0.11,
+      0.06
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 6,0 mm a intervalos de 40,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 30,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 6 [mm], distancia entre ranuras de 40 [mm], y la razon de apertura es 15%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.34,
+      0.78,
+      0.94,
+      0.79,
+      0.39,
+      0.08,
+      0.08
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 6,0 mm a intervalos de 40,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 100,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 6 [mm], distancia entre ranuras de 40 [mm], y la razon de apertura es 15%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.37,
+      0.77,
+      0.93,
+      0.88,
+      0.87,
+      0.37,
+      0.18,
+      0.08
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 6,0 mm a intervalos de 80,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 30,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 6 [mm], distancia entre ranuras de 80 [mm], y la razon de apertura es 8%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.1,
+      0.37,
+      0.9,
+      0.75,
+      0.39,
+      0.12,
+      0.01,
+      0.02
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 6,0 mm a intervalos de 80,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 100,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 6 [mm], distancia entre ranuras de 80 [mm], y la razon de apertura es 8%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.38,
+      0.83,
+      0.91,
+      0.72,
+      0.47,
+      0.07,
+      0.02,
+      0.01
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 12,0 mm a intervalos de 20,0 mm, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 12 [mm], distancia entre ranuras de 20 [mm], y la razon de apertura es 60%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.13,
+      0.36,
+      0.73,
+      0.94,
+      0.94,
+      0.77,
+      0.62
+    ],
+    "scatter_coef": [
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 12,0 mm a intervalos de 20,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 30,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 12 [mm], distancia entre ranuras de 20 [mm], y la razon de apertura es 60%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.13,
+      0.34,
+      0.69,
+      0.92,
+      0.94,
+      0.95,
+      0.76,
+      0.52
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 12,0 mm a intervalos de 20,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 100,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 12 [mm], distancia entre ranuras de 20 [mm], y la razon de apertura es 60%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.47,
+      0.76,
+      0.9,
+      0.91,
+      0.89,
+      0.94,
+      0.81,
+      0.66
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 12,0 mm a intervalos de 40,0 mm, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 12 [mm], distancia entre ranuras de 40 [mm], y la razon de apertura es 30%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.13,
+      0.38,
+      0.81,
+      0.92,
+      0.69,
+      0.32,
+      0.15
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 12,0 mm a intervalos de 40,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 30,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 12 [mm], distancia entre ranuras de 40 [mm], y la razon de apertura es 30%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.33,
+      0.73,
+      0.94,
+      0.92,
+      0.74,
+      0.28,
+      0.21
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 12,0 mm a intervalos de 40,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 100,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 12 [mm], distancia entre ranuras de 40 [mm], y la razon de apertura es 30%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.38,
+      0.74,
+      0.92,
+      0.9,
+      0.93,
+      0.68,
+      0.36,
+      0.09
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 12,0 mm a intervalos de 80,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 30,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 12 [mm], distancia entre ranuras de 80 [mm], y la razon de apertura es 15%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.12,
+      0.34,
+      0.81,
+      0.91,
+      0.67,
+      0.26,
+      0.05,
+      0.04
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 12,0 mm a intervalos de 80,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 100,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 12 [mm], densidad de 700 [kg/m3], ancho de ranura de 12 [mm], distancia entre ranuras de 80 [mm], y la razon de apertura es 15%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.37,
+      0.78,
+      0.93,
+      0.85,
+      0.77,
+      0.25,
+      0.1,
+      0.04
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 20,0 mm a intervalos de 30,0 mm, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 30 [mm], densidad de 700 [kg/m3], ancho de ranura de 20 [mm], distancia entre ranuras de 30 [mm], y la razon de apertura es 67%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.05,
+      0.14,
+      0.38,
+      0.79,
+      0.94,
+      0.79,
+      0.43,
+      0.2
+    ],
+    "scatter_coef": [
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 20,0 mm a intervalos de 30,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 30,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 30 [mm], densidad de 700 [kg/m3], ancho de ranura de 20 [mm], distancia entre ranuras de 30 [mm], y la razon de apertura es 67%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.33,
+      0.72,
+      0.94,
+      0.94,
+      0.83,
+      0.38,
+      0.28
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 20,0 mm a intervalos de 30,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 100,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 30 [mm], densidad de 700 [kg/m3], ancho de ranura de 20 [mm], distancia entre ranuras de 30 [mm], y la razon de apertura es 67%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.4,
+      0.74,
+      0.92,
+      0.9,
+      0.93,
+      0.78,
+      0.46,
+      0.17
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 25,0 mm a intervalos de 30,0 mm, absorbente de 40 mm a 81 kg/m3",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 30 [mm], densidad de 700 [kg/m3], ancho de ranura de 25 [mm], distancia entre ranuras de 30 [mm], y la razon de apertura es 83%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.13,
+      0.37,
+      0.76,
+      0.95,
+      0.88,
+      0.55,
+      0.36
+    ],
+    "scatter_coef": [
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45,
+      0.45
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 25,0 mm a intervalos de 30,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 30,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 30 [mm], densidad de 700 [kg/m3], ancho de ranura de 25 [mm], distancia entre ranuras de 30 [mm], y la razon de apertura es 83%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 30 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.33,
+      0.71,
+      0.93,
+      0.94,
+      0.9,
+      0.51,
+      0.38
+    ],
+    "scatter_coef": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ]
+  },
+  {
+    "name": "Panel estriado, franjas de 25,0 mm a intervalos de 30,0 mm, absorbente de 40 mm a 81 kg/m3, cavidad de 100,0 mm",
+    "category": "Paneles perforados",
+    "description": "Este material esta compuesto por 4 capas. De la superficie hacia el fondo: \r\n1: Panel estriado de espesor 30 [mm], densidad de 700 [kg/m3], ancho de ranura de 25 [mm], distancia entre ranuras de 30 [mm], y la razon de apertura es 83%., \r\n2: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n3: Air cavidad de espesor 100 [mm]., \r\n4: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.47,
+      0.76,
+      0.91,
+      0.91,
+      0.91,
+      0.87,
+      0.58,
+      0.4
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  }
+]

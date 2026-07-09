@@ -1,0 +1,689 @@
+% ============================================================
+%  Signal Flow — Prototipo 1: Modelador de Recintos 3D
+%  Compilar con: pdflatex signal_flow.tex
+%  (requiere pdflatex o lualatex; tikz, pgf, amsmath, geometry)
+% ============================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+
+\usepackage{amsmath, amssymb}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, fit, shapes.geometric,
+                shapes.multipart, calc, backgrounds, decorations.pathreplacing}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+
+% ---- Colores del tema ----
+\definecolor{clrGUI}{RGB}{137,180,250}       % azul claro — módulos GUI
+\definecolor{clrGeo}{RGB}{166,227,161}       % verde — geometría
+\definecolor{clrFEM}{RGB}{245,194,231}       % rosa — FEM
+\definecolor{clrViz}{RGB}{250,179,135}       % naranja — visualización
+\definecolor{clrMat}{RGB}{203,166,247}       % violeta — materiales
+\definecolor{clrSig}{RGB}{148,226,213}       % teal — señales Qt
+\definecolor{clrDark}{RGB}{30,30,46}         % fondo oscuro
+
+% ---- Estilo de cajas ----
+\tikzset{
+  box/.style    = {draw, rectangle, rounded corners=4pt,
+                   minimum width=3.2cm, minimum height=0.9cm,
+                   text centered, align=center,
+                   font=\footnotesize\bfseries,
+                   inner sep=4pt},
+  guibox/.style  = {box, fill=clrGUI!40},
+  geobox/.style  = {box, fill=clrGeo!50},
+  fembox/.style  = {box, fill=clrFEM!50},
+  vizbox/.style  = {box, fill=clrViz!50},
+  matbox/.style  = {box, fill=clrMat!40},
+  sigbox/.style  = {box, fill=clrSig!40, dashed},
+  smallbox/.style= {box, minimum width=2.4cm, minimum height=0.7cm,
+                    font=\scriptsize\bfseries},
+  arr/.style    = {-{Stealth[length=6pt]}, thick},
+  darr/.style   = {-{Stealth[length=6pt]}, thick, dashed, gray},
+  label/.style  = {font=\scriptsize, midway, fill=white, inner sep=1pt,
+                   align=center},
+}
+
+% ============================================================
+\begin{document}
+% ============================================================
+
+\title{\textbf{Flujo de señales}\\
+       Prototipo 1 — Modelador de Recintos 3D con Simulación Acústica FEM}
+\author{Ingeniería acústica / Desarrollo de software}
+\date{}
+\maketitle
+\tableofcontents
+\newpage
+
+% ------------------------------------------------------------
+\section{Visión general de la arquitectura}
+% ------------------------------------------------------------
+
+La aplicación está organizada en tres capas: \textbf{interfaz (GUI)},
+\textbf{cómputo} y \textbf{renderizado 3D}.  La comunicación entre capas
+ocurre mediante el sistema de \emph{signals/slots} de Qt5; ningún módulo
+llama directamente a otro sin pasar por una señal o un método público
+explícito.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.4cm and 2.2cm]
+
+  % --- Capa GUI ---
+  \node[guibox, minimum width=4cm] (main)    {MainWindow\\{\scriptsize main.py}};
+  \node[guibox, below=0.7cm of main, xshift=-2.8cm] (ctrl)
+        {ControlPanel\\{\scriptsize controls.py}};
+  \node[guibox, below=0.7cm of main, xshift= 2.8cm] (apanel)
+        {AcousticPanel\\{\scriptsize acoustic\_panel.py}};
+
+  % --- Capa cómputo ---
+  \node[geobox, below=1.5cm of ctrl] (geo)
+        {geometry.py\\{\scriptsize make\_room / make\_arch\_ribs}};
+  \node[fembox, below=1.5cm of apanel] (fem)
+        {acoustic\_fem.py\\{\scriptsize build\_KM / solve\_modes / FRF}};
+  \node[matbox, right=1.3cm of fem] (mlib)
+        {material\_library.py\\{\scriptsize Sabine / RT60 / $\xi_n$}};
+  \node[fembox, below=0.9cm of fem, xshift=-2cm] (amesh)
+        {acoustic\_mesh.py\\{\scriptsize build\_volume\_mesh}};
+  \node[fembox, below=0.9cm of fem, xshift= 2cm] (aana)
+        {acoustic\_analysis.py\\{\scriptsize pipelines / slices / campos}};
+
+  % --- Capa renderizado ---
+  \node[vizbox, below=1.5cm of geo, xshift=2cm] (viewer)
+        {IsoViewer\\{\scriptsize viewer.py}};
+  \node[vizbox, right=1.2cm of viewer] (aviz)
+        {acoustic\_viewer.py\\{\scriptsize markers / slices / nubes}};
+
+  % --- Flechas ---
+  \draw[arr] (main) -- node[label, left]{parámetros} (ctrl);
+  \draw[arr] (main) -- node[label, right]{get\_surface} (apanel);
+  \draw[arr] (ctrl) -- node[label, left]{verts/tris/edges} (geo);
+  \draw[arr] (geo)  -- node[label, below]{update\_geometry} (viewer);
+  \draw[arr] (apanel) -- node[label, right]{run\_fem\_modal} (fem);
+  \draw[arr] (fem)  -- node[label, left]{eigsh} (amesh);
+  \draw[arr] (fem)  -- node[label, right]{ModalSolution} (aana);
+  \draw[arr] (mlib) -- node[label, right]{$\xi_n$} (fem);
+  \draw[arr] (aana) -- node[label, below]{slices / nubes} (aviz);
+  \draw[arr] (aviz) -- (viewer);
+
+  % --- Señales Qt (punteadas) ---
+  \draw[darr] (ctrl)   to[bend left=15]
+      node[label, left]{\footnotesize parametersChanged} (main);
+  \draw[darr] (viewer) to[bend right=20]
+      node[label, below]{\footnotesize sourceAddRequested\\sourceMoveRequested}
+      (main);
+  \draw[darr] (main)   to[bend right=10]
+      node[label, right]{\footnotesize add\_source\_at} (apanel);
+
+\end{tikzpicture}
+\caption{Arquitectura de tres capas. Líneas sólidas = llamadas directas;
+         líneas punteadas = señales Qt.}
+\end{figure}
+
+% ------------------------------------------------------------
+\section{Flujo 1 — Cambio de geometría}
+% ------------------------------------------------------------
+
+Cada vez que el usuario mueve un slider o edita el polígono de planta,
+\texttt{ControlPanel} emite \texttt{parametersChanged}.  El flujo completo
+hasta el renderizado se describe a continuación.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.9cm and 0cm]
+
+  \node[guibox]  (s1) {Usuario mueve slider\\o edita polígono};
+  \node[sigbox,  below=of s1] (s2)
+        {\texttt{parametersChanged(params:dict)}\\señal Qt};
+  \node[guibox,  below=of s2] (s3)
+        {\texttt{MainWindow.\_on\_params()}};
+  \node[geobox,  below=of s3] (s4)
+        {\texttt{make\_room(**params)}\\$\rightarrow$ verts, tris, edges};
+  \node[geobox,  below=of s4] (s5)
+        {\texttt{make\_arch\_ribs(**params)}\\(solo si arch\_height $>$ 0)};
+  \node[vizbox,  below=of s5] (s6)
+        {\texttt{viewer.update\_geometry(v,t,e)}\\refresh mesh + aristas};
+  \node[fembox,  below=of s6] (s7)
+        {\texttt{acoustic.on\_geometry\_changed()}\\invalida modal\_result,
+         $\xi_n$, campo 3D};
+  \node[vizbox,  below=of s7] (s8)
+        {\texttt{acoustic.\_refresh\_sources\_list()}\\re-agrega esferas
+         \emph{después} del mesh};
+  \node[vizbox,  below=of s8] (s9)
+        {\texttt{acoustic.\_refresh\_receiver\_marker()}\\re-agrega cruz};
+
+  \foreach \i/\j in {s1/s2, s2/s3, s3/s4, s4/s5, s5/s6, s6/s7, s7/s8, s8/s9}
+    \draw[arr] (\i) -- (\j);
+
+  % Nota lateral
+  \node[right=2cm of s7, font=\scriptsize, align=left,
+        draw=gray, rounded corners, fill=yellow!10, inner sep=4pt,
+        minimum width=4.2cm]
+    (nota1) {Invalidación necesaria:\\la malla FEM antigua\\
+             no corresponde al\\nuevo recinto.};
+  \draw[darr] (s7) -- (nota1);
+
+\end{tikzpicture}
+\caption{Flujo de cambio de geometría.}
+\end{figure}
+
+\subsection*{Detalles del mallado volumétrico}
+
+\texttt{build\_volume\_mesh} construye una malla tetraédrica interior:
+
+\begin{enumerate}[itemsep=2pt]
+  \item Calcular AABB (bounding box) del recinto.
+  \item Generar rejilla estructurada de hexaedros con paso $h = 1/\texttt{n\_per\_meter}$.
+  \item Subdividir cada hexaedro en 6 tetraedros (split de Freudenthal).
+  \item Filtrar tetraedros cuyo centroide cae \emph{fuera} del recinto
+        (test point-in-polyhedron por rayo en $+z$, paridad de intersecciones).
+  \item Re-indexar nodos usados.
+\end{enumerate}
+
+% ------------------------------------------------------------
+\section{Flujo 2 — Cálculo modal FEM}
+% ------------------------------------------------------------
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.85cm and 0cm]
+
+  \node[guibox] (f1) {Usuario presiona\\``Calcular modos (FEM)''};
+  \node[fembox, below=of f1] (f2)
+        {\texttt{\_solve\_fem()}};
+  \node[geobox, below=of f2] (f3)
+        {\texttt{get\_surface()} $\rightarrow$ (verts, tris)};
+  \node[fembox, below=of f3] (f4)
+        {\texttt{build\_volume\_mesh(verts, tris, n\_per\_meter)}\\
+         $\rightarrow$ nodes~$(N_n\times3)$, tets~$(N_e\times4)$};
+  \node[fembox, below=of f4] (f5)
+        {\texttt{build\_KM(nodes, tets)}\\
+         $\rightarrow$ $\mathbf{K},\mathbf{M}$ sparse CSR};
+  \node[fembox, below=of f5] (f6)
+        {\texttt{solve\_modes(K, M, n\_modes)}\\
+         \texttt{eigsh} shift-invert (Lanczos)\\
+         $\rightarrow$ $f_n$~[Hz],\; $\boldsymbol{\Phi}$~$(N_n\times N_m)$};
+  \node[matbox, below=of f6] (f7)
+        {\texttt{\_compute\_xi\_from\_materials()}\\
+         Sabine $\rightarrow$ RT60$(f)$ $\rightarrow$ $\xi_n$};
+  \node[vizbox, below=of f7] (f8)
+        {\texttt{\_refresh\_modes\_combo()}\\llena ComboBox con $f_n$};
+  \node[vizbox, below=of f8] (f9)
+        {\texttt{\_update\_slice()}\\slice 2D del modo~0};
+
+  \foreach \i/\j in {f1/f2, f2/f3, f3/f4, f4/f5, f5/f6, f6/f7, f7/f8, f8/f9}
+    \draw[arr] (\i) -- (\j);
+
+\end{tikzpicture}
+\caption{Flujo del cálculo modal FEM.}
+\end{figure}
+
+\subsection*{Formulación variacional}
+
+El problema de autovalores acústico con condición de Neumann homogénea
+(paredes rígidas):
+
+\[
+  \mathbf{K}\,\boldsymbol{\phi}_n \;=\; \lambda_n\,\mathbf{M}\,\boldsymbol{\phi}_n,
+  \qquad
+  f_n = \frac{c}{2\pi}\sqrt{\lambda_n}
+\]
+
+donde
+\[
+  K_{ij} = \int_\Omega \nabla N_i \cdot \nabla N_j \,\mathrm{d}V,
+  \qquad
+  M_{ij} = \int_\Omega N_i \, N_j \,\mathrm{d}V
+\]
+
+Los modos se M-ortonormalizan: $\boldsymbol{\phi}_n^T \mathbf{M} \boldsymbol{\phi}_m = \delta_{nm}$.
+
+\subsection*{Amortiguamiento modal desde materiales}
+
+\[
+  A(f) = \sum_i \alpha_i(f)\,S_i
+  \qquad\text{(absorción de Sabine)}
+\]
+\[
+  \mathrm{RT}_{60}(f) = \frac{0{,}161\,V}{A(f)}
+  \qquad\text{(Sabine)}
+\]
+\[
+  \xi_n = \frac{1{,}1}{f_n \cdot \mathrm{RT}_{60}(f_n)}
+  \qquad\text{(amortiguamiento modal del modo } n\text{)}
+\]
+
+Los coeficientes $\alpha_i(f)$ se obtienen de archivos JSON en la carpeta
+\texttt{materials/} e interpolan en escala logarítmica entre bandas de octava.
+
+% ------------------------------------------------------------
+\section{Flujo 3 — Evaluación de la FRF}
+% ------------------------------------------------------------
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.85cm and 0cm]
+
+  \node[guibox] (r1) {Usuario presiona ``Calcular FRF''};
+  \node[fembox, below=of r1] (r2)
+        {\texttt{\_compute\_frf()}};
+  \node[fembox, below=of r2] (r3)
+        {\texttt{run\_fem\_frf(modal, sources, receiver,}\\
+         \texttt{f\_min, f\_max, n\_freqs, damping=$\xi_n$)}};
+  \node[fembox, below=of r3] (r4)
+        {\texttt{acoustic\_fem.frequency\_response(...)}\\
+         evalúa $H(f_k)$ para cada $f_k$};
+  \node[vizbox, below=of r4] (r5)
+        {\texttt{FRFDialog(result, modal\_freqs)}\\
+         gráfico matplotlib embebido en Qt};
+  \node[vizbox, below=of r5] (r6)
+        {dB SPL $= 20\log_{10}(|H|/20\,\mu\text{Pa})$\\
+         + líneas verticales en $f_n$};
+
+  \foreach \i/\j in {r1/r2, r2/r3, r3/r4, r4/r5, r5/r6}
+    \draw[arr] (\i) -- (\j);
+
+  % Nota: export
+  \node[right=1.8cm of r6, font=\scriptsize, align=left,
+        draw=gray, rounded corners, fill=yellow!10, inner sep=4pt,
+        minimum width=3.8cm]
+    (nota2) {Export PNG/SVG/PDF\\desde botón o barra\\de herramientas.};
+  \draw[darr] (r6) -- (nota2);
+
+\end{tikzpicture}
+\caption{Flujo de cálculo y visualización de la FRF.}
+\end{figure}
+
+\subsection*{Superposición modal}
+
+\[
+  H(f) = i\omega\rho_0 \sum_{n=1}^{N_m}
+         \frac{\varphi_n(\mathbf{x}_r)
+               \displaystyle\sum_s Q_s\,\varphi_n(\mathbf{x}_s)}
+              {\omega_n^2 - \omega^2 + 2i\,\xi_n\,\omega_n\,\omega}
+\]
+
+con $\omega = 2\pi f$, $\rho_0 = 1{,}21\ \text{kg/m}^3$.
+El denominador se evalúa en cada frecuencia $f_k$ del eje de la FRF;
+el numerador (independiente de $\omega$) se pre-calcula.
+
+% ------------------------------------------------------------
+\section{Flujo 4 — Visualización del campo acústico 3D}
+% ------------------------------------------------------------
+
+El botón ``Actualizar campo 3D'' (o la tecla Enter) despacha
+\texttt{\_update\_field\_3d()}, cuyo comportamiento depende del
+\texttt{combo\_field}:
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.85cm and 0cm]
+
+  \node[guibox] (c1) {Trigger:\\botón / Enter / debounce 350~ms};
+  \node[fembox, below=of c1] (c2)
+        {\texttt{\_update\_field\_3d()}};
+
+  % Bifurcación
+  \node[below=0.85cm of c2] (fork) {};
+  \node[geobox, below=0.6cm of c2, xshift=-4cm] (c3a)
+        {\texttt{mode\_shape\_field\_3d}\\
+         evalúa $\varphi_n(\mathbf{x})$ en rejilla 3D\\
+         $\rightarrow$ valores con signo $[-1,1]$};
+  \node[fembox, below=0.6cm of c2, xshift= 4cm] (c3b)
+        {\texttt{pressure\_field\_3d}\\
+         evalúa $|p(\mathbf{x},f_n)|$ en rejilla 3D\\
+         (superposición modal, con fuentes)};
+
+  \node[vizbox, below=0.85cm of c3a] (c4a)
+        {\texttt{pressure\_3d.update\_signed()}\\
+         Azul $\leftrightarrow$ Blanco $\leftrightarrow$ Rojo\\
+         (valores negativos / cero / positivos)};
+  \node[vizbox, below=0.85cm of c3b] (c4b)
+        {\texttt{pressure\_3d.update()}\\
+         Azul $\to$ Verde $\to$ Rojo\\
+         (mínimo $\to$ máximo presión)};
+
+  \node[vizbox, below=0.85cm of c4a, xshift=4cm] (c5)
+        {\texttt{GLScatterPlotItem} (pxMode=True)\\
+         montado sobre \texttt{IsoViewer}};
+
+  \draw[arr] (c1) -- (c2);
+  \draw[arr] (c2) -| node[label, above left]
+      {\scriptsize combo\_field = 0\\(Forma modal)}
+      (c3a);
+  \draw[arr] (c2) -| node[label, above right]
+      {\scriptsize combo\_field = 1\\(Presión $|p|$)}
+      (c3b);
+  \draw[arr] (c3a) -- (c4a);
+  \draw[arr] (c3b) -- (c4b);
+  \draw[arr] (c4a) |- (c5);
+  \draw[arr] (c4b) |- (c5);
+
+\end{tikzpicture}
+\caption{Bifurcación del flujo de visualización según \texttt{combo\_field}.}
+\end{figure}
+
+\subsection*{Rejilla de evaluación}
+
+Los campos se evalúan sobre una rejilla uniforme 3D dentro del AABB de la
+malla FEM.  Solo se conservan los puntos donde el interpolador baricéntrico
+devuelve un valor finito (puntos dentro de algún tetraedro):
+
+\[
+  \{(x_i, y_i, z_i)\}_{i=1}^N
+  = \bigl\{ \mathbf{x} \in \mathbb{R}^3 \mid
+    \mathrm{FEM{-}locator}(\mathbf{x}) \neq \mathrm{NaN} \bigr\}
+\]
+
+\subsection*{Por qué forma modal y presión se parecen \emph{en resonancia}}
+
+En la frecuencia $f = f_n$ (resonancia del modo $n$):
+
+\[
+  p(\mathbf{x}) \approx
+  \frac{\rho_0}{2\xi_n\,\omega_n} \cdot
+  \varphi_n(\mathbf{x}_s) \cdot \varphi_n(\mathbf{x})
+\]
+
+La distribución espacial de $|p(\mathbf{x})|$ es proporcional a $|\varphi_n(\mathbf{x})|$.
+La diferencia observable es el \emph{signo}: la forma modal muestra lóbulos
+$+$ y $-$ (azul/rojo), mientras que $|p|$ es siempre no-negativo (solo rojo).
+
+Al mover la fuente a un \textbf{nodo} del modo $n$ ($\varphi_n(\mathbf{x}_s)=0$),
+la contribución del modo $n$ se anula y el patrón cambia significativamente
+(dominan otros modos fuera de resonancia).
+
+% ------------------------------------------------------------
+\section{Flujo 5 — Posicionamiento y arrastre de fuentes}
+% ------------------------------------------------------------
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.8cm and 0cm]
+
+  % --- Colocar fuente ---
+  \node[guibox] (p1) {Ctrl + Click derecho\\en \texttt{IsoViewer}};
+  \node[sigbox,  below=of p1] (p2)
+        {\texttt{mousePressEvent}\\raycast al plano $z=0$};
+  \node[sigbox,  below=of p2] (p3)
+        {\texttt{sourceAddRequested(x,y,1.0)}\\señal Qt};
+  \node[guibox,  below=of p3] (p4)
+        {\texttt{MainWindow.\_on\_source\_add\_from\_viewer}\\
+         $\to$ \texttt{acoustic.add\_source\_at(x,y,1)}};
+  \node[fembox,  below=of p4] (p5)
+        {\texttt{SourceArray.add(OmniSource)}\\
+         actualiza lista interna};
+  \node[vizbox,  below=of p5] (p6)
+        {\texttt{src\_markers.update(sources)}\\
+         \texttt{GLScatterPlotItem} re-creado};
+
+  \foreach \i/\j in {p1/p2, p2/p3, p3/p4, p4/p5, p5/p6}
+    \draw[arr] (\i) -- (\j);
+
+  % --- Arrastrar fuente ---
+  \node[right=3.5cm of p1, guibox] (q1) {Shift + Click izquierdo\\sobre esfera de fuente};
+  \node[sigbox,  below=of q1] (q2)
+        {\texttt{\_pick\_source(px,py)}\\retorna idx $\geq 0$ (fuente) ó $-2$ (receptor)};
+  \node[sigbox,  below=of q2] (q3)
+        {\texttt{\_dragging\_source\_idx = idx}\\guarda $z$ de arrastre};
+  \node[sigbox,  below=of q3] (q4)
+        {Mouse move $\to$ \texttt{\_pick\_horizontal\_plane}\\
+         $\to$ \texttt{sourceMoveRequested(idx,x,y,z)}};
+  \node[guibox,  below=of q4] (q5)
+        {\texttt{\_on\_source\_moved\_from\_viewer}\\
+         \texttt{srcs.sources[idx] = OmniSource(...)}};
+  \node[vizbox,  below=of q5] (q6)
+        {\texttt{src\_markers.set\_positions(srcs)}\\actualiza en-lugar (sin re-crear GL)};
+  \node[fembox,  below=of q6] (q7)
+        {\texttt{acoustic.schedule\_field\_update()}\\
+         reinicia timer debounce 350~ms};
+  \node[sigbox,  below=of q7] (q8)
+        {Timer dispara $\to$ \texttt{\_deferred\_field\_update}\\
+         (solo si \texttt{combo\_field}=Presión~$|p|$)};
+
+  \foreach \i/\j in {q1/q2, q2/q3, q3/q4, q4/q5, q5/q6, q6/q7, q7/q8}
+    \draw[arr] (\i) -- (\j);
+
+  % Nota receptor
+  \node[below=0.4cm of q8, font=\scriptsize, align=left,
+        draw=gray, rounded corners, fill=yellow!10, inner sep=4pt,
+        minimum width=4cm]
+    (nota3) {Para el receptor (idx=$-2$):\\señal \texttt{receiverMoveRequested}\\
+             $\to$ actualiza spinboxes\\
+             $\to$ \texttt{rcv\_marker.update()}};
+  \draw[darr] (q8.south) -- (nota3);
+
+\end{tikzpicture}
+\caption{Flujo de posicionamiento (izquierda) y arrastre (derecha) de fuentes acústicas.}
+\end{figure}
+
+\subsection*{Raycast para posicionamiento}
+
+El click en el visor 3D lanza un rayo desde el ojo de la cámara en la
+dirección del pixel seleccionado.  La intersección con el plano $z = z_0$
+se calcula como:
+
+\[
+  t = \frac{z_0 - o_z}{d_z}, \qquad
+  \mathbf{x} = \mathbf{o} + t\,\mathbf{d}
+\]
+
+donde $\mathbf{o}$ es el origen del rayo y $\mathbf{d}$ su dirección,
+obtenidos invirtiendo la matriz de proyección-vista construida manualmente
+con \texttt{QMatrix4x4}.
+
+\subsection*{Detección de fuentes en pantalla (\textit{picking})}
+
+Para Shift+Click, la función \texttt{\_pick\_source(px,py)} proyecta cada
+posición de fuente $(x_s,y_s,z_s)$ al espacio de pantalla y busca la más
+cercana dentro de un radio de 28~px:
+
+\[
+  i^* = \arg\min_{i} \bigl[(px - u_i)^2 + (py - v_i)^2\bigr],
+  \quad \text{si} < 28^2 \text{ px}^2
+\]
+
+donde $(u_i, v_i)$ es la proyección de la fuente $i$.  El receptor usa el
+índice especial $-2$.
+
+% ------------------------------------------------------------
+\section{Flujo 6 — Slice 2D horizontal}
+% ------------------------------------------------------------
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.8cm and 0cm]
+
+  \node[guibox] (sl1)
+    {Cambio en:\\combo\_mode / combo\_field / sb\_slice\_z / sb\_slice\_res};
+  \node[fembox, below=of sl1] (sl2)
+    {\texttt{\_update\_slice()}};
+
+  \node[fembox, below=0.8cm of sl2, xshift=-3.5cm] (sl3a)
+    {\texttt{slice\_mode\_shape}\\$\varphi_n(x,y,z_0)$ real con signo};
+  \node[fembox, below=0.8cm of sl2, xshift= 3.5cm] (sl3b)
+    {\texttt{slice\_pressure\_field}\\$|p(x,y,z_0,f)|$ complejo $\to|{\cdot}|$};
+
+  \node[fembox, below=0.9cm of sl3a] (sl4a)
+    {\texttt{slice\_field\_fem}\\interpolación baricéntrica sobre rejilla $nx\times ny$};
+  \node[fembox, below=0.9cm of sl3b] (sl4b)
+    {\texttt{modal\_pressure\_field}\\$\to$ \texttt{slice\_field\_fem}};
+
+  \node[vizbox, below=0.9cm of sl4a, xshift=3.5cm] (sl5)
+    {\texttt{FieldSliceItem.update()}\\construye quads solo donde\\
+     los 4 vértices están \emph{dentro} del recinto};
+  \node[vizbox, below=0.8cm of sl5] (sl6)
+    {\texttt{GLMeshItem} con \texttt{faceColors}\\montado sobre \texttt{IsoViewer}};
+
+  \draw[arr] (sl1) -- (sl2);
+  \draw[arr] (sl2) -| node[label, above left]{\scriptsize kind=0} (sl3a);
+  \draw[arr] (sl2) -| node[label, above right]{\scriptsize kind=1} (sl3b);
+  \draw[arr] (sl3a) -- (sl4a);
+  \draw[arr] (sl3b) -- (sl4b);
+  \draw[arr] (sl4a) |- (sl5);
+  \draw[arr] (sl4b) |- (sl5);
+  \draw[arr] (sl5) -- (sl6);
+
+\end{tikzpicture}
+\caption{Flujo del slice 2D horizontal.}
+\end{figure}
+
+\paragraph{Enmascaramiento dentro del recinto.}
+Un quad de la rejilla se incluye solo si sus cuatro vértices tienen
+coordenadas dentro del mesh FEM (el interpolador devuelve un valor finito):
+
+\[
+  \text{mostrar quad}_{ij} \;\iff\;
+  \mathrm{mask}[i,j] \;\wedge\; \mathrm{mask}[i{+}1,j] \;\wedge\;
+  \mathrm{mask}[i,j{+}1] \;\wedge\; \mathrm{mask}[i{+}1,j{+}1]
+\]
+
+Esto evita que el slice ``sangre'' fuera del contorno del recinto.
+
+% ------------------------------------------------------------
+\section{Flujo 7 — RT60 y amortiguamiento desde materiales}
+% ------------------------------------------------------------
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.85cm and 0cm]
+
+  \node[guibox] (m1) {Usuario elige material\\(combo Piso / Techo / Paredes)};
+  \node[matbox, below=of m1] (m2)
+        {\texttt{MaterialLibrary} $\leftarrow$ \texttt{materials/*.json}\\
+         interpolación log en bandas de octava};
+  \node[matbox, below=of m2] (m3)
+        {\texttt{classify\_surface\_areas(verts, tris)}\\
+         clasifica tris por normal:\\
+         piso ($n_z < -0{,}7$) / techo ($n_z > 0{,}7$) / paredes (resto)};
+  \node[matbox, below=of m3] (m4)
+        {\texttt{compute\_sabine\_rt60(V, Sf, mf, Sc, mc, Sw, mw)}\\
+         $A(f) = \alpha_f(f)\,S_f + \alpha_c(f)\,S_c + \alpha_w(f)\,S_w$\\
+         $\mathrm{RT60}(f) = 0{,}161\,V/A(f)$};
+  \node[matbox, below=of m4] (m5)
+        {\texttt{compute\_xi\_per\_mode(freqs, rt60\_bands)}\\
+         $\xi_n = 1{,}1 / [f_n \cdot \mathrm{RT60}(f_n)]$};
+  \node[fembox, below=of m5] (m6)
+        {$\xi_n$ array $(N_m,)$\\pasado a \texttt{frequency\_response} y\\
+         \texttt{modal\_pressure\_field}};
+  \node[vizbox, below=of m6] (m7)
+        {\texttt{RT60PlotDialog}\\gráfico matplotlib de RT60$(f)$\\
+         Export PNG/SVG};
+
+  \foreach \i/\j in {m1/m2, m2/m3, m3/m4, m4/m5, m5/m6, m6/m7}
+    \draw[arr] (\i) -- (\j);
+
+\end{tikzpicture}
+\caption{Flujo de cálculo de amortiguamiento modal desde materiales.}
+\end{figure}
+
+% ------------------------------------------------------------
+\section{Tabla resumen de señales Qt}
+% ------------------------------------------------------------
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{>{\ttfamily}l l >{\ttfamily}l}
+\toprule
+\normalfont\textbf{Señal} & \textbf{Emisor} & \normalfont\textbf{Slot receptor} \\
+\midrule
+parametersChanged(dict)      & ControlPanel  & MainWindow.\_on\_params \\
+parametersCommitted(dict)    & ControlPanel  & MainWindow.\_on\_commit \\
+cameraResetRequested()       & ControlPanel  & IsoViewer.reset\_camera \\
+drawShapeRequested()         & ControlPanel  & MainWindow.\_open\_shape\_dialog \\
+showLabelsToggled(bool)      & ControlPanel  & IsoViewer.set\_show\_labels \\
+viewModeChanged(str)         & ControlPanel  & IsoViewer.set\_view\_mode \\
+wallDragStarted(int)         & IsoViewer     & ControlPanel.begin\_wall\_drag \\
+wallDragMoved(float)         & IsoViewer     & ControlPanel.update\_wall\_drag \\
+wallDragEnded()              & IsoViewer     & ControlPanel.end\_wall\_drag \\
+sourceAddRequested(x,y,z)    & IsoViewer     & MainWindow.\_on\_source\_add \\
+sourceEditRequested(int)     & IsoViewer     & MainWindow.\_on\_source\_edit \\
+sourceMoveRequested(i,x,y,z) & IsoViewer     & MainWindow.\_on\_source\_moved \\
+receiverMoveRequested(x,y,z) & IsoViewer     & MainWindow.\_on\_receiver\_moved \\
+sourceAddedAtFloor(x,y)      & ShapeCanvas   & MainWindow.\_on\_source\_add \\
+\bottomrule
+\end{tabular}
+\caption{Tabla de señales Qt en la aplicación.}
+\end{table}
+
+% ------------------------------------------------------------
+\section{Ciclo de vida del \texttt{ModalSolution}}
+% ------------------------------------------------------------
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.0cm and 0.5cm,
+    state/.style={draw, rounded corners=6pt, minimum width=3.8cm,
+                  minimum height=0.8cm, text centered, font=\small}]
+
+  \node[state, fill=clrGUI!40]  (idle)    {Sin cálculo};
+  \node[state, fill=clrFEM!50, right=2.5cm of idle]  (calc)
+        {Calculando modos};
+  \node[state, fill=clrGeo!50, right=2.5cm of calc]  (valid)
+        {modal\_result válido};
+  \node[state, fill=gray!20,   below=1.5cm of valid] (invalid)
+        {modal\_result = None};
+
+  \draw[arr] (idle)    -- node[label, above]{\scriptsize btn\_solve\_fem} (calc);
+  \draw[arr] (calc)    -- node[label, above]{\scriptsize eigsh OK} (valid);
+  \draw[arr] (calc)    to[bend right=30]
+      node[label, below]{\scriptsize error} (idle);
+  \draw[arr] (valid)   to[bend left=20]
+      node[label, right]{\scriptsize geometría cambia\\
+                         (on\_geometry\_changed)} (invalid);
+  \draw[arr] (invalid) to[bend left=20]
+      node[label, left]{\scriptsize btn\_solve\_fem} (calc);
+
+\end{tikzpicture}
+\caption{Ciclo de vida del objeto \texttt{ModalSolution}.
+         Cualquier cambio de geometría invalida el resultado.}
+\end{figure}
+
+% ------------------------------------------------------------
+\section{Consideraciones de implementación}
+% ------------------------------------------------------------
+
+\subsection{Orden de renderizado en OpenGL}
+
+Los ítems del \texttt{GLViewWidget} se renderizan en el orden en que fueron
+agregados.  Las esferas de fuentes (\texttt{GLScatterPlotItem} con
+\texttt{pxMode=True}) deben agregarse \emph{después} del mesh del recinto
+para garantizar visibilidad.  Por eso \texttt{\_on\_params()} llama a
+\texttt{\_refresh\_sources\_list()} tras \texttt{update\_geometry()}.
+
+\subsection{Proyección manual de la cámara}
+
+pyqtgraph 0.14 cambió la signatura de \texttt{projectionMatrix()}.
+La aplicación construye manualmente las matrices view y projection con
+\texttt{QMatrix4x4} para el cálculo de etiquetas de aristas y picking 2D,
+sin depender de la API interna de pyqtgraph.
+
+\subsection{Debounce del campo acústico}
+
+El arrastre de fuentes emite \texttt{sourceMoveRequested} en cada evento
+de mouse (potencialmente 60~veces por segundo).  Un \texttt{QTimer}
+monoshot de 350~ms actúa como debounce: el campo se recalcula solo cuando
+el usuario detiene el arrastre, evitando saturar la CPU con cómputos FEM
+intermedios.
+
+\subsection{Interpolación baricéntrica en mallas tet}
+
+El \texttt{FieldEvaluator} pre-calcula matrices de transformación afín
+$A_e^{-1}$ para cada tetraedro.  La localización de un punto $\mathbf{x}$
+se realiza buscando el tetraedro con máximo mínimo de coordenadas
+baricéntricas $\min(N_0, N_1, N_2, N_3)$, lo que selecciona el elemento
+más ``interno'' al punto en caso de múltiples candidatos.
+
+\end{document}

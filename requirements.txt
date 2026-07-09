@@ -1,0 +1,13 @@
+PyQt5>=5.15
+pyqtgraph>=0.13.3
+PyOpenGL>=3.1.6
+numpy>=1.24
+scipy>=1.10
+
+# --- Modulo acustico: mallado boundary-fitted + import CAD ---
+# Obligatorio: gmsh (kernel OpenCASCADE) para STEP/IGES/BREP y tetra mesh.
+# El usuario puede no usarlo (combo "Voxel" en panel Acustica) pero la
+# instalacion debe traerlo para tener TODOS los formatos CAD disponibles.
+gmsh>=4.13
+trimesh>=4.0
+matplotlib>=3.7  # graficos de FRF y RT60

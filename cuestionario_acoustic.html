@@ -1,0 +1,1379 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Cuestionario — acoustic_mesh & acoustic_fem</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --fg: #e6e8ee;
+    --muted: #8a93a3;
+    --card: #161a22;
+    --border: #242a36;
+    --accent: #6aa9ff;
+    --good: #4ade80;
+    --bad: #f87171;
+    --warn: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    margin: 0;
+    padding: 32px 16px;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 840px; margin: 0 auto; }
+  h1 { margin: 0 0 8px 0; font-size: 1.7rem; }
+  .sub { color: var(--muted); margin-bottom: 24px; }
+  .progress {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    height: 8px;
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+  .progress > div {
+    background: linear-gradient(90deg, var(--accent), #93c5fd);
+    height: 100%;
+    width: 0%;
+    transition: width 0.3s;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+  .cat {
+    display: inline-block;
+    font-size: 0.75rem;
+    background: var(--border);
+    color: var(--muted);
+    padding: 2px 10px;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .qnum { color: var(--muted); font-size: 0.9rem; margin-bottom: 4px; }
+  .qtext { font-size: 1.05rem; margin-bottom: 16px; }
+  .qtext code, .qtext pre {
+    background: #0a0c12;
+    color: #e2e8f0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.92rem;
+    font-family: "JetBrains Mono", Consolas, monospace;
+  }
+  .qtext pre {
+    padding: 10px 12px;
+    margin: 8px 0;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .opts { display: flex; flex-direction: column; gap: 8px; }
+  .opt {
+    background: #1d222d;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    padding: 10px 14px;
+    border-radius: 8px;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    transition: all 0.15s;
+  }
+  .opt:hover:not(:disabled) { border-color: var(--accent); background: #222836; }
+  .opt:disabled { cursor: default; opacity: 0.85; }
+  .opt.good {
+    background: rgba(74, 222, 128, 0.15);
+    border-color: var(--good);
+    color: #d1fae5;
+  }
+  .opt.bad {
+    background: rgba(248, 113, 113, 0.15);
+    border-color: var(--bad);
+    color: #fecaca;
+  }
+  .explain {
+    margin-top: 14px;
+    padding: 12px 14px;
+    background: #0a0c12;
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    font-size: 0.95rem;
+    color: #cdd5e3;
+  }
+  .explain code {
+    background: #161a22;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: "JetBrains Mono", Consolas, monospace;
+    font-size: 0.88rem;
+  }
+  .nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+  }
+  .btn {
+    background: var(--accent);
+    border: none;
+    color: #0a0c12;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn.ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-weight: 400;
+  }
+  .results { text-align: center; padding: 32px; }
+  .results h2 { margin: 0 0 8px 0; font-size: 2rem; }
+  .score-big { font-size: 4rem; font-weight: 700; margin: 16px 0; color: var(--accent); }
+  .cat-scores {
+    text-align: left;
+    margin: 24px auto;
+    max-width: 540px;
+  }
+  .cat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .cat-row span:last-child { font-family: "JetBrains Mono", Consolas, monospace; }
+  .verdict { color: var(--muted); margin-top: 16px; font-style: italic; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Cuestionario — <code style="font-size:1rem;">acoustic_mesh</code> & <code style="font-size:1rem;">acoustic_fem</code></h1>
+  <div class="sub" id="sub">Evaluación exhaustiva en 8 categorías. Respondé una por una; las respuestas se bloquean al marcar.</div>
+  <div class="progress"><div id="bar"></div></div>
+  <div id="quiz"></div>
+</div>
+
+<script>
+// =====================================================================
+// BANCO DE PREGUNTAS
+//   - cat: categoría (para el resumen final)
+//   - q:   enunciado (HTML permitido para <code> y <pre>)
+//   - opts: array de 4 strings
+//   - ans: índice (0..3) de la correcta
+//   - why: explicación (HTML permitido)
+// =====================================================================
+const BANK = [
+  // ─── 1. FÍSICA Y FORMA DÉBIL ──────────────────────────────────────
+  {
+    cat: "Física y forma débil",
+    q: "¿Qué ecuación gobierna el campo de presión armónica en el aire de un recinto?",
+    opts: [
+      "La ecuación de onda en el dominio del tiempo, ∂²p/∂t² = c²∇²p.",
+      "La ecuación de Helmholtz, ∇²p + k²p = -iωρ₀ q(x), con k = ω/c.",
+      "La ecuación de Laplace, ∇²p = 0.",
+      "La ecuación de Poisson con fuente, ∇²p = ρ."
+    ],
+    ans: 1,
+    why: "Helmholtz es la forma frecuencial de la ecuación de onda. El factor <code>-iωρ₀</code> del lado derecho aparece al asumir <code>e^{+iωt}</code> y derivar la fuente de monopolo."
+  },
+  {
+    cat: "Física y forma débil",
+    q: "Pared rígida significa físicamente que…",
+    opts: [
+      "La presión es cero en la pared.",
+      "La velocidad de partícula normal a la pared es cero (∂p/∂n = 0).",
+      "La impedancia de la pared es cero.",
+      "La energía se absorbe instantáneamente."
+    ],
+    ans: 1,
+    why: "Pared rígida = no hay movimiento de aire perpendicular a la pared. Como <code>v_n ∝ ∂p/∂n</code> en régimen armónico, la condición se traduce en gradiente normal nulo."
+  },
+  {
+    cat: "Física y forma débil",
+    q: "¿Por qué se dice que la pared rígida es una condición de borde \"natural\" en la formulación de Galerkin?",
+    opts: [
+      "Porque es la única condición que la naturaleza impone.",
+      "Porque al integrar por partes aparece un término de frontera ∫ v·(∂p/∂n) dS que se anula solo cuando ∂p/∂n = 0, sin que haya que modificar K ni M.",
+      "Porque cualquier pared real es naturalmente rígida.",
+      "Porque la condición se cumple por casualidad numérica."
+    ],
+    ans: 1,
+    why: "Las condiciones \"naturales\" son las que se satisfacen automáticamente al desaparecer el término de frontera de la forma débil. Las condiciones \"esenciales\" (Dirichlet) sí hay que imponerlas en el espacio de prueba."
+  },
+  {
+    cat: "Física y forma débil",
+    q: "El problema de modos libres K·φ = λ·M·φ aparece al…",
+    opts: [
+      "Resolver la ecuación de Helmholtz con fuente impuesta.",
+      "Buscar soluciones del tipo p(x,t) = φ(x)·e^{iωt} sin fuente y sin pérdidas, e identificar λ = (ω/c)².",
+      "Aproximar la EDO con diferencias finitas.",
+      "Aplicar el método de Crank-Nicolson."
+    ],
+    ans: 1,
+    why: "Sustituís el ansatz armónico, el término <code>iωρ₀ f</code> se anula (sin fuente), y queda el problema generalizado de autovalores. <code>λ_n = (ω_n/c)² = (2πf_n/c)²</code>."
+  },
+  {
+    cat: "Física y forma débil",
+    q: "Si querés modelar absorción en una pared (impedancia finita), ¿qué cambia respecto al caso rígido?",
+    opts: [
+      "Nada: se sigue ensamblando solo K y M.",
+      "Aparece una matriz adicional C que se ensambla integrando sobre la pared, con su normal y área correctas.",
+      "Hay que reemplazar el solver eigsh por un solver no lineal.",
+      "Solo hace falta cambiar el valor de c."
+    ],
+    ans: 1,
+    why: "La condición de impedancia <code>∂p/∂n + ikβp = 0</code> deja un término de frontera no nulo en la forma débil → matriz de superficie C. Por eso la frontera escalonada se banca con paredes rígidas pero NO con absorción modelada en la pared."
+  },
+
+  // ─── 2. MESH: VOXELIZACIÓN Y FREUDENTHAL ──────────────────────────
+  {
+    cat: "Mesh: voxelización",
+    q: "¿Qué es la AABB (axis-aligned bounding box) del recinto?",
+    opts: [
+      "La caja convexa más chica que envuelve al recinto.",
+      "La caja alineada a los ejes x, y, z más chica que contiene todos los vértices de la superficie.",
+      "Una caja oblicua que se ajusta a la pared inclinada.",
+      "La esfera circunscrita al recinto."
+    ],
+    ans: 1,
+    why: "Es solo <code>min</code> y <code>max</code> por coordenada. \"Alineada a los ejes\" = sus caras son paralelas a los planos coordenados, no se rota para ajustarse mejor."
+  },
+  {
+    cat: "Mesh: voxelización",
+    q: "La descomposición de Freudenthal parte un hexaedro (cubo) en…",
+    opts: [
+      "5 tetraedros conformes.",
+      "6 tetraedros conformes, todos compartiendo un mismo vértice del cubo.",
+      "8 tetraedros centrados en el baricentro.",
+      "12 tetraedros (uno por arista)."
+    ],
+    ans: 1,
+    why: "La tabla <code>HEX_TO_TETS</code> tiene 6 filas; las 6 comparten el vértice 7. La propiedad clave es que la malla queda <i>conforme</i> entre cubos vecinos sin agregar nodos nuevos."
+  },
+  {
+    cat: "Mesh: voxelización",
+    q: "Conformidad de la malla significa que…",
+    opts: [
+      "Todos los tetraedros tienen el mismo volumen.",
+      "Caras vecinas de tets adyacentes coinciden exactamente, sin huecos ni nodos colgantes.",
+      "Los tets son regulares (lados iguales).",
+      "La malla está axis-aligned."
+    ],
+    ans: 1,
+    why: "Sin conformidad, la solución FEM puede tener saltos espurios en las interfaces. Por eso elegir la descomposición de Freudenthal (no otra cualquiera) es crítico."
+  },
+  {
+    cat: "Mesh: voxelización",
+    q: "¿Por qué la rejilla genera tets candidatos y después se filtran, en lugar de generar solo los buenos directamente?",
+    opts: [
+      "Para sobrecargar la memoria.",
+      "Porque generar la rejilla completa es vectorizable y barato; el filtro point-in-polyhedron se aplica una sola vez en lote.",
+      "Para tener tets de repuesto.",
+      "Porque algunos modos viven afuera del recinto."
+    ],
+    ans: 1,
+    why: "Es el patrón \"genera-y-filtra\". Construir la rejilla es <code>O(N)</code> con numpy puro; el cuello de botella sería el filtro hecho en Python loop, pero el código lo vectoriza con Möller-Trumbore broadcasted."
+  },
+  {
+    cat: "Mesh: voxelización",
+    q: "El parámetro <code>n_per_meter</code> controla…",
+    opts: [
+      "Cuántos modos calcula el solver.",
+      "Cuántas celdas de rejilla por metro en cada eje (densidad de la malla volumétrica).",
+      "El damping modal.",
+      "El orden del elemento finito (P1 vs P2)."
+    ],
+    ans: 1,
+    why: "Por ejemplo <code>n_per_meter=2</code> en una caja 5×4×3 m da 10×8×6 cubos → 480 hex → ~2880 tets. A mayor valor, malla más fina y <code>f_max</code> resoluble más alta."
+  },
+
+  // ─── 3. MESH: POINT-IN-POLYHEDRON Y RAYCAST ───────────────────────
+  {
+    cat: "Mesh: raycast",
+    q: "El test de Jordan (\"impar = adentro\") para saber si un punto está dentro de una malla cerrada se basa en…",
+    opts: [
+      "Calcular el volumen total y compararlo.",
+      "Tirar un rayo desde el punto en una dirección arbitraria y contar cuántos triángulos de la superficie cruza.",
+      "Comparar con la AABB y devolver true si está adentro de la caja.",
+      "Triangular el dominio y buscar el tet contenedor."
+    ],
+    ans: 1,
+    why: "Cada cruce del rayo cambia el estado dentro/fuera. Si el punto está adentro, el rayo termina afuera tras un número impar de cruces. Funciona para CUALQUIER malla cerrada (no convexa)."
+  },
+  {
+    cat: "Mesh: raycast",
+    q: "¿Por qué el código usa la dirección <code>[1e-4, 2e-4, 1.0]</code> en lugar de <code>[0, 0, 1]</code>?",
+    opts: [
+      "Por estética.",
+      "Para evitar rozar exactamente aristas o caras axis-aligned del recinto, que serían casos degenerados que rompen el conteo de paridad.",
+      "Porque el rayo en z puro no atraviesa nada.",
+      "Para que el rayo sea unitario."
+    ],
+    ans: 1,
+    why: "Si un rayo cae justo en el plano de un triángulo o pasa exactamente por una arista compartida por 2 triángulos, lo contás 2 veces (o ninguna). La inclinación minúscula desambigua sin sesgar el resultado."
+  },
+  {
+    cat: "Mesh: raycast",
+    q: "El algoritmo Möller-Trumbore para intersección rayo-triángulo usa…",
+    opts: [
+      "Diferencias finitas en cada componente.",
+      "Coordenadas baricéntricas del rayo en el plano del triángulo (resuelve un sistema 3×3 con productos cruzados).",
+      "Búsqueda binaria sobre las aristas.",
+      "Una red neuronal entrenada."
+    ],
+    ans: 1,
+    why: "Es el algoritmo estándar en gráficos. La <i>misma</i> idea de coords baricéntricas reaparece en el solver FEM para interpolar dentro del tet."
+  },
+  {
+    cat: "Mesh: raycast",
+    q: "El chunking en <code>points_inside_surface</code> existe para…",
+    opts: [
+      "Mantener acotada la memoria peak: el array intermedio (Np, Nt, 3) puede llegar a cientos de MB si no se procesa por partes.",
+      "Que el algoritmo sea más preciso.",
+      "Paralelizar en múltiples cores.",
+      "Cumplir con normas IEEE-754."
+    ],
+    ans: 0,
+    why: "Para 14k puntos × 500 triángulos × 3 floats × 8 bytes ≈ 168 MB. Chunkear de a 10⁷ pares mantiene el peak en ~250 MB constante sin importar Np."
+  },
+  {
+    cat: "Mesh: raycast",
+    q: "¿Por qué se filtra por <i>centroide</i> del tet y no por sus 4 vértices?",
+    opts: [
+      "Por velocidad (1 test en lugar de 4).",
+      "Por velocidad <i>y</i> porque el centroide es el criterio menos ambiguo cuando un tet tiene vértices justo en la pared escalonada.",
+      "Porque los vértices no están definidos.",
+      "Por convención histórica."
+    ],
+    ans: 1,
+    why: "Ambas. Además, en la frontera escalonada hay tets con 1-3 vértices justo sobre la pared; usar el centro de masa decide \"a qué lado pertenece el tet\" de forma consistente."
+  },
+
+  // ─── 4. BUILD_KM: ENSAMBLAJE ──────────────────────────────────────
+  {
+    cat: "Ensamblaje K y M",
+    q: "Para un tetraedro con vértices (x_j, y_j, z_j), el determinante de la matriz V4 = [[1, x_j, y_j, z_j]] (4×4) vale…",
+    opts: [
+      "El volumen del tet.",
+      "6 veces el volumen orientado del tet.",
+      "La masa del tet.",
+      "El área de la cara más grande."
+    ],
+    ans: 1,
+    why: "Identidad clásica: <code>det(V4) = ±6 V_e</code>. Por eso <code>vols = |det(V4)| / 6</code>. Sale de expandir el determinante por la primera columna."
+  },
+  {
+    cat: "Ensamblaje K y M",
+    q: "¿Por qué las filas 2-4 de V4⁻¹ contienen los gradientes de las funciones de forma N_j del tet?",
+    opts: [
+      "Por casualidad numérica.",
+      "Porque las N_j son lineales y cumplen N_j(v_k) = δ_jk, lo que se traduce matricialmente en V4·[a_j, b_j, c_j, d_j]ᵀ = e_j; los gradientes son (b_j, c_j, d_j) = filas 2-4 de la columna j de V4⁻¹.",
+      "Porque eigsh lo requiere.",
+      "Es una convención de scipy."
+    ],
+    ans: 1,
+    why: "<code>N_j(x) = a_j + b_j x + c_j y + d_j z</code>. Imponer <code>N_j(v_k) = δ_jk</code> en los 4 vértices da un sistema cuya solución es la columna j de <code>V4⁻¹</code>. ∇N_j = (b_j, c_j, d_j) son constantes dentro del tet."
+  },
+  {
+    cat: "Ensamblaje K y M",
+    q: "La rigidez local K_ij^e = V_e · ∇N_i · ∇N_j se calcula con <code>np.einsum(\"eij,ekj->eik\", grads, grads)</code>. ¿Qué hace ese einsum?",
+    opts: [
+      "Producto matricial fila × columna.",
+      "Para cada elemento e (eje batch), calcula grads[e] @ grads[e].T sumando sobre el índice j (componentes xyz) y conservando i, k.",
+      "Aplica una FFT.",
+      "Invierte la matriz grads."
+    ],
+    ans: 1,
+    why: "<code>e</code> es el eje batch (los Ne tets). El índice <code>j</code> aparece dos veces → se suma sobre él (es la contracción de los componentes xyz). Resultado: tensor (Ne, 4, 4) con (∇N_i · ∇N_k) por elemento."
+  },
+  {
+    cat: "Ensamblaje K y M",
+    q: "La masa consistente local M_ij^e = (V_e / 20)·(1 + δ_ij) sale de…",
+    opts: [
+      "Una aproximación de lumping.",
+      "La integración EXACTA de ∫ N_i N_j dV en coords baricéntricas, usando la fórmula ∫ L_1^a L_2^b L_3^c L_4^d dV = (a!b!c!d!/(a+b+c+d+3)!) · 6V.",
+      "Una regla de Simpson 3D.",
+      "Diferencias finitas."
+    ],
+    ans: 1,
+    why: "Para i=j: integrando N_i² → exponentes (2,0,0,0) → 2!/5! = 1/60 → integral = 6V/60 = V/10. Para i≠j: exponentes (1,1,0,0) → 1/120 → V/20. Se compacta en <code>(V/20)·(1+δ_ij)</code>."
+  },
+  {
+    cat: "Ensamblaje K y M",
+    q: "Diferencia clave entre masa CONSISTENTE y masa LUMPED:",
+    opts: [
+      "La consistente es más rápida.",
+      "La lumped es diagonal (M_ii = V_e/4) y rápida pero introduce error de fase O(h); la consistente es completa (4×4 por tet) y da error O(h²) en los modos.",
+      "La lumped requiere más memoria.",
+      "No hay diferencia, son la misma."
+    ],
+    ans: 1,
+    why: "El código usa consistente. Lumping equivale a integración en nodos (regla del trapecio) → menos precisa pero diagonal. Para modos acústicos con malla razonable, la consistente justifica el costo."
+  },
+  {
+    cat: "Ensamblaje K y M",
+    q: "¿Por qué se usa <code>scipy.sparse.coo_matrix</code> para construir K y M en lugar de un ndarray denso?",
+    opts: [
+      "Porque es más fácil de leer.",
+      "Porque K y M son matrices simétricas con ~30 no-ceros por fila aunque tengan decenas de miles de filas; almacenarlas densas sería N²·8 bytes (gigabytes) y multiplicarlas inviable.",
+      "Porque scipy obliga.",
+      "Para evitar overflow de enteros."
+    ],
+    ans: 1,
+    why: "Para 50k nodos, denso = 50k² × 8B = 20 GB. Sparse CSR guarda solo los no-ceros más punteros: típicamente <100 MB."
+  },
+  {
+    cat: "Ensamblaje K y M",
+    q: "El \"scatter\" final con <code>coo_matrix((data, (rows, cols)))</code> es elegante porque…",
+    opts: [
+      "Convierte automáticamente a CSR.",
+      "Cuando dos contribuciones caen en la misma (fila, col), las SUMA. Eso es exactamente lo que pide el ensamblaje FEM (un nodo recibe aporte de todos los tets que lo tocan).",
+      "Comprime los datos.",
+      "Cifra la matriz."
+    ],
+    ans: 1,
+    why: "Es el truco clave. Sin la suma automática, deberías acumular a mano en una matriz pre-asignada. <code>coo_matrix</code> lo hace por vos."
+  },
+  {
+    cat: "Ensamblaje K y M",
+    q: "¿Por qué después se llama a <code>.tocsr()</code>?",
+    opts: [
+      "Para ahorrar memoria.",
+      "Porque CSR (Compressed Sparse Row) es eficiente para producto matriz×vector, que es lo que eigsh hace en cada iteración Lanczos.",
+      "Porque COO no se puede serializar.",
+      "Por compatibilidad con MATLAB."
+    ],
+    ans: 1,
+    why: "COO es óptimo para construir; CSR para operar. La conversión es <code>O(nnz)</code>, se hace una vez y rinde durante todo el solver."
+  },
+
+  // ─── 5. SOLVE_MODES: AUTOVALORES ──────────────────────────────────
+  {
+    cat: "Autovalores",
+    q: "¿Por qué se usa <code>eigsh</code> y no <code>eigs</code>?",
+    opts: [
+      "Por velocidad arbitraria.",
+      "Porque K y M son simétricas reales (hermíticas), y eigsh está optimizado para ese caso y garantiza autovalores reales.",
+      "Porque eigs no existe en scipy.",
+      "Por compatibilidad con Python 2."
+    ],
+    ans: 1,
+    why: "La \"h\" es de hermítico. Para problemas no simétricos hay que usar <code>eigs</code>, que es más lento y permite autovalores complejos. Los modos acústicos sin damping son siempre reales."
+  },
+  {
+    cat: "Autovalores",
+    q: "El \"shift-invert\" en <code>eigsh(K, M, sigma=1e-6, which=\"LM\")</code> hace que internamente se resuelva…",
+    opts: [
+      "K·φ = λ·M·φ directamente.",
+      "El problema transformado (K - σM)⁻¹·M·φ = μ·φ con μ = 1/(λ - σ); pedir \"LM\" del transformado equivale a los λ más cercanos a σ.",
+      "Una transformada de Fourier.",
+      "Un método de potencias sin transformar."
+    ],
+    ans: 1,
+    why: "Es la clave para conseguir los autovalores MÁS CHICOS rápidamente. <code>eigsh</code> factoriza <code>K - σM</code> una sola vez (LU) y luego cada paso Lanczos es solo una sustitución, muy barata."
+  },
+  {
+    cat: "Autovalores",
+    q: "¿Por qué se pide un autovalor de más cuando <code>drop_zero_mode=True</code>?",
+    opts: [
+      "Por superstición.",
+      "Porque el primer autovalor es siempre λ ≈ 0 (modo trivial p = constante, frecuencia 0), que no es físico y se descarta. Se pide uno extra para no quedarse cortos.",
+      "Por bug histórico.",
+      "Porque el array necesita un índice extra."
+    ],
+    ans: 1,
+    why: "El modo p=constante satisface trivialmente Neumann homogénea: gradiente cero en todos lados, λ=0. Corresponde a una presión estática uniforme, que no se propaga. Se filtra a posteriori."
+  },
+  {
+    cat: "Autovalores",
+    q: "La M-ortonormalización <code>φₙᵀ · M · φₙ = 1</code> se aplica para…",
+    opts: [
+      "Que los modos queden con norma euclídea 1.",
+      "Que la fórmula de superposición modal NO tenga factores de escala extra. Sin ella, cada término llevaría un 1/(φₙᵀ M φₙ).",
+      "Acelerar la convergencia.",
+      "Compatibilidad con MATLAB."
+    ],
+    ans: 1,
+    why: "Es la normalización \"natural\" en problemas generalizados K φ = λ M φ. Hace que la base modal sea ortonormal en el producto interno <i, j>_M = iᵀMj, que es lo que aparece naturalmente en la energía cinética del sistema."
+  },
+  {
+    cat: "Autovalores",
+    q: "La conversión final <code>freqs = sqrt(eigvals) * c / (2π)</code> viene de…",
+    opts: [
+      "Una constante arbitraria.",
+      "La definición λ = (ω/c)² = (2πf/c)², que despejada da f = c√λ / (2π).",
+      "El número áureo.",
+      "Una calibración experimental."
+    ],
+    ans: 1,
+    why: "Recordá que la sustitución del ansatz <code>p ~ e^{iωt}</code> en Helmholtz da <code>k² = (ω/c)²</code> = autovalor del problema generalizado."
+  },
+
+  // ─── 6. COORDS BARICÉNTRICAS E INTERPOLACIÓN ──────────────────────
+  {
+    cat: "Barycentric",
+    q: "Las coordenadas baricéntricas (N₀, s, t, u) de un punto x en un tet con vértices v₀..v₃ cumplen…",
+    opts: [
+      "N₀ + s + t + u = 0 y x = s·v₁ + t·v₂ + u·v₃.",
+      "N₀ + s + t + u = 1 y x = N₀·v₀ + s·v₁ + t·v₂ + u·v₃.",
+      "N₀·s·t·u = volumen del tet.",
+      "Son siempre positivas, sin importar el punto."
+    ],
+    ans: 1,
+    why: "Suman 1 (es una partición convexa) y son no negativas SOLO si x está dentro del tet. Eso es justo lo que el código verifica para decidir si un punto pertenece a un tet."
+  },
+  {
+    cat: "Barycentric",
+    q: "El sistema A · (s, t, u)ᵀ = (x - v₀) con A = [v₁-v₀ | v₂-v₀ | v₃-v₀] permite obtener (s, t, u). ¿Por qué se precomputa A⁻¹ una vez por tet?",
+    opts: [
+      "Por elegancia.",
+      "Porque cada localización implica resolver el sistema; con A⁻¹ pre-calculado, cada query es una sola multiplicación matriz×vector vectorizada.",
+      "Porque A no siempre existe.",
+      "Para ahorrar bytes."
+    ],
+    ans: 1,
+    why: "Costo de inversión: <code>O(Ne)</code>, una sola vez. Costo de cada query con A⁻¹: <code>O(1)</code> por candidato. Es el patrón clásico de pre-compute + reuse."
+  },
+  {
+    cat: "Barycentric",
+    q: "El criterio \"el punto está dentro del tet\" se traduce numéricamente en…",
+    opts: [
+      "|s| < 1, |t| < 1, |u| < 1.",
+      "Las 4 coords baricéntricas N₀, s, t, u son todas ≥ -tol (tol ≈ 1e-6 para tolerar puntos en caras).",
+      "s + t + u > 1.",
+      "El producto N₀·s·t·u es positivo."
+    ],
+    ans: 1,
+    why: "Si alguna es negativa, el punto está \"al otro lado\" de una cara. La tolerancia evita excluir puntos justo en una cara compartida por dos tets."
+  },
+  {
+    cat: "Barycentric",
+    q: "Si un punto cae en una cara o arista compartida por varios tets, el código elige…",
+    opts: [
+      "El primero que encuentra.",
+      "El tet con MAYOR valor de min(N₀, s, t, u): el punto está \"más adentro\" de ese tet, dando el cálculo numéricamente más estable.",
+      "El que tenga menor volumen.",
+      "Al azar."
+    ],
+    ans: 1,
+    why: "Si dos tets son válidos, las coords en uno tendrán algún valor cercano a 0 (el punto está justo en la cara común). El tet \"ganador\" es el que tiene el mínimo más grande, indicando que el punto está más alejado de las caras."
+  },
+  {
+    cat: "Barycentric",
+    q: "La interpolación final del campo en el punto x usa <code>p(x) = Σⱼ Nⱼ · field[vértice_j]</code>. Esto es…",
+    opts: [
+      "Interpolación cúbica.",
+      "Interpolación lineal exacta dentro del tet (las funciones de forma P1 son por construcción lineales).",
+      "Interpolación bilineal.",
+      "Interpolación spline."
+    ],
+    ans: 1,
+    why: "Las coords baricéntricas ACTÚAN como las funciones de forma evaluadas en el punto. Por eso la fórmula es idéntica a la del FEM P1."
+  },
+
+  // ─── 7. FIELDEVALUATOR Y KDTREE ───────────────────────────────────
+  {
+    cat: "KDTree",
+    q: "El cuello de botella del enfoque naive \"para cada punto, probar todos los tets\" es…",
+    opts: [
+      "El uso de RAM.",
+      "Costo O(Np · Ne) con el loop dentro del intérprete de Python, que es lentísimo comparado con NumPy en C.",
+      "La precisión.",
+      "El cache miss."
+    ],
+    ans: 1,
+    why: "Para 50k puntos × 25k tets = 1.25 mil millones de iteraciones Python. Aunque cada test fuera 100 ns (que NO es el caso), serían 2 minutos. En la práctica, decenas de minutos."
+  },
+  {
+    cat: "KDTree",
+    q: "El cKDTree de scipy se construye sobre…",
+    opts: [
+      "Los vértices de la malla.",
+      "Los centroides de los tetraedros, asumiendo que el tet contenedor de un punto está entre los K vecinos más cercanos a su centroide.",
+      "Los nodos de superficie.",
+      "Las normales de los triángulos."
+    ],
+    ans: 1,
+    why: "El KDTree responde \"dame los K centroides más cercanos a este punto\" en <code>O(log Ne)</code>. Después solo se evalúan barycentric en esos K candidatos."
+  },
+  {
+    cat: "KDTree",
+    q: "¿Por qué K=12 y un fallback a K=48?",
+    opts: [
+      "Son números de Fibonacci.",
+      "K=12 cubre >99% de los casos (un tet tiene ~4 vecinos topológicos más margen); en bordes con tets alargados el centroide más cercano puede no ser el contenedor, y K=48 atrapa esos casos.",
+      "Por convención IEEE.",
+      "Para evitar overflow."
+    ],
+    ans: 1,
+    why: "Hace dos pasadas: una rápida con K=12 para todos los puntos, y una segunda SOLO con los que quedaron sin localizar, usando K=48. No paga el costo de K=48 para el 99% que ya estaban bien."
+  },
+  {
+    cat: "KDTree",
+    q: "El lazy init del KDTree (construirlo solo al primer <code>evaluate_many</code>) se justifica porque…",
+    opts: [
+      "Reduce el tamaño en disco.",
+      "Si el usuario solo evalúa puntos sueltos (1 receptor con <code>evaluate_one</code>), no paga el costo de construir el árbol.",
+      "Es obligatorio en scipy.",
+      "Mejora la precisión."
+    ],
+    ans: 1,
+    why: "Construir el KDTree es <code>O(Ne log Ne)</code> y consume memoria. Si solo necesitás un par de queries (el receptor del FRF), no vale la pena."
+  },
+  {
+    cat: "KDTree",
+    q: "El speedup medido del FieldEvaluator vs el loop naive es…",
+    opts: [
+      "~2×",
+      "~50× a 170×",
+      "~5×",
+      "~10000×"
+    ],
+    ans: 1,
+    why: "El factor depende del tamaño. La docstring lo reporta para una sala 6×8×3 con ~25k tets y 62500 puntos: de ~20s a ~0.3s."
+  },
+
+  // ─── 8. FRF Y SUPERPOSICIÓN MODAL ─────────────────────────────────
+  {
+    cat: "FRF modal",
+    q: "La fórmula de superposición modal H(f) = iωρ₀ · Σₙ φₙ(x_r)·[Σ_s Q_s·φₙ(x_s)] / Dₙ(ω) con Dₙ = ωₙ² - ω² + 2iξₙωₙω asume…",
+    opts: [
+      "Pared con impedancia compleja arbitraria.",
+      "Modos M-ortonormales y damping modal pequeño introducido a mano (no surge de K, M directamente, porque las paredes son rígidas).",
+      "Que las fuentes son ondas planas.",
+      "Que ω es real positiva."
+    ],
+    ans: 1,
+    why: "Con paredes rígidas no hay pérdidas en el modelo. El damping ξₙ se inyecta a posteriori para cada modo, típicamente derivado del RT60 esperado por banda."
+  },
+  {
+    cat: "FRF modal",
+    q: "El \"numerador modal\" <code>num = phi_r * (src_arr @ phi_s)</code> se calcula UNA vez fuera del loop sobre frecuencia porque…",
+    opts: [
+      "Sería lento calcularlo dentro.",
+      "No depende de f. El loop solo necesita recalcular Dₙ(ω). Sacar lo invariante del loop es buena práctica.",
+      "Numpy obliga.",
+      "Por coherencia estilística."
+    ],
+    ans: 1,
+    why: "Es la optimización de \"loop hoisting\". El numerador depende solo de modos y posiciones, no de la frecuencia de evaluación."
+  },
+  {
+    cat: "FRF modal",
+    q: "<code>src_arr @ phi_s</code> donde <code>src_arr</code> es (Ns,) y <code>phi_s</code> es (Ns, Nm) produce…",
+    opts: [
+      "Una matriz (Ns, Nm).",
+      "Un vector (Nm,) cuya entrada n es Σ_s Q_s · φₙ(x_s), la amplitud modal de excitación.",
+      "Un escalar.",
+      "Un tensor (Ns, Nm, 1)."
+    ],
+    ans: 1,
+    why: "Producto vector × matriz. La operación <code>@</code> de Python es producto matricial (PEP 465); cuando los rangos son (Ns,) × (Ns, Nm) el resultado es (Nm,)."
+  },
+  {
+    cat: "FRF modal",
+    q: "<code>np.where(np.abs(denom) < 1e-30, 1e-30, denom)</code> aparece para…",
+    opts: [
+      "Acelerar el cálculo.",
+      "Blindar contra división por cero exacto si en alguna ω casual el denominador colapsa numéricamente.",
+      "Mejorar la precisión.",
+      "Activar la GPU."
+    ],
+    ans: 1,
+    why: "Con damping > 0 no debería ocurrir, pero es defensivo. El reemplazo por 1e-30 deja la frecuencia con módulo enorme (en realidad |H| ≈ 0 efectivo), sin reventar el array entero."
+  },
+  {
+    cat: "FRF modal",
+    q: "<code>modal_pressure_field</code> calcula la presión a UNA frecuencia f pero en TODOS los nodos. La línea clave <code>p_nodes = phis @ coeff</code> con <code>phis</code> de forma (Nn, Nm) y <code>coeff</code> de (Nm,) hace…",
+    opts: [
+      "Un loop interno por nodo.",
+      "Una sola operación BLAS matriz×vector que evalúa p(x_i) = Σₙ φₙ(x_i)·coeffₙ para todos los nodos i de una sola vez.",
+      "Una FFT 3D.",
+      "Una convolución."
+    ],
+    ans: 1,
+    why: "El truco es delegar a BLAS. Una multiplicación matriz×vector aprovecha cache y SIMD; reemplaza un loop Python que sería 100× más lento."
+  },
+  {
+    cat: "FRF modal",
+    q: "El damping ξ puede pasarse como…",
+    opts: [
+      "Solo float (uniforme para todos los modos).",
+      "Float (uniforme) o array (Nm,) con un ξₙ distinto por modo, típicamente derivado del RT60 por banda.",
+      "Solo array.",
+      "Solo complex."
+    ],
+    ans: 1,
+    why: "Permitir damping por modo es lo que da realismo: en una sala real el ξ depende de la frecuencia (RT60(f)), y cada modo cae en su banda."
+  },
+
+  // ─── 9. NUMPY TRICKS ──────────────────────────────────────────────
+  {
+    cat: "NumPy tricks",
+    q: "¿Qué hace <code>nodes[tets]</code> si <code>nodes</code> es (Nn, 3) y <code>tets</code> es (Ne, 4)?",
+    opts: [
+      "Devuelve un escalar.",
+      "Devuelve un array de forma (Ne, 4, 3): para cada tet, las coords xyz de sus 4 vértices.",
+      "Falla con IndexError.",
+      "Devuelve solo (Ne, 3)."
+    ],
+    ans: 1,
+    why: "Es \"fancy indexing\". El array de índices <code>tets</code> inserta su propia forma en el resultado, reemplazando el primer eje de <code>nodes</code>. Es el patrón base para vectorizar FEM."
+  },
+  {
+    cat: "NumPy tricks",
+    q: "Broadcasting permite operar arrays de distinta forma alineando ejes desde la derecha. ¿Cuál de estos pares es compatible?",
+    opts: [
+      "(3, 4) y (3,)",
+      "(2, 1, 3) y (5, 3)",
+      "(4, 5) y (6,)",
+      "(2, 3) y (4, 5)"
+    ],
+    ans: 1,
+    why: "Alineando: <code>(2, 1, 3)</code> vs <code>(_, 5, 3)</code> → 1 se estira a 5, el primer eje queda 2 → resultado (2, 5, 3). La opción 0 falla: alineadas dan (3,4) vs (_,3), 4≠3."
+  },
+  {
+    cat: "NumPy tricks",
+    q: "<code>a[:, None, :]</code> con <code>a</code> de forma (N, 3) produce un array de forma…",
+    opts: [
+      "(N, 3, 1)",
+      "(N, 1, 3)",
+      "(1, N, 3)",
+      "(N, 3)"
+    ],
+    ans: 1,
+    why: "<code>None</code> (alias de <code>np.newaxis</code>) inserta un eje de tamaño 1 en esa posición. Se usa todo el tiempo para forzar broadcasting en un eje específico."
+  },
+  {
+    cat: "NumPy tricks",
+    q: "<code>np.einsum(\"eij,ej->ei\", A, b)</code> donde A es (Ne, 3, 3) y b es (Ne, 3) hace…",
+    opts: [
+      "Producto exterior.",
+      "Para cada e (eje batch), calcula A[e] @ b[e] (matriz × vector) sumando sobre j. Resultado (Ne, 3).",
+      "FFT.",
+      "Producto cruz."
+    ],
+    ans: 1,
+    why: "Es la generalización elegante de \"matriz × vector en lote\". El índice <code>j</code> repetido se suma; los demás se conservan en el orden de la salida."
+  },
+  {
+    cat: "NumPy tricks",
+    q: "<code>arr[rows, cols]</code> con <code>rows</code> y <code>cols</code> ambos arrays 1D de longitud Np hace…",
+    opts: [
+      "Devuelve una sub-matriz (Np × Np).",
+      "Para cada i, devuelve arr[rows[i], cols[i]]. Resultado (Np,). Es como \"elegir una entrada distinta por fila\".",
+      "Falla.",
+      "Devuelve la diagonal de arr."
+    ],
+    ans: 1,
+    why: "Es fancy indexing 2D. Aparece en <code>_evaluate_batch</code> con <code>arr[rows, best_c]</code> para extraer las coords baricéntricas del tet ganador de cada punto."
+  },
+  {
+    cat: "NumPy tricks",
+    q: "<code>np.linalg.inv(A)</code> con A de forma (Ne, 3, 3) hace…",
+    opts: [
+      "Falla, solo funciona con matrices 2D.",
+      "Invierte CADA matriz 3×3 a lo largo del eje batch. Resultado (Ne, 3, 3). NumPy detecta el rango y aplica en lote.",
+      "Devuelve la pseudoinversa.",
+      "Calcula el determinante."
+    ],
+    ans: 1,
+    why: "Tanto <code>inv</code> como <code>det</code>, <code>solve</code>, etc. soportan rango (..., n, n). Le permite al solver invertir todas las A en una sola llamada sin loops."
+  },
+  {
+    cat: "NumPy tricks",
+    q: "<code>np.unique(kept_tets)</code> seguido de <code>new_idx[used_idx] = np.arange(len(used_idx))</code> implementa…",
+    opts: [
+      "Ordenamiento topológico.",
+      "Remapeo compacto de índices: los nodos viejos que sobreviven al filtro se renumeran 0..N-1 consecutivos, sin huecos.",
+      "Hash.",
+      "Borrado físico de nodos."
+    ],
+    ans: 1,
+    why: "Patrón estándar después de un filtro: <code>unique</code> da los índices que sobreviven en orden; el array <code>new_idx</code> es la tabla de traducción viejo→nuevo. Después <code>tets = new_idx[kept_tets]</code> hace el reindexado."
+  },
+
+  // ─── 10. ESCALONADO Y LÍMITES ─────────────────────────────────────
+  {
+    cat: "Límites y validez",
+    q: "Con paredes rígidas y frontera escalonada, el error principal en las frecuencias modales viene de…",
+    opts: [
+      "Una matriz de impedancia mal ensamblada.",
+      "Que el volumen efectivo del dominio difiere ligeramente del recinto real; con n_per_meter=2 da ~1-2% en los primeros modos.",
+      "Errores de redondeo IEEE-754.",
+      "El damping uniforme."
+    ],
+    ans: 1,
+    why: "La forma débil no requiere normal ni área exactas (al ser ∂p/∂n = 0). Solo el volumen total afecta y se controla refinando."
+  },
+  {
+    cat: "Límites y validez",
+    q: "La regla <code>f_max = c / (ppw · h_max)</code> con ppw ≈ 6 dice que…",
+    opts: [
+      "El solver explota para f > f_max.",
+      "Por encima de f_max la malla no resuelve correctamente la longitud de onda (menos de 6 puntos por λ) y los modos se corren significativamente por dispersión numérica.",
+      "f_max es la frecuencia de muestreo de audio.",
+      "Es la frecuencia de Nyquist."
+    ],
+    ans: 1,
+    why: "Es una regla empírica de FEM acústico. <code>ppw</code> entre 4-10 según orden del elemento y tolerancia de error. Para P1 con error < 5%, ppw=6 es típico."
+  },
+  {
+    cat: "Límites y validez",
+    q: "Si modelás absorción en paredes con coeficientes α(f), la frontera escalonada introduce error porque…",
+    opts: [
+      "α no se puede calcular numéricamente.",
+      "Las normales y el área superficial de los escalones no representan la pared inclinada real: el área escalonada es mayor que la inclinada (la suma de escalones es más larga que la hipotenusa).",
+      "scipy no soporta α.",
+      "El damping requiere FFT."
+    ],
+    ans: 1,
+    why: "Por eso este código aplica damping por modo (ξₙ derivado del RT60) en lugar de ensamblar una matriz de superficie con α: la malla escalonada se banca mucho mejor con damping modal que con impedancia ensamblada."
+  },
+  {
+    cat: "Límites y validez",
+    q: "El método de mallado de este proyecto, comparado con TetGen o CGAL, es…",
+    opts: [
+      "Más preciso en la frontera.",
+      "Más simple y autosuficiente (solo numpy), pero produce frontera escalonada en lugar de tets que sigan exactamente la superficie. Suficiente para paredes rígidas axis-aligned dominantes.",
+      "Más lento.",
+      "Solo funciona en 2D."
+    ],
+    ans: 1,
+    why: "Es un trade-off consciente: ganás simplicidad y portabilidad (cero dependencias C/C++); perdés fidelidad de frontera. Para el caso de uso (salas con paredes axis-aligned + paneles internos) es excelente."
+  },
+
+  // ─── EXTRA / Integración ──────────────────────────────────────────
+  {
+    cat: "Integración",
+    q: "El orden típico de las llamadas desde acoustic_panel.py es…",
+    opts: [
+      "solve_modes → build_KM → build_volume_mesh → frequency_response.",
+      "make_room → build_volume_mesh → build_KM → solve_modes → FieldEvaluator → frequency_response.",
+      "frequency_response → solve_modes → build_KM.",
+      "El orden es irrelevante."
+    ],
+    ans: 1,
+    why: "Cada paso consume el output del anterior: geometría → malla volumétrica → matrices K, M → modos (f_n, φ_n) → estructura de localización → FRF / campo nodal."
+  },
+  {
+    cat: "Integración",
+    q: "Si querés mostrar el campo de presión a 80 Hz como un mapa de color sobre la malla, usás…",
+    opts: [
+      "frequency_response con una sola frecuencia.",
+      "modal_pressure_field(locator, freqs, phis, sources, f=80.0, damping=ξ): devuelve p(x_node) complejo para cada nodo de la malla.",
+      "build_KM otra vez.",
+      "solve_modes con n_modes=1."
+    ],
+    ans: 1,
+    why: "<code>modal_pressure_field</code> es la \"versión espacial\" del FRF: una frecuencia, todos los nodos. Después se proyecta sobre la malla 3D y se colorea por |p| o Re(p)."
+  },
+  {
+    cat: "Integración",
+    q: "<code>mode_shape_field(phis, mode_idx=3)</code> devuelve…",
+    opts: [
+      "El modo 3 con normalización M (φᵀMφ = 1).",
+      "La parte real del modo 3 normalizada a max|φ| = 1, lista para visualización con colormap consistente entre modos.",
+      "La presión a la frecuencia del modo 3.",
+      "El damping del modo 3."
+    ],
+    ans: 1,
+    why: "La M-norm sirve para cálculo (queda en <code>phis</code>); la max-norm sirve para visualización (queda en el output de esta función). No son lo mismo."
+  },
+
+  // ─── 11. CAPCIOSAS / TRAMPAS ──────────────────────────────────────
+  {
+    cat: "Capciosas",
+    q: "¿Qué ocurre si llamás <code>eigsh(K, k=10, M=M, sigma=0.0, which=\"LM\")</code> (con shift EXACTAMENTE en cero) en lugar de sigma=1e-6?",
+    opts: [
+      "Funciona igual, no hay diferencia.",
+      "Falla o produce resultados numéricamente inestables porque K es semi-definida positiva (tiene el modo 0 con λ=0), así que K - 0·M = K es singular y su factorización LU revienta.",
+      "Te devuelve solo el modo trivial.",
+      "Devuelve siempre los autovalores correctos pero más lento."
+    ],
+    ans: 1,
+    why: "El sigma debe estar CERCA de los autovalores buscados pero NO coincidir con ninguno. Por eso 1e-6: lo suficientemente cerca del 0 para capturar los modos más bajos, lo suficientemente lejos para que K - σM sea invertible."
+  },
+  {
+    cat: "Capciosas",
+    q: "Si rotás los vértices de un tet en <code>tets[e]</code> (por ejemplo <code>[0,1,2,3] → [1,0,2,3]</code>), ¿el ensamblaje cambia?",
+    opts: [
+      "Sí, K y M cambian completamente y los modos salen mal.",
+      "No: como el código usa |det(V4)| (valor absoluto) y la fórmula de M es simétrica en (i,j), invertir el orden cambia el signo del determinante pero no afecta K_e ni M_e finales.",
+      "Sí, los volúmenes salen negativos y el solver crashea.",
+      "Solo afecta a la matriz de rigidez."
+    ],
+    ans: 1,
+    why: "Es robusto a orientación. Si lo intentás cambiar a una versión sin <code>abs(detV)</code>, ahí sí explotaría. Algunos solvers FEM exigen orden positivo; este no."
+  },
+  {
+    cat: "Capciosas",
+    q: "Las frecuencias modales numéricas con elementos P1 lineales tienden a salir…",
+    opts: [
+      "Siempre por debajo de las analíticas.",
+      "Siempre por arriba de las analíticas (el método de Galerkin sobre un subespacio finito acota los autovalores POR ARRIBA — propiedad min-max de Courant).",
+      "Aleatoriamente desviadas en ambos sentidos.",
+      "Exactas si la malla es estructurada."
+    ],
+    ans: 1,
+    why: "Es una propiedad teórica clave: cualquier subespacio de aproximación da un cociente de Rayleigh ≥ al autovalor exacto. Por eso al refinar, las frecuencias bajan asintóticamente hacia las verdaderas — nunca las cruzan desde abajo."
+  },
+  {
+    cat: "Capciosas",
+    q: "Si pedís <code>n_modes=12</code> pero el solver Lanczos no converge para los 12, ¿qué hace el código actual?",
+    opts: [
+      "Reintenta automáticamente.",
+      "Nada explícito: <code>eigsh</code> tira <code>ArpackNoConvergence</code> y la excepción se propaga. El código no la captura, así que la función falla.",
+      "Devuelve los modos que sí convergieron.",
+      "Cambia automáticamente a un solver denso."
+    ],
+    ans: 1,
+    why: "Es un punto débil del código: no hay manejo de no-convergencia. En la práctica eigsh con shift-invert converge casi siempre con sigma chico, pero para mallas patológicas convendría capturar la excepción y pedir menos modos."
+  },
+  {
+    cat: "Capciosas",
+    q: "Si pasás un receptor con coordenadas FUERA del recinto a <code>frequency_response</code>, ¿qué devuelve?",
+    opts: [
+      "Una excepción.",
+      "Una H(f) válida pero idénticamente 0: <code>locator.evaluate_one</code> devuelve None, el código pone phi_r=0, y la sumatoria modal es 0 en todo f.",
+      "NaN en todas las frecuencias.",
+      "Una H(f) extrapolada por continuación analítica."
+    ],
+    ans: 1,
+    why: "El comportamiento es silencioso, lo que puede confundir. Si ves H=0 en todas las frecuencias, lo primero a chequear es que el receptor caiga dentro de la malla (no del bounding box: de la malla escalonada, que puede ser un poco más chica)."
+  },
+  {
+    cat: "Capciosas",
+    q: "El KDTree del FieldEvaluator está cacheado en <code>self._tree</code>. ¿Qué pasa si modificás <code>self.nodes</code> directamente DESPUÉS de la primera llamada a <code>evaluate_many</code>?",
+    opts: [
+      "El árbol se actualiza automáticamente.",
+      "El árbol queda desactualizado: sigue indexando los centroides viejos. <code>evaluate_many</code> dará resultados incorrectos sin avisar.",
+      "Lanza un warning.",
+      "Reconstruye el árbol al detectar el cambio."
+    ],
+    ans: 1,
+    why: "Es una trampa clásica de cacheo. La regla: <b>FieldEvaluator es inmutable</b> — si la malla cambia, hay que construir uno nuevo. El código no se defiende contra mutación in-place."
+  },
+  {
+    cat: "Capciosas",
+    q: "Si setás <code>damping=0.0</code> en <code>frequency_response</code> y evaluás <i>justo</i> en una frecuencia modal f = fₙ, ¿qué pasa?",
+    opts: [
+      "Devuelve un valor finito correcto.",
+      "El denominador colapsa a 0 numéricamente, el <code>np.where(<1e-30, 1e-30, ...)</code> entra en acción y devuelve un módulo enorme pero finito (un 'pico saturado'), no infinito ni NaN.",
+      "Crashea con división por cero.",
+      "Devuelve exactamente 0."
+    ],
+    ans: 1,
+    why: "El blindaje del denominador evita el crash, pero el resultado no es físico: en una sala SIN damping, |H| → ∞ en cada modo (resonancia perfecta). Por eso damping > 0 es OBLIGATORIO para que la FRF tenga sentido."
+  },
+  {
+    cat: "Capciosas",
+    q: "K es semi-definida positiva (no estrictamente positiva). ¿Cuál es la consecuencia?",
+    opts: [
+      "El sistema no tiene solución.",
+      "K tiene un núcleo no trivial: el vector constante (p=cte) cumple K·1 = 0 → es el autovector del modo trivial λ=0. Por eso hace falta drop_zero_mode.",
+      "Las matrices de rigidez nunca son semi-definidas.",
+      "Es un bug en el ensamblaje."
+    ],
+    ans: 1,
+    why: "Es la firma matemática del modo trivial. Si impusieras una condición de Dirichlet en alguna parte de la frontera (p=0 en un punto), K se volvería estrictamente positiva y el modo 0 desaparecería."
+  },
+  {
+    cat: "Capciosas",
+    q: "El parámetro <code>tol=1e-6</code> en el test baricéntrico permite que un punto sea \"válido\" aunque alguna coord sea ligeramente negativa. ¿Por qué NO se puede poner tol=0?",
+    opts: [
+      "Por elegancia.",
+      "Porque puntos justo en una cara compartida entre dos tets dan coords del orden de ±1e-15 por aritmética IEEE; con tol=0 pueden quedar fuera de AMBOS tets y reportarse como no localizados.",
+      "Porque scipy no acepta valores exactos.",
+      "Por convención FEM."
+    ],
+    ans: 1,
+    why: "Es la misma razón por la que el rayo del raycast tiene inclinación no nula. Las degeneraciones geométricas exactas son enemigas; un margen pequeño las desambigua."
+  },
+  {
+    cat: "Capciosas",
+    q: "La fórmula de superposición modal <code>H(f) = iωρ₀ Σₙ ...</code> con damping ξₙ por modo es válida si los modos se M-ortonormalizan PREVIAMENTE. Si no se ortonormalizan, ¿qué falta?",
+    opts: [
+      "Multiplicar por la masa total.",
+      "Cada término debería llevar un factor <code>1 / (φₙᵀ M φₙ)</code>. Con la M-ortonormalización ese cociente es 1 y la fórmula queda limpia.",
+      "Dividir por el número de modos.",
+      "Una FFT."
+    ],
+    ans: 1,
+    why: "Por eso <code>solve_modes</code> hace la M-ortonormalización a mano aunque eigsh suela devolverla — para tener garantía. Sin garantía, la fórmula de H necesitaría el factor de masa modal en cada término."
+  },
+
+  // ─── 12. CÓDIGO SNIPPET — ¿QUÉ HACE? ──────────────────────────────
+  {
+    cat: "Código",
+    q: "Con <code>A</code> de forma (Ne, 4, 4), ¿qué devuelve <code>np.einsum(\"eii->e\", A)</code>?",
+    opts: [
+      "Una matriz (Ne, 4).",
+      "Un array (Ne,) con la traza de cada matriz A[e] (suma de la diagonal).",
+      "Falla por índices repetidos.",
+      "El determinante de cada matriz."
+    ],
+    ans: 1,
+    why: "El índice <code>i</code> aparece dos veces en el mismo factor → se suma sobre la diagonal. La salida conserva solo <code>e</code>. Es el truco vectorizado de la traza."
+  },
+  {
+    cat: "Código",
+    q: "Con <code>coords</code> de forma (Ne, 4, 3), ¿qué hace <code>coords.mean(axis=1)</code>?",
+    opts: [
+      "Promedia los tres ejes xyz por separado.",
+      "Promedia los 4 vértices de cada tet → array (Ne, 3) con el centroide de cada tetraedro.",
+      "Devuelve un escalar.",
+      "Promedia sobre todos los tets."
+    ],
+    ans: 1,
+    why: "<code>axis=1</code> es el eje de los 4 vértices. Promediarlo colapsa ese eje y deja (Ne, 3). Es exactamente lo que hace el FieldEvaluator para construir centroides."
+  },
+  {
+    cat: "Código",
+    q: "Con <code>phi</code> de forma (Nn, Nm), ¿qué devuelve <code>np.linalg.norm(phi, axis=0)</code>?",
+    opts: [
+      "La norma de Frobenius.",
+      "Un array (Nm,): la norma euclídea de cada modo (norma de la columna).",
+      "Un escalar.",
+      "Falla porque axis no es válido."
+    ],
+    ans: 1,
+    why: "<code>axis=0</code> colapsa el eje de los nodos, dejando una norma por modo. NOTA: esta es la norma euclídea, no la M-norma. Para M-ortonormalizar hace falta <code>sqrt(φᵀ M φ)</code>, no <code>norm(φ)</code>."
+  },
+  {
+    cat: "Código",
+    q: "<code>phis[:, ::-1]</code> con <code>phis</code> de forma (Nn, Nm) produce…",
+    opts: [
+      "Una transposición.",
+      "Un array (Nn, Nm) con los modos en orden INVERTIDO (el último primero). Útil si querés mostrar modos de mayor a menor frecuencia.",
+      "Una copia profunda.",
+      "Solo el primer modo."
+    ],
+    ans: 1,
+    why: "El slice <code>::-1</code> invierte el eje. Es una VIEW (no copia memoria) salvo que asignes. Muy usado para reordenar resultados sin pagar costo."
+  },
+  {
+    cat: "Código",
+    q: "¿Qué hace <code>np.argsort(eigvals)[:3]</code>?",
+    opts: [
+      "Devuelve los 3 autovalores más chicos.",
+      "Devuelve los ÍNDICES de los 3 autovalores más chicos (no los valores mismos).",
+      "Devuelve los 3 más grandes.",
+      "Ordena eigvals en sitio."
+    ],
+    ans: 1,
+    why: "<code>argsort</code> NO ordena: devuelve la permutación que ordenaría. Para los valores escribirías <code>np.sort(eigvals)[:3]</code> o <code>eigvals[np.argsort(eigvals)[:3]]</code>."
+  },
+  {
+    cat: "Código",
+    q: "<code>cKDTree(centroides).query(x, k=1)</code> donde x es (3,) devuelve…",
+    opts: [
+      "Solo el índice del centroide más cercano.",
+      "Una tupla (distancia, índice): la distancia euclídea al centroide más cercano y su índice en el array.",
+      "Una lista de los k=1 centroides ordenados.",
+      "El centroide más cercano (vector 3D)."
+    ],
+    ans: 1,
+    why: "Siempre devuelve (dist, idx). Para k>1 ambos son arrays de longitud k. Es el patrón base del FieldEvaluator: te dice CUÁL es el más cercano sin recorrer todos."
+  },
+  {
+    cat: "Código",
+    q: "Con <code>K</code> en CSR, ¿qué hace <code>(K + K.T).multiply(0.5)</code>?",
+    opts: [
+      "Suma fila por columna.",
+      "Simetriza K explícitamente. Si K ya es teóricamente simétrica pero por aritmética tiene asimetrías de ~1e-15, este patrón las cancela.",
+      "Calcula la inversa.",
+      "Convierte K a CSC."
+    ],
+    ans: 1,
+    why: "Es el truco de simetrización forzada. El código actual NO lo aplica (confía en que el ensamblaje produce K simétrica por construcción), pero es útil si después usás un solver que exige simetría exacta."
+  },
+  {
+    cat: "Código",
+    q: "<code>np.where(np.isnan(out))[0]</code> con out de forma (Np,) complex devuelve…",
+    opts: [
+      "El número de NaNs.",
+      "Un array 1D con los ÍNDICES de las posiciones que son NaN. Útil para identificar qué puntos quedaron fuera de la malla en evaluate_many.",
+      "Un array booleano.",
+      "La posición del primer NaN."
+    ],
+    ans: 1,
+    why: "<code>np.where</code> con un único argumento booleano devuelve una tupla con los índices de los True. El <code>[0]</code> extrae el array para el primer (y único) eje."
+  },
+  {
+    cat: "Código",
+    q: "¿Qué hace este snippet?<pre>idx = np.argmax(np.abs(H))\nf_peak = freq_axis[idx]</pre>",
+    opts: [
+      "Promedia la magnitud.",
+      "Encuentra la frecuencia del máximo de |H(f)| en el FRF — el pico modal dominante en el rango analizado.",
+      "Calcula la fase del pico.",
+      "Detecta NaN."
+    ],
+    ans: 1,
+    why: "Es el patrón clásico de \"frequency picking\" en un FRF. Aparece en la demo del <code>__main__</code> de acoustic_fem para imprimir el pico principal."
+  },
+  {
+    cat: "Código",
+    q: "Con <code>tets</code> de forma (Ne, 4) y un nodo <code>idx_node</code>, ¿qué hace <code>np.any(tets == idx_node, axis=1)</code>?",
+    opts: [
+      "Devuelve un escalar bool.",
+      "Devuelve un array bool de forma (Ne,) con True en los tets que CONTIENEN al nodo idx_node entre sus 4 vértices. Útil para encontrar todos los tets que tocan a un nodo dado.",
+      "Cuenta cuántas veces aparece idx_node.",
+      "Reemplaza idx_node por True."
+    ],
+    ans: 1,
+    why: "<code>tets == idx_node</code> es comparación elemento a elemento → (Ne, 4) bool. <code>np.any(..., axis=1)</code> colapsa el eje de los 4 vértices con OR → (Ne,) bool. Es el típico \"¿qué elementos contienen al nodo X?\"."
+  },
+
+  // ─── 13. NUMÉRICAS ────────────────────────────────────────────────
+  {
+    cat: "Numéricas",
+    q: "Caja rectangular 5×4×3 m, c = 343 m/s. ¿Cuál es la frecuencia del modo (1,0,0) (primer modo axial en x)?",
+    opts: [
+      "f = 42.9 Hz",
+      "f = 34.3 Hz",
+      "f = 57.2 Hz",
+      "f = 68.6 Hz"
+    ],
+    ans: 1,
+    why: "<code>f = (c/2)·√((l/Lx)² + (m/Ly)² + (n/Lz)²)</code>. Para (1,0,0): <code>f = 343/(2·5) = 34.3 Hz</code>. Es el modo de longitud de onda 2·Lx = 10 m."
+  },
+  {
+    cat: "Numéricas",
+    q: "Misma caja 5×4×3 m. ¿Frecuencia del modo tangencial (1,1,0)?",
+    opts: [
+      "f ≈ 42.9 Hz",
+      "f ≈ 54.9 Hz",
+      "f ≈ 75.0 Hz",
+      "f ≈ 34.3 Hz"
+    ],
+    ans: 1,
+    why: "<code>f = (343/2)·√((1/5)² + (1/4)²) = 171.5 · √(0.04 + 0.0625) = 171.5 · √0.1025 ≈ 171.5 · 0.3202 ≈ 54.9 Hz</code>."
+  },
+  {
+    cat: "Numéricas",
+    q: "Un tet con vértices <code>(0,0,0), (1,0,0), (0,1,0), (0,0,1)</code> tiene volumen…",
+    opts: [
+      "V = 1",
+      "V = 1/6",
+      "V = 1/2",
+      "V = 1/3"
+    ],
+    ans: 1,
+    why: "<code>V = |det(A)| / 6</code> donde A tiene como columnas v1-v0, v2-v0, v3-v0. Acá A es la identidad 3×3 → det=1 → V = 1/6. Es el tet \"corner unit\" de referencia."
+  },
+  {
+    cat: "Numéricas",
+    q: "Para resolver fielmente hasta f_max = 200 Hz con la regla ppw = 6 (c = 343 m/s), ¿qué tamaño máximo de elemento h_max necesitás?",
+    opts: [
+      "h_max ≈ 1.7 m",
+      "h_max ≈ 0.286 m",
+      "h_max ≈ 0.10 m",
+      "h_max ≈ 1.0 m"
+    ],
+    ans: 1,
+    why: "<code>h_max = c / (ppw · f_max) = 343 / (6 · 200) ≈ 0.286 m</code>. Esta es la regla detrás de <code>max_solver_frequency()</code> en acoustic_mesh, aplicada en el sentido inverso."
+  },
+  {
+    cat: "Numéricas",
+    q: "Caja 6×6×3 m con n_per_meter = 2. ¿Cuántos hexaedros (cubos) tiene la rejilla antes del filtrado?",
+    opts: [
+      "576",
+      "864",
+      "1296",
+      "432"
+    ],
+    ans: 1,
+    why: "<code>nx = ny = round(6·2) = 12</code>, <code>nz = round(3·2) = 6</code>. Total hex = <code>12 · 12 · 6 = 864</code>."
+  },
+  {
+    cat: "Numéricas",
+    q: "Misma rejilla (12×12×6 hex). ¿Cuántos tetraedros CANDIDATOS produce la descomposición de Freudenthal (antes del filtro por centroide)?",
+    opts: [
+      "1728",
+      "5184",
+      "10368",
+      "864"
+    ],
+    ans: 1,
+    why: "Cada hex se parte en 6 tets → <code>864 · 6 = 5184</code> tets candidatos. Después el filtro descarta los que caen fuera; en una caja rectangular pura sobreviven todos."
+  },
+  {
+    cat: "Numéricas",
+    q: "Misma rejilla (12×12×6 hex). ¿Cuántos NODOS tiene en total la rejilla antes del remapeo?",
+    opts: [
+      "864",
+      "1183",
+      "1500",
+      "2197"
+    ],
+    ans: 1,
+    why: "Nodos = (nx+1)·(ny+1)·(nz+1) = <code>13 · 13 · 7 = 1183</code>. Para una caja rectangular completa el remapeo no descarta ninguno."
+  },
+  {
+    cat: "Numéricas",
+    q: "Para un modo con f_n = 80 Hz y damping ξ = 0.03, el tiempo de reverberación modal aproximado T60 vale…",
+    opts: [
+      "T60 ≈ 0.10 s",
+      "T60 ≈ 0.46 s",
+      "T60 ≈ 1.50 s",
+      "T60 ≈ 2.30 s"
+    ],
+    ans: 1,
+    why: "<code>T60 = 3·ln(10) / (ξ · ω_n) ≈ 6.91 / (ξ · 2π·f_n)</code>. Sustituyendo: <code>6.91 / (0.03 · 502.65) ≈ 0.458 s</code>. Es la conexión entre damping modal y RT60."
+  },
+  {
+    cat: "Numéricas",
+    q: "Sala de 6×4×3 m (V = 72 m³) con T60 = 0.5 s. La frecuencia de Schroeder (transición modal/estadística) f_s ≈ 2000·√(T60/V) vale…",
+    opts: [
+      "≈ 50 Hz",
+      "≈ 167 Hz",
+      "≈ 500 Hz",
+      "≈ 1000 Hz"
+    ],
+    ans: 1,
+    why: "<code>f_s = 2000·√(0.5/72) = 2000·√0.00694 ≈ 2000·0.0833 ≈ 166.7 Hz</code>. Por debajo, los modos son discretos y discernibles (régimen modal); por arriba, la densidad modal es tan alta que dominan los promedios estadísticos."
+  },
+  {
+    cat: "Numéricas",
+    q: "Para una rejilla con nx=10, ny=8, nz=6 (cubos en cada eje), ¿cuál es el índice lineal del nodo en posición (i, j, k) = (3, 2, 1) según <code>gid(i,j,k) = (i·(ny+1) + j)·(nz+1) + k</code>?",
+    opts: [
+      "gid = 187",
+      "gid = 204",
+      "gid = 158",
+      "gid = 320"
+    ],
+    ans: 1,
+    why: "ny+1 = 9, nz+1 = 7. <code>gid = (3·9 + 2)·7 + 1 = 29·7 + 1 = 203 + 1 = 204</code>. Es el mapeo (i,j,k)→índice lineal con orden 'i lento, k rápido' (C-order) usado en build_volume_mesh."
+  },
+];
+
+// =====================================================================
+// LÓGICA INTERACTIVA
+// =====================================================================
+const state = {
+  i: 0,
+  answers: new Array(BANK.length).fill(null),
+};
+
+const quizEl = document.getElementById("quiz");
+const barEl = document.getElementById("bar");
+const subEl = document.getElementById("sub");
+
+function render() {
+  if (state.i >= BANK.length) return renderResults();
+
+  const q = BANK[state.i];
+  const userAns = state.answers[state.i];
+  const isAnswered = userAns !== null;
+
+  const optsHtml = q.opts.map((opt, idx) => {
+    let cls = "opt";
+    if (isAnswered) {
+      if (idx === q.ans) cls += " good";
+      else if (idx === userAns) cls += " bad";
+    }
+    return `<button class="${cls}" data-idx="${idx}" ${isAnswered ? "disabled" : ""}>${opt}</button>`;
+  }).join("");
+
+  const explainHtml = isAnswered
+    ? `<div class="explain"><b>${userAns === q.ans ? "✓ Correcto." : "✗ Incorrecto."}</b> ${q.why}</div>`
+    : "";
+
+  const navHtml = `
+    <div class="nav">
+      <button class="btn ghost" id="back" ${state.i === 0 ? "disabled" : ""}>← Atrás</button>
+      <button class="btn" id="next" ${!isAnswered ? "disabled" : ""}>
+        ${state.i === BANK.length - 1 ? "Ver resultado" : "Siguiente →"}
+      </button>
+    </div>
+  `;
+
+  quizEl.innerHTML = `
+    <div class="card">
+      <div class="cat">${q.cat}</div>
+      <div class="qnum">Pregunta ${state.i + 1} de ${BANK.length}</div>
+      <div class="qtext">${q.q}</div>
+      <div class="opts">${optsHtml}</div>
+      ${explainHtml}
+      ${navHtml}
+    </div>
+  `;
+
+  barEl.style.width = ((state.i + (isAnswered ? 1 : 0)) / BANK.length * 100) + "%";
+
+  // listeners
+  document.querySelectorAll(".opt").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (state.answers[state.i] !== null) return;
+      state.answers[state.i] = parseInt(btn.dataset.idx, 10);
+      render();
+    });
+  });
+  const next = document.getElementById("next");
+  if (next) next.addEventListener("click", () => { state.i++; render(); window.scrollTo(0, 0); });
+  const back = document.getElementById("back");
+  if (back) back.addEventListener("click", () => { state.i--; render(); window.scrollTo(0, 0); });
+}
+
+function renderResults() {
+  const total = BANK.length;
+  const correct = state.answers.filter((a, i) => a === BANK[i].ans).length;
+  const pct = Math.round(correct / total * 100);
+
+  // por categoría
+  const byCat = {};
+  BANK.forEach((q, i) => {
+    if (!byCat[q.cat]) byCat[q.cat] = { ok: 0, tot: 0 };
+    byCat[q.cat].tot++;
+    if (state.answers[i] === q.ans) byCat[q.cat].ok++;
+  });
+
+  let verdict;
+  if (pct >= 90) verdict = "Dominio sólido. Podés explicar el código sin trabarte.";
+  else if (pct >= 75) verdict = "Buen nivel. Repasá los temas en rojo y queda redondo.";
+  else if (pct >= 60) verdict = "Aprobado, pero conviene volver a los markdowns y refrescar lo flojo.";
+  else verdict = "Conviene una segunda pasada por los explicadores antes de re-evaluar.";
+
+  const catRows = Object.entries(byCat).map(([cat, s]) => {
+    const cp = Math.round(s.ok / s.tot * 100);
+    const color = cp >= 75 ? "var(--good)" : cp >= 50 ? "var(--warn)" : "var(--bad)";
+    return `<div class="cat-row"><span>${cat}</span><span style="color:${color}">${s.ok}/${s.tot} (${cp}%)</span></div>`;
+  }).join("");
+
+  quizEl.innerHTML = `
+    <div class="card results">
+      <h2>Resultado</h2>
+      <div class="score-big">${correct} / ${total}</div>
+      <div style="font-size:1.3rem">${pct}%</div>
+      <div class="verdict">${verdict}</div>
+      <div class="cat-scores">${catRows}</div>
+      <button class="btn" id="restart">Reintentar</button>
+    </div>
+  `;
+  barEl.style.width = "100%";
+  document.getElementById("restart").addEventListener("click", () => {
+    state.i = 0;
+    state.answers = new Array(BANK.length).fill(null);
+    render();
+    window.scrollTo(0, 0);
+  });
+}
+
+subEl.textContent = `Evaluación exhaustiva: ${BANK.length} preguntas en ${[...new Set(BANK.map(q => q.cat))].length} categorías. Cada respuesta se bloquea al marcar y muestra la explicación.`;
+render();
+</script>
+</body>
+</html>

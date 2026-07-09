@@ -1,0 +1,75 @@
+PROTOTIPO 1 - MODELADOR DE RECINTOS 3D CON SIMULACION ACUSTICA FEM
+===================================================================
+
+COMO ARRANCAR
+-------------
+Doble click en  Prototipo1.exe
+
+La primera vez Windows puede mostrar una pantalla azul con el mensaje
+"Windows protegio tu PC". Es normal: el programa no esta firmado con
+un certificado pago, pero no tiene nada raro. Solucion:
+
+  1. Apretar  "Mas informacion"  (texto chico abajo del mensaje).
+  2. Apretar  "Ejecutar de todos modos"  (boton que aparece despues).
+
+A partir de la segunda vez, abre sin esa pantalla.
+
+
+QUE INCLUYE
+-----------
+- Prototipo1.exe         Entry point del programa.
+- ejemplo.room           Sala de muestra (5x4x3 m con una fuente en
+                         esquina y un receptor central). Abrir con
+                         Ctrl+O desde la app o doble click si Windows
+                         tiene .room asociado al .exe.
+- MANUAL.pdf             Manual completo de 32 paginas con todas las
+                         funciones y el changelog desde v2.0.
+- _internal\             Dependencias bundleadas (DLLs, Python embebido,
+                         materiales JSON). NO BORRAR ni mover archivos
+                         de adentro.
+
+
+PRIMERA SESION SUGERIDA
+-----------------------
+1. Abrir Prototipo1.exe.
+2. Ctrl+O - abrir ejemplo.room.
+3. Click en pestaña "Acustica".
+4. Click en "Calcular f_Schroeder" para ver los limites fisicos.
+5. (Opcional) Click en "[Aplicar]" al lado de "npm sugerido"
+   para que la malla cubra hasta f_Schroeder.
+6. Click en "Calcular modos (FEM)".
+7. Cambiar el modo en el dropdown "Modo:" para ver distintas
+   formas modales en 3D.
+8. "Calcular FRF" -> "Escuchar" para oir la sala con ruido rosa.
+
+
+REQUISITOS
+----------
+- Windows 10 / 11 (64-bit)
+- GPU con soporte OpenGL 2.1 o superior (cualquier PC de los
+  ultimos 10 anios cumple).
+- ~500 MB libres en disco.
+
+
+PROBLEMAS COMUNES
+-----------------
+"Windows protegio tu PC"
+  - Mas informacion -> Ejecutar de todos modos. Es normal.
+
+Vista 3D en negro
+  - Actualizar drivers de la tarjeta grafica.
+
+El programa abre pero al elegir un material solo aparece "default"
+  - El bundle de materiales/ se rompio. Reportar al desarrollador.
+
+"DLL load failed" o el .exe no abre
+  - Falta el Visual C++ Redistributable de Microsoft. Instalar:
+    https://aka.ms/vs/17/release/vc_redist.x64.exe
+  - Reintentar.
+
+
+CONTACTO
+--------
+Desarrollado por el ingeniero acustico autor del proyecto.
+Cualquier bug, comentario o sugerencia, reportar al mail / contacto
+provisto al recibir el ZIP.

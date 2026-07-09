@@ -1,0 +1,28 @@
+[
+  {
+    "name": "Vidrio (ventana/mampara)",
+    "category": "Ventanas",
+    "description": "Panel de vidrio simple de 4-6mm, típico de ventanas",
+    "source": "Beranek 1954",
+    "absorption_coef": [
+      0.04,
+      0.04,
+      0.03,
+      0.03,
+      0.02,
+      0.02,
+      0.02,
+      0.02
+    ],
+    "scatter_coef": [
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05
+    ]
+  }
+]

@@ -1,0 +1,2888 @@
+[
+  {
+    "name": "Cielorraso acustico (lana de vidrio), 20 mm, 30 kg/m3, suspendido a 50 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de vidrio) de 20 mm de espesor, resistividad al flujo de 15000 Pa s/m2 y densidad de 30 kg/m3\n2. Camara de aire de 50 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.03,
+      0.06,
+      0.17,
+      0.44,
+      0.8,
+      0.94,
+      0.95,
+      0.95
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de vidrio), 20 mm, 30 kg/m3, suspendido a 100 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de vidrio) de 20 mm de espesor, resistividad al flujo de 15000 Pa s/m2 y densidad de 30 kg/m3\n2. Camara de aire de 100 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.11,
+      0.31,
+      0.69,
+      0.94,
+      0.94,
+      0.94,
+      0.95
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de vidrio), 20 mm, 30 kg/m3, suspendido a 200 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de vidrio) de 20 mm de espesor, resistividad al flujo de 15000 Pa s/m2 y densidad de 30 kg/m3\n2. Camara de aire de 200 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.25,
+      0.61,
+      0.93,
+      0.94,
+      0.94,
+      0.94,
+      0.95
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de vidrio), 20 mm, 70 kg/m3, suspendido a 50 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de vidrio) de 20 mm de espesor, resistividad al flujo de 50000 Pa s/m2 y densidad de 70 kg/m3\n2. Camara de aire de 50 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.11,
+      0.3,
+      0.61,
+      0.84,
+      0.92,
+      0.93,
+      0.94
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de vidrio), 20 mm, 70 kg/m3, suspendido a 100 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de vidrio) de 20 mm de espesor, resistividad al flujo de 50000 Pa s/m2 y densidad de 70 kg/m3\n2. Camara de aire de 100 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.09,
+      0.21,
+      0.48,
+      0.76,
+      0.89,
+      0.89,
+      0.93,
+      0.94
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de vidrio), 20 mm, 70 kg/m3, suspendido a 200 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de vidrio) de 20 mm de espesor, resistividad al flujo de 50000 Pa s/m2 y densidad de 70 kg/m3\n2. Camara de aire de 200 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.19,
+      0.41,
+      0.69,
+      0.87,
+      0.86,
+      0.89,
+      0.93,
+      0.94
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de vidrio), 20 mm, 100 kg/m3, suspendido a 50 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de vidrio) de 20 mm de espesor, resistividad al flujo de 80000 Pa s/m2 y densidad de 100 kg/m3\n2. Camara de aire de 50 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.05,
+      0.15,
+      0.36,
+      0.62,
+      0.81,
+      0.87,
+      0.91,
+      0.94
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de vidrio), 20 mm, 100 kg/m3, suspendido a 100 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de vidrio) de 20 mm de espesor, resistividad al flujo de 80000 Pa s/m2 y densidad de 100 kg/m3\n2. Camara de aire de 100 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.26,
+      0.5,
+      0.71,
+      0.83,
+      0.85,
+      0.91,
+      0.94
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de vidrio), 20 mm, 100 kg/m3, suspendido a 200 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de vidrio) de 20 mm de espesor, resistividad al flujo de 80000 Pa s/m2 y densidad de 100 kg/m3\n2. Camara de aire de 200 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.22,
+      0.42,
+      0.64,
+      0.78,
+      0.78,
+      0.85,
+      0.91,
+      0.94
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de vidrio), 40 mm, 30 kg/m3, suspendido a 50 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de vidrio) de 40 mm de espesor, resistividad al flujo de 15000 Pa s/m2 y densidad de 30 kg/m3\n2. Camara de aire de 50 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.06,
+      0.16,
+      0.4,
+      0.72,
+      0.92,
+      0.94,
+      0.95,
+      0.95
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de vidrio), 40 mm, 30 kg/m3, suspendido a 100 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de vidrio) de 40 mm de espesor, resistividad al flujo de 15000 Pa s/m2 y densidad de 30 kg/m3\n2. Camara de aire de 100 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.24,
+      0.55,
+      0.84,
+      0.94,
+      0.94,
+      0.95,
+      0.95
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de vidrio), 40 mm, 30 kg/m3, suspendido a 200 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de vidrio) de 40 mm de espesor, resistividad al flujo de 15000 Pa s/m2 y densidad de 30 kg/m3\n2. Camara de aire de 200 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.17,
+      0.42,
+      0.76,
+      0.93,
+      0.92,
+      0.94,
+      0.95,
+      0.95
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de vidrio), 40 mm, 70 kg/m3, suspendido a 50 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de vidrio) de 40 mm de espesor, resistividad al flujo de 50000 Pa s/m2 y densidad de 70 kg/m3\n2. Camara de aire de 50 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.27,
+      0.53,
+      0.76,
+      0.86,
+      0.9,
+      0.93,
+      0.94
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de vidrio), 40 mm, 70 kg/m3, suspendido a 100 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de vidrio) de 40 mm de espesor, resistividad al flujo de 50000 Pa s/m2 y densidad de 70 kg/m3\n2. Camara de aire de 100 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.17,
+      0.37,
+      0.61,
+      0.78,
+      0.84,
+      0.9,
+      0.93,
+      0.94
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de vidrio), 40 mm, 70 kg/m3, suspendido a 200 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de vidrio) de 40 mm de espesor, resistividad al flujo de 50000 Pa s/m2 y densidad de 70 kg/m3\n2. Camara de aire de 200 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.28,
+      0.49,
+      0.67,
+      0.78,
+      0.83,
+      0.9,
+      0.93,
+      0.94
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de vidrio), 40 mm, 100 kg/m3, suspendido a 50 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de vidrio) de 40 mm de espesor, resistividad al flujo de 80000 Pa s/m2 y densidad de 100 kg/m3\n2. Camara de aire de 50 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.14,
+      0.31,
+      0.51,
+      0.68,
+      0.79,
+      0.87,
+      0.91,
+      0.94
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de vidrio), 40 mm, 100 kg/m3, suspendido a 100 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de vidrio) de 40 mm de espesor, resistividad al flujo de 80000 Pa s/m2 y densidad de 100 kg/m3\n2. Camara de aire de 100 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.2,
+      0.37,
+      0.55,
+      0.68,
+      0.78,
+      0.87,
+      0.91,
+      0.94
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de vidrio), 40 mm, 100 kg/m3, suspendido a 200 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de vidrio) de 40 mm de espesor, resistividad al flujo de 80000 Pa s/m2 y densidad de 100 kg/m3\n2. Camara de aire de 200 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.28,
+      0.43,
+      0.57,
+      0.67,
+      0.77,
+      0.87,
+      0.91,
+      0.94
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de roca), 20 mm, 30 kg/m3, suspendido a 50 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de roca) de 20 mm de espesor, resistividad al flujo de 9000 Pa s/m2 y densidad de 30 kg/m3\n2. Camara de aire de 50 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.05,
+      0.07,
+      0.15,
+      0.37,
+      0.75,
+      0.94,
+      0.95,
+      0.95
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de roca), 20 mm, 30 kg/m3, suspendido a 100 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de roca) de 20 mm de espesor, resistividad al flujo de 9000 Pa s/m2 y densidad de 30 kg/m3\n2. Camara de aire de 100 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.09,
+      0.24,
+      0.62,
+      0.93,
+      0.95,
+      0.95,
+      0.95
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de roca), 20 mm, 30 kg/m3, suspendido a 200 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de roca) de 20 mm de espesor, resistividad al flujo de 9000 Pa s/m2 y densidad de 30 kg/m3\n2. Camara de aire de 200 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.06,
+      0.17,
+      0.51,
+      0.92,
+      0.95,
+      0.95,
+      0.94,
+      0.95
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de roca), 20 mm, 70 kg/m3, suspendido a 50 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de roca) de 20 mm de espesor, resistividad al flujo de 33000 Pa s/m2 y densidad de 70 kg/m3\n2. Camara de aire de 50 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.03,
+      0.09,
+      0.25,
+      0.56,
+      0.85,
+      0.94,
+      0.94,
+      0.95
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de roca), 20 mm, 70 kg/m3, suspendido a 100 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de roca) de 20 mm de espesor, resistividad al flujo de 33000 Pa s/m2 y densidad de 70 kg/m3\n2. Camara de aire de 100 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.06,
+      0.17,
+      0.44,
+      0.76,
+      0.93,
+      0.92,
+      0.94,
+      0.95
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de roca), 20 mm, 70 kg/m3, suspendido a 200 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de roca) de 20 mm de espesor, resistividad al flujo de 33000 Pa s/m2 y densidad de 70 kg/m3\n2. Camara de aire de 200 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.15,
+      0.36,
+      0.69,
+      0.91,
+      0.9,
+      0.91,
+      0.94,
+      0.95
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de roca), 20 mm, 100 kg/m3, suspendido a 50 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de roca) de 20 mm de espesor, resistividad al flujo de 55000 Pa s/m2 y densidad de 100 kg/m3\n2. Camara de aire de 50 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.05,
+      0.12,
+      0.31,
+      0.61,
+      0.84,
+      0.91,
+      0.93,
+      0.94
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de roca), 20 mm, 100 kg/m3, suspendido a 100 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de roca) de 20 mm de espesor, resistividad al flujo de 55000 Pa s/m2 y densidad de 100 kg/m3\n2. Camara de aire de 100 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.09,
+      0.22,
+      0.49,
+      0.75,
+      0.88,
+      0.89,
+      0.93,
+      0.94
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de roca), 20 mm, 100 kg/m3, suspendido a 200 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de roca) de 20 mm de espesor, resistividad al flujo de 55000 Pa s/m2 y densidad de 100 kg/m3\n2. Camara de aire de 200 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.2,
+      0.41,
+      0.68,
+      0.85,
+      0.85,
+      0.88,
+      0.93,
+      0.94
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de roca), 40 mm, 30 kg/m3, suspendido a 50 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de roca) de 40 mm de espesor, resistividad al flujo de 9000 Pa s/m2 y densidad de 30 kg/m3\n2. Camara de aire de 50 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.06,
+      0.14,
+      0.34,
+      0.66,
+      0.89,
+      0.95,
+      0.95,
+      0.95
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de roca), 40 mm, 30 kg/m3, suspendido a 100 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de roca) de 40 mm de espesor, resistividad al flujo de 9000 Pa s/m2 y densidad de 30 kg/m3\n2. Camara de aire de 100 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.07,
+      0.19,
+      0.47,
+      0.81,
+      0.94,
+      0.94,
+      0.95,
+      0.95
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de roca), 40 mm, 30 kg/m3, suspendido a 200 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de roca) de 40 mm de espesor, resistividad al flujo de 9000 Pa s/m2 y densidad de 30 kg/m3\n2. Camara de aire de 200 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.12,
+      0.34,
+      0.72,
+      0.94,
+      0.94,
+      0.94,
+      0.95,
+      0.95
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de roca), 40 mm, 70 kg/m3, suspendido a 50 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de roca) de 40 mm de espesor, resistividad al flujo de 33000 Pa s/m2 y densidad de 70 kg/m3\n2. Camara de aire de 50 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.22,
+      0.5,
+      0.78,
+      0.9,
+      0.92,
+      0.94,
+      0.95
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de roca), 40 mm, 70 kg/m3, suspendido a 100 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de roca) de 40 mm de espesor, resistividad al flujo de 33000 Pa s/m2 y densidad de 70 kg/m3\n2. Camara de aire de 100 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.14,
+      0.33,
+      0.62,
+      0.83,
+      0.89,
+      0.92,
+      0.94,
+      0.95
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de roca), 40 mm, 70 kg/m3, suspendido a 200 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de roca) de 40 mm de espesor, resistividad al flujo de 33000 Pa s/m2 y densidad de 70 kg/m3\n2. Camara de aire de 200 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.25,
+      0.49,
+      0.74,
+      0.86,
+      0.87,
+      0.92,
+      0.94,
+      0.95
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de roca), 40 mm, 100 kg/m3, suspendido a 50 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de roca) de 40 mm de espesor, resistividad al flujo de 55000 Pa s/m2 y densidad de 100 kg/m3\n2. Camara de aire de 50 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.28,
+      0.53,
+      0.74,
+      0.85,
+      0.89,
+      0.93,
+      0.94
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de roca), 40 mm, 100 kg/m3, suspendido a 100 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de roca) de 40 mm de espesor, resistividad al flujo de 55000 Pa s/m2 y densidad de 100 kg/m3\n2. Camara de aire de 100 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.18,
+      0.37,
+      0.6,
+      0.76,
+      0.83,
+      0.9,
+      0.93,
+      0.94
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cielorraso acustico (lana de roca), 40 mm, 100 kg/m3, suspendido a 200 mm",
+    "category": "Porosos",
+    "description": "1. Absorbente poroso (lana de roca) de 40 mm de espesor, resistividad al flujo de 55000 Pa s/m2 y densidad de 100 kg/m3\n2. Camara de aire de 200 mm de espesor.",
+    "source": "",
+    "absorption_coef": [
+      0.28,
+      0.48,
+      0.65,
+      0.76,
+      0.82,
+      0.9,
+      0.93,
+      0.94
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Epoxi 6 mm (fibra de vidrio)",
+    "category": "Porosos",
+    "description": "Composite de epoxi con fibra de vidrio. Espesor: 6 mm",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.08,
+      0.08,
+      0.08,
+      0.09,
+      0.1,
+      0.13,
+      0.17
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Epoxi 9 mm (lino)",
+    "category": "Porosos",
+    "description": "Composite de epoxi UD con lino. Espesor 9 mm",
+    "source": "",
+    "absorption_coef": [
+      0.02,
+      0.02,
+      0.02,
+      0.04,
+      0.09,
+      0.16,
+      0.3,
+      0.29
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de vidrio 20 mm, 25 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de vidrio) de espesor 20 [mm] y densidad de 25.3 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.03,
+      0.07,
+      0.16,
+      0.3,
+      0.48,
+      0.71,
+      0.94
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de vidrio 40 mm, 18 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de vidrio) de espesor 40 [mm] y densidad de 18.5 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.09,
+      0.14,
+      0.27,
+      0.49,
+      0.71,
+      0.94,
+      0.87
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de vidrio 40 mm, 25 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de vidrio) de espesor 40 [mm] y densidad de 25.3 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.05,
+      0.08,
+      0.17,
+      0.39,
+      0.66,
+      0.86,
+      0.93,
+      0.9
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de vidrio 50 mm, 18 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de vidrio) de espesor 50 [mm] y densidad de 18.5 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.1,
+      0.18,
+      0.37,
+      0.64,
+      0.86,
+      0.93,
+      0.91
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de vidrio 50 mm, 25 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de vidrio) de espesor 50 [mm] y densidad de 25.3 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.05,
+      0.1,
+      0.27,
+      0.54,
+      0.78,
+      0.93,
+      0.91,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de vidrio 80 mm, 18 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de vidrio) de espesor 80 [mm] y densidad de 18.5 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.18,
+      0.39,
+      0.67,
+      0.87,
+      0.93,
+      0.91,
+      0.91
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de vidrio 80 mm, 25 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de vidrio) de espesor 80 [mm] y densidad de 25.3 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.09,
+      0.25,
+      0.55,
+      0.82,
+      0.93,
+      0.92,
+      0.92,
+      0.91
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de vidrio 100 mm, 18 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de vidrio) de espesor 100 [mm] y densidad de 18.5 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.26,
+      0.53,
+      0.79,
+      0.93,
+      0.91,
+      0.91,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de vidrio 100 mm, 25 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de vidrio) de espesor 100 [mm] y densidad de 25.3 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.15,
+      0.38,
+      0.7,
+      0.9,
+      0.93,
+      0.92,
+      0.92,
+      0.91
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 20 mm, 30 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 30.1 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.03,
+      0.07,
+      0.16,
+      0.28,
+      0.44,
+      0.66,
+      0.94
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 20 mm, 47 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 47.2 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.02,
+      0.07,
+      0.18,
+      0.37,
+      0.61,
+      0.83,
+      0.93
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 20 mm, 64 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 64.2 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.02,
+      0.08,
+      0.21,
+      0.44,
+      0.71,
+      0.9,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 20 mm, 81 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 81.2 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.03,
+      0.09,
+      0.23,
+      0.5,
+      0.78,
+      0.93,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 20 mm, 115 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 115.3 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.03,
+      0.1,
+      0.29,
+      0.6,
+      0.86,
+      0.94,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 20 mm, 149 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 149.3 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.04,
+      0.12,
+      0.34,
+      0.68,
+      0.89,
+      0.93,
+      0.91
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 20 mm, 183 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 20 [mm] y densidad de 183.4 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.02,
+      0.05,
+      0.14,
+      0.39,
+      0.74,
+      0.9,
+      0.91,
+      0.91
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 25 mm, 23 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 25 [mm] y densidad de 23.0 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.05,
+      0.2,
+      0.52,
+      0.81,
+      0.94,
+      0.92,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 25 mm, 34 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 25 [mm] y densidad de 34.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.05,
+      0.22,
+      0.57,
+      0.85,
+      0.94,
+      0.91,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 25 mm, 57 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 25 [mm] y densidad de 56.6 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.02,
+      0.06,
+      0.25,
+      0.64,
+      0.87,
+      0.92,
+      0.89,
+      0.91
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 25 mm, 79 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 25 [mm] y densidad de 79.0 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.02,
+      0.07,
+      0.29,
+      0.68,
+      0.87,
+      0.89,
+      0.88,
+      0.9
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 25 mm, 101 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 25 [mm] y densidad de 101.4 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.03,
+      0.08,
+      0.33,
+      0.71,
+      0.86,
+      0.87,
+      0.87,
+      0.9
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 25 mm, 124 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 25 [mm] y densidad de 123.7 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.03,
+      0.1,
+      0.36,
+      0.74,
+      0.84,
+      0.84,
+      0.86,
+      0.89
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 40 mm, 23 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 23.3 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.09,
+      0.14,
+      0.27,
+      0.49,
+      0.71,
+      0.94,
+      0.87
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 40 mm, 30 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 30.1 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.05,
+      0.08,
+      0.16,
+      0.35,
+      0.61,
+      0.83,
+      0.93,
+      0.89
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 40 mm, 47 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 47.2 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.03,
+      0.08,
+      0.22,
+      0.5,
+      0.78,
+      0.93,
+      0.92,
+      0.91
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 40 mm, 64 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 64.2 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.03,
+      0.1,
+      0.29,
+      0.6,
+      0.86,
+      0.94,
+      0.92,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 40 mm, 81 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 81.2 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.12,
+      0.34,
+      0.68,
+      0.89,
+      0.93,
+      0.91,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 40 mm, 115 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 115.3 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.07,
+      0.17,
+      0.44,
+      0.78,
+      0.9,
+      0.9,
+      0.91,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 40 mm, 149 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 149.3 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.09,
+      0.21,
+      0.53,
+      0.81,
+      0.87,
+      0.88,
+      0.91,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 40 mm, 183 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 40 [mm] y densidad de 183.4 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.1,
+      0.26,
+      0.59,
+      0.81,
+      0.83,
+      0.86,
+      0.9,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 50 mm, 23 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 50 [mm] y densidad de 23.3 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.1,
+      0.18,
+      0.37,
+      0.64,
+      0.86,
+      0.93,
+      0.91
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 50 mm, 23 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 50 [mm] y densidad de 23.0 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.24,
+      0.56,
+      0.86,
+      0.94,
+      0.91,
+      0.92,
+      0.91
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 50 mm, 30 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 50 [mm] y densidad de 30.1 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.05,
+      0.1,
+      0.25,
+      0.5,
+      0.74,
+      0.92,
+      0.91,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 50 mm, 34 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 50 [mm] y densidad de 34.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.06,
+      0.21,
+      0.6,
+      0.9,
+      0.92,
+      0.9,
+      0.91,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 50 mm, 47 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 50 [mm] y densidad de 47.2 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.13,
+      0.35,
+      0.66,
+      0.88,
+      0.94,
+      0.91,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 50 mm, 57 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 50 [mm] y densidad de 56.6 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.27,
+      0.71,
+      0.89,
+      0.87,
+      0.87,
+      0.9,
+      0.91
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 50 mm, 64 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 50 [mm] y densidad de 64.2 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.06,
+      0.17,
+      0.43,
+      0.76,
+      0.92,
+      0.92,
+      0.92,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 50 mm, 79 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 50 [mm] y densidad de 79.0 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.35,
+      0.77,
+      0.85,
+      0.83,
+      0.86,
+      0.89,
+      0.9
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 50 mm, 81 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 50 [mm] y densidad de 81.2 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.21,
+      0.51,
+      0.82,
+      0.91,
+      0.91,
+      0.92,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 50 mm, 101 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 50 [mm] y densidad de 101.4 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.14,
+      0.41,
+      0.78,
+      0.8,
+      0.8,
+      0.84,
+      0.88,
+      0.89
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 50 mm, 115 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 50 [mm] y densidad de 115.3 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.21,
+      0.51,
+      0.82,
+      0.91,
+      0.91,
+      0.92,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 50 mm, 124 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 50 [mm] y densidad de 123.7 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.17,
+      0.47,
+      0.77,
+      0.77,
+      0.78,
+      0.82,
+      0.87,
+      0.89
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 50 mm, 149 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 50 [mm] y densidad de 149.3 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.14,
+      0.35,
+      0.69,
+      0.83,
+      0.84,
+      0.87,
+      0.91,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 50 mm, 183 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 50 [mm] y densidad de 183.4 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.17,
+      0.41,
+      0.73,
+      0.79,
+      0.81,
+      0.86,
+      0.9,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 75 mm, 23 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 75 [mm] y densidad de 23.0 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.34,
+      0.78,
+      0.94,
+      0.92,
+      0.9,
+      0.92,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 75 mm, 34 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 75 [mm] y densidad de 34.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.13,
+      0.42,
+      0.85,
+      0.92,
+      0.89,
+      0.9,
+      0.91,
+      0.91
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 75 mm, 57 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 75 [mm] y densidad de 56.6 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.21,
+      0.58,
+      0.86,
+      0.85,
+      0.85,
+      0.88,
+      0.9,
+      0.91
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 75 mm, 79 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 75 [mm] y densidad de 79.0 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.29,
+      0.68,
+      0.81,
+      0.8,
+      0.82,
+      0.86,
+      0.89,
+      0.9
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 75 mm, 101 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 75 [mm] y densidad de 101.4 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.36,
+      0.71,
+      0.75,
+      0.76,
+      0.8,
+      0.84,
+      0.88,
+      0.89
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 75 mm, 124 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 75 [mm] y densidad de 123.7 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.42,
+      0.71,
+      0.7,
+      0.73,
+      0.78,
+      0.83,
+      0.86,
+      0.89
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 80 mm, 23 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 80 [mm] y densidad de 23.3 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.18,
+      0.39,
+      0.67,
+      0.87,
+      0.93,
+      0.91,
+      0.91
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 80 mm, 30 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 80 [mm] y densidad de 30.1 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.22,
+      0.5,
+      0.78,
+      0.93,
+      0.92,
+      0.92,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 80 mm, 47 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 80 [mm] y densidad de 47.2 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.13,
+      0.35,
+      0.68,
+      0.89,
+      0.93,
+      0.91,
+      0.92,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 80 mm, 64 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 80 [mm] y densidad de 64.2 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.18,
+      0.44,
+      0.78,
+      0.9,
+      0.9,
+      0.91,
+      0.92,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 80 mm, 81 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 80 [mm] y densidad de 81.2 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.23,
+      0.53,
+      0.81,
+      0.87,
+      0.88,
+      0.91,
+      0.92,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 80 mm, 115 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 80 [mm] y densidad de 115.3 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.32,
+      0.64,
+      0.79,
+      0.81,
+      0.85,
+      0.89,
+      0.91,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 80 mm, 149 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 80 [mm] y densidad de 149.3 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.39,
+      0.69,
+      0.74,
+      0.76,
+      0.83,
+      0.88,
+      0.91,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 80 mm, 183 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 80 [mm] y densidad de 183.4 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.44,
+      0.69,
+      0.7,
+      0.73,
+      0.81,
+      0.86,
+      0.9,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 100 mm, 23 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 100 [mm] y densidad de 23.3 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.26,
+      0.53,
+      0.79,
+      0.93,
+      0.91,
+      0.91,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 100 mm, 23 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 100 [mm] y densidad de 23.0 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.16,
+      0.5,
+      0.9,
+      0.94,
+      0.9,
+      0.91,
+      0.92,
+      0.91
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 100 mm, 30 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 100 [mm] y densidad de 30.1 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.13,
+      0.35,
+      0.66,
+      0.88,
+      0.94,
+      0.91,
+      0.92,
+      0.91
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 100 mm, 34 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 100 [mm] y densidad de 34.2 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.24,
+      0.65,
+      0.91,
+      0.89,
+      0.88,
+      0.9,
+      0.91,
+      0.91
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 100 mm, 47 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 100 [mm] y densidad de 47.2 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.22,
+      0.51,
+      0.82,
+      0.91,
+      0.91,
+      0.92,
+      0.92,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 100 mm, 57 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 100 [mm] y densidad de 56.6 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.4,
+      0.78,
+      0.84,
+      0.83,
+      0.85,
+      0.88,
+      0.9,
+      0.9
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 100 mm, 64 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 100 [mm] y densidad de 64.2 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.3,
+      0.62,
+      0.85,
+      0.88,
+      0.89,
+      0.91,
+      0.92,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 100 mm, 79 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 100 [mm] y densidad de 79.0 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.51,
+      0.77,
+      0.76,
+      0.78,
+      0.82,
+      0.86,
+      0.89,
+      0.9
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 100 mm, 81 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 100 [mm] y densidad de 81.2 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.37,
+      0.7,
+      0.83,
+      0.84,
+      0.88,
+      0.91,
+      0.92,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 100 mm, 101 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 100 [mm] y densidad de 101.4 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.58,
+      0.71,
+      0.71,
+      0.75,
+      0.8,
+      0.84,
+      0.88,
+      0.89
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 100 mm, 115 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 100 [mm] y densidad de 115.3 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.48,
+      0.74,
+      0.76,
+      0.79,
+      0.85,
+      0.89,
+      0.91,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 100 mm, 124 kg/m3, con velo de fibra de vidrio",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 3 capas. De la superficie hacia el fondo: \r\n1: Recubrimiento poroso de espesor 0.5 [mm], superficie densidad de 0.33 [kg/m2], resistance de 550 [Pa.s/m], y porosity de 70 [%]., \r\n2: Absorbente poroso (lana de vidrio) de espesor 100 [mm] y densidad de 123.7 [kg/m3]., \r\n3: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.61,
+      0.66,
+      0.67,
+      0.73,
+      0.78,
+      0.82,
+      0.86,
+      0.89
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 100 mm, 149 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 100 [mm] y densidad de 149.3 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.56,
+      0.7,
+      0.7,
+      0.75,
+      0.83,
+      0.88,
+      0.91,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Lana de roca 100 mm, 183 kg/m3",
+    "category": "Porosos",
+    "description": "Este material esta compuesto por 2 capas. De la superficie hacia el fondo: \r\n1: Absorbente poroso (lana de roca) de espesor 100 [mm] y densidad de 183.4 [kg/m3]., \r\n2: Respaldo rigido",
+    "source": "",
+    "absorption_coef": [
+      0.59,
+      0.65,
+      0.66,
+      0.73,
+      0.81,
+      0.86,
+      0.9,
+      0.92
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Hilado de lana de oveja copetudo",
+    "category": "Porosos",
+    "description": "Lana de oveja preparada en hilado y luego tejido copetudo denso construido con ella. 10-20 mm de espesor",
+    "source": "",
+    "absorption_coef": [
+      0.16,
+      0.16,
+      0.18,
+      0.26,
+      0.46,
+      0.76,
+      0.86,
+      0.7
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  }
+]

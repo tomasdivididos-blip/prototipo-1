@@ -1,0 +1,28 @@
+[
+  {
+    "name": "Panel acústico (espuma + tela)",
+    "category": "Porosos",
+    "description": "Panel de tratamiento acústico: espuma de melamina o lana de vidrio con tela",
+    "source": "Fabricante promedio / ISO 354",
+    "absorption_coef": [
+      0.05,
+      0.15,
+      0.4,
+      0.7,
+      0.85,
+      0.9,
+      0.9,
+      0.85
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.3,
+      0.4,
+      0.5,
+      0.6,
+      0.6,
+      0.6
+    ]
+  }
+]

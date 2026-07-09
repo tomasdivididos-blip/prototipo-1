@@ -1,0 +1,392 @@
+[
+  {
+    "name": "Baldosas de alfombra",
+    "category": "Alfombras",
+    "description": "Baldosas con superficie de alfombra de poliamida 6",
+    "source": "",
+    "absorption_coef": [
+      0.02,
+      0.08,
+      0.1,
+      0.14,
+      0.18,
+      0.23,
+      0.27,
+      0.28
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Alfombra con base",
+    "category": "Alfombras",
+    "description": "Alfombra sobre una base",
+    "source": "",
+    "absorption_coef": [
+      0.15,
+      0.22,
+      0.33,
+      0.4,
+      0.43,
+      0.44,
+      0.44,
+      0.44
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Pelo corto sobre fieltro",
+    "category": "Alfombras",
+    "description": "Alfombra de pelo corto sobre fieltro",
+    "source": "",
+    "absorption_coef": [
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Alfombra pesada sobre hormigon",
+    "category": "Alfombras",
+    "description": "Alfombra pesada sobre piso o pared de hormigon",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.05,
+      0.07,
+      0.13,
+      0.28,
+      0.51,
+      0.65,
+      0.64
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Alfombra pesada sobre espuma de goma",
+    "category": "Alfombras",
+    "description": "Alfombra pesada sobre espuma de goma o fieltro de pelo de 1,35 kg/m2",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.11,
+      0.29,
+      0.52,
+      0.66,
+      0.71,
+      0.73,
+      0.73
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Alfombra pesada con respaldo de latex sobre espuma de goma",
+    "category": "Alfombras",
+    "description": "Alfombra pesada con respaldo de latex sobre espuma de goma o fieltro de pelo de 1,35 kg/m2",
+    "source": "",
+    "absorption_coef": [
+      0.09,
+      0.13,
+      0.22,
+      0.33,
+      0.41,
+      0.51,
+      0.6,
+      0.6
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Alfombra persa de doble base",
+    "category": "Alfombras",
+    "description": "Alfombra persa estratificada con capas base de 8 mm y pelo de 7 mm encima",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.1,
+      0.11,
+      0.15,
+      0.26,
+      0.48,
+      0.68,
+      0.77
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Pelo y fieltro grueso",
+    "category": "Alfombras",
+    "description": "Alfombra de pelo y lana afieltrada",
+    "source": "",
+    "absorption_coef": [
+      0.06,
+      0.11,
+      0.22,
+      0.42,
+      0.57,
+      0.63,
+      0.64,
+      0.65
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Alfombra de pelo sobre base de espuma de celda cerrada",
+    "category": "Alfombras",
+    "description": "Alfombra de pelo de 6 mm sobre base de espuma de celda cerrada",
+    "source": "",
+    "absorption_coef": [
+      0.03,
+      0.04,
+      0.09,
+      0.2,
+      0.32,
+      0.39,
+      0.41,
+      0.42
+    ],
+    "scatter_coef": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+    ]
+  },
+  {
+    "name": "Alfombra de pelo sobre base de espuma de celda abierta",
+    "category": "Alfombras",
+    "description": "Alfombra de pelo de 6 mm sobre base de espuma de celda abierta",
+    "source": "",
+    "absorption_coef": [
+      0.03,
+      0.05,
+      0.11,
+      0.27,
+      0.5,
+      0.66,
+      0.71,
+      0.73
+    ],
+    "scatter_coef": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+    ]
+  },
+  {
+    "name": "Alfombra de pelo sobre base de goma esponjosa",
+    "category": "Alfombras",
+    "description": "Alfombra de pelo de 10 mm sobre base de goma esponjosa",
+    "source": "",
+    "absorption_coef": [
+      0.02,
+      0.04,
+      0.12,
+      0.3,
+      0.52,
+      0.64,
+      0.68,
+      0.69
+    ],
+    "scatter_coef": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+    ]
+  },
+  {
+    "name": "Alfombra de pelo grueso sobre base de goma esponjosa",
+    "category": "Alfombras",
+    "description": "Alfombra de pelo de 15 mm sobre base de goma esponjosa",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.15,
+      0.27,
+      0.47,
+      0.62,
+      0.68,
+      0.7,
+      0.7
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Alfombra de pelo copetudo sobre base de fieltro",
+    "category": "Alfombras",
+    "description": "Alfombra de pelo copetudo de 9 mm de espesor sobre base de fieltro",
+    "source": "",
+    "absorption_coef": [
+      0.07,
+      0.09,
+      0.16,
+      0.34,
+      0.58,
+      0.74,
+      0.8,
+      0.8
+    ],
+    "scatter_coef": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+    ]
+  },
+  {
+    "name": "Pelo de lana sobre hormigon",
+    "category": "Alfombras",
+    "description": "Pelo de lana de 9,5 mm de espesor sobre hormigon",
+    "source": "",
+    "absorption_coef": [
+      0.07,
+      0.08,
+      0.12,
+      0.19,
+      0.25,
+      0.3,
+      0.35,
+      0.38
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Pelo de lana con base",
+    "category": "Alfombras",
+    "description": "Pelo de lana de 16 mm de espesor con base",
+    "source": "",
+    "absorption_coef": [
+      0.16,
+      0.18,
+      0.24,
+      0.34,
+      0.43,
+      0.55,
+      0.69,
+      0.81
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  }
+]

@@ -1,0 +1,28 @@
+[
+  {
+    "name": "Yeso pintado / Revoque fino",
+    "category": "Yeso",
+    "description": "Pared de yeso o revoque fino con pintura al látex",
+    "source": "Beranek 1954 / Egan 1988",
+    "absorption_coef": [
+      0.01,
+      0.01,
+      0.02,
+      0.03,
+      0.04,
+      0.05,
+      0.05,
+      0.05
+    ],
+    "scatter_coef": [
+      0.05,
+      0.05,
+      0.05,
+      0.1,
+      0.1,
+      0.15,
+      0.15,
+      0.15
+    ]
+  }
+]

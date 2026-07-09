@@ -1,0 +1,288 @@
+[
+  {
+    "name": "Cortinas de algodon drapeadas al 75% del area",
+    "category": "Cortinas",
+    "description": "Cortina de algodon (0,475 kg/m2) drapeada al 75% del area",
+    "source": "",
+    "absorption_coef": [
+      0.05,
+      0.08,
+      0.2,
+      0.42,
+      0.54,
+      0.5,
+      0.43,
+      0.32
+    ],
+    "scatter_coef": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+    ]
+  },
+  {
+    "name": "Cortinas de algodon drapeadas al 88% del area",
+    "category": "Cortinas",
+    "description": "Cortina de algodon (0,475 kg/m2) drapeada al 88% del area",
+    "source": "",
+    "absorption_coef": [
+      0.02,
+      0.05,
+      0.12,
+      0.18,
+      0.25,
+      0.38,
+      0.56,
+      0.67
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Cortinas de algodon drapeadas a mitad de area",
+    "category": "Cortinas",
+    "description": "Cortina de algodon (0,475 kg/m2) drapeada a mitad de area",
+    "source": "",
+    "absorption_coef": [
+      0.1,
+      0.14,
+      0.27,
+      0.47,
+      0.63,
+      0.69,
+      0.69,
+      0.62
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Cortinas drapeadas al 40% del area",
+    "category": "Cortinas",
+    "description": "Cortina de material no especificado drapeada al 40% del area",
+    "source": "",
+    "absorption_coef": [
+      0.16,
+      0.22,
+      0.3,
+      0.35,
+      0.39,
+      0.44,
+      0.49,
+      0.48
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Cortinas drapeadas a mitad de area",
+    "category": "Cortinas",
+    "description": "Cortina de material no especificado drapeada a mitad de area",
+    "source": "",
+    "absorption_coef": [
+      0.15,
+      0.17,
+      0.22,
+      0.29,
+      0.35,
+      0.37,
+      0.37,
+      0.37
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Cortinas colgadas rectas",
+    "category": "Cortinas",
+    "description": "Cortina de material no especificado colgada recta",
+    "source": "",
+    "absorption_coef": [
+      0.05,
+      0.11,
+      0.15,
+      0.18,
+      0.19,
+      0.22,
+      0.24,
+      0.26
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Terciopelo pesado drapeado a mitad de area",
+    "category": "Cortinas",
+    "description": "Terciopelo pesado (0,61 kg/m2) drapeado a mitad de area",
+    "source": "",
+    "absorption_coef": [
+      0.11,
+      0.21,
+      0.38,
+      0.53,
+      0.44,
+      0.45,
+      0.47,
+      0.48
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Terciopelo pesado colgado recto",
+    "category": "Cortinas",
+    "description": "Terciopelo pesado (0,61 kg/m2) colgado recto",
+    "source": "",
+    "absorption_coef": [
+      0.05,
+      0.07,
+      0.16,
+      0.34,
+      0.46,
+      0.41,
+      0.34,
+      0.3
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Terciopelo liviano colgado recto en contacto con la pared",
+    "category": "Cortinas",
+    "description": "Terciopelo liviano (0,34 kg/m2) colgado recto y en contacto con la pared/ventana",
+    "source": "",
+    "absorption_coef": [
+      0.02,
+      0.04,
+      0.07,
+      0.11,
+      0.18,
+      0.28,
+      0.36,
+      0.4
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Terciopelo semipesado drapeado a mitad de area",
+    "category": "Cortinas",
+    "description": "Terciopelo semipesado (0,475 kg/m2) drapeado a mitad de area",
+    "source": "",
+    "absorption_coef": [
+      0.04,
+      0.04,
+      0.06,
+      0.13,
+      0.24,
+      0.32,
+      0.35,
+      0.36
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Terciopelo semipesado colgado recto",
+    "category": "Cortinas",
+    "description": "Terciopelo semipesado (0,475 kg/m2) colgado recto",
+    "source": "",
+    "absorption_coef": [
+      0.06,
+      0.07,
+      0.08,
+      0.13,
+      0.22,
+      0.31,
+      0.34,
+      0.35
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  }
+]

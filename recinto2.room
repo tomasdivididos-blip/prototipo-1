@@ -1,0 +1,200 @@
+{
+  "format": "prototipo1.room",
+  "version": 6,
+  "params": {
+    "width": 6.0,
+    "length": 8.0,
+    "height": 3.0,
+    "n_walls": 4,
+    "taper": 0.0,
+    "twist": 0.0,
+    "arch_height": 0.0,
+    "ridge_offset": 0.0,
+    "roof_type": "arch",
+    "ceiling_pitch_x": 0.0,
+    "ceiling_pitch_y": 0.0,
+    "floor_pitch_x": 0.0,
+    "floor_pitch_y": 0.0,
+    "wall_inclinations": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "base_polygon": [
+      [
+        8.5,
+        17.5
+      ],
+      [
+        2.0,
+        13.5
+      ],
+      [
+        2.0,
+        5.0
+      ],
+      [
+        11.5,
+        1.5
+      ],
+      [
+        21.5,
+        9.0
+      ],
+      [
+        14.5,
+        18.0
+      ]
+    ],
+    "wall_profiles": null
+  },
+  "acoustic": {
+    "mesh_engine": "auto",
+    "h_target": 0.4,
+    "n_per_meter": 2.55,
+    "n_modes": 297,
+    "sources": [
+      {
+        "label": "actual1",
+        "position": [
+          11.578095738204695,
+          10.639720044973075,
+          1.0
+        ],
+        "Q_real": 1.0,
+        "Q_imag": 0.0,
+        "sensitivity_dB": null,
+        "response": null,
+        "orientation": null,
+        "baffle_size": [
+          0.3,
+          0.5,
+          0.4
+        ],
+        "pitch": 0.0,
+        "mounted": false
+      },
+      {
+        "label": "actual2",
+        "position": [
+          12.225660936934986,
+          10.607862783042805,
+          1.0
+        ],
+        "Q_real": 1.0,
+        "Q_imag": 0.0,
+        "sensitivity_dB": null,
+        "response": null,
+        "orientation": null,
+        "baffle_size": [
+          0.3,
+          0.5,
+          0.4
+        ],
+        "pitch": 0.0,
+        "mounted": false
+      },
+      {
+        "label": "actual3",
+        "position": [
+          11.643171898592982,
+          9.17476221701844,
+          1.0
+        ],
+        "Q_real": 1.0,
+        "Q_imag": 0.0,
+        "sensitivity_dB": null,
+        "response": null,
+        "orientation": null,
+        "baffle_size": [
+          0.3,
+          0.5,
+          0.4
+        ],
+        "pitch": 0.0,
+        "mounted": false
+      },
+      {
+        "label": "actual4",
+        "position": [
+          10.954803333275152,
+          10.673405278241853,
+          1.0
+        ],
+        "Q_real": 1.0,
+        "Q_imag": 0.0,
+        "sensitivity_dB": null,
+        "response": null,
+        "orientation": null,
+        "baffle_size": [
+          0.3,
+          0.5,
+          0.4
+        ],
+        "pitch": 0.0,
+        "mounted": false
+      },
+      {
+        "label": "actual5",
+        "position": [
+          11.648442248814746,
+          9.928658970154657,
+          1.0
+        ],
+        "Q_real": 1.0,
+        "Q_imag": 0.0,
+        "sensitivity_dB": null,
+        "response": null,
+        "orientation": null,
+        "baffle_size": [
+          0.3,
+          0.5,
+          0.4
+        ],
+        "pitch": 0.0,
+        "mounted": false
+      },
+      {
+        "label": "actual6",
+        "position": [
+          11.579195304495432,
+          11.384035540990418,
+          1.0
+        ],
+        "Q_real": 1.0,
+        "Q_imag": 0.0,
+        "sensitivity_dB": null,
+        "response": null,
+        "orientation": null,
+        "baffle_size": [
+          0.3,
+          0.5,
+          0.4
+        ],
+        "pitch": 0.0,
+        "mounted": false
+      }
+    ],
+    "receiver": [
+      0.0,
+      0.0,
+      1.5
+    ],
+    "face_materials": {
+      "default": "Alfombra fina (pelo corto)",
+      "assignments": {
+        "15eca1abfaaa00fb": "Piso de madera",
+        "accc171fec0d660a": "Panel acústico (espuma + tela)",
+        "d37396b3f2a155d9": "Yeso pintado / Revoque fino",
+        "815b9199f303e7b4": "Yeso pintado / Revoque fino",
+        "a542bfc40f385e89": "Yeso pintado / Revoque fino",
+        "bf957ce641bf1a2b": "Yeso pintado / Revoque fino",
+        "6f415f9629a0a525": "Yeso pintado / Revoque fino",
+        "44f1557293f2a170": "Yeso pintado / Revoque fino"
+      }
+    }
+  }
+}

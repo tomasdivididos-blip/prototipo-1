@@ -1,0 +1,366 @@
+[
+  {
+    "name": "Ladrillo pintado",
+    "category": "Rigidos",
+    "description": "Pared de ladrillo pintada",
+    "source": "",
+    "absorption_coef": [
+      0.05,
+      0.04,
+      0.04,
+      0.03,
+      0.04,
+      0.05,
+      0.05,
+      0.05
+    ],
+    "scatter_coef": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "name": "Ladrillo sin esmaltar",
+    "category": "Rigidos",
+    "description": "Pared de ladrillo sin esmaltar",
+    "source": "",
+    "absorption_coef": [
+      0.03,
+      0.03,
+      0.03,
+      0.03,
+      0.04,
+      0.05,
+      0.06,
+      0.09
+    ],
+    "scatter_coef": [
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4,
+      0.4
+    ]
+  },
+  {
+    "name": "Bloque de hormigon, rugoso",
+    "category": "Rigidos",
+    "description": "Bloque de hormigon con textura rugosa",
+    "source": "",
+    "absorption_coef": [
+      0.35,
+      0.36,
+      0.39,
+      0.38,
+      0.33,
+      0.29,
+      0.26,
+      0.2
+    ],
+    "scatter_coef": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+    ]
+  },
+  {
+    "name": "Bloque de hormigon, pintado",
+    "category": "Rigidos",
+    "description": "Bloque de hormigon que ha sido pintado",
+    "source": "",
+    "absorption_coef": [
+      0.09,
+      0.09,
+      0.07,
+      0.07,
+      0.08,
+      0.08,
+      0.08,
+      0.08
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Superficie totalmente reflectante",
+    "category": "Rigidos",
+    "description": "Superficie rigida con absorcion plana del 0%",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Piso de marmol",
+    "category": "Rigidos",
+    "description": "Piso de marmol, tambien aplicable a paredes",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Pared de mamposteria revocada",
+    "category": "Rigidos",
+    "description": "Pared de ladrillo con una capa de revoque que reduce la dispersion",
+    "source": "",
+    "absorption_coef": [
+      0.02,
+      0.02,
+      0.03,
+      0.03,
+      0.04,
+      0.07,
+      0.08,
+      0.08
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Hormigon rugoso",
+    "category": "Rigidos",
+    "description": "Hormigon con textura rugosa",
+    "source": "",
+    "absorption_coef": [
+      0.03,
+      0.03,
+      0.03,
+      0.03,
+      0.03,
+      0.04,
+      0.07,
+      0.08
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Ladrillos lisos",
+    "category": "Rigidos",
+    "description": "Pared de ladrillo con terminacion lisa y sin pintar",
+    "source": "",
+    "absorption_coef": [
+      0.03,
+      0.03,
+      0.03,
+      0.03,
+      0.04,
+      0.05,
+      0.06,
+      0.06
+    ],
+    "scatter_coef": [
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  {
+    "name": "Baldosas esmaltadas lisas",
+    "category": "Rigidos",
+    "description": "Baldosas esmaltadas lisas sobre hormigon",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Hormigon liso pintado",
+    "category": "Rigidos",
+    "description": "Hormigon liso pintado o esmaltado",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Baldosas lisas sobre madera",
+    "category": "Rigidos",
+    "description": "Baldosas lisas (baja dispersion) colocadas sobre madera",
+    "source": "",
+    "absorption_coef": [
+      0.09,
+      0.08,
+      0.06,
+      0.04,
+      0.03,
+      0.03,
+      0.03,
+      0.03
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Hormigon liso sin pintar",
+    "category": "Rigidos",
+    "description": "Hormigon liso sin pintar ni esmaltar",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01
+    ],
+    "scatter_coef": [
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ]
+  },
+  {
+    "name": "Losas de terrazo",
+    "category": "Rigidos",
+    "description": "Losas de terrazo lisas",
+    "source": "",
+    "absorption_coef": [
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  }
+]

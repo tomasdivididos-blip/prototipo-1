@@ -1,0 +1,236 @@
+[
+  {
+    "name": "Placa de yeso de 10 mm sobre bastidor, camara de aire de 100 mm",
+    "category": "Yeso",
+    "description": "Placa de yeso de 10 mm de espesor sobre bastidor con camara de aire de 100 mm",
+    "source": "",
+    "absorption_coef": [
+      0.1,
+      0.09,
+      0.08,
+      0.06,
+      0.04,
+      0.04,
+      0.03,
+      0.03
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Placa de yeso de 10 mm sobre bastidor, 100 mm de lana mineral por detras",
+    "category": "Yeso",
+    "description": "Placa de yeso de 10 mm de espesor sobre bastidor con 100 mm de lana mineral por detras",
+    "source": "",
+    "absorption_coef": [
+      0.33,
+      0.2,
+      0.12,
+      0.08,
+      0.08,
+      0.07,
+      0.07,
+      0.07
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Placa de yeso de 13 mm sobre bastidor, camara de aire de 100 mm",
+    "category": "Yeso",
+    "description": "Placa de yeso de 13 mm de espesor sobre bastidor con camara de aire de 100 mm",
+    "source": "",
+    "absorption_coef": [
+      0.08,
+      0.07,
+      0.06,
+      0.05,
+      0.04,
+      0.03,
+      0.03,
+      0.03
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Placa de yeso de 13 mm sobre bastidor, 100 mm de lana mineral por detras",
+    "category": "Yeso",
+    "description": "Placa de yeso de 13 mm de espesor sobre bastidor con 100 mm de lana mineral por detras",
+    "source": "",
+    "absorption_coef": [
+      0.34,
+      0.2,
+      0.11,
+      0.08,
+      0.08,
+      0.07,
+      0.07,
+      0.07
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Yeso acustico",
+    "category": "Yeso",
+    "description": "Yeso acustico con espesor maximo de 30 mm",
+    "source": "",
+    "absorption_coef": [
+      0.25,
+      0.29,
+      0.4,
+      0.56,
+      0.66,
+      0.69,
+      0.7,
+      0.69
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Yeso acustico de 40 mm de espesor",
+    "category": "Yeso",
+    "description": "Yeso acustico con espesor de 30 - 50 mm",
+    "source": "",
+    "absorption_coef": [
+      0.26,
+      0.41,
+      0.62,
+      0.74,
+      0.78,
+      0.75,
+      0.63,
+      0.45
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Yeso acustico de 68 mm de espesor",
+    "category": "Yeso",
+    "description": "Yeso acustico con espesor de 50 - 70 mm",
+    "source": "",
+    "absorption_coef": [
+      0.41,
+      0.6,
+      0.69,
+      0.71,
+      0.7,
+      0.63,
+      0.52,
+      0.45
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Placa de yeso clavada a montantes",
+    "category": "Yeso",
+    "description": "Placa de yeso de 13 mm de espesor clavada a montantes con separacion 4/1 m c-t-c",
+    "source": "",
+    "absorption_coef": [
+      0.36,
+      0.26,
+      0.12,
+      0.09,
+      0.08,
+      0.07,
+      0.07,
+      0.07
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  },
+  {
+    "name": "Yeso sobre respaldo solido",
+    "category": "Yeso",
+    "description": "Yeso montado sobre respaldo solido",
+    "source": "",
+    "absorption_coef": [
+      0.03,
+      0.03,
+      0.03,
+      0.03,
+      0.03,
+      0.03,
+      0.03,
+      0.03
+    ],
+    "scatter_coef": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ]
+  }
+]
