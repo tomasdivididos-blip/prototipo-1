@@ -411,9 +411,13 @@ Compilación del manual: `pdflatex -interaction=nonstopmode MANUAL.tex` × 2
 pasadas (para resolver TOC). Limpiar `.aux .log .toc .out` después.
 
 ### Git
-**No hay git inicializado**. Si querés "commits", son ediciones
-secuenciales documentadas. Si el usuario pide inicializar git, hacelo
-sólo con permiso explícito.
+**El proyecto YA tiene git inicializado** (desde 7-8 Jul 2026 — cambió la regla
+histórica). Repo **PRIVADO** en `github.com/tomasdivididos-blip/prototipo-1`,
+rama `main`. Subir cambios: `git add -A; git commit -m "..."; git push` (ya no
+hace falta re-autenticar). El `.gitignore` excluye `dist/`, `build/`, `*.zip` y
+`referencias/` (libros/slides de terceros con copyright). `gh` (GitHub CLI)
+instalado en `C:\Program Files\GitHub CLI\gh.exe` (NO en el PATH de bash → usar
+ruta completa). Convención de commits: terminar con `Co-Authored-By: Claude`.
 
 ### Reglas de cuadratura para FEM
 Si volvés a trabajar con P2 (lo cual el usuario probablemente no quiere
@@ -624,7 +628,7 @@ que haya 19 JSON en `_internal/materials/`.
 | Reporta "el .exe abre pero el dialog Materiales sólo muestra 'default'" | Bug B10 (clásico): `materials/` no se bundleó. Verificar que `build.bat` tiene `--add-data "materials;materials"`. Diagnóstico rápido: `ls dist/Prototipo1/_internal/materials/*.json \| wc -l` debe dar 19 |
 | Reporta build fail con "attempt to collect multiple Qt bindings" | Bug B8: la Anaconda tiene PyQt5 + PyQt6 simultáneamente. `build.bat` ya tiene `--exclude-module PyQt6 / PySide6 / PySide2` desde v2.12. Si aparece otra variante, agregale el exclude correspondiente |
 | Pide slimear el bundle (1.6 GB es mucho) | Agregar excludes adicionales a `build.bat`: `botocore` (~92 MB), `numba` + `llvmlite` (~66 MB), `panel` + `bokeh` (~100 MB). Más allá de eso, hay ~400 MB de MKL DLLs que numpy/scipy necesitan para BLAS; reemplazar por OpenBLAS requiere reinstalar numpy y es invasivo. Ver B9 en §7 |
-| Pide hacer commit / git push / git status | **Pará**. No hay git inicializado en el proyecto (verificado §6). Si querés inicializar, requiere permiso explícito del usuario. Decile: *"No hay git inicializado acá. ¿Querés que arranque el repo? Si sí, te aviso qué entra al primer commit"*. NO ejecutes `git init` ni similares por iniciativa propia |
+| Pide hacer commit / git push / git status | El proyecto **YA tiene git** (repo privado `tomasdivididos-blip/prototipo-1`, rama `main` — ver §6). Hacé `git add -A; git commit; git push` normal. NO re-inicialices el repo ni cambies el remote sin permiso |
 | Pide migrar a P2 (otra vez) | Respondé que ya se evaluó y descartó en v2.10. Cita los números (5–36× más caro, error P1 ya despreciable vs ruido de modelado). NO empieces de cero: el rationale completo está en MANUAL.md §"Cambios v2.10" y en este archivo §5 D1. Solo reabrir el tema si el usuario presenta evidencia nueva |
 | Pide migrar a FEniCS / dolfinx / deal.II | Decisión D2 ya tomada. Ver apéndice "FEM a mano vs FEniCS" en MANUAL.md. Push back salvo que aparezcan los criterios listados ahí (> 10⁶ DOFs, impedancia angular, multifísica) |
 | Pregunta por **directividad / patrón polar** de fuentes | Ya se evaluó (13 Jun 2026) y se **descartó**: en banda modal (≤ Schroeder) los parlantes son casi omni; el dominio de la directividad casi no se solapa con la validez del FEM. Ver `plan_fuentes_respuesta_frecuencia.md` §1.1. Si insiste: monopolo+dipolo acoplado a ∇φₙ, pero NO en el plan actual |
@@ -732,11 +736,10 @@ bien.
 
 > *Cambié algo en el código y quiero hacer commit, ¿cómo arranco?*
 
-**Debe incluir:**
-- "No hay git inicializado en este proyecto" (verificación explícita).
-- Pregunta si quiere inicializar.
-- Lista de qué entraría en el primer commit.
-- **NO** debe ejecutar `git init` por iniciativa propia.
+**Debe incluir (ACTUALIZADO 7-8 Jul 2026):**
+- El proyecto **YA tiene git** (repo privado `tomasdivididos-blip/prototipo-1`).
+- Flujo normal: `git add -A; git commit -m "..."; git push`.
+- (Histórico: antes NO había git; se inicializó el 7-8 Jul 2026.)
 
 ### Caso 4 — Actualizar manual (testa la regla de los 3 archivos)
 
@@ -1468,6 +1471,60 @@ bien.
      panel izquierdo y cortaba el contenido de Acústica). Test `bench_prediction_materials.py` 9/9.
      Único pendiente (opcional, futuro): guardar presets PROPIOS a disco.
   **MANUAL v2.14 integrado** (MANUAL.md changelog "Cambios v2.14" A/B/C/D/E + `.tex` + `.pdf` 33 pág).
+
+- **7-8 Jul 2026 — Feature MUEBLES + calibración con RIRs medidas + subida a GitHub.**
+  Sesión larga (nota: los changelogs v2.15/v2.16 viven en la memoria persistente
+  `[[batch-v2.13]]`/`[[gui-batch-v2.16]]`, no en este §13). Tres bloques:
+
+  **1. Feature MUEBLES (nuevo, `furniture.py`).** Mobiliario en el modelo modal, 3 canales físicos:
+  - **Fase A (rígido):** `carve_mesh(nodes,tets,muebles)` quita tets por centroide-adentro +
+    PODA huérfanos + reindexa (evita M singular). Va ENTRE build_volume_mesh y build_KM, sin
+    tocar la API estable. `Furniture` dataclass (box/cylinder + provenance + to_dict/from_dict).
+    Significancia >λ_max/8. `bench_furniture.py` 13/13 (signo perturbativo textbook: obstáculo al
+    centro → (1,0,0) BAJA [nodo], (2,0,0) SUBE [antinodo]; consistencia losa≡4×4×3 <0.6%).
+  - **Fase B (absorción):** `furniture_boundary_faces` extrae la interfaz aire-mueble (caras
+    kept-vs-removed; **GOTCHA: extraer de la malla ORIGINAL, no la tallada** — el locator evalúa
+    por posición mundial) + `augment_surface_with_furniture` mete esas caras como FaceGroups al
+    A36 existente. `bench_furniture_absorption.py` 5/5. Re-validación TP7: rígido EMPEORA,
+    absorbente RECUPERA (+0.048 vs A) → un sillón DEBE absorber (material tesis).
+  - **Fase C espina (headless):** `solve_modal_with_furniture` + `furniture_xi`; **`.room` v7**
+    (holder `AcousticPanel.furniture`, serialize/restore en main.py, `FILE_VERSION 6→7`, compat).
+    `bench_furniture_phaseC.py` 7/7.
+  - **Canal SBIR-mueble:** rolloff de panel finito de Rindel, ADITIVO a `sbir.py` (`Wall.area`
+    opcional; area=None=plano infinito=comportamiento previo). `furniture_walls`. `bench_furniture_sbir.py` 6/6.
+  - **FALTA (capstone, necesita build+test visual):** UI diálogo agregar/editar muebles + wireframe
+    en viewer (patrón bafle: GLLinePlotItem float32 color único, NUNCA GLMeshItem shader=None) +
+    wiring del carve/xi/SBIR al camino LIVE del panel (`_compute_modes_async`, `_xi_per_mode_from_faces`).
+
+  **2. Calibración con RIRs medidas (TP7 control room) — investigación grande.** Nuevo `rir.py`
+  (load_rir, deconvolve_sweep, rir_to_frf, rt60 Schroeder T30/T20/T10 con flags, find_modal_peaks)
+  + `bench_rir.py` 14/14 + `analyze_rirs.py`. **Todo el detalle en memoria `[[calibracion-rirs]]`.**
+  Hallazgos que hay que saber:
+  - **RIRs TP7: YA deconvolucionadas Y NORMALIZADAS POR ARCHIVO** (pico −6.02 dBFS idéntico en las
+    7) → nivel absoluto y entre-posiciones NO comparable → **tabla en dB SPL IMPOSIBLE** con estos
+    archivos. Lo único absoluto y confiable es el RT60. El sweep arrancó en ~70 Hz → perdió los
+    modos axiales de 1er orden (43/61 Hz).
+  - **Auditados TODOS los componentes del modelo** (convergencia de malla, CAD-vs-paramétrico,
+    material, orden de elemento P2/P3, fuente/TRF, acople L/R/LR, frame, posición) → **TODOS
+    correctos**. La corr FRF punto-a-punto baja (~0.33) NO es un defecto del software: es el
+    **régimen físico M>1** (transición→f_Schroeder=164 Hz) que hace la FRF puntual *ill-posed*.
+    Validación estadística correcta: **varianza espacial medida 3.43 vs simulada 3.39 dB (ratio
+    0.99)**. Sala casi cuadrada (3.91×3.96) → par degenerado en 86 Hz (peor caso).
+  - **Element order P2/P3 NO ayuda** (error numérico ya <0.5%; aplica D1). **Impedancia compleja
+    descartada** (D5b). Para predecir en M>1 hay que desarrollar la **rama estadística** (FEM-SEA /
+    SEA / varianza-vs-M / RMT), no la curva exacta. Es material fuerte del paper D de la tesis.
+
+  **3. GitHub — el proyecto YA tiene git (ver §6 y §8, actualizados).** Repo PRIVADO
+  `github.com/tomasdivididos-blip/prototipo-1`. `.gitignore` excluye dist/build/zips/referencias.
+  `gh` en `C:\Program Files\GitHub CLI\gh.exe`.
+
+  **Pendiente de MANUAL** (chico, ya shippeado sin integrar): materiales en orden **alfabético**
+  (`material_library.load_folder` sort + default "Alfombra fina" pineado en acoustic_panel) +
+  preview **default plana** en `SourceEditDialog`. El feature muebles + la calibración también
+  esperan integración a MANUAL cuando cierren.
+
+  **Nuevos archivos:** `furniture.py`, `rir.py`, `bench_furniture.py`, `bench_furniture_absorption.py`,
+  `bench_furniture_phaseC.py`, `bench_furniture_sbir.py`, `bench_rir.py`, `analyze_rirs.py`, `.gitignore`.
 
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
