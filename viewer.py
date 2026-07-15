@@ -153,6 +153,10 @@ class IsoViewer(gl.GLViewWidget):
 
         # Resaltado de un grupo de caras (hover en la tabla de materiales)
         self._highlight_item = None
+        # Overlay de parches de absorcion sub-cara (v8): quads pintados sobre las caras.
+        self._patch_item = None
+        # Resaltado de UN parche (hover en la lista de Materiales), estilo highlight.
+        self._patch_highlight_item = None
 
         # Puntos de escucha adicionales (v2.16: lista de mics para Comparar)
         self._listen_pts_items = []
@@ -728,6 +732,50 @@ class IsoViewer(gl.GLViewWidget):
             shader=None, glOptions="additive",
         )
         self.addItem(self._highlight_item)
+        self.update()
+
+    def set_patches(self, verts=None, faces=None, face_colors=None):
+        """Overlay de parches de absorcion: quads pintados sobre las caras.
+
+        `verts` (Nv,3), `faces` (Nf,3) indices a verts, `face_colors` (Nf,4) RGBA
+        en [0,1]. None/vacio = quitar.
+
+        Render ADITIVO (mismo criterio que `set_highlight_faces`): no escribe
+        profundidad, asi el parche se dibuja SIEMPRE encima de la cara (evita el
+        z-fighting de un quad coplanar con una superficie opaca) y 'brilla' aun
+        si otra pared lo ocluye desde este angulo — util para ubicarlo. Patron
+        GLMeshItem estable (no scatter persistente).
+        """
+        if self._patch_item is not None:
+            self.removeItem(self._patch_item)
+            self._patch_item = None
+        if verts is None or faces is None or len(faces) == 0:
+            self.update()
+            return
+        md = gl.MeshData(vertexes=np.asarray(verts, dtype=float),
+                         faces=np.asarray(faces, dtype=int),
+                         faceColors=np.asarray(face_colors, dtype=float))
+        self._patch_item = gl.GLMeshItem(
+            meshdata=md, smooth=False, shader=None, glOptions="additive")
+        self.addItem(self._patch_item)
+        self.update()
+
+    def set_highlight_patch(self, verts=None, faces=None):
+        """Resalta UN parche (hover en la fila de Materiales) con un glow ambar,
+        mismo criterio que `set_highlight_faces`. None/vacio = apagar. Item
+        separado del overlay permanente (`set_patches`), no lo pisa."""
+        if self._patch_highlight_item is not None:
+            self.removeItem(self._patch_highlight_item)
+            self._patch_highlight_item = None
+        if verts is None or faces is None or len(faces) == 0:
+            self.update()
+            return
+        self._patch_highlight_item = gl.GLMeshItem(
+            meshdata=gl.MeshData(vertexes=np.asarray(verts, dtype=float),
+                                 faces=np.asarray(faces, dtype=int)),
+            smooth=False, color=(0.98, 0.83, 0.25, 0.75),
+            shader=None, glOptions="additive")
+        self.addItem(self._patch_highlight_item)
         self.update()
 
     def _refresh_render(self):

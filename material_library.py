@@ -193,6 +193,18 @@ class MaterialLibrary:
         self._materials.sort(key=lambda m: _norm(m.name))
         return count
 
+    def reload(self) -> int:
+        """Recarga los materiales de `self._folder` EN EL SITIO (misma instancia).
+
+        Sirve para que un material recien copiado a la carpeta aparezca sin
+        recrear el objeto MaterialLibrary — cualquier referencia compartida
+        (panel + dialogos) ve el material nuevo. Devuelve la cantidad cargada."""
+        self._materials = []
+        n = self.load_folder(self._folder) if self._folder else 0
+        if not self._materials:
+            self._materials.append(_default_material())
+        return n
+
     @property
     def materials(self) -> List[Material]:
         return list(self._materials)

@@ -1914,6 +1914,9 @@ class AcousticPanel(QWidget):
         self._face_mat_map = fm.FaceMaterialMap(default_material=_default_mat)
         self._face_groups_cache = None    # se calcula on-demand
         self._face_groups_for_verts_id = None  # invalidacion por identidad
+        # Parches de absorcion sub-cara (.room v8). Vacio = comportamiento
+        # historico (la absorcion la fija solo el material por cara / A36).
+        self._patches = []                # List[absorption_patch.AbsorptionPatch]
 
         self.btn_open_materials = QPushButton("Materiales…")
         self.btn_open_materials.setObjectName("PrimaryButton")
@@ -1933,6 +1936,21 @@ class AcousticPanel(QWidget):
         self.lbl_rt60.setStyleSheet("color: #94e2d5; font-size: 9pt;")
         self.lbl_rt60.setWordWrap(True)
         fmat.addRow(self.lbl_rt60)
+
+        self.btn_open_patches = QPushButton("Parches de absorcion…")
+        self.btn_open_patches.setToolTip(
+            "Dibuja regiones (parches) DENTRO de una cara con su propio material.\n"
+            "Da resolucion sub-cara al amortiguamiento modal (A36): un modo con\n"
+            "antinodo sobre el parche se amortigua mas. Activar parches recalcula\n"
+            "la absorcion con cuadratura fina (mas precisa que la malla gruesa)."
+        )
+        self.btn_open_patches.clicked.connect(self._open_patches_dialog)
+        fmat.addRow(self.btn_open_patches)
+
+        self.lbl_patch_summary = QLabel("Sin parches")
+        self.lbl_patch_summary.setStyleSheet("color: #94a3b8; font-size: 9pt;")
+        self.lbl_patch_summary.setWordWrap(True)
+        fmat.addRow(self.lbl_patch_summary)
 
         btn_rt60_plot  = QPushButton("Ver RT60 calculado")
         btn_reload_mat = QPushButton("Recargar materiales")
@@ -3555,7 +3573,7 @@ class AcousticPanel(QWidget):
                 groups, _gv, _gt = self._get_face_groups()
                 if groups and V > 0:
                     g2m = self._group_to_material_dict(groups)
-                    rt = fm.compute_sabine_rt60_per_face(V, groups, g2m)
+                    rt = self._sabine_rt60(V, groups, g2m)
                     if rt:
                         bands = np.array(sorted(rt), dtype=float)
                         rts = np.array([rt[b] for b in sorted(rt)], dtype=float)
@@ -3821,27 +3839,176 @@ class AcousticPanel(QWidget):
             material_library=self._mat_lib,
             face_mat_map=self._face_mat_map,
             volume=V,
+            patches=self._patches,
             parent=self,
         )
         # Conectar la senal applied para refrescar el panel en vivo
         dlg.applied.connect(self._on_face_materials_applied)
-        # Hover sobre la fila de un grupo -> resaltar sus caras en el 3D.
-        if hasattr(self.viewer, "set_highlight_faces"):
-            dlg.hovered.connect(
-                lambda g: self.viewer.set_highlight_faces(
-                    g.face_indices if g is not None else None))
+        # Si el usuario carga un material propio, refrescar resumen + xi (el
+        # catalogo se recargo en el sitio, misma instancia de MaterialLibrary).
+        dlg.materialsReloaded.connect(self._on_face_materials_applied)
+        # Cambiar el material de un parche desde la tabla -> recolorear el overlay
+        # en vivo (el xi se recomputa al aplicar/cerrar via _on_face_materials_applied).
+        dlg.patchesChanged.connect(self._refresh_patch_overlay)
+        # Hover sobre una fila -> resaltar la cara O el parche en el 3D.
+        dlg.hovered.connect(self._on_materials_hovered)
         dlg.exec_()
-        if hasattr(self.viewer, "set_highlight_faces"):
-            self.viewer.set_highlight_faces(None)   # por las dudas
+        self._on_materials_hovered(None)   # apagar resaltados por las dudas
         # Tras cerrar (OK o Cancel) refrescamos el resumen porque el mapa
         # se actualiza en vivo desde el combo. Si el usuario cancelo, los
         # cambios se mantienen igual (decisión explícita: 'auto-save' como
         # pidió el usuario).
         self._on_face_materials_applied()
 
+    # ------------------------------------------------------------------
+    # Parches de absorcion sub-cara (v8)
+    # ------------------------------------------------------------------
+    def _open_patches_dialog(self):
+        """Abre el editor 2D de parches de absorcion por cara."""
+        try:
+            groups, verts, tris = self._get_face_groups()
+        except Exception as e:
+            self._log(f"Error agrupando caras: {e}")
+            return
+        if not groups:
+            self._log("No hay caras para dibujar parches.")
+            return
+        import patch_dialog as pdlg
+        dlg = pdlg.PatchEditorDialog(
+            groups=groups, verts=verts, tris=tris,
+            mat_lib=self._mat_lib, patches=self._patches, parent=self)
+        dlg.applied.connect(lambda: self._on_patches_applied(dlg.result_patches))
+        # Preview 3D en vivo mientras se edita (sin recomputar la fisica).
+        dlg.changed.connect(self._refresh_patch_overlay)
+        ok = dlg.exec_()
+        if ok:
+            self._on_patches_applied(dlg.result_patches)
+        else:
+            # Cancelado: descartar el preview y volver al overlay de los parches reales.
+            self._refresh_patch_overlay()
+
+    def _on_patches_applied(self, patches):
+        """Adopta la lista de parches editada y recomputa xi/RT."""
+        self._patches = list(patches or [])
+        self._refresh_patches_summary()
+        if self.modal_result is not None:
+            self._xi_per_mode = self._compute_xi_from_materials()
+        self._update_modal_crossover()
+
+    def _refresh_patches_summary(self):
+        n = len(self._patches)
+        if n == 0:
+            self.lbl_patch_summary.setText("Sin parches")
+        else:
+            area = sum(p.area for p in self._patches)
+            self.lbl_patch_summary.setText(
+                f"{n} parche(s) · {area:.2f} m² · absorción con cuadratura fina activa")
+        self._refresh_patch_overlay()
+
+    def _refresh_patch_overlay(self, patches=None):
+        """Pinta los parches como quads sobre las caras en el visor 3D (v8).
+
+        `patches` permite un PREVIEW en vivo (lista del diálogo mientras se
+        edita) sin tocar `self._patches`; si es None usa los parches reales."""
+        if not hasattr(self.viewer, "set_patches"):
+            return
+        patches = self._patches if patches is None else patches
+        try:
+            if not patches:
+                self.viewer.set_patches(None)
+                return
+            import numpy as _np
+            import patch_dialog as pdlg
+            try:
+                _v, _t = self.get_surface()
+                centroid = _np.asarray(_v, float).mean(axis=0)
+            except Exception:
+                centroid = None
+            verts, faces, colors = [], [], []
+            for p in patches:
+                pv, pf = self._patch_quad(p, centroid)
+                if pv is None:
+                    continue
+                base = len(verts)
+                verts.extend(pv)
+                col = pdlg._material_color(p.material_name, alpha=180)
+                rgba = (col.red() / 255.0, col.green() / 255.0,
+                        col.blue() / 255.0, 0.85)
+                for (i, j, k) in pf:
+                    faces.append([base + i, base + j, base + k])
+                    colors.append(rgba)
+            if not faces:
+                self.viewer.set_patches(None)
+                return
+            self.viewer.set_patches(_np.array(verts), _np.array(faces),
+                                    _np.array(colors))
+        except Exception as e:
+            self._log(f"Aviso overlay parches: {e}")
+
+    def _patch_quad(self, p, centroid):
+        """Geometria 3D de UN parche: (verts (Nv,3), faces (Nf,3) locales).
+
+        Offset chico hacia el interior para no quedar exactamente sobre la cara.
+        Triangula el poligono (ear clipping) para soportar no convexos."""
+        import absorption_patch as _ap
+        na = p.normal_axis
+        off = 0.01
+        if centroid is not None:
+            off = 0.01 if centroid[na] >= p.plane_coord else -0.01
+        uv = p.polygon_uv()
+        tris = _ap.triangulate_uv(uv)
+        if not tris:
+            return None, None
+        verts = []
+        for (u, v) in uv:
+            c = [0.0, 0.0, 0.0]
+            c[na] = p.plane_coord + off
+            c[p.u_axis] = u
+            c[p.v_axis] = v
+            verts.append(c)
+        return verts, [list(t) for t in tris]
+
+    def _room_centroid(self):
+        try:
+            import numpy as _np
+            v, _t = self.get_surface()
+            return _np.asarray(v, float).mean(axis=0)
+        except Exception:
+            return None
+
+    def _on_materials_hovered(self, obj):
+        """Hover en la tabla de Materiales: resalta la cara (FaceGroup) o el
+        parche (AbsorptionPatch) en el 3D. None = apagar ambos."""
+        import numpy as _np
+        # Apagar el resaltado de caras salvo que sea justamente una cara.
+        is_group = obj is not None and hasattr(obj, "face_indices")
+        is_patch = obj is not None and hasattr(obj, "polygon_uv")
+        if hasattr(self.viewer, "set_highlight_faces"):
+            self.viewer.set_highlight_faces(obj.face_indices if is_group else None)
+        if hasattr(self.viewer, "set_highlight_patch"):
+            if is_patch:
+                pv, pf = self._patch_quad(obj, self._room_centroid())
+                if pv is not None:
+                    self.viewer.set_highlight_patch(_np.array(pv), _np.array(pf))
+                else:
+                    self.viewer.set_highlight_patch(None)
+            else:
+                self.viewer.set_highlight_patch(None)
+
+    def _patch_to_material_dict(self):
+        """Construye {patch.key: Material} usando el catalogo actual."""
+        names = self._mat_lib.names
+        d = {}
+        for p in self._patches:
+            if p.material_name in names:
+                d[p.key] = self._mat_lib[names.index(p.material_name)]
+        return d
+
     def _on_face_materials_applied(self):
         """Refresca el resumen y recomputa xi tras editar materiales."""
         self._refresh_materials_summary()
+        # El material de un parche pudo cambiar desde la tabla -> recolorear overlay.
+        self._refresh_patch_overlay()
         # Recalcular xi si los modos ya estaban resueltos
         if self.modal_result is not None:
             self._xi_per_mode = self._compute_xi_from_materials()
@@ -3916,7 +4083,7 @@ class AcousticPanel(QWidget):
             # RT60 medio
             V = aa.compute_mesh_volume(verts, tris)
             g2m = self._group_to_material_dict(groups)
-            rt = fm.compute_sabine_rt60_per_face(V, groups, g2m)
+            rt = self._sabine_rt60(V, groups, g2m)
             rt_avg = float(np.mean(list(rt.values()))) if rt else 0.0
             rt500 = rt.get(500, 0.0)
             # D5: Bass Ratio (calidez por reverberacion). Solo si hay materiales
@@ -3964,6 +4131,17 @@ class AcousticPanel(QWidget):
             groups, verts, tris = self._get_face_groups()
             V = aa.compute_mesh_volume(verts, tris)
             g2m = self._group_to_material_dict(groups)
+            # Parches sub-cara (v8): si hay al menos uno, la absorcion se integra
+            # con cuadratura FINA (A36 refinado). Baseline sin parches queda en
+            # A36 crudo -> los .room sin parches no cambian ni un digito.
+            if self._patches:
+                import absorption_patch as ap
+                xi = ap.compute_xi_per_mode_with_patches(
+                    self.modal_result.freqs, self.modal_result.phis,
+                    self.modal_result.locator, verts, tris, groups, g2m,
+                    self._patches, self._patch_to_material_dict(), V)
+                if xi is not None:
+                    return xi
             # A36: xi por modo pesado por la forma modal en cada cara (captura
             # el amortiguamiento selectivo segun DONDE esta el tratamiento). Se
             # reduce exacto a la Sabine global si los materiales son uniformes.
@@ -3973,11 +4151,21 @@ class AcousticPanel(QWidget):
             if xi is not None:
                 return xi
             # Fallback: RT60 global por banda (comportamiento previo).
-            rt60 = fm.compute_sabine_rt60_per_face(V, groups, g2m)
+            rt60 = self._sabine_rt60(V, groups, g2m)
             return compute_xi_per_mode(self.modal_result.freqs, rt60)
         except Exception as e:
             self._log(f"Aviso materiales: {e}")
             return None
+
+    def _sabine_rt60(self, V, groups, g2m):
+        """RT60 de Sabine por banda, patch-aware: si hay parches, cada uno le
+        resta area a su cara anfitriona y aporta su alpha. Sin parches, es la
+        Sabine por cara de siempre (baseline intacto)."""
+        if self._patches:
+            import absorption_patch as ap
+            return ap.sabine_rt60_with_patches(
+                V, groups, g2m, self._patches, self._patch_to_material_dict())
+        return fm.compute_sabine_rt60_per_face(V, groups, g2m)
 
     def _rt60_callable(self):
         """Devuelve un callable f->RT60 [s] (log-interp de la Sabine por cara),
@@ -3988,7 +4176,7 @@ class AcousticPanel(QWidget):
                 return None
             V = aa.compute_mesh_volume(verts, tris)
             g2m = self._group_to_material_dict(groups)
-            rt = fm.compute_sabine_rt60_per_face(V, groups, g2m)   # {banda: RT60}
+            rt = self._sabine_rt60(V, groups, g2m)   # {banda: RT60}
             if not rt:
                 return None
             bands = np.array(sorted(rt.keys()), dtype=float)

@@ -760,12 +760,17 @@ if _HAS_QT:
         # Hover sobre la fila de un grupo: emite el FaceGroup (o None al salir).
         # El panel lo conecta al resaltado 3D (viewer.set_highlight_faces).
         hovered = pyqtSignal(object)
+        # Se emite cuando el usuario carga un material propio (catalogo cambio).
+        materialsReloaded = pyqtSignal()
+        # Se emite cuando el usuario cambia el material de un parche desde la tabla.
+        patchesChanged = pyqtSignal()
 
         def __init__(self,
                      groups: List[FaceGroup],
                      material_library: "MaterialLibrary",
                      face_mat_map: FaceMaterialMap,
                      volume: float = 0.0,
+                     patches=None,
                      parent=None):
             super().__init__(parent)
             self.setWindowTitle("Materiales por cara")
@@ -776,6 +781,11 @@ if _HAS_QT:
             self._mat_lib = material_library
             self._map = face_mat_map
             self._volume = float(volume)
+            # Parches de absorcion (solo lectura aca): se listan bajo su cara.
+            self._patches = list(patches or [])
+            self._sig_label = {g.signature: g.label for g in groups}
+            # row -> ("group", FaceGroup) | ("patch", AbsorptionPatch)
+            self._row_map = []
 
             self._build_ui()
             self._populate_table()
@@ -863,6 +873,14 @@ if _HAS_QT:
             self.btn_named_preset.clicked.connect(self._named_preset_dialog)
             qrow.addWidget(self.btn_named_preset)
 
+            self.btn_load_custom = QPushButton("Cargar tu material…")
+            self.btn_load_custom.setToolTip(
+                "Carga un material propio desde un archivo .json (mismo formato "
+                "que el catalogo). Se copia a materials/ y queda disponible en "
+                "todo el programa.")
+            self.btn_load_custom.clicked.connect(self._load_custom_material)
+            qrow.addWidget(self.btn_load_custom)
+
             self.btn_recompute = QPushButton("Recalcular RT60")
             self.btn_recompute.clicked.connect(self._refresh_summary)
             qrow.addWidget(self.btn_recompute)
@@ -885,8 +903,8 @@ if _HAS_QT:
             if row == self._hover_row:
                 return
             self._hover_row = row
-            g = self._groups[row] if 0 <= row < len(self._groups) else None
-            self.hovered.emit(g)
+            obj = self._row_map[row][1] if 0 <= row < len(self._row_map) else None
+            self.hovered.emit(obj)
 
         def eventFilter(self, obj, ev):
             # El mouse salio de la tabla -> apagar el resaltado.
@@ -906,7 +924,9 @@ if _HAS_QT:
         # ------------------------------------------------------------------
         def _populate_table(self):
             names = self._mat_lib.names
-            self.table.setRowCount(len(self._groups))
+            self._row_map = [("group", g) for g in self._groups] + \
+                            [("patch", p) for p in self._patches]
+            self.table.setRowCount(len(self._row_map))
             for row, g in enumerate(self._groups):
                 # Col 0: chip de color por categoria
                 color_item = QTableWidgetItem("")
@@ -958,9 +978,73 @@ if _HAS_QT:
                 )
                 self.table.setCellWidget(row, 5, combo)
 
+            # Filas de parche (solo lectura): bajo su cara, con su material.
+            try:
+                from patch_dialog import _material_color as _patch_color
+            except Exception:
+                _patch_color = None
+            base = len(self._groups)
+            for k, p in enumerate(self._patches):
+                row = base + k
+                # Col 0: chip de color por material del parche
+                chip = QTableWidgetItem("")
+                if _patch_color is not None:
+                    chip.setBackground(QBrush(_patch_color(p.material_name, 220)))
+                chip.setFlags(Qt.ItemIsEnabled)
+                self.table.setItem(row, 0, chip)
+                # Col 1: etiqueta ("parche en <cara>")
+                face_lbl = self._sig_label.get(p.face_signature, "cara")
+                shape = "polígono" if getattr(p, "poly", None) else "rect"
+                lbl = QTableWidgetItem(f"  ↳ Parche ({shape}) en {face_lbl}")
+                lbl.setToolTip("Parche de absorción sub-cara. Se edita en "
+                               "'Parches de absorción…'.")
+                self.table.setItem(row, 1, lbl)
+                # Col 2: n caras (no aplica)
+                n_item = QTableWidgetItem("—")
+                n_item.setTextAlignment(Qt.AlignCenter)
+                self.table.setItem(row, 2, n_item)
+                # Col 3: area del parche
+                a_item = QTableWidgetItem(f"{p.area:.2f}")
+                a_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.table.setItem(row, 3, a_item)
+                # Col 4: categoria del material del parche
+                mat = self._mat_lib[names.index(p.material_name)] \
+                    if p.material_name in names else None
+                cat_item = QTableWidgetItem(getattr(mat, "category", "") if mat else "")
+                cat_item.setTextAlignment(Qt.AlignCenter)
+                self.table.setItem(row, 4, cat_item)
+                # Col 5: material del parche (combo editable, como las caras)
+                pcombo = QComboBox()
+                pcombo.addItems(names)
+                pidx = pcombo.findText(p.material_name) if p.material_name else -1
+                pcombo.setCurrentIndex(max(0, pidx))
+                pcombo.currentTextChanged.connect(
+                    lambda text, pp=p, r=row: self._on_patch_mat_changed(pp, text, r))
+                self.table.setCellWidget(row, 5, pcombo)
+
         def _on_combo_changed(self, signature: str, material_name: str):
             self._map.assign(signature, material_name)
             self._refresh_summary()
+
+        def _on_patch_mat_changed(self, patch, material_name: str, row: int):
+            """Cambia el material de un parche desde la tabla (muta el objeto
+            compartido con el panel) y refresca color/categoria + resumen."""
+            patch.material_name = material_name
+            names = self._mat_lib.names
+            mat = self._mat_lib[names.index(material_name)] \
+                if material_name in names else None
+            cat = self.table.item(row, 4)
+            if cat is not None:
+                cat.setText(getattr(mat, "category", "") if mat else "")
+            chip = self.table.item(row, 0)
+            if chip is not None:
+                try:
+                    from patch_dialog import _material_color
+                    chip.setBackground(QBrush(_material_color(material_name, 220)))
+                except Exception:
+                    pass
+            self._refresh_summary()
+            self.patchesChanged.emit()
 
         # ------------------------------------------------------------------
         # Resumen RT60
@@ -1069,6 +1153,110 @@ if _HAS_QT:
                     self._map.assign(g.signature, mw.name)
             self._populate_table()
             self._refresh_summary()
+
+        # ------------------------------------------------------------------
+        # Cargar material propio (JSON)
+        # ------------------------------------------------------------------
+        _JSON_EXAMPLE = (
+            "{\n"
+            '  "name": "Mi panel absorbente",\n'
+            '  "category": "Paneles perforados",\n'
+            '  "description": "opcional",\n'
+            '  "source": "opcional (ficha / medicion)",\n'
+            '  "alpha": {"63": 0.15, "125": 0.30, "250": 0.55, "500": 0.75,\n'
+            '            "1000": 0.65, "2000": 0.50, "4000": 0.40, "8000": 0.35}\n'
+            "}"
+        )
+
+        def _load_custom_material(self):
+            from pathlib import Path
+            import json
+            from PyQt5.QtWidgets import QFileDialog, QMessageBox
+
+            # 1. Cuadro con la sintaxis + elegir archivo.
+            box = QMessageBox(self)
+            box.setWindowTitle("Cargar tu material")
+            box.setIcon(QMessageBox.Information)
+            box.setText(
+                "El archivo debe ser un .json con el mismo formato que el "
+                "catalogo. Un material por archivo:")
+            box.setInformativeText(
+                self._JSON_EXAMPLE +
+                "\n\nAlternativa a \"alpha\": \"absorption_coef\": [a63, a125, "
+                "a250, a500, a1000, a2000, a4000, a8000]  (8 valores).\n"
+                "Bandas de octava: 63, 125, 250, 500, 1000, 2000, 4000, 8000 Hz.\n"
+                "Se copia a la carpeta materials/ y queda disponible en todo el "
+                "programa (Acustica y Prediccion).")
+            btn_pick = box.addButton("Elegir archivo JSON…", QMessageBox.AcceptRole)
+            box.addButton("Cancelar", QMessageBox.RejectRole)
+            box.exec_()
+            if box.clickedButton() is not btn_pick:
+                return
+
+            folder = getattr(self._mat_lib, "_folder", None) or \
+                str(Path(__file__).parent / "materials")
+            path, _ = QFileDialog.getOpenFileName(
+                self, "Elegir material JSON", folder, "JSON (*.json)")
+            if not path:
+                return
+
+            # 2. Validar.
+            from material_library import Material
+            try:
+                data = json.loads(Path(path).read_text(encoding="utf-8"))
+            except Exception as e:
+                QMessageBox.warning(self, "JSON invalido",
+                                    f"No se pudo leer el JSON:\n{e}")
+                return
+            entries = data if isinstance(data, list) else [data]
+            names_new = []
+            for entry in entries:
+                if not isinstance(entry, dict) or not entry.get("name"):
+                    QMessageBox.warning(
+                        self, "Falta campo",
+                        "Cada material necesita al menos el campo \"name\".")
+                    return
+                if not any(k in entry for k in ("alpha", "absorption", "absorption_coef")):
+                    QMessageBox.warning(
+                        self, "Falta absorcion",
+                        f"'{entry.get('name')}' no tiene \"alpha\" ni "
+                        "\"absorption_coef\".")
+                    return
+                try:
+                    Material(entry)
+                except Exception as e:
+                    QMessageBox.warning(self, "Material invalido", str(e))
+                    return
+                names_new.append(str(entry.get("name")))
+
+            # 3. Copiar a materials/ (sin pisar builtins: sufijo si colisiona).
+            import shutil
+            dest = Path(folder) / Path(path).name
+            if dest.resolve() != Path(path).resolve():
+                stem, suf = dest.stem, dest.suffix
+                k = 1
+                while dest.exists():
+                    dest = Path(folder) / f"{stem}_{k}{suf}"
+                    k += 1
+                try:
+                    shutil.copy2(path, dest)
+                except Exception as e:
+                    QMessageBox.warning(self, "No se pudo copiar",
+                                        f"No se pudo copiar a materials/:\n{e}")
+                    return
+
+            # 4. Recargar la biblioteca EN EL SITIO y refrescar el dialogo.
+            try:
+                self._mat_lib.reload()
+            except Exception as e:
+                QMessageBox.warning(self, "Recarga", str(e))
+                return
+            self._populate_table()
+            self._refresh_summary()
+            self.materialsReloaded.emit()
+            QMessageBox.information(
+                self, "Material cargado",
+                "Cargado(s): " + ", ".join(names_new))
 
         # ------------------------------------------------------------------
         # Aceptar / aplicar

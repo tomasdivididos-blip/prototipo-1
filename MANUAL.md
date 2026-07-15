@@ -648,6 +648,41 @@ Esto hace que los picos de la FRF sean más o menos anchos según la absorción 
 
 (El cálculo interno del FEM usa **Sabine** para mantener la compatibilidad numérica; el método Eyring se usa únicamente en el diálogo comparativo de visualización. Si querés que el amortiguamiento modal use Eyring, basta reemplazar la llamada a `compute_sabine_rt60_per_face` por `compute_eyring_rt60_per_face` en `acoustic_panel._compute_xi_from_materials`.)
 
+### 10.5 Parches de absorción sub-cara
+
+Además de asignar **un material por cara**, se puede dibujar una **región (parche) dentro de una cara** y darle su propio material. Botón **"Parches de absorción…"** en el grupo Materiales.
+
+**Qué hace físicamente.** Un parche no es una física nueva: es darle **resolución sub-cara** al amortiguamiento modal selectivo (criterio A36). Como las formas modales φₙ se calculan con paredes rígidas, un parche **no cambia la forma del modo ni el heatmap** — su α entra por dos vías: (1) el **RT60 de Sabine** (le resta área al material anfitrión y aporta la suya), y (2) el **ξₙ por modo**, pesado por la presión modal φₙ² **sobre la región del parche**. Efecto: un modo cuyo antinodo cae sobre el parche se amortigua más; uno con nodo ahí casi no lo ve. Lo observable es sobre **ξₙ → RT → FRF**.
+
+**Editor 2D.** Elegís la cara de una lista (alcance v1: caras perpendiculares a un eje), y dibujás sobre su plano local:
+
+- **Modo Rectángulo** — mantené el botón izquierdo y arrastrá.
+- **Modo Polígono** — click izquierdo por cada vértice (convexo o no); cerrás clickeando cerca del primer punto, con **Enter** o doble click; **botón derecho** / **Esc** deshace el último vértice o cancela.
+- **Rueda del mouse** = zoom in/out sobre la grilla, centrado en el cursor.
+- Los parches **no pueden solaparse**: si el candidato pisaría a otro se dibuja en rojo y no se agrega.
+- El material se elige del combo (se aplica al parche nuevo o al seleccionado); botón derecho sobre un parche lo borra.
+
+Los parches se **pintan sobre la cara en el visor 3D** (color del material) y se guardan en el `.room`.
+
+**Cuadratura fina (nota importante).** Sin parches, la absorción se integra como siempre (baseline intacto). **Al activar el primer parche**, el ξₙ se recalcula con **cuadratura fina** (tesela la cara en muchos puntos, más preciso que la malla de render gruesa) — los números de RT/FRF **pueden moverse** respecto de la malla gruesa: es mayor precisión, no un error. Núcleo: `absorption_patch.py` (`compute_xi_per_mode_with_patches`, `sabine_rt60_with_patches`); bench `bench_absorption_patch.py`.
+
+### 10.6 Cargar tu propio material
+
+En el diálogo **Materiales…**, el botón **"Cargar tu material…"** muestra un cuadro con la sintaxis del JSON esperado y abre un selector de archivo. El archivo se **valida** (nombre + coeficiente de absorción por banda), se **copia a la carpeta `materials/`** (sin pisar los del catálogo) y queda disponible en **todo el programa** (Acústica y Predicción). Formato aceptado (un material por archivo):
+
+```json
+{
+  "name": "Mi panel absorbente",
+  "category": "Paneles perforados",
+  "description": "opcional",
+  "source": "opcional (ficha / medición)",
+  "alpha": {"63": 0.15, "125": 0.30, "250": 0.55, "500": 0.75,
+            "1000": 0.65, "2000": 0.50, "4000": 0.40, "8000": 0.35}
+}
+```
+
+Alternativa a `alpha`: `"absorption_coef": [a63, a125, a250, a500, a1000, a2000, a4000, a8000]` (8 valores). Bandas de octava: 63–8000 Hz.
+
 ---
 
 ## 11. Flujo de trabajo completo
@@ -2037,4 +2072,29 @@ Dos correcciones al eje **Ubicación de fuentes** con planta dibujada:
 
 ---
 
-*Manual actualizado al 5 de Julio de 2026 — v2.16.*
+**Cambios v2.17** (14 de julio 2026): parches de absorción sub-cara (dibujar una región dentro de una cara con su propio material) y carga de materiales propios desde JSON. Cuatro ejes.
+
+### A. Parches de absorción sub-cara
+
+Nuevo botón **"Parches de absorción…"** (grupo Materiales) que abre un editor 2D para dibujar **regiones de absorción dentro de una cara**, cada una con su material. Da **resolución sub-cara** al amortiguamiento modal selectivo (A36): el α del parche entra por el RT60 de Sabine (restándole área al anfitrión) y por el ξₙ por modo, pesado por la presión modal φₙ² sobre la región. Como las φₙ se calculan con paredes rígidas, un parche **no** cambia la forma del modo ni el heatmap; el efecto es sobre ξₙ → RT → FRF. Detalle de uso en §10.5.
+
+**Decisión de cuadratura.** Sin parches, el ξₙ se integra con el método histórico (A36 sobre centroides de la malla de render) → los `.room` sin parches **no cambian ni un dígito**. Con al menos un parche, se conmuta a **cuadratura fina**: cada cara se tesela en muchos puntos y a cada uno se le asigna α del parche o del anfitrión, integrando `α·φₙ² / φₙ²`. La cuadratura fina es **más precisa** que la malla gruesa; los números pueden moverse al activar el primer parche (no es un error). Reduce **exacto** a A36 cuando el material es uniforme. Núcleo: `absorption_patch.py`; `.room` **v8** (`absorption_patches`); bench `bench_absorption_patch.py` (oráculos de área, reducción a A36, equivalencia parche-full-face, monotonía, Sabine patch-aware, geometría de polígonos).
+
+### B. Editor 2D: rectángulos y polígonos, zoom, sin solapes
+
+- **Dos modos de dibujo**: *Rectángulo* (arrastrar el botón izquierdo) y *Polígono* (click por vértice — convexo o no —; cerrar cerca del primer punto, con Enter o doble click; botón derecho / Esc deshace o cancela).
+- **Rueda del mouse** = zoom in/out sobre la grilla de la cara, centrado en el cursor (con paneo automático para no mover el punto bajo el mouse).
+- **Sin solapes**: un parche que pisaría a otro se dibuja en **rojo** y no se agrega (test de solape de polígonos que permite adyacencia por arista). Snapping a grilla configurable (0.1–1 m).
+- Núcleo geométrico en `absorption_patch.py`: `poly_area` (shoelace), `points_in_poly` (ray casting), `triangulate_uv` (ear clipping, para no convexos), `polys_overlap`. UI en `patch_dialog.py`.
+
+### C. Overlay 3D de los parches
+
+Los parches se **pintan sobre la cara en el visor 3D**, coloreados por material (los no convexos se triangulan por ear clipping), con un offset chico hacia el interior para evitar z-fighting. `IsoViewer.set_patches` (patrón `GLMeshItem` estable, no scatter persistente).
+
+### D. Cargar tu propio material (JSON)
+
+Botón **"Cargar tu material…"** en el diálogo Materiales: muestra un cuadro con la sintaxis del JSON, abre un selector de archivo, **valida** (nombre + absorción por banda), lo **copia a `materials/`** sin pisar los del catálogo, y **recarga la biblioteca en el sitio** (`MaterialLibrary.reload`) para que aparezca en todo el programa sin reiniciar. Formato y ejemplo en §10.6.
+
+---
+
+*Manual actualizado al 14 de Julio de 2026 — v2.17. (Versiones `.tex`/`.pdf` pendientes de regenerar.)*
