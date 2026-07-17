@@ -527,8 +527,14 @@ Materiales incluidos:
   \bottomrule
 \end{tabular}
 
-\textbf{Para agregar materiales propios:} copiar un archivo \texttt{.json}
-a la carpeta \texttt{materials/} y presionar \menu{Recargar materiales}.
+\textbf{Para agregar materiales propios (v2.17):} el botón
+\menu{Cargar tu material\ldots} del diálogo Materiales muestra un cuadro con la
+sintaxis esperada y abre un selector de archivo. El \texttt{.json} elegido se
+\textbf{valida} (nombre $+$ absorción por banda), se \textbf{copia} a la carpeta
+\texttt{materials/} sin pisar los del catálogo, y la biblioteca se \textbf{recarga
+en el sitio} (\texttt{MaterialLibrary.reload}) para que aparezca en todo el
+programa sin reiniciar. (El camino manual sigue vigente: copiar el
+\texttt{.json} a \texttt{materials/} y presionar \menu{Recargar materiales}.)
 
 Formato del JSON:
 \begin{verbatim}
@@ -545,6 +551,70 @@ Los 8 valores corresponden a las bandas de octava:
 
 El botón \menu{Ver RT60 calculado} abre un gráfico de la curva RT60(f)
 resultante (fórmula de Sabine), con exportación a PNG, SVG, CSV, TXT y PDF.
+
+\subsection{Parches de absorción sub-cara (v2.17)}
+
+Además de asignar \emph{un material por cara}, el botón
+\menu{Parches de absorción\ldots} permite dibujar una \textbf{región dentro de
+una cara} con su propio material.
+
+\subsubsection*{Qué hace físicamente}
+
+Un parche \textbf{no es física nueva}: le da \textbf{resolución sub-cara} al
+amortiguamiento modal selectivo (criterio A36). Como las formas modales
+$\phi_n$ se calculan con paredes rígidas, un parche \textbf{no cambia la forma
+del modo ni el heatmap}; su $\alpha$ entra por dos vías:
+
+\begin{enumerate}
+  \item el \textbf{RT60 de Sabine}: le resta área al material anfitrión y
+        aporta la suya ($A = \sum_i \alpha_i S_i$);
+  \item el \textbf{$\xi_n$ por modo}, pesado por la presión modal $\phi_n^2$
+        \emph{sobre la región del parche}:
+        \[
+          \alpha_{\text{ef}}(n) \;=\;
+          \frac{\sum_p \alpha(p)\,\phi_n(p)^2\,\mathrm{d}A_p}
+               {\sum_p \phi_n(p)^2\,\mathrm{d}A_p}
+        \]
+\end{enumerate}
+
+Efecto: un modo cuyo antinodo cae sobre el parche se amortigua más; uno con un
+nodo ahí casi no lo ve. Lo observable es sobre $\xi_n \to RT \to$ FRF.
+
+\subsubsection*{Editor 2D}
+
+Se elige la cara de una lista (alcance v1: caras perpendiculares a un eje) y se
+dibuja sobre su plano local:
+
+\begin{itemize}
+  \item \textbf{Modo Rectángulo}: mantener el botón izquierdo y arrastrar.
+  \item \textbf{Modo Polígono}: click izquierdo por vértice (convexo o no); se
+        cierra clickeando cerca del primer punto, con \tecla{Enter} o doble
+        click; \textbf{botón derecho} / \tecla{Esc} deshace el último vértice o
+        cancela.
+  \item \textbf{Rueda del mouse} $=$ zoom sobre la grilla, centrado en el cursor.
+  \item Los parches \textbf{no pueden solaparse}: si el candidato pisaría a
+        otro se dibuja en rojo y no se agrega (se permite adyacencia por arista).
+\end{itemize}
+
+Los parches se pintan sobre la cara en el visor 3D con el color de su material y
+se guardan en el \texttt{.room} (v8). En el diálogo \menu{Materiales\ldots}
+aparecen listados debajo de las caras (\texttt{Parche (rect/polígono) en
+\emph{cara}}), con su combo de material editable, y al pasar el cursor por la
+fila se resaltan en el 3D.
+
+\subsubsection*{Cuadratura fina (nota importante)}
+
+Sin parches, la absorción se integra como siempre (\textbf{baseline intacto}:
+los \texttt{.room} sin parches no cambian ni un dígito). Al activar el
+\textbf{primer parche}, $\xi_n$ se recalcula con \textbf{cuadratura fina}
+(tesela la cara en muchos puntos, más preciso que la malla de render gruesa,
+que usa 1 punto por triángulo). Los números de RT/FRF \textbf{pueden moverse}
+respecto de la malla gruesa: es mayor precisión, no un error. Con material
+uniforme reduce \textbf{exacto} a A36.
+
+Núcleo: \texttt{absorption\_patch.py}
+(\texttt{compute\_xi\_per\_mode\_with\_patches}, \texttt{sabine\_rt60\_with\_patches});
+editor en \texttt{patch\_dialog.py}; bench \texttt{bench\_absorption\_patch.py}.
 
 % ============================================================
 \section{Cálculo de modos FEM}
@@ -2153,7 +2223,52 @@ ahora:
     desde su propio evento colgaba el mouse-grab de Qt); puntos de escucha con
     esferas \texttt{GLMeshItem} en vez de scatter GL persistente; watchdog
     opcional \texttt{PROTO1\_WATCHDOG=1} (stacks en consola si la GUI se
-    cuelga $>20$ s).%
+    cuelga $>20$ s).\\[2pt]
+    \textbf{Cambios v2.17} (14 de julio): parches de absorción sub-cara y carga
+    de materiales propios desde JSON.
+    (A) \textbf{Parches de absorción sub-cara}: botón
+    \menu{Parches de absorción\ldots} $+$ editor 2D para dibujar regiones
+    DENTRO de una cara con su propio material. Da resolución sub-cara al
+    amortiguamiento modal selectivo (A36): el $\alpha$ del parche entra por el
+    RT60 de Sabine (restando área al anfitrión) y por $\xi_n$ pesado por
+    $\phi_n^2$ sobre la región. Las $\phi_n$ se calculan con paredes rígidas, así
+    que un parche NO cambia la forma modal ni el heatmap; el efecto es
+    $\xi_n \to RT \to$ FRF. \emph{Cuadratura}: sin parches se usa A36 crudo (los
+    \texttt{.room} sin parches no cambian ni un dígito); con $\geq 1$ parche se
+    conmuta a cuadratura FINA (más precisa que la malla gruesa: los números
+    pueden moverse, no es un error). Reduce exacto a A36 con material uniforme.
+    \texttt{absorption\_patch.py}; \texttt{.room} \textbf{v8}
+    (\texttt{absorption\_patches}); \texttt{bench\_absorption\_patch.py}.
+    (B) \textbf{Editor 2D}: modo Rectángulo (arrastrar) y modo Polígono (click
+    por vértice, convexo o no; cerrar cerca del primer punto / \tecla{Enter} /
+    doble click; botón derecho o \tecla{Esc} deshace); rueda $=$ zoom centrado en
+    el cursor; snapping a grilla; \textbf{sin solapes} (candidato en rojo, no se
+    agrega; se permite adyacencia por arista). Geometría en
+    \texttt{absorption\_patch}: \texttt{poly\_area} (shoelace),
+    \texttt{points\_in\_poly} (ray casting), \texttt{triangulate\_uv} (ear
+    clipping, para no convexos), \texttt{polys\_overlap}.
+    \texttt{patch\_dialog.py}.
+    (C) \textbf{Overlay 3D}: los parches se pintan sobre la cara con el color de
+    su material, con el quad separado 4 cm hacia el interior.
+    \texttt{IsoViewer.set\_patches} crea \textbf{un \texttt{GLMeshItem} por
+    parche con color uniforme}. \emph{Gotcha}: un \texttt{GLMeshItem} con
+    \texttt{shader=None} $+$ \texttt{faceColors} NO renderiza en esta escena, y
+    no es cuestión del modo de profundidad (\texttt{translucent},
+    \texttt{additive} y \texttt{opaque} fueron los tres invisibles); ya estaba
+    documentado en \texttt{acoustic\_viewer.SourceMarkers}. El único patrón
+    probado es el de \texttt{set\_highlight\_faces}: color uniforme $+$
+    \texttt{shader=None} $+$ \texttt{glOptions='additive'}.
+    (D) \textbf{Parches en el diálogo Materiales}: se listan debajo de las caras
+    (\texttt{Parche (rect/polígono) en \emph{cara}}) con área y categoría; su
+    \textbf{combo de material es editable} (recolorea el overlay en vivo y
+    recalcula $\xi$/RT al aplicar); el \textbf{hover} sobre la fila resalta el
+    parche en el 3D (\texttt{set\_highlight\_patch}, ítem propio que no pisa el
+    overlay permanente).
+    (E) \textbf{Cargar tu material} (JSON): cuadro con la sintaxis $+$ selector
+    de archivo; valida (nombre $+$ absorción por banda), copia a
+    \texttt{materials/} sin pisar el catálogo y recarga la biblioteca en el
+    sitio (\texttt{MaterialLibrary.reload}) --- disponible en todo el programa
+    sin reiniciar.%
   }
 \end{center}
 

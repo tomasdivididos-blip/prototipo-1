@@ -36,7 +36,7 @@ from prediction_panel import PredictionPanel
 
 
 FILE_FORMAT = "prototipo1.room"
-FILE_VERSION = 7  # v7: furniture (muebles); v6: wall_profiles; v5: response Q(f); v4: face_materials
+FILE_VERSION = 8  # v8: absorption_patches (parches sub-cara); v7: furniture; v6: wall_profiles; v5: response Q(f); v4: face_materials
 FILE_FILTER = "Recinto Prototipo 1 (*.room *.json)"
 DEFAULT_DIR = str(Path.home() / "Desktop")
 UNDO_LIMIT = 10   # cantidad de acciones reversibles (ctrl+z / ctrl+y)
@@ -1005,6 +1005,8 @@ class MainWindow(QMainWindow):
             "face_materials": face_mat,
             # v7: mobiliario (obstaculos rigidos con absorcion por cara).
             "furniture": [m.to_dict() for m in getattr(ap, "furniture", [])],
+            # v8: parches de absorcion sub-cara (region + material dentro de una cara).
+            "absorption_patches": [p.to_dict() for p in getattr(ap, "_patches", [])],
         }
 
     def _serialize_external_geometry(self):
@@ -1191,6 +1193,15 @@ class MainWindow(QMainWindow):
                     ap._refresh_materials_summary()
             except Exception:
                 pass
+        # v8: parches de absorcion sub-cara. v4-v7 sin la clave -> lista vacia.
+        try:
+            from absorption_patch import AbsorptionPatch
+            ap._patches = [AbsorptionPatch.from_dict(d)
+                           for d in (ac.get("absorption_patches") or [])]
+            if hasattr(ap, "_refresh_patches_summary"):
+                ap._refresh_patches_summary()
+        except Exception:
+            ap._patches = []
 
     def _update_title(self):
         base = "Prototipo 1 - Modelador de Recintos 3D"
