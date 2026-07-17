@@ -3924,24 +3924,19 @@ class AcousticPanel(QWidget):
                 centroid = _np.asarray(_v, float).mean(axis=0)
             except Exception:
                 centroid = None
-            verts, faces, colors = [], [], []
+            # Un item por parche con COLOR UNIFORME: un GLMeshItem con
+            # shader=None + faceColors no renderiza en esta escena (gotcha
+            # documentado en acoustic_viewer.SourceMarkers).
+            data = []
             for p in patches:
                 pv, pf = self._patch_quad(p, centroid)
                 if pv is None:
                     continue
-                base = len(verts)
-                verts.extend(pv)
-                col = pdlg._material_color(p.material_name, alpha=180)
+                col = pdlg._material_color(p.material_name, alpha=255)
                 rgba = (col.red() / 255.0, col.green() / 255.0,
-                        col.blue() / 255.0, 0.85)
-                for (i, j, k) in pf:
-                    faces.append([base + i, base + j, base + k])
-                    colors.append(rgba)
-            if not faces:
-                self.viewer.set_patches(None)
-                return
-            self.viewer.set_patches(_np.array(verts), _np.array(faces),
-                                    _np.array(colors))
+                        col.blue() / 255.0, 0.75)
+                data.append((_np.array(pv), _np.array(pf), rgba))
+            self.viewer.set_patches(data or None)
         except Exception as e:
             self._log(f"Aviso overlay parches: {e}")
 
@@ -3952,9 +3947,13 @@ class AcousticPanel(QWidget):
         Triangula el poligono (ear clipping) para soportar no convexos."""
         import absorption_patch as _ap
         na = p.normal_axis
-        off = 0.01
+        # Separacion de la cara hacia el interior: suficiente para que no haya
+        # z-fighting con la superficie opaca en render translucent (1 cm no
+        # alcanzaba). El parche igual se lee "sobre" la cara.
+        OFF = 0.04
+        off = OFF
         if centroid is not None:
-            off = 0.01 if centroid[na] >= p.plane_coord else -0.01
+            off = OFF if centroid[na] >= p.plane_coord else -OFF
         uv = p.polygon_uv()
         tris = _ap.triangulate_uv(uv)
         if not tris:

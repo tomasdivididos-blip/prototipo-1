@@ -153,8 +153,8 @@ class IsoViewer(gl.GLViewWidget):
 
         # Resaltado de un grupo de caras (hover en la tabla de materiales)
         self._highlight_item = None
-        # Overlay de parches de absorcion sub-cara (v8): quads pintados sobre las caras.
-        self._patch_item = None
+        # Overlay de parches de absorcion sub-cara (v8): un item por parche.
+        self._patch_items = []
         # Resaltado de UN parche (hover en la lista de Materiales), estilo highlight.
         self._patch_highlight_item = None
 
@@ -734,30 +734,40 @@ class IsoViewer(gl.GLViewWidget):
         self.addItem(self._highlight_item)
         self.update()
 
-    def set_patches(self, verts=None, faces=None, face_colors=None):
-        """Overlay de parches de absorcion: quads pintados sobre las caras.
+    def set_patches(self, patches=None):
+        """Overlay de parches de absorcion: un GLMeshItem por parche.
 
-        `verts` (Nv,3), `faces` (Nf,3) indices a verts, `face_colors` (Nf,4) RGBA
-        en [0,1]. None/vacio = quitar.
+        `patches`: lista de (verts (Nv,3), faces (Nf,3), rgba (4,)). None/vacio
+        = quitar.
 
-        Render ADITIVO (mismo criterio que `set_highlight_faces`): no escribe
-        profundidad, asi el parche se dibuja SIEMPRE encima de la cara (evita el
-        z-fighting de un quad coplanar con una superficie opaca) y 'brilla' aun
-        si otra pared lo ocluye desde este angulo — util para ubicarlo. Patron
-        GLMeshItem estable (no scatter persistente).
+        IMPORTANTE — por que un item por parche con COLOR UNIFORME y no un mesh
+        combinado con `faceColors`: un `GLMeshItem` con `shader=None` +
+        `faceColors` NO RENDERIZA en esta escena (mismo gotcha ya documentado en
+        `acoustic_viewer.SourceMarkers`, que por eso migro a GLLinePlotItem).
+        Tampoco renderiza con glOptions 'opaque'/'translucent'. El unico patron
+        probado que SI funciona es el de `set_highlight_faces`: color UNIFORME +
+        shader=None + glOptions='additive'. Como cada parche tiene un solo
+        material, un item por parche resuelve el color sin tocar faceColors.
+
+        'additive' no escribe ni testea profundidad -> el parche se dibuja
+        siempre encima de la cara (no hay z-fighting). El panel igual separa el
+        quad ~4 cm hacia el interior.
         """
-        if self._patch_item is not None:
-            self.removeItem(self._patch_item)
-            self._patch_item = None
-        if verts is None or faces is None or len(faces) == 0:
+        for it in self._patch_items:
+            self.removeItem(it)
+        self._patch_items = []
+        if not patches:
             self.update()
             return
-        md = gl.MeshData(vertexes=np.asarray(verts, dtype=float),
-                         faces=np.asarray(faces, dtype=int),
-                         faceColors=np.asarray(face_colors, dtype=float))
-        self._patch_item = gl.GLMeshItem(
-            meshdata=md, smooth=False, shader=None, glOptions="additive")
-        self.addItem(self._patch_item)
+        for (verts, faces, rgba) in patches:
+            if verts is None or faces is None or len(faces) == 0:
+                continue
+            item = gl.GLMeshItem(
+                meshdata=gl.MeshData(vertexes=np.asarray(verts, dtype=float),
+                                     faces=np.asarray(faces, dtype=int)),
+                smooth=False, color=tuple(rgba), shader=None, glOptions="additive")
+            self.addItem(item)
+            self._patch_items.append(item)
         self.update()
 
     def set_highlight_patch(self, verts=None, faces=None):
