@@ -156,6 +156,60 @@ saber para no romperlo ni re-derivarlo:
 
 ---
 
+## 1d. Batch v2.17 (14 Jul 2026) — parches de absorción sub-cara
+
+Changelog completo en MANUAL.md "Cambios v2.17" (5 ejes A-E) + §10.5/§10.6.
+Lo que hay que saber para no romperlo ni re-derivarlo:
+
+**Modelo mental:** un parche = **región de absorción sub-cara**. NO es física
+nueva: es darle resolución sub-cara al mecanismo A36. Las φₙ se calculan con
+paredes rígidas → **un parche NO cambia la forma modal ni el heatmap**; su α
+entra por el RT60 de Sabine (restando área al anfitrión) y por ξₙ pesado por
+φₙ² sobre la región. Lo observable es ξₙ → RT → FRF.
+
+**Decisión de cuadratura (importante):** sin parches, ξ se integra con A36 crudo
+(centroides de la malla de render) → los `.room` sin parches **no cambian ni un
+dígito**. Con ≥1 parche se conmuta a **cuadratura fina** (tesela la cara, α por
+punto). La fina es MÁS precisa: la brecha vs A36 es ~25% medio en ξ (A36 sobre
+malla gruesa usa 1 punto por triángulo — el piso de un shoebox son 2 puntos).
+Reduce EXACTO a A36 con material uniforme. Criterio elegido por el usuario.
+
+**Archivos:** `absorption_patch.py` (núcleo + geometría de polígonos),
+`patch_dialog.py` (editor 2D), wiring en `acoustic_panel.py`, `.room` v8 en
+`main.py`, `viewer.set_patches`/`set_highlight_patch`. Bench:
+`bench_absorption_patch.py` (8/8).
+
+### ⚠️ Gotcha de render (costó ~6 iteraciones — LEER ANTES DE TOCAR EL VISOR)
+
+**Un `GLMeshItem` con `shader=None` + `faceColors` NO RENDERIZA en esta escena.**
+Y **no es cuestión del modo de profundidad**: se probó `translucent`, `additive`
+y `opaque`, los tres invisibles. Ya estaba documentado en el docstring de
+`acoustic_viewer.SourceMarkers` (por eso migró a `GLLinePlotItem`) y no se leyó
+a tiempo.
+
+- **El único patrón probado que funciona** es el de `viewer.set_highlight_faces`:
+  **color UNIFORME + `shader=None` + `glOptions='additive'`**.
+- Por eso `set_patches` crea **un item por parche** con color uniforme (cada
+  parche tiene un solo material → no hace falta `faceColors`).
+- Si necesitás color por-cara en un mesh, NO uses `faceColors`: partilo en items
+  de color uniforme, o usá `GLLinePlotItem`.
+
+**Lección de método:** ante "no se ve en el 3D", **instrumentar desde el 2º
+intento** (imprimir nº de items, bbox de los verts, excepciones) en vez de
+razonar sobre el pipeline de render. Un `print` del bbox habría cerrado el tema
+en un turno.
+
+### Falsa alarma: "no se mueve/rota el parlante"
+
+Se reportó como regresión. Se instrumentó la cadena completa
+(`mousePress → _pick_source → mouseMove → sourceMoveRequested → handler`) y
+**funciona entera**: la fuente recorría la sala y el bafle rotaba a nivel de
+datos. Era percepción visual (el overlay ni siquiera renderizaba entonces).
+**NO volver a perseguir esto.** El picking de fuentes usa proyección a pantalla
+de `_source_positions`, es independiente de los items GL.
+
+---
+
 ## 2. Perfil del usuario
 
 - **Profesión**: ingeniero en acústica.

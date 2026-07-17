@@ -664,6 +664,8 @@ Además de asignar **un material por cara**, se puede dibujar una **región (par
 
 Los parches se **pintan sobre la cara en el visor 3D** (color del material) y se guardan en el `.room`.
 
+**Desde el diálogo Materiales…** los parches también aparecen listados debajo de las caras, como `↳ Parche (rect/polígono) en <cara>`, con su área y categoría. Ahí podés **cambiarle el material** con su combo (igual que a una cara), y al **posar el cursor sobre la fila** el parche se **resalta en el 3D** con el mismo brillo ámbar que usan las caras.
+
 **Cuadratura fina (nota importante).** Sin parches, la absorción se integra como siempre (baseline intacto). **Al activar el primer parche**, el ξₙ se recalcula con **cuadratura fina** (tesela la cara en muchos puntos, más preciso que la malla de render gruesa) — los números de RT/FRF **pueden moverse** respecto de la malla gruesa: es mayor precisión, no un error. Núcleo: `absorption_patch.py` (`compute_xi_per_mode_with_patches`, `sabine_rt60_with_patches`); bench `bench_absorption_patch.py`.
 
 ### 10.6 Cargar tu propio material
@@ -2072,7 +2074,7 @@ Dos correcciones al eje **Ubicación de fuentes** con planta dibujada:
 
 ---
 
-**Cambios v2.17** (14 de julio 2026): parches de absorción sub-cara (dibujar una región dentro de una cara con su propio material) y carga de materiales propios desde JSON. Cuatro ejes.
+**Cambios v2.17** (14 de julio 2026): parches de absorción sub-cara (dibujar una región dentro de una cara con su propio material) y carga de materiales propios desde JSON. Cinco ejes.
 
 ### A. Parches de absorción sub-cara
 
@@ -2089,12 +2091,18 @@ Nuevo botón **"Parches de absorción…"** (grupo Materiales) que abre un edito
 
 ### C. Overlay 3D de los parches
 
-Los parches se **pintan sobre la cara en el visor 3D**, coloreados por material (los no convexos se triangulan por ear clipping), con un offset chico hacia el interior para evitar z-fighting. `IsoViewer.set_patches` (patrón `GLMeshItem` estable, no scatter persistente).
+Los parches se **pintan sobre la cara en el visor 3D**, coloreados por material (los no convexos se triangulan por ear clipping), con el quad separado 4 cm hacia el interior. `IsoViewer.set_patches` crea **un `GLMeshItem` por parche con color uniforme**.
 
-### D. Cargar tu propio material (JSON)
+> **Nota para quien toque el overlay.** El primer intento usaba un mesh combinado con `faceColors`, y **no renderizaba** — un `GLMeshItem` con `shader=None` + `faceColors` no se dibuja en esta escena, y **no es cuestión del modo de profundidad** (`translucent`, `additive` y `opaque` fueron los tres invisibles). Es el mismo gotcha ya documentado en `acoustic_viewer.SourceMarkers`, que por eso migró a `GLLinePlotItem`. El único patrón probado es el de `viewer.set_highlight_faces`: **color uniforme + `shader=None` + `glOptions='additive'`**. Como cada parche tiene un solo material, un item por parche evita `faceColors`.
+
+### D. Parches en el diálogo Materiales (listado, edición y resaltado)
+
+La tabla de **Materiales…** ahora lista los parches debajo de las caras (`↳ Parche (rect/polígono) en <cara>`, con área y categoría). Cada fila trae su **combo de material**: cambiarlo actualiza el parche (recolorea el overlay en vivo y recalcula ξ/RT al aplicar). Al **posar el cursor** sobre la fila, el parche se **resalta en el 3D** con el mismo brillo ámbar que las caras (`IsoViewer.set_highlight_patch`, ítem propio que no pisa el overlay permanente). El hover unificado distingue cara (`FaceGroup`) de parche (`AbsorptionPatch`) y son mutuamente excluyentes.
+
+### E. Cargar tu propio material (JSON)
 
 Botón **"Cargar tu material…"** en el diálogo Materiales: muestra un cuadro con la sintaxis del JSON, abre un selector de archivo, **valida** (nombre + absorción por banda), lo **copia a `materials/`** sin pisar los del catálogo, y **recarga la biblioteca en el sitio** (`MaterialLibrary.reload`) para que aparezca en todo el programa sin reiniciar. Formato y ejemplo en §10.6.
 
 ---
 
-*Manual actualizado al 14 de Julio de 2026 — v2.17. (Versiones `.tex`/`.pdf` pendientes de regenerar.)*
+*Manual actualizado al 14 de Julio de 2026 — v2.17.*
