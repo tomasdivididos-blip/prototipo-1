@@ -1724,6 +1724,11 @@ class AcousticPanel(QWidget):
         # malla (obstaculo rigido) y sus caras absorben via A36. Persistido en
         # .room v7. Vacio = comportamiento historico (sin muebles).
         self.furniture = []
+        # Material por mueble (indice en self.furniture -> nombre de material del
+        # catalogo self._mat_lib). Sin entrada -> mueble RIGIDO (None -> alpha
+        # default 0.03), que es el default fisico correcto. Lo puebla el dialogo
+        # de muebles (fuera de alcance headless; ver _furniture_mat_by_index).
+        self._furniture_mat_names = {}
         # Estado de geometria importada (CAD) - DEBE inicializarse antes de
         # _compute_default_receiver porque este consulta get_surface.
         self._is_imported_cad = False
@@ -2823,8 +2828,14 @@ class AcousticPanel(QWidget):
                 n_modes=self.sb_nmodes.value(),
                 n_per_meter=npm_used,
                 h_target=h_used,
+                muebles=self.furniture,     # Fase C: talla rigida (obstaculo)
                 progress=_progress_cb,
             )
+            # Auditoria de la talla de muebles (R2.2): avisar escalonado grosero.
+            ci = getattr(self.modal_result, "carve_info", None)
+            if ci is not None:
+                for w in ci.get("warnings", []):
+                    self._log(f"⚠ Muebles: {w}")
             self._mesh_decision = decision
             self._apply_badge(decision)
         except Exception as e:
@@ -3248,6 +3259,17 @@ class AcousticPanel(QWidget):
                 R=sbir.reflection_from_alpha(alpha),
             ))
 
+        # SBIR-mueble (Fase C): la cara superior de cada mueble (tope del
+        # escritorio, respaldo del sofa) rebota con rolloff de panel FINITO
+        # (Rindel). Sin muebles no agrega nada -> SBIR historico intacto.
+        n_furn = 0
+        muebles = getattr(self, "furniture", None)
+        if muebles:
+            import furniture as fu
+            walls.extend(fu.furniture_walls(
+                muebles, self._furniture_mat_by_index(), freq))
+            n_furn = len(muebles)
+
         try:
             res = sbir.sbir_from_sources(act, walls, self.receiver, freq)
         except Exception as e:
@@ -3255,8 +3277,9 @@ class AcousticPanel(QWidget):
             return
 
         n_assigned = sum(1 for g in groups if g.signature in g2m)
+        furn_str = f", {n_furn} mueble(s)" if n_furn else ""
         self._log(f"SBIR: {len(act)} fuente(s) activa(s), {len(walls)} superficies "
-                  f"({n_assigned} con material), receptor {self.receiver}.")
+                  f"({n_assigned} con material){furn_str}, receptor {self.receiver}.")
         dlg = SBIRDialog(res, f_lo=f_lo, f_hi=f_hi, parent=self)
         dlg.exec_()
 
@@ -3283,6 +3306,7 @@ class AcousticPanel(QWidget):
                     verts, tris,
                     n_modes=self.sb_nmodes.value(),
                     n_per_meter=self.sb_density.value(),
+                    muebles=self.furniture,     # Fase C: talla rigida (obstaculo)
                     progress=self._log,
                 )
                 # CLIP por validez de malla (idem main solve path).
@@ -4003,6 +4027,25 @@ class AcousticPanel(QWidget):
                 d[p.key] = self._mat_lib[names.index(p.material_name)]
         return d
 
+    def _furniture_mat_by_index(self):
+        """Construye {indice_mueble: Material} desde self._furniture_mat_names.
+
+        Un mueble sin material asignado NO aparece en el dict -> los canales de
+        absorcion/SBIR lo tratan como RIGIDO (alpha default 0.03), que es el
+        default fisico correcto. Vacio -> {} -> todos los muebles rigidos.
+
+        TODO (test visual en PC): el dialogo de muebles debe poblar
+        self._furniture_mat_names {indice: nombre_material} al asignar material a
+        un mueble; aca solo se resuelve el nombre contra el catalogo actual.
+        """
+        names = self._mat_lib.names
+        d = {}
+        for i in range(len(self.furniture)):
+            nm = self._furniture_mat_names.get(i)
+            if nm and nm in names:
+                d[i] = self._mat_lib[names.index(nm)]
+        return d
+
     def _on_face_materials_applied(self):
         """Refresca el resumen y recomputa xi tras editar materiales."""
         self._refresh_materials_summary()
@@ -4130,6 +4173,26 @@ class AcousticPanel(QWidget):
             groups, verts, tris = self._get_face_groups()
             V = aa.compute_mesh_volume(verts, tris)
             g2m = self._group_to_material_dict(groups)
+            # Absorcion de muebles (Fase C): las caras de la interfaz aire-mueble
+            # entran como FaceGroups nuevos al MISMO A36 que las paredes. Se
+            # extraen de la malla ORIGINAL (sin tallar) preservada en el solve;
+            # el locator y los modos van sobre la tallada. Compone con parches:
+            # se AGREGAN caras al final (no renumera las existentes), asi los
+            # parches por signature siguen resolviendo. Sin muebles no toca nada
+            # -> los .room sin muebles no cambian ni un digito.
+            muebles = getattr(self, "furniture", None)
+            nodes0 = getattr(self.modal_result, "nodes0", None)
+            tets0 = getattr(self.modal_result, "tets0", None)
+            if muebles and nodes0 is not None and tets0 is not None:
+                import furniture as fu
+                verts, tris, groups, g2m = fu.augment_surface_with_furniture(
+                    verts, tris, groups, g2m, nodes0, tets0, muebles,
+                    self._furniture_mat_by_index())
+                # V del A36 = volumen de AIRE (el mueble se tallo del dominio);
+                # normalizacion modal consistente con la malla resuelta.
+                ci = getattr(self.modal_result, "carve_info", None)
+                if ci is not None:
+                    V = max(V - float(ci.get("V_removed_mesh", 0.0)), 1e-9)
             # Parches sub-cara (v8): si hay al menos uno, la absorcion se integra
             # con cuadratura FINA (A36 refinado). Baseline sin parches queda en
             # A36 crudo -> los .room sin parches no cambian ni un digito.
