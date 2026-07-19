@@ -33,10 +33,20 @@ class ModalSolution:
     method: str                 # "fem"
     freqs: np.ndarray           # (Nm,) frecuencias modales en Hz
     phis: np.ndarray            # (Nn, Nm) modos M-ortonormalizados
-    nodes: np.ndarray           # (Nn, 3)
+    nodes: np.ndarray           # (Nn, 3)   malla del DOMINIO DE AIRE (tallada si hay muebles)
     tets: np.ndarray            # (Ne, 4)
     mesh_info: dict
     locator: acoustic_fem.FieldEvaluator = field(repr=False, default=None)
+    # --- Mobiliario (Fase C, aditivo) --------------------------------------
+    # Cuando hay muebles, la malla se TALLA (carve) entre build_volume_mesh y
+    # build_KM: `nodes`/`tets` arriba son ya la malla del aire (con el agujero).
+    # La malla ORIGINAL (sin tallar) se preserva aca porque el canal de
+    # absorcion (A36) extrae de ella la frontera aire-mueble por posicion
+    # mundial (gotcha de furniture.furniture_boundary_faces). Sin muebles estos
+    # campos quedan None -> regresion bit a bit (consumidores previos no los ven).
+    nodes0: Optional[np.ndarray] = field(repr=False, default=None)  # malla sin tallar
+    tets0: Optional[np.ndarray] = field(repr=False, default=None)
+    carve_info: Optional[dict] = None      # auditoria de la talla (furniture.carve_mesh)
 
 
 @dataclass
@@ -74,19 +84,32 @@ def run_fem_modal(
     n_modes: int = 12,
     n_per_meter: float = 3.0,
     c: float = C0,
+    muebles: Optional[list] = None,
     progress=None,
 ) -> ModalSolution:
     """Pipeline FEM: malla -> K,M -> autovalores -> modos M-ortonormales.
 
     `progress`: callable opcional(str) para reportar etapas.
+    `muebles`: lista de furniture.Furniture, opcional (talla la malla; ver
+    run_fem_modal_routed). Con None/[] el resultado es identico al historico.
     """
     if progress: progress("Mallando volumen...")
     nodes, tets = acoustic_mesh.build_volume_mesh(
         surface_verts, surface_tris, n_per_meter=n_per_meter
     )
-    info = acoustic_mesh.mesh_info(nodes, tets)
     if len(tets) == 0:
         raise RuntimeError("Mallado volumetrico vacio (geometria degenerada?).")
+
+    # Talla de mobiliario (ver run_fem_modal_routed) preservando la malla original.
+    nodes0 = tets0 = None
+    carve_info = None
+    if muebles:
+        import furniture as fu
+        nodes0, tets0 = nodes, tets
+        nodes, tets, carve_info = fu.carve_mesh(nodes0, tets0, muebles)
+        if len(tets) == 0:
+            raise RuntimeError("La talla de muebles vacio el dominio de aire.")
+    info = acoustic_mesh.mesh_info(nodes, tets)
 
     if progress: progress(f"Ensamblando K, M ({info['n_nodes']} nodos)...")
     K, M, _ = acoustic_fem.build_KM(nodes, tets)
@@ -100,6 +123,7 @@ def run_fem_modal(
         freqs=freqs, phis=phis,
         nodes=nodes, tets=tets,
         mesh_info=info, locator=locator,
+        nodes0=nodes0, tets0=tets0, carve_info=carve_info,
     )
 
 
@@ -114,12 +138,19 @@ def run_fem_modal_routed(
     n_per_meter: float = 2.5,
     h_target: float = 0.40,
     c: float = C0,
+    muebles: Optional[list] = None,
     progress=None,
 ):
     """Pipeline FEM con seleccion automatica de motor (voxel/gmsh).
 
     Devuelve (ModalSolution, MeshDecision). El segundo elemento contiene
     la informacion para el badge UI (color, texto, tooltip).
+
+    `muebles`: lista de furniture.Furniture, opcional. Si no es vacia, la malla
+    del router se TALLA (carve) antes de ensamblar K,M — los muebles quedan como
+    agujeros rigidos en el aire (Neumann natural). La malla ORIGINAL se preserva
+    en sol.nodes0/tets0 para el canal de absorcion. Con muebles=None/[] el
+    resultado es identico al historico (regresion bit a bit).
     """
     import mesh_router
 
@@ -135,18 +166,38 @@ def run_fem_modal_routed(
     if len(result.tets) == 0:
         raise RuntimeError("Mallado volumetrico vacio (geometria degenerada?).")
 
-    if progress: progress(f"Ensamblando K, M ({result.info['n_nodes']} nodos)...")
-    K, M, _ = acoustic_fem.build_KM(result.nodes, result.tets)
+    # ----- Talla de mobiliario (Fase C): ENTRE build_mesh y build_KM --------
+    nodes, tets, info = result.nodes, result.tets, result.info
+    nodes0 = tets0 = None
+    carve_info = None
+    if muebles:
+        import furniture as fu
+        nodes0, tets0 = result.nodes, result.tets      # malla ORIGINAL preservada
+        nodes, tets, carve_info = fu.carve_mesh(nodes0, tets0, muebles)
+        if len(tets) == 0:
+            raise RuntimeError("La talla de muebles vacio el dominio de aire "
+                               "(mueble mas grande que el recinto?).")
+        # mesh_info recomputado sobre la malla TALLADA (h_max/n_nodes reales),
+        # preservando las claves-meta del router (engine, n_per_meter, t_mesh).
+        info = {**result.info, **acoustic_mesh.mesh_info(nodes, tets)}
+        if progress:
+            progress(f"Muebles: {carve_info['n_tets_removed']} tets tallados, "
+                     f"{carve_info['n_nodes_pruned']} nodos podados "
+                     f"(V_aire -{carve_info['V_removed_mesh']:.2f} m3).")
+
+    if progress: progress(f"Ensamblando K, M ({info['n_nodes']} nodos)...")
+    K, M, _ = acoustic_fem.build_KM(nodes, tets)
 
     if progress: progress(f"Resolviendo {n_modes} modos (Lanczos)...")
     freqs, phis = acoustic_fem.solve_modes(K, M, n_modes=n_modes, c=c)
 
-    locator = acoustic_fem.FieldEvaluator(result.nodes, result.tets)
+    locator = acoustic_fem.FieldEvaluator(nodes, tets)
     sol = ModalSolution(
         method="fem",
         freqs=freqs, phis=phis,
-        nodes=result.nodes, tets=result.tets,
-        mesh_info=result.info, locator=locator,
+        nodes=nodes, tets=tets,
+        mesh_info=info, locator=locator,
+        nodes0=nodes0, tets0=tets0, carve_info=carve_info,
     )
     return sol, result.decision
 
