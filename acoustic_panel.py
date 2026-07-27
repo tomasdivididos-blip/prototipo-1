@@ -548,6 +548,149 @@ def _contiguous_runs(fa, mask):
     return spans
 
 
+class FurnitureEditDialog(QDialog):
+    """Editor de un mueble (caja/cilindro), edición numérica exacta.
+
+    Devuelve `(Furniture, nombre_material | None)` via `get_furniture()`. El
+    material None = mueble RÍGIDO (obstáculo sin absorción, α default 0.03). El
+    mueble se persiste en el `.room` y afecta modos (carve), RT/ξ (A36) y SBIR.
+    Esta versión NO arrastra el mueble en el visor (edición por spinbox); el
+    drag 3D queda para un paso posterior.
+    """
+
+    _KINDS = [("box", "Caja"), ("cylinder", "Cilindro")]
+    _RIGID = "Rígido (sin material)"
+
+    def __init__(self, furn=None, mat_name=None, mat_names=None,
+                 dims_hint=None, default_pos=None, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Editar mueble" if furn is not None else "Añadir mueble")
+        mat_names = list(mat_names or [])
+        Lx, Ly, _Lz = dims_hint or (5.0, 4.0, 3.0)
+
+        form = QFormLayout(self)
+
+        self.combo_kind = QComboBox()
+        for _, label in self._KINDS:
+            self.combo_kind.addItem(label)
+        form.addRow("Tipo:", self.combo_kind)
+
+        # Centro (posición)
+        self.sb_x = self._spin(-1e3, 1e3, 3, 0.1)
+        self.sb_y = self._spin(-1e3, 1e3, 3, 0.1)
+        self.sb_z = self._spin(-1e3, 1e3, 3, 0.1)
+        prow = QHBoxLayout(); prow.setSpacing(3)
+        for lbl, sb in (("X", self.sb_x), ("Y", self.sb_y), ("Z", self.sb_z)):
+            prow.addWidget(QLabel(lbl)); prow.addWidget(sb, 1)
+        form.addRow("Centro (m):", prow)
+
+        # Tamaño (los labels cambian según el tipo)
+        self.sb_sx = self._spin(0.01, 1e3, 3, 0.05)
+        self.sb_sy = self._spin(0.01, 1e3, 3, 0.05)
+        self.sb_sz = self._spin(0.01, 1e3, 3, 0.05)
+        self.lbl_sx, self.lbl_sy, self.lbl_sz = QLabel("An"), QLabel("La"), QLabel("Al")
+        srow = QHBoxLayout(); srow.setSpacing(3)
+        for lbl, sb in ((self.lbl_sx, self.sb_sx), (self.lbl_sy, self.sb_sy),
+                        (self.lbl_sz, self.sb_sz)):
+            srow.addWidget(lbl); srow.addWidget(sb, 1)
+        form.addRow("Tamaño (m):", srow)
+
+        # Orientación (yaw) e inclinación (pitch), solo caja.
+        self.sb_orient = self._spin(-360, 360, 1, 5.0)
+        self.sb_orient.setSuffix(" °")
+        form.addRow("Orientación (yaw):", self.sb_orient)
+        self.sb_pitch = self._spin(-90, 90, 1, 5.0)
+        self.sb_pitch.setSuffix(" °")
+        form.addRow("Inclinación (pitch):", self.sb_pitch)
+
+        # Material (Rígido = sin absorción)
+        self.combo_mat = QComboBox()
+        self.combo_mat.addItem(self._RIGID)
+        self.combo_mat.addItems(mat_names)
+        form.addRow("Material:", self.combo_mat)
+
+        self.ed_label = QLineEdit()
+        form.addRow("Etiqueta:", self.ed_label)
+        self.ed_prov = QLineEdit()
+        self.ed_prov.setPlaceholderText("medida propia / catálogo / …")
+        form.addRow("Procedencia:", self.ed_prov)
+
+        if furn is not None:
+            self.combo_kind.setCurrentIndex(
+                1 if getattr(furn, "kind", "box") == "cylinder" else 0)
+            px, py, pz = furn.position
+            self.sb_x.setValue(px); self.sb_y.setValue(py); self.sb_z.setValue(pz)
+            sx, sy, sz = furn.size
+            self.sb_sx.setValue(sx); self.sb_sy.setValue(sy); self.sb_sz.setValue(sz)
+            self.sb_orient.setValue(float(getattr(furn, "orientation", 0.0) or 0.0))
+            self.sb_pitch.setValue(float(getattr(furn, "pitch", 0.0) or 0.0))
+            self.ed_label.setText(str(getattr(furn, "label", "") or ""))
+            self.ed_prov.setText(str(getattr(furn, "provenance", "") or ""))
+            if mat_name and mat_name in mat_names:
+                self.combo_mat.setCurrentText(mat_name)
+        else:
+            # Default: centro real de la sala (bbox) apoyado en el piso. El
+            # frame del recinto está centrado en el origen -> NO asumir esquina.
+            if default_pos is not None:
+                self.sb_x.setValue(float(default_pos[0]))
+                self.sb_y.setValue(float(default_pos[1]))
+                self.sb_z.setValue(float(default_pos[2]))
+            else:
+                self.sb_x.setValue(Lx / 2.0); self.sb_y.setValue(Ly / 2.0)
+                self.sb_z.setValue(0.45)
+            self.sb_sx.setValue(0.8); self.sb_sy.setValue(0.8); self.sb_sz.setValue(0.9)
+            self.ed_label.setText("mueble")
+
+        self.combo_kind.currentIndexChanged.connect(self._on_kind_changed)
+        self._on_kind_changed()
+
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb.accepted.connect(self.accept)
+        bb.rejected.connect(self.reject)
+        form.addRow(bb)
+
+    @staticmethod
+    def _spin(lo, hi, dec, step):
+        sb = QDoubleSpinBox()
+        sb.setRange(lo, hi); sb.setDecimals(dec); sb.setSingleStep(step)
+        sb.setMinimumWidth(0); sb.setMaximumWidth(95)
+        return sb
+
+    def _kind(self):
+        return self._KINDS[self.combo_kind.currentIndex()][0]
+
+    def _on_kind_changed(self):
+        cyl = self._kind() == "cylinder"
+        # Cilindro: size = (diámetro, _, alto); el 2º lado y el yaw no aplican.
+        self.lbl_sx.setText("Diám" if cyl else "An")
+        self.lbl_sy.setVisible(not cyl)
+        self.sb_sy.setVisible(not cyl)
+        self.sb_orient.setEnabled(not cyl)
+        self.sb_pitch.setEnabled(not cyl)
+
+    def get_furniture(self):
+        from furniture import Furniture
+        kind = self._kind()
+        if kind == "cylinder":
+            diam = float(self.sb_sx.value())
+            size = (diam, diam, float(self.sb_sz.value()))
+            orient = pitch = 0.0
+        else:
+            size = (float(self.sb_sx.value()), float(self.sb_sy.value()),
+                    float(self.sb_sz.value()))
+            orient = float(self.sb_orient.value())
+            pitch = float(self.sb_pitch.value())
+        furn = Furniture(
+            kind=kind,
+            position=(float(self.sb_x.value()), float(self.sb_y.value()),
+                      float(self.sb_z.value())),
+            size=size, orientation=orient, pitch=pitch,
+            label=self.ed_label.text().strip() or "mueble",
+            provenance=self.ed_prov.text().strip())
+        mat = self.combo_mat.currentText() if self.combo_mat.currentIndex() > 0 else None
+        return furn, mat
+
+
 class FRFDialog(QDialog):
     """Diálogo de FRF con gráfico matplotlib, exportación y escucha con ruido rosa."""
 
@@ -1752,10 +1895,12 @@ class AcousticPanel(QWidget):
         self.src_markers = av.SourceMarkers(viewer)
         self.rcv_marker = av.ReceiverMarker(viewer)
         self.slice_item = av.FieldSliceItem(viewer)
+        self.furn_markers = av.FurnitureMarkers(viewer)
 
         self._build_ui()
         self._refresh_sources_list()
         self._refresh_receiver_marker()
+        self._refresh_furniture_list()
 
         # Señales del visor para plano interactivo
         if hasattr(self.viewer, 'slicePlaneHovered'):
@@ -1841,6 +1986,34 @@ class AcousticPanel(QWidget):
         self.btn_del_src.clicked.connect(self._remove_source)
         self.btn_dup_src.clicked.connect(self._duplicate_source)
         layout.addWidget(grp_src)
+
+        # --- Muebles (obstáculos en el modelo modal: carve + absorción + SBIR) ---
+        grp_furn = QGroupBox("Muebles")
+        vf = QVBoxLayout(grp_furn)
+        self.list_furn = QListWidget()
+        self.list_furn.setMaximumHeight(110)
+        self.list_furn.itemSelectionChanged.connect(self._on_furn_selection)
+        self.list_furn.setToolTip(
+            "Muebles como obstáculos en el modelo modal: la malla se talla\n"
+            "(agujero rígido) y sus caras absorben según el material asignado.\n"
+            "Afecta modos, RT/ξ y SBIR. Edición numérica; se ven como wireframe\n"
+            "verde-azulado en el visor 3D. El efecto se aplica al recalcular FEM.")
+        vf.addWidget(self.list_furn)
+        rowf = QHBoxLayout(); rowf.setSpacing(4)
+        self.btn_add_furn = QPushButton("Añadir")
+        self.btn_edit_furn = QPushButton("Editar")
+        self.btn_del_furn = QPushButton("Quitar")
+        self.btn_dup_furn = QPushButton("Duplicar")
+        for b in (self.btn_add_furn, self.btn_edit_furn, self.btn_del_furn,
+                  self.btn_dup_furn):
+            b.setMinimumWidth(0)
+            rowf.addWidget(b, 1)
+        vf.addLayout(rowf)
+        self.btn_add_furn.clicked.connect(self._add_furniture)
+        self.btn_edit_furn.clicked.connect(self._edit_furniture)
+        self.btn_del_furn.clicked.connect(self._remove_furniture)
+        self.btn_dup_furn.clicked.connect(self._duplicate_furniture)
+        layout.addWidget(grp_furn)
 
         # --- Receptor ---
         grp_rcv = QGroupBox("Receptor")
@@ -2420,6 +2593,281 @@ class AcousticPanel(QWidget):
         self.sources.add(new)
         self._refresh_sources_list()
         self._log("Fuente duplicada.")
+
+    # -----------------------------------------------------------------------
+    # Muebles (carve rígido + absorción A36 + SBIR; ver acoustic_analysis y
+    # _compute_xi_from_materials / _open_sbir, ya cableados)
+    # -----------------------------------------------------------------------
+    def _selected_furn_idx(self) -> int:
+        return self.list_furn.currentRow()
+
+    def _furn_item_text(self, i, m) -> str:
+        cyl = getattr(m, "kind", "box") == "cylinder"
+        sx, sy, sz = m.size
+        dims = f"Ø{sx:.2f}×{sz:.2f}" if cyl else f"{sx:.2f}×{sy:.2f}×{sz:.2f}"
+        mat = self._furniture_mat_names.get(i)
+        return f"{m.label}  [{'cilindro' if cyl else 'caja'} {dims} m · {mat or 'rígido'}]"
+
+    def _refresh_furniture_list(self):
+        """Repuebla la lista de muebles y refresca el wireframe 3D."""
+        sel = self._selected_furn_idx()
+        self.list_furn.blockSignals(True)
+        self.list_furn.clear()
+        for i, m in enumerate(self.furniture):
+            self.list_furn.addItem(QListWidgetItem(self._furn_item_text(i, m)))
+        self.list_furn.blockSignals(False)
+        if 0 <= sel < self.list_furn.count():
+            self.list_furn.setCurrentRow(sel)
+        self.furn_markers.update(self.furniture,
+                                 selected_idx=self._selected_furn_idx())
+        self._sync_furniture_positions_to_viewer()
+        self.viewer.update()
+
+    def _on_furn_selection(self):
+        self.furn_markers.update(self.furniture,
+                                 selected_idx=self._selected_furn_idx())
+        self.viewer.update()
+
+    def _sync_furniture_positions_to_viewer(self):
+        """Pasa los centros de los muebles al viewer para picking (drag /
+        doble-click), igual que _sync_source_positions_to_viewer."""
+        if hasattr(self.viewer, "set_furniture_positions"):
+            self.viewer.set_furniture_positions(
+                [tuple(m.position) for m in self.furniture])
+
+    @staticmethod
+    def _furniture_aabb(m):
+        """AABB (min, max) de un mueble en coords mundo. Caja: envolvente de las
+        8 esquinas rotadas por yaw+pitch (exacto). Cilindro: prisma vertical."""
+        cx, cy, cz = [float(v) for v in m.position]
+        sx, sy, sz = [float(v) for v in m.size]
+        if getattr(m, "kind", "box") == "cylinder":
+            r = sx / 2.0
+            return (np.array([cx - r, cy - r, cz - sz / 2.0]),
+                    np.array([cx + r, cy + r, cz + sz / 2.0]))
+        th = np.radians(float(getattr(m, "orientation", 0.0) or 0.0))
+        ph = np.radians(float(getattr(m, "pitch", 0.0) or 0.0))
+        c, s = np.cos(th), np.sin(th)
+        cp, sp = np.cos(ph), np.sin(ph)
+        ex = np.array([cp * c, cp * s, sp])           # ejes locales (== contains)
+        ey = np.array([-s, c, 0.0])
+        ez = np.array([-sp * c, -sp * s, cp])
+        c0 = np.array([cx, cy, cz])
+        hx, hy, hz = sx / 2.0, sy / 2.0, sz / 2.0
+        corners = np.array([c0 + a * hx * ex + b * hy * ey + d * hz * ez
+                            for a in (-1, 1) for b in (-1, 1) for d in (-1, 1)])
+        return corners.min(axis=0), corners.max(axis=0)
+
+    @staticmethod
+    def _source_baffle_aabb(s):
+        """AABB del bafle (caja visual) de una fuente, con su yaw+pitch. Mismo
+        frame que acoustic_viewer._baffle_wireframe (n=frente, ey=ancho, ez=n×ey)."""
+        pos = np.array([float(v) for v in s.position])
+        bsz = getattr(s, "baffle_size", None) or (0.30, 0.50, 0.40)
+        w, h, d = [float(v) for v in bsz]
+        yaw = getattr(s, "orientation", None)
+        th = np.radians(90.0 if yaw is None else float(yaw))
+        ph = np.radians(float(getattr(s, "pitch", 0.0) or 0.0))
+        n = np.array([np.cos(ph) * np.cos(th), np.cos(ph) * np.sin(th), np.sin(ph)])
+        ey = np.array([-np.sin(th), np.cos(th), 0.0])
+        ez = np.cross(n, ey)
+        hx, hy, hz = d / 2.0, w / 2.0, h / 2.0
+        corners = np.array([pos + a * hx * n + b * hy * ey + e * hz * ez
+                            for a in (-1, 1) for b in (-1, 1) for e in (-1, 1)])
+        return corners.min(axis=0), corners.max(axis=0)
+
+    def _room_bbox(self):
+        """(min, max) del bounding box del recinto actual (surface real)."""
+        verts, _tris = self.get_surface()
+        v = np.asarray(verts, dtype=float)
+        return v.min(axis=0), v.max(axis=0)
+
+    def _clamp_to_room_bbox(self, x, y, z, eps=1e-3):
+        """Recorta (x,y,z) al bounding box del recinto (con un pequeño inset para
+        quedar estrictamente adentro de la malla). 'Traba' el arrastre de fuentes
+        y receptor en los límites: si el cursor sale, el objeto desliza pegado a
+        la pared en vez de irse afuera. Sin geometría -> devuelve el punto igual."""
+        try:
+            lo, hi = self._room_bbox()
+        except Exception:
+            return (float(x), float(y), float(z))
+        out = []
+        for v, l, h in zip((x, y, z), lo, hi):
+            l2, h2 = float(l) + eps, float(h) - eps
+            out.append(float(v) if h2 < l2 else min(max(float(v), l2), h2))
+        return tuple(out)
+
+    @staticmethod
+    def _aabb_overlap(amin, amax, bmin, bmax, tol=1e-4):
+        return bool(np.all(amin < bmax - tol) and np.all(bmin < amax - tol))
+
+    def _furniture_conflict(self, cand, ignore_idx: int = -1):
+        """Mensaje si `cand` NO puede colocarse, o None si está OK. Chequea, por
+        AABB: (1) solape con otro mueble, (2) solape con un parlante (bafle),
+        (3) que no se salga de los límites del recinto. Conservador para cajas
+        rotadas/inclinadas — seguro para 'los objetos sólidos no se atraviesan'."""
+        amin, amax = self._furniture_aabb(cand)
+        for i, m in enumerate(self.furniture):
+            if i == ignore_idx:
+                continue
+            bmin, bmax = self._furniture_aabb(m)
+            if self._aabb_overlap(amin, amax, bmin, bmax):
+                return f"se solaparía con el mueble «{m.label}»"
+        try:
+            for s in self.sources:
+                bmin, bmax = self._source_baffle_aabb(s)
+                if self._aabb_overlap(amin, amax, bmin, bmax):
+                    return f"se solaparía con el parlante «{getattr(s, 'label', 'fuente')}»"
+        except Exception:
+            pass
+        try:
+            lo, hi = self._room_bbox()
+            if np.any(amin < lo - 1e-4) or np.any(amax > hi + 1e-4):
+                return "se saldría de los límites del recinto"
+        except Exception:
+            pass
+        return None
+
+    def _room_center_default(self):
+        """Posición por defecto de un mueble nuevo: centro de planta de la sala
+        real (bbox del surface) apoyado en el piso. Robusto a origin_mode
+        (auto/centro/esquina) — NO asume esquina en (0,0)."""
+        try:
+            verts, _tris = self.get_surface()
+            v = np.asarray(verts, dtype=float)
+            lo, hi = v.min(axis=0), v.max(axis=0)
+            return (float((lo[0] + hi[0]) / 2.0),
+                    float((lo[1] + hi[1]) / 2.0),
+                    float(lo[2] + 0.45))
+        except Exception:
+            return None
+
+    def _add_furniture(self):
+        dlg = FurnitureEditDialog(mat_names=self._mat_lib.names,
+                                  dims_hint=self.get_dims_hint(),
+                                  default_pos=self._room_center_default(),
+                                  parent=self)
+        if dlg.exec_() != QDialog.Accepted:
+            return
+        furn, mat = dlg.get_furniture()
+        msg = self._furniture_conflict(furn)
+        if msg:
+            QMessageBox.warning(
+                self, "No se puede colocar",
+                f"El mueble «{furn.label}» {msg}. Ajustá posición o tamaño.")
+            return
+        self.furniture.append(furn)
+        if mat:
+            self._furniture_mat_names[len(self.furniture) - 1] = mat
+        self.list_furn.setCurrentRow(len(self.furniture) - 1)
+        self._refresh_furniture_list()
+        self._log(f"Mueble '{furn.label}' añadido"
+                  f"{f' (material {mat})' if mat else ' (rígido)'}. "
+                  f"Recalculá los modos para aplicarlo.")
+
+    def _edit_furniture(self):
+        self._edit_furniture_by_idx(self._selected_furn_idx())
+
+    def _edit_furniture_by_idx(self, i: int):
+        """Abre el editor del mueble `i` (usado por el botón Editar y por el
+        doble-click en el visor)."""
+        if not (0 <= i < len(self.furniture)):
+            return
+        dlg = FurnitureEditDialog(self.furniture[i],
+                                  mat_name=self._furniture_mat_names.get(i),
+                                  mat_names=self._mat_lib.names,
+                                  dims_hint=self.get_dims_hint(), parent=self)
+        if dlg.exec_() != QDialog.Accepted:
+            return
+        furn, mat = dlg.get_furniture()
+        msg = self._furniture_conflict(furn, ignore_idx=i)
+        if msg:
+            QMessageBox.warning(
+                self, "No se puede colocar",
+                f"Ese cambio haría que «{furn.label}» {msg}. Ajustá posición o tamaño.")
+            return
+        self.furniture[i] = furn
+        if mat:
+            self._furniture_mat_names[i] = mat
+        else:
+            self._furniture_mat_names.pop(i, None)
+        self.list_furn.setCurrentRow(i)
+        self._refresh_furniture_list()
+        self._log(f"Mueble {i} editado. Recalculá los modos para aplicarlo.")
+
+    def apply_furniture_move(self, idx: int, x: float, y: float, z: float):
+        """Mueve un mueble por drag (Shift). Colisión-stop: si la nueva posición
+        lo haría solapar con otro, NO se aplica (frena al contacto). Actualiza el
+        wireframe IN-PLACE (sin reconstruir la lista -> sin cuelgue por frame)."""
+        if not (0 <= idx < len(self.furniture)):
+            return
+        m = self.furniture[idx]
+        old = m.position
+        m.position = (float(x), float(y), float(z))
+        if self._furniture_conflict(m, ignore_idx=idx):
+            m.position = old   # frena: no atraviesa materia ni sale del recinto
+            return
+        self.furn_markers.set_positions(self.furniture, selected_idx=idx)
+        self._sync_furniture_positions_to_viewer()
+        self.viewer.update()
+
+    def apply_furniture_rotate(self, idx: int, d_yaw: float):
+        """Rota (yaw) un mueble por gesto Alt+Ctrl. Solo cajas (el cilindro es
+        invariante). Colisión-stop igual que el move."""
+        if not (0 <= idx < len(self.furniture)):
+            return
+        m = self.furniture[idx]
+        if getattr(m, "kind", "box") == "cylinder":
+            return
+        old = float(getattr(m, "orientation", 0.0) or 0.0)
+        m.orientation = float((old + d_yaw) % 360.0)
+        if self._furniture_conflict(m, ignore_idx=idx):
+            m.orientation = old
+            return
+        self.furn_markers.set_positions(self.furniture, selected_idx=idx)
+        self.viewer.update()
+
+    def apply_furniture_tilt(self, idx: int, d_pitch: float):
+        """Inclina (pitch) un mueble por gesto Alt+Ctrl (vertical). Solo cajas;
+        clamp -90..90. El pitch afecta el carve. Colisión-stop igual que rotate."""
+        if not (0 <= idx < len(self.furniture)):
+            return
+        m = self.furniture[idx]
+        if getattr(m, "kind", "box") == "cylinder":
+            return
+        old = float(getattr(m, "pitch", 0.0) or 0.0)
+        m.pitch = float(max(-90.0, min(90.0, old + d_pitch)))
+        if self._furniture_conflict(m, ignore_idx=idx):
+            m.pitch = old
+            return
+        self.furn_markers.set_positions(self.furniture, selected_idx=idx)
+        self.viewer.update()
+
+    def _remove_furniture(self):
+        i = self._selected_furn_idx()
+        if not (0 <= i < len(self.furniture)):
+            return
+        del self.furniture[i]
+        # Reindexar el dict de materiales: quitar i y correr los índices > i.
+        self._furniture_mat_names = {
+            (k - 1 if k > i else k): v
+            for k, v in self._furniture_mat_names.items() if k != i}
+        self._refresh_furniture_list()
+        self._log(f"Mueble {i} eliminado.")
+
+    def _duplicate_furniture(self):
+        i = self._selected_furn_idx()
+        if not (0 <= i < len(self.furniture)):
+            return
+        from furniture import Furniture
+        m = Furniture.from_dict(self.furniture[i].to_dict())
+        m.label = f"{m.label}_dup"
+        self.furniture.append(m)
+        mat = self._furniture_mat_names.get(i)
+        if mat:
+            self._furniture_mat_names[len(self.furniture) - 1] = mat
+        self._refresh_furniture_list()
+        self._log("Mueble duplicado.")
 
     # -----------------------------------------------------------------------
     # Receptor

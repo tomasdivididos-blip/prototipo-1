@@ -120,6 +120,12 @@ class IsoViewer(gl.GLViewWidget):
     # Orientacion del bafle por gesto directo (Alt+Ctrl): delta en grados.
     sourceRotateRequested = pyqtSignal(int, float)   # idx, d_azimut (Alt+Ctrl+Left drag)
     sourceTiltRequested   = pyqtSignal(int, float)   # idx, d_pitch  (Alt+Ctrl+rueda)
+    # Muebles: mismos gestos que las fuentes (las fuentes tienen prioridad de
+    # picking; el mueble se agarra solo si no hay fuente/receptor bajo el cursor).
+    furnitureMoveRequested   = pyqtSignal(int, float, float, float)  # idx,x,y,z
+    furnitureEditRequested   = pyqtSignal(int)                       # idx (doble-click)
+    furnitureRotateRequested = pyqtSignal(int, float)               # idx, d_yaw   (Alt+Ctrl horiz)
+    furnitureTiltRequested   = pyqtSignal(int, float)               # idx, d_pitch (Alt+Ctrl vert)
     # Plano de corte interactivo
     slicePlaneHovered     = pyqtSignal(int, float)  # axis, offset (mientras mueve)
     slicePlaneConfirmed   = pyqtSignal(int, float)  # axis, offset (al hacer click)
@@ -176,6 +182,12 @@ class IsoViewer(gl.GLViewWidget):
         # Orientacion de bafle por gesto sostenido (Alt+Ctrl+Left): indice de
         # fuente (o -1). Un solo gesto: horizontal=azimut, vertical=pitch.
         self._orient_source_idx = -1
+
+        # Muebles: posiciones para picking + estado de arrastre/orientacion
+        # (mismo mecanismo que las fuentes, con menor prioridad de picking).
+        self._furniture_positions = []   # lista de (x,y,z) de los centros
+        self._dragging_furn_idx = -1     # >=0 mueble en arrastre, -1 ninguno
+        self._orient_furn_idx = -1       # >=0 mueble rotando (Alt+Ctrl), -1 no
 
         # Plano de corte interactivo
         self._slice_placement = False
@@ -350,6 +362,11 @@ class IsoViewer(gl.GLViewWidget):
         """Guarda la posicion del receptor para picking en Shift+drag."""
         self._receiver_position = tuple(pos) if pos is not None else None
 
+    def set_furniture_positions(self, positions):
+        """Guarda los centros de los muebles para picking (drag / doble-click).
+        `positions`: lista de tuplas (x, y, z)."""
+        self._furniture_positions = list(positions)
+
     def mouseDoubleClickEvent(self, ev):
         """Doble-click izquierdo sobre una esfera de fuente -> editar."""
         if ev.button() != Qt.LeftButton:
@@ -364,6 +381,10 @@ class IsoViewer(gl.GLViewWidget):
             if dx * dx + dy * dy < 20 ** 2:   # 20 px de radio de clic
                 self.sourceEditRequested.emit(i)
                 return
+        # Ninguna fuente: probar muebles (las fuentes tienen prioridad).
+        fidx = self._pick_furniture(ev.x(), ev.y(), radius_px=24)
+        if fidx >= 0:
+            self.furnitureEditRequested.emit(fidx)
 
     def _pick_horizontal_plane(self, px, py, z: float = 0.0):
         """Raycast contra el plano z=cte. Devuelve (x,y,z) o None."""
@@ -437,6 +458,21 @@ class IsoViewer(gl.GLViewWidget):
                     best_d2, best_idx = d2, -2
         return best_idx
 
+    def _pick_furniture(self, px, py, radius_px: int = 28) -> int:
+        """Indice del mueble mas cercano al cursor (>=0) o -1. Se llama SOLO
+        cuando `_pick_source` no encontro nada (las fuentes tienen prioridad)."""
+        best_d2 = radius_px ** 2
+        best_idx = -1
+        for i, pos in enumerate(self._furniture_positions):
+            sp = self._project(pos)
+            if sp is None:
+                continue
+            dx, dy = px - sp[0], py - sp[1]
+            d2 = dx * dx + dy * dy
+            if d2 < best_d2:
+                best_d2, best_idx = d2, i
+        return best_idx
+
     def mousePressEvent(self, ev):
         self.mousePos = ev.localPos()
 
@@ -457,7 +493,9 @@ class IsoViewer(gl.GLViewWidget):
         is_shift_left = left and shift and not alt
         if not is_shift_left:
             self._dragging_source_idx = -1
+            self._dragging_furn_idx = -1
         self._orient_source_idx = -1     # se re-setea abajo si es gesto de orientacion
+        self._orient_furn_idx = -1
 
         # Modo colocacion de plano de corte
         if self._slice_placement:
@@ -481,6 +519,7 @@ class IsoViewer(gl.GLViewWidget):
         # posicion original); sin Ctrl, drag en el plano horizontal (default).
         if is_shift_left:
             self._dragging_source_idx = -1   # reset antes de detectar
+            self._dragging_furn_idx = -1
             idx = self._pick_source(ev.x(), ev.y())
             if idx >= 0:
                 self._dragging_source_idx = idx
@@ -489,7 +528,13 @@ class IsoViewer(gl.GLViewWidget):
                 self._dragging_source_idx = -2
                 x0, y0, z0 = self._receiver_position
             else:
-                return   # no hubo pick: no arrancamos drag
+                # Ninguna fuente/receptor: probar muebles (menor prioridad).
+                fidx = self._pick_furniture(ev.x(), ev.y())
+                if fidx >= 0:
+                    self._dragging_furn_idx = fidx
+                    x0, y0, z0 = self._furniture_positions[fidx]
+                else:
+                    return   # no hubo pick: no arrancamos drag
             self._drag_source_z = float(z0)
             self._drag_anchor_x = float(x0)
             self._drag_anchor_y = float(y0)
@@ -503,7 +548,11 @@ class IsoViewer(gl.GLViewWidget):
         # robaba el foco). Solo orientacion: no cambia posicion ni acustica.
         if is_orient:
             idx = self._pick_source(ev.x(), ev.y())
-            self._orient_source_idx = idx if idx >= 0 else -1
+            if idx >= 0:
+                self._orient_source_idx = idx
+            else:
+                # Ninguna fuente: rotar el mueble bajo el cursor (yaw).
+                self._orient_furn_idx = self._pick_furniture(ev.x(), ev.y())
             return
 
         # Ctrl + Click derecho -> colocar fuente acustica a 1 m del piso
@@ -554,6 +603,17 @@ class IsoViewer(gl.GLViewWidget):
                 self.sourceTiltRequested.emit(self._orient_source_idx, d_pitch)
             return
 
+        # Orientacion de mueble (Alt+Ctrl+Left sostenido): horizontal = yaw,
+        # vertical = pitch (inclinacion). Ambos a la vez, igual que el bafle.
+        if self._orient_furn_idx >= 0 and (btns & Qt.LeftButton):
+            d_az = float(diff.x()) * self.BAFFLE_ROTATE_DEG_PER_PX
+            d_pitch = -float(diff.y()) * self.BAFFLE_TILT_DEG_PER_PX
+            if d_az != 0.0:
+                self.furnitureRotateRequested.emit(self._orient_furn_idx, d_az)
+            if d_pitch != 0.0:
+                self.furnitureTiltRequested.emit(self._orient_furn_idx, d_pitch)
+            return
+
         # Arrastre de fuente o receptor (Shift+LeftButton sostenido).
         if self._dragging_source_idx != -1 and (btns & Qt.LeftButton):
             if self._drag_mode == "z":
@@ -584,6 +644,26 @@ class IsoViewer(gl.GLViewWidget):
                 )
             return
 
+        # Arrastre de mueble (Shift+LeftButton sostenido; misma mecanica que la
+        # fuente: XY sobre el plano z=cte, o solo Z con Ctrl).
+        if self._dragging_furn_idx != -1 and (btns & Qt.LeftButton):
+            if self._drag_mode == "z":
+                new_z = self._pick_vertical_line(
+                    int(lpos.x()), int(lpos.y()),
+                    self._drag_anchor_x, self._drag_anchor_y)
+                if new_z is None:
+                    return
+                new_x, new_y = self._drag_anchor_x, self._drag_anchor_y
+            else:
+                pt = self._pick_horizontal_plane(
+                    int(lpos.x()), int(lpos.y()), self._drag_source_z)
+                if pt is None:
+                    return
+                new_x, new_y, new_z = pt[0], pt[1], self._drag_source_z
+            self.furnitureMoveRequested.emit(
+                self._dragging_furn_idx, new_x, new_y, new_z)
+            return
+
         if self._inclining_wall is not None and (btns & Qt.RightButton):
             dy = float(lpos.y()) - self._incline_press_y
             self.wallDragMoved.emit(-dy * self.WALL_DRAG_DEG_PER_PX)
@@ -606,8 +686,14 @@ class IsoViewer(gl.GLViewWidget):
         if ev.button() == Qt.LeftButton and self._orient_source_idx >= 0:
             self._orient_source_idx = -1   # soltar -> detiene el gesto de orientacion
             return
+        if ev.button() == Qt.LeftButton and self._orient_furn_idx >= 0:
+            self._orient_furn_idx = -1
+            return
         if ev.button() == Qt.LeftButton and self._dragging_source_idx != -1:
             self._dragging_source_idx = -1
+            return
+        if ev.button() == Qt.LeftButton and self._dragging_furn_idx != -1:
+            self._dragging_furn_idx = -1
             return
         if ev.button() == Qt.RightButton and self._inclining_wall is not None:
             self._inclining_wall = None

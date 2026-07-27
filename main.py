@@ -158,6 +158,12 @@ class MainWindow(QMainWindow):
         # Alt+Ctrl: gestos de orientacion del bafle (rotar / inclinar) en vivo.
         self.viewer.sourceRotateRequested.connect(self._on_source_rotate_from_viewer)
         self.viewer.sourceTiltRequested.connect(self._on_source_tilt_from_viewer)
+        # Muebles: mismos gestos que las fuentes (mover / doble-click editar /
+        # Alt+Ctrl rotar yaw). Las fuentes tienen prioridad de picking.
+        self.viewer.furnitureMoveRequested.connect(self._on_furniture_moved_from_viewer)
+        self.viewer.furnitureEditRequested.connect(self._on_furniture_edit_from_viewer)
+        self.viewer.furnitureRotateRequested.connect(self._on_furniture_rotate_from_viewer)
+        self.viewer.furnitureTiltRequested.connect(self._on_furniture_tilt_from_viewer)
 
         self._on_params(self.controls.get_params())
         self._setup_shortcuts()
@@ -701,7 +707,9 @@ class MainWindow(QMainWindow):
         self._maybe_snapshot(force=True)
 
     def _on_source_moved_from_viewer(self, idx: int, x: float, y: float, z: float):
-        """Shift+drag en el viewer 3D: mover fuente acustica (actualiza en-lugar)."""
+        """Shift+drag en el viewer 3D: mover fuente acustica (actualiza en-lugar).
+        Se traba en los limites del recinto (clamp al bbox)."""
+        x, y, z = self.acoustic._clamp_to_room_bbox(x, y, z)
         srcs = self.acoustic.sources
         if 0 <= idx < len(srcs):
             # Mutar SOLO la posicion en-lugar: preserva orientacion/pitch/bafle/
@@ -741,8 +749,29 @@ class MainWindow(QMainWindow):
         self._note_activity()
 
     def _on_receiver_moved_from_viewer(self, x: float, y: float, z: float):
-        """Shift+drag sobre la cruz del receptor: moverlo a nueva posicion."""
+        """Shift+drag sobre la cruz del receptor: moverlo a nueva posicion.
+        Se traba en los limites del recinto (clamp al bbox)."""
+        x, y, z = self.acoustic._clamp_to_room_bbox(x, y, z)
         self.acoustic.move_receiver_to(x, y, z)
+        self._note_activity()
+
+    def _on_furniture_moved_from_viewer(self, idx: int, x: float, y: float, z: float):
+        """Shift+drag sobre un mueble: moverlo (colisión-stop en el panel)."""
+        self.acoustic.apply_furniture_move(idx, x, y, z)
+        self._note_activity()
+
+    def _on_furniture_edit_from_viewer(self, idx: int):
+        """Doble-click sobre un mueble: abrir su editor."""
+        self.acoustic._edit_furniture_by_idx(idx)
+
+    def _on_furniture_rotate_from_viewer(self, idx: int, d_yaw: float):
+        """Alt+Ctrl+Left drag horizontal sobre un mueble: rotar yaw (solo cajas)."""
+        self.acoustic.apply_furniture_rotate(idx, d_yaw)
+        self._note_activity()
+
+    def _on_furniture_tilt_from_viewer(self, idx: int, d_pitch: float):
+        """Alt+Ctrl+Left drag vertical sobre un mueble: inclinar pitch (solo cajas)."""
+        self.acoustic.apply_furniture_tilt(idx, d_pitch)
         self._note_activity()
 
     def _on_source_edit_from_viewer(self, idx: int):
@@ -1005,6 +1034,12 @@ class MainWindow(QMainWindow):
             "face_materials": face_mat,
             # v7: mobiliario (obstaculos rigidos con absorcion por cara).
             "furniture": [m.to_dict() for m in getattr(ap, "furniture", [])],
+            # Material por mueble (paralelo a "furniture"; null = rigido). Aditivo:
+            # v7 sin la clave -> todos rigidos al cargar. Ver _furniture_mat_names.
+            "furniture_materials": [
+                (getattr(ap, "_furniture_mat_names", {}) or {}).get(i)
+                for i in range(len(getattr(ap, "furniture", [])))
+            ],
             # v8: parches de absorcion sub-cara (region + material dentro de una cara).
             "absorption_patches": [p.to_dict() for p in getattr(ap, "_patches", [])],
         }
@@ -1147,6 +1182,13 @@ class MainWindow(QMainWindow):
                             for m in (ac.get("furniture") or [])]
         except Exception:
             ap.furniture = []
+        # Material por mueble (paralelo a furniture; sin la clave -> rigidos).
+        try:
+            fmats = ac.get("furniture_materials") or []
+            ap._furniture_mat_names = {i: str(nm)
+                                       for i, nm in enumerate(fmats) if nm}
+        except Exception:
+            ap._furniture_mat_names = {}
         # Fuentes
         ap.sources.sources.clear()
         for s in ac.get("sources") or []:
@@ -1178,6 +1220,8 @@ class MainWindow(QMainWindow):
                     self.status.setText(f"Aviso: respuesta de fuente ignorada ({e})")
             ap.sources.add(src)
         ap._refresh_sources_list()
+        if hasattr(ap, "_refresh_furniture_list"):
+            ap._refresh_furniture_list()
         # Si el receptor del archivo quedó fuera del recinto (p.ej. una forma
         # custom guardada con el receptor en el (0,0) por defecto), reubicarlo
         # al interior — el move_receiver_to de arriba pisó la reubicación que

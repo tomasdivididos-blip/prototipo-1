@@ -238,6 +238,114 @@ class SourceMarkers:
         self._item_sel = None
 
 
+def _furniture_wireframe(furn, nseg=24):
+    """Segmentos (pares de puntos) para GLLinePlotItem(mode='lines') de un mueble.
+
+    Caja: 12 aristas del prisma con yaw sobre z. Cilindro: 2 anillos (piso/tope)
+    + montantes verticales (invariante al yaw). Devuelve lista de (x,y,z) en
+    PARES (cada 2 puntos = un segmento). El mueble es puramente geometrico aca;
+    su efecto acustico va por el carve/xi/SBIR del panel.
+    """
+    kind = getattr(furn, "kind", "box")
+    cx, cy, cz = [float(v) for v in furn.position]
+    sx, sy, sz = [float(v) for v in furn.size]
+    segs = []
+    if kind == "cylinder":
+        r = sx / 2.0
+        z0, z1 = cz - sz / 2.0, cz + sz / 2.0
+        ang = [2 * np.pi * k / nseg for k in range(nseg)]
+        ring0 = [(cx + r * np.cos(a), cy + r * np.sin(a), z0) for a in ang]
+        ring1 = [(cx + r * np.cos(a), cy + r * np.sin(a), z1) for a in ang]
+        for ring in (ring0, ring1):
+            for k in range(nseg):
+                segs.append(ring[k]); segs.append(ring[(k + 1) % nseg])
+        step = max(1, nseg // 8)             # ~8 montantes verticales
+        for k in range(0, nseg, step):
+            segs.append(ring0[k]); segs.append(ring1[k])
+        return segs
+    # Caja con yaw (sobre z) + pitch (sobre el eje local ey). Mismos ejes que
+    # Furniture.contains -> el wireframe coincide con lo que se talla.
+    th = np.radians(float(getattr(furn, "orientation", 0.0) or 0.0))
+    ph = np.radians(float(getattr(furn, "pitch", 0.0) or 0.0))
+    c, s = np.cos(th), np.sin(th)
+    cp, sp = np.cos(ph), np.sin(ph)
+    ex0 = np.array([c, s, 0.0]); ez0 = np.array([0.0, 0.0, 1.0])
+    ex = cp * ex0 + sp * ez0                 # ex' (inclina con pitch)
+    ey = np.array([-s, c, 0.0])              # ey' (invariante al pitch)
+    ez = -sp * ex0 + cp * ez0                # ez'
+    c0 = np.array([cx, cy, cz])
+    hx, hy, hz = sx / 2.0, sy / 2.0, sz / 2.0
+
+    def R(a, b, d):                          # coords locales -> mundo
+        p = c0 + a * ex + b * ey + d * ez
+        return (float(p[0]), float(p[1]), float(p[2]))
+
+    box = [R(-hx, -hy, -hz), R(hx, -hy, -hz), R(hx, hy, -hz), R(-hx, hy, -hz),
+           R(-hx, -hy, hz),  R(hx, -hy, hz),  R(hx, hy, hz),  R(-hx, hy, hz)]
+    edges = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4),
+             (0, 4), (1, 5), (2, 6), (3, 7)]
+    for a, b in edges:
+        segs.append(box[a]); segs.append(box[b])
+    return segs
+
+
+class FurnitureMarkers:
+    """Muebles como wireframe (caja/cilindro) en el visor 3D.
+
+    Mismo patron PROBADO que SourceMarkers y las aristas del recinto:
+    GLLinePlotItem (pos float32, color unico, mode='lines') actualizado IN-PLACE
+    via `setData` — NUNCA `removeItem`+`addItem` por frame, y NUNCA
+    `GLMeshItem(shader=None, faceColors=...)` (no renderiza en esta escena).
+    Dos items persistentes: normal (verde-azulado, para distinguir de las
+    fuentes rosas) y seleccionado (naranja).
+    """
+
+    _COL     = (0.40, 0.85, 0.75, 1.0)       # verde-azulado (mueble)
+    _COL_SEL = (0.98, 0.55, 0.05, 1.0)       # naranja (mueble seleccionado)
+    _EMPTY = np.zeros((0, 3), dtype=np.float32)
+
+    def __init__(self, viewer: gl.GLViewWidget):
+        self.viewer = viewer
+        self._item_normal = None
+        self._item_sel = None
+
+    def _ensure_items(self):
+        if self._item_normal is None:
+            self._item_normal = gl.GLLinePlotItem(
+                pos=self._EMPTY, color=self._COL, width=2.0,
+                antialias=True, mode="lines")
+            self.viewer.addItem(self._item_normal)
+        if self._item_sel is None:
+            self._item_sel = gl.GLLinePlotItem(
+                pos=self._EMPTY, color=self._COL_SEL, width=2.4,
+                antialias=True, mode="lines")
+            self.viewer.addItem(self._item_sel)
+
+    def update(self, muebles, selected_idx: int = -1, **_):
+        self._ensure_items()
+        normal_segs, sel_segs = [], []
+        for i, m in enumerate(muebles or []):
+            segs = _furniture_wireframe(m)
+            (sel_segs if i == selected_idx else normal_segs).extend(segs)
+        for item, segs in ((self._item_normal, normal_segs),
+                           (self._item_sel, sel_segs)):
+            if segs:
+                item.setData(pos=np.asarray(segs, dtype=np.float32))
+                item.setVisible(True)
+            else:
+                item.setVisible(False)
+
+    def set_positions(self, muebles, selected_idx: int = -1):
+        self.update(muebles, selected_idx=selected_idx)
+
+    def clear(self):
+        for it in (self._item_normal, self._item_sel):
+            if it is not None:
+                self.viewer.removeItem(it)
+        self._item_normal = None
+        self._item_sel = None
+
+
 class ReceiverMarker:
     """Una cruz 3D simple para marcar el receptor.
 
