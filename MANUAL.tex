@@ -2268,7 +2268,35 @@ ahora:
     de archivo; valida (nombre $+$ absorción por banda), copia a
     \texttt{materials/} sin pisar el catálogo y recarga la biblioteca en el
     sitio (\texttt{MaterialLibrary.reload}) --- disponible en todo el programa
-    sin reiniciar.%
+    sin reiniciar.\\[2pt]
+    \textbf{Cambios v2.18} (19 de julio): \textbf{muebles} como obstáculos en el
+    modelo modal --- modelado completo (obstáculo rígido $+$ absorción $+$
+    reflexión) y manipulación directa en el visor (uso en \S6.4).
+    (A) \textbf{Obstáculo rígido (carve)}: un mueble (caja o cilindro) talla la
+    malla del aire (los tets adentro se quitan antes de \texttt{build\_KM}; la
+    superficie del hueco queda rígida por condición natural). Los modos se corren
+    solos, exacto. Preserva la malla original para la absorción; API estable del
+    solver intacta (\texttt{furniture.carve\_mesh}; \texttt{muebles=[]}
+    $\to$ idéntico al histórico).
+    (B) \textbf{Absorción (A36)}: con material asignado, las caras aire-mueble
+    entran al mismo A36 que las paredes ($\xi_n$ pesado por $\phi_n^2$ sobre el
+    mueble); sin material $=$ rígido. Un sillón tapizado debe absorber.
+    (C) \textbf{Reflexión (SBIR)}: la cara superior del mueble se agrega al SBIR
+    como panel finito (rolloff de Rindel por difracción de borde).
+    (D) \textbf{Interfaz}: grupo \menu{Muebles} (Añadir/Editar/Quitar/Duplicar)
+    $+$ \texttt{FurnitureEditDialog} (tipo, centro, tamaño, yaw, pitch, material,
+    etiqueta) $+$ \textbf{wireframe} verde-azulado en el visor
+    (\texttt{GLLinePlotItem}, nunca \texttt{GLMeshItem(shader=None)}). Persistido
+    en el \texttt{.room} con su material (\texttt{furniture\_materials}, aditivo).
+    (E) \textbf{Manipulación directa} (mismos gestos que las fuentes):
+    \tecla{Shift}$+$arrastrar (mover XY), \tecla{Ctrl}$+$\tecla{Shift} (Z),
+    \tecla{Alt}$+$\tecla{Ctrl} (girar yaw horizontal / inclinar pitch vertical),
+    doble-click (editar). El \textbf{pitch es físico}: afecta el carve, no es solo
+    visual (pitch$=0$ reduce exacto).
+    (F) \textbf{Colisiones (AABB)}: un mueble no se superpone con otro mueble ni
+    con el bafle de un parlante, ni se sale del recinto (frena en el drag; avisa
+    en Añadir/Editar). Además, fuentes y receptor se traban en las paredes del
+    recinto al arrastrarlos (clamp al bounding box).%
   }
 \end{center}
 
