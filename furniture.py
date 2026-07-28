@@ -50,6 +50,10 @@ class Furniture:
                   el radio se toma de size[0]/2 (seccion circular, eje vertical).
     orientation : yaw del mueble [deg] alrededor de z (solo box; el cilindro
                   circular es invariante).
+    pitch       : inclinacion [deg] del box alrededor de su eje local ey (tras
+                  el yaw). AFECTA EL CARVE (no es solo visual): un mueble
+                  inclinado talla la region inclinada. pitch=0 reduce exacto al
+                  caso solo-yaw. El cilindro lo ignora (se apoya vertical).
     label       : nombre para UI / informe de auditoria.
     provenance  : de donde salieron las dimensiones (medida propia, catalogo,
                   archivo importado + licencia). Trazabilidad (R6.6).
@@ -58,6 +62,7 @@ class Furniture:
     position: Tuple[float, float, float] = (0.0, 0.0, 0.0)
     size: Tuple[float, float, float] = (0.5, 0.5, 0.5)
     orientation: float = 0.0
+    pitch: float = 0.0
     label: str = "mueble"
     provenance: str = ""
 
@@ -84,12 +89,17 @@ class Furniture:
             r = sx / 2.0
             return ((p[:, 0] ** 2 + p[:, 1] ** 2 <= r * r)
                     & (np.abs(p[:, 2]) <= sz / 2.0))
-        # box con yaw: rotar el punto al frame local del mueble (por -yaw)
+        # box con yaw (+pitch): proyectar el punto sobre los ejes locales.
+        # ejes: yaw th sobre z -> ex=(c,s,0), ey=(-s,c,0), ez=(0,0,1);
+        # luego pitch ph sobre ey -> ex'=cp*ex+sp*ez, ez'=-sp*ex+cp*ez, ey'=ey.
+        # pitch=0 reduce EXACTO al caso solo-yaw (cp=1, sp=0).
         th = np.radians(self.orientation)
+        ph = np.radians(float(getattr(self, "pitch", 0.0) or 0.0))
         c, s = np.cos(th), np.sin(th)
-        xl = c * p[:, 0] + s * p[:, 1]
-        yl = -s * p[:, 0] + c * p[:, 1]
-        zl = p[:, 2]
+        cp, sp = np.cos(ph), np.sin(ph)
+        xl = (cp * c) * p[:, 0] + (cp * s) * p[:, 1] + sp * p[:, 2]   # . ex'
+        yl = (-s) * p[:, 0] + c * p[:, 1]                            # . ey'
+        zl = (-sp * c) * p[:, 0] + (-sp * s) * p[:, 1] + cp * p[:, 2]  # . ez'
         return ((np.abs(xl) <= sx / 2.0)
                 & (np.abs(yl) <= sy / 2.0)
                 & (np.abs(zl) <= sz / 2.0))
@@ -98,6 +108,7 @@ class Furniture:
     def to_dict(self) -> dict:
         return {"kind": self.kind, "position": list(self.position),
                 "size": list(self.size), "orientation": self.orientation,
+                "pitch": self.pitch,
                 "label": self.label, "provenance": self.provenance}
 
     @classmethod
@@ -106,6 +117,7 @@ class Furniture:
                    position=tuple(d.get("position", (0, 0, 0))),
                    size=tuple(d.get("size", (0.5, 0.5, 0.5))),
                    orientation=float(d.get("orientation", 0.0)),
+                   pitch=float(d.get("pitch", 0.0)),
                    label=str(d.get("label", "mueble")),
                    provenance=str(d.get("provenance", "")))
 

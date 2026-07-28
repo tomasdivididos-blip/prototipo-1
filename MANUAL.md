@@ -318,6 +318,47 @@ Formato del archivo:
 
 Los 8 valores corresponden a las bandas de octava: **63 / 125 / 250 / 500 / 1000 / 2000 / 4000 / 8000 Hz**.
 
+### 6.4 Muebles
+
+Un **mueble** es un objeto sólido (caja o cilindro) que entra en el modelo modal como un **obstáculo real**. No es un adorno visual: afecta la física por **tres canales**:
+
+1. **Obstáculo rígido (carve).** La malla del aire se **talla**: los tetraedros dentro del mueble se quitan del dominio. La superficie del hueco queda como pared rígida (condición natural, gratis). Resultado: los **modos se corren** por sí solos (exacto, no perturbativo).
+2. **Absorción (A36).** Si al mueble le asignás un **material**, sus caras absorben según la presión modal sobre ellas — igual que las paredes. Un sillón tapizado domina por **absorción**, no por desplazar volumen; modelarlo rígido es cualitativamente errado.
+3. **Reflexión (SBIR).** La cara superior del mueble (el sobre del escritorio, el respaldo del sofá) rebota con **rolloff de panel finito** (difracción de borde), y aparece en el diálogo SBIR.
+
+El efecto se aplica al **recalcular los modos**.
+
+#### Agregar y editar
+
+En el grupo **Muebles** (pestaña Acústica): **Añadir / Editar / Quitar / Duplicar**. El editor pide:
+
+| Campo | Detalle |
+|---|---|
+| **Tipo** | Caja o Cilindro |
+| **Centro (X, Y, Z)** | posición del centro geométrico [m]; el mueble nuevo aparece **en el medio de la sala** |
+| **Tamaño** | caja = Ancho × Largo × Alto; cilindro = Diámetro × Alto |
+| **Orientación (yaw)** | giro alrededor del eje vertical (solo caja) |
+| **Inclinación (pitch)** | inclinación (solo caja); **afecta el carve**, no es solo visual |
+| **Material** | del catálogo, o **Rígido** (sin absorción) |
+| **Etiqueta / Procedencia** | nombre y trazabilidad de las medidas |
+
+El mueble se ve como un **wireframe verde-azulado** en el visor 3D (naranja al seleccionarlo en la lista). Se guarda en el `.room` junto con su material.
+
+#### Mover en el visor 3D (mismos gestos que las fuentes)
+
+| Gesto | Acción |
+|---|---|
+| **Shift + arrastrar** | mover en el plano horizontal (XY) |
+| **Ctrl + Shift + arrastrar** | mover en altura (Z) |
+| **Alt + Ctrl + arrastrar** | horizontal = girar (yaw), vertical = inclinar (pitch) |
+| **Doble-click** | abrir el editor |
+
+> Las **fuentes tienen prioridad** de selección: el mueble se agarra solo si no hay una fuente o el receptor bajo el cursor.
+
+#### Objetos sólidos — no se superponen
+
+Un mueble **no puede** ocupar el mismo espacio que otro mueble, que el **bafle de un parlante**, ni salirse de los **límites del recinto**. Al arrastrarlo, **frena** al tocar el obstáculo; al Añadir/Editar con una posición inválida, avisa el motivo y no lo agrega. Del mismo modo, **las fuentes y el receptor se traban en las paredes** del recinto al arrastrarlos (se deslizan pegados al límite en vez de salirse).
+
 ---
 
 ## 7. Cálculo de modos FEM
@@ -2105,4 +2146,32 @@ Botón **"Cargar tu material…"** en el diálogo Materiales: muestra un cuadro 
 
 ---
 
-*Manual actualizado al 14 de Julio de 2026 — v2.17.*
+**Cambios v2.18** (19 de julio 2026): **muebles** como obstáculos en el modelo modal — modelado completo (obstáculo rígido + absorción + reflexión) y manipulación directa en el visor. Uso en §6.4. Seis ejes.
+
+### A. Muebles como obstáculo rígido (carve)
+
+Un mueble (caja o cilindro) **talla** la malla del aire: los tetraedros dentro del mueble se quitan del dominio antes de ensamblar K, M (la superficie del hueco queda rígida por condición natural, sin ensamblar nada). Los **modos se corren solos** (exacto, no perturbativo). El carve va entre el mallado y `build_KM`, preservando la malla original para la absorción; la API estable del solver no se toca (`furniture.carve_mesh`; cableado en `acoustic_analysis.run_fem_modal[_routed]` vía `muebles=[]` opcional → sin muebles, resultado idéntico al histórico).
+
+### B. Absorción del mueble (A36)
+
+Si el mueble tiene un **material**, sus caras (la interfaz aire-mueble, extraída de la malla original) entran como grupos nuevos al mismo mecanismo A36 que las paredes: el ξ por modo se pesa por la presión modal sobre el mueble. Sin material = **rígido** (α por defecto). Un sillón tapizado **debe** absorber: en banda modal su rol dominante es la absorción selectiva, no desplazar volumen.
+
+### C. Reflexión del mueble (SBIR)
+
+La cara superior de cada mueble se agrega al análisis SBIR como un **panel finito** (rolloff de Rindel por difracción de borde): el sobre del escritorio o el respaldo del sofá rebota, con la reflexión de graves atenuada por el tamaño finito.
+
+### D. Interfaz: grupo Muebles + editor + wireframe
+
+Nuevo grupo **Muebles** en la pestaña Acústica (Añadir / Editar / Quitar / Duplicar). El editor (`FurnitureEditDialog`) toma tipo, centro, tamaño, orientación (yaw), inclinación (pitch), material y etiqueta — todo por edición numérica exacta. El mueble se dibuja como **wireframe** verde-azulado en el visor 3D (naranja al seleccionarlo), con el patrón probado `GLLinePlotItem` (nunca `GLMeshItem(shader=None)`). Se persiste en el `.room` junto con su material (`furniture_materials`, aditivo).
+
+### E. Manipulación directa (mismos gestos que las fuentes)
+
+Los muebles se mueven y orientan con el mouse igual que los bafles: **Shift**+arrastrar (mover XY), **Ctrl+Shift** (mover Z), **Alt+Ctrl** (girar yaw en horizontal / inclinar pitch en vertical), **doble-click** (editar). Las fuentes tienen prioridad de selección. La **inclinación (pitch) es física**: afecta el carve (lo que inclinás es lo que se talla), no es solo visual; con pitch=0 el cómputo se reduce exacto al caso sin inclinación.
+
+### F. Colisiones — los objetos sólidos no se atraviesan
+
+Un mueble no puede superponerse con otro mueble, con el **bafle de un parlante**, ni salirse de los **límites del recinto** (test por AABB). Al arrastrar, **frena** al tocar el obstáculo; al Añadir/Editar con posición inválida, se avisa el motivo y no se agrega. Además, las **fuentes y el receptor** ahora se **traban en las paredes** del recinto al arrastrarlos (clamp al bounding box: se deslizan pegados al límite en vez de salirse).
+
+---
+
+*Manual actualizado al 19 de Julio de 2026 — v2.18.*

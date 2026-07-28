@@ -1580,6 +1580,51 @@ bien.
   **Nuevos archivos:** `furniture.py`, `rir.py`, `bench_furniture.py`, `bench_furniture_absorption.py`,
   `bench_furniture_phaseC.py`, `bench_furniture_sbir.py`, `bench_rir.py`, `analyze_rirs.py`, `.gitignore`.
 
+- **19 Jul 2026 — Muebles: capstone visual (UI) + v2.18 + PR.** Se cerró el
+  feature MUEBLES de punta a punta. El cómputo (carve/ξ/SBIR) ya estaba en `main`
+  (PR #2, `006ca22`, vía agente remoto); esta sesión agregó la **UI y la
+  manipulación directa**. Rama `muebles-ui` off `main` (commit `918c730` código +
+  commit de docs); MANUAL v2.18 integrado (.md §6.4 + changelog A-F, .tex, .pdf 35
+  pág, limpio). Test: `smoke_test_furniture_ui.py` **20/20**; benches de cómputo
+  de muebles y de fuentes verdes.
+  - **UI:** grupo "Muebles" en Acústica (Añadir/Editar/Quitar/Duplicar),
+    `FurnitureEditDialog` (caja/cilindro, centro, tamaño, yaw, **pitch**, material,
+    etiqueta), `FurnitureMarkers` (wireframe verde-azulado, patrón GLLinePlotItem
+    in-place — NUNCA GLMeshItem shader=None). Material por mueble en un holder
+    `_furniture_mat_names` {idx: nombre}, persistido en `.room` como
+    `furniture_materials` (paralelo a `furniture`, aditivo; v7 → todos rígidos).
+  - **Manipulación directa** (mismos gestos que fuentes, en `viewer.py`): Shift=mover
+    XY, Ctrl+Shift=Z, Alt+Ctrl=rotar yaw (horiz) / inclinar pitch (vert), doble-click=
+    editar. Señales `furnitureMove/Edit/Rotate/TiltRequested`. **Las fuentes tienen
+    prioridad de picking** (`_pick_furniture` corre solo si `_pick_source`==-1). Move/
+    rotate/tilt mutan in-place + `set_positions` (sin reconstruir la lista → sin cuelgue).
+  - **Decisiones de diseño (importantes):**
+    1. **Pitch FÍSICO**: se agregó `pitch` a `Furniture` (dataclass + `contains()` +
+       to/from_dict). Afecta el CARVE (lo que inclinás es lo que se talla), no es solo
+       visual como el bafle. `pitch=0` reduce EXACTO al caso solo-yaw → los benches de
+       cómputo no se tocan. Ejes locales (yaw sobre z, luego pitch sobre ey) compartidos
+       entre `contains`, `_furniture_wireframe` y el AABB del panel → dibujo = carve.
+    2. **#2 "aparecían en el origen" era el FRAME**: el recinto vivo está CENTRADO en el
+       origen (gotcha `make_room`/`build_room_geometry`); mi default asumía esquina
+       (`Lx/2`). Fix: `_room_center_default()` usa el bbox real del surface (centro de
+       planta, apoyado en piso) → robusto a cualquier `origin_mode`.
+    3. **Colisiones por AABB** (`_furniture_conflict`): un mueble no se superpone con
+       otro mueble, con el **bafle de un parlante** (`_source_baffle_aabb`), ni sale del
+       **recinto** (`_room_bbox`). Colisión-STOP en el drag (revierte si conflicto);
+       aviso en Añadir/Editar. Conservador para cajas rotadas/inclinadas (envolvente).
+    4. **Fuentes y receptor se traban** en las paredes al arrastrar: `_clamp_to_room_bbox`
+       en `_on_source_moved_from_viewer`/`_on_receiver_moved_from_viewer` (CLAMP = desliza
+       pegado a la pared, no freeze — más natural para un punto; distinto del freeze de
+       muebles, decisión consciente). Si el usuario pide freeze igual que muebles, cambiar ahí.
+  - **Contexto de git de la sesión:** el usuario estaba en la rama `juego-quiz-acustica`
+    (su WIP del juego PWA) con `juego/banco/*.js` modificados sin commitear. Para NO
+    ensuciar esa rama, se hizo `git stash push` de esos 4 archivos, `git switch -c
+    muebles-ui main`, se commiteó muebles, y al final `git switch juego-quiz-acustica` +
+    `git stash pop` para restaurar su WIP intacto. `recinto3.room` (untracked) es del usuario.
+  - **Falta:** push de `muebles-ui` + PR (el usuario dijo "commitea", no "push"; ofrecido).
+    Validación limpia definitiva del efecto físico del mueble sigue siendo A/B controlado
+    (ver [[calibracion-rirs]]).
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.
