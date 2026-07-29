@@ -45,6 +45,7 @@ from viewer import IsoViewer
 from acoustic_panel import AcousticPanel, FurnitureEditDialog
 from acoustic_viewer import _furniture_wireframe
 from furniture import Furniture
+import furniture as fu
 
 MAT_NAMES = ["Alfombra fina", "Madera", "Ladrillo"]
 
@@ -413,6 +414,156 @@ def t20_clamp_to_room_bbox():
     assert np.allclose(panel._clamp_to_room_bbox(1.0, 2.0, 1.5), (1.0, 2.0, 1.5)), \
         "punto interior no debe moverse"
     return "clamp: fuera -> pegado a la pared; dentro -> intacto"
+
+
+@test
+def t21_compound_contains_and_aabb():
+    """Compound (preset): contains = unión de partes; aabb envuelve todo; se
+    apoya en el piso."""
+    f, mat = fu.make_preset("Silla")
+    lo, hi = f.aabb(); f.position = (0.0, 0.0, -float(lo[2]))   # apoyar en z=0
+    lo, hi = f.aabb()
+    assert abs(lo[2]) < 1e-6, "no quedó apoyada en el piso"
+    cz = f.position[2]
+    assert f.contains(np.array([[0, 0, cz-0.02]]))[0], "asiento no está adentro"
+    assert not f.contains(np.array([[2.0, 2.0, 0.5]]))[0], "punto lejano adentro?"
+    assert mat == "Madera"
+    d = hi - lo
+    return f"compound: contains unión + aabb {d[0]:.2f}x{d[1]:.2f}x{d[2]:.2f}"
+
+
+@test
+def t22_compound_persistence():
+    """to_dict/from_dict preserva las partes del compound (.room)."""
+    f, _ = fu.make_preset("Escritorio")
+    f.position = (1.0, 2.0, 0.4); f.orientation = 30.0
+    g = Furniture.from_dict(f.to_dict())
+    assert g.kind == "compound" and g.parts and len(g.parts) == len(f.parts)
+    assert np.allclose(g.position, (1.0, 2.0, 0.4)) and abs(g.orientation-30) < 1e-9
+    pts = np.random.default_rng(0).uniform(-1, 3, (200, 3))
+    assert np.array_equal(f.contains(pts), g.contains(pts)), "contains no round-trip"
+    return "compound round-trip: partes + contains idénticos"
+
+
+@test
+def t23_compound_wireframe():
+    """El wireframe del compound concatena las partes y rota con el yaw."""
+    f, _ = fu.make_preset("Sillón")
+    segs = np.asarray(_furniture_wireframe(f))
+    assert segs.ndim == 2 and segs.shape[1] == 3 and len(segs) > 0
+    assert np.isfinite(segs).all()
+    f.orientation = 90.0
+    segs2 = np.asarray(_furniture_wireframe(f))
+    assert not np.allclose(segs, segs2), "el yaw no rotó el wireframe del compound"
+    return f"compound wireframe: {len(segs)} puntos, rota con el yaw"
+
+
+@test
+def t24_preset_insert_and_edit():
+    """Panel: insertar un preset (compound + material) y editarlo preserva la forma."""
+    _v, panel = make_panel()
+    n0 = len(panel.furniture)
+    panel._insert_preset("Mesa")
+    assert len(panel.furniture) == n0 + 1, "no se insertó el preset"
+    i = len(panel.furniture) - 1
+    m = panel.furniture[i]
+    assert m.kind == "compound" and m.parts, "el preset no es compound"
+    assert panel._furniture_mat_names.get(i) == "Madera"
+    assert "preset" in panel.list_furn.item(i).text()
+    dlg = FurnitureEditDialog(m, mat_name="Madera", mat_names=MAT_NAMES,
+                              dims_hint=(6, 8, 3))
+    dlg.sb_x.setValue(0.5)
+    f2, _mat = dlg.get_furniture()
+    assert f2.kind == "compound" and len(f2.parts) == len(m.parts), "editar perdió la forma"
+    assert abs(f2.position[0] - 0.5) < 1e-9
+    return "preset: insertar (compound+material) + editar preserva la forma"
+
+
+@test
+def t25_preset_move_rotate_tilt():
+    """Los gestos move/rotate/tilt funcionan sobre un compound."""
+    _v, panel = make_panel()
+    panel._insert_preset("Silla")
+    i = len(panel.furniture) - 1
+    p0 = panel.furniture[i].position
+    panel.apply_furniture_rotate(i, 25.0)
+    assert abs(panel.furniture[i].orientation - 25.0) < 1e-9, "no rotó"
+    panel.apply_furniture_tilt(i, 10.0)
+    assert abs(panel.furniture[i].pitch - 10.0) < 1e-9, "no inclinó"
+    panel.apply_furniture_move(i, p0[0]+0.3, p0[1], p0[2])
+    assert abs(panel.furniture[i].position[0] - (p0[0]+0.3)) < 1e-6, "no movió"
+    return "compound: rotate/tilt/move OK"
+
+
+@test
+def t26_pick_large_furniture_by_silhouette():
+    """Un mueble grande se agarra clickeando en su silueta (borde), no solo cerca
+    del centro. (El picking viejo por radio de 28px fallaba en muebles grandes.)"""
+    viewer, panel = make_panel(width=8.0, length=8.0, height=4.0)
+    viewer.resize(800, 600); viewer.repaint()
+    panel.move_receiver_to(3.5, 3.5, 0.2)     # receptor lejos, sin prioridad
+    panel.furniture.append(Furniture("box", position=(0.0, 0.0, 1.0),
+                                     size=(3.0, 3.0, 2.0), label="grande"))
+    panel._refresh_furniture_list()           # sincroniza pos + bboxes
+    i = len(panel.furniture) - 1
+    m = panel.furniture[i]
+    center_sp = viewer._project(tuple(m.position))
+    if center_sp is None:
+        return "skipped (no se pudo proyectar)"
+    lo, hi = m.aabb()
+    far = None
+    for a in (lo[0], hi[0]):
+        for b in (lo[1], hi[1]):
+            for c in (lo[2], hi[2]):
+                q = viewer._project((float(a), float(b), float(c)))
+                if q is not None and ((q[0]-center_sp[0])**2 +
+                                      (q[1]-center_sp[1])**2) ** 0.5 > 30:
+                    far = q
+    if far is None:
+        return "skipped (bbox chico en pantalla headless)"
+    # El borde está a >30px del centro -> el picking viejo (radio 28) fallaría.
+    assert viewer._pick_furniture(int(far[0]), int(far[1])) == i, \
+        "no agarró el mueble grande por la silueta"
+    # Un punto MUY lejos (fuera de la silueta) no debe agarrarlo.
+    assert viewer._pick_furniture(int(max(0, far[0]) + 300), int(far[1])) != i, \
+        "agarró el mueble desde fuera de su silueta"
+    return "mueble grande: agarrado por la silueta, no desde afuera"
+
+
+@test
+def t27_rotate_gesture_yaw_only():
+    """El gesto Alt+Ctrl rota (yaw) SIN inclinar, aunque el arrastre tenga
+    componente vertical -> el mueble no se 'cae' ni se traba después."""
+    from PyQt5.QtCore import Qt, QPointF, QEvent
+    from PyQt5.QtGui import QMouseEvent
+    viewer, panel = make_panel(width=8.0, length=8.0, height=4.0)
+    viewer.resize(800, 600); viewer.repaint()
+    panel.move_receiver_to(3.5, 3.5, 0.2)
+    viewer.furnitureRotateRequested.connect(panel.apply_furniture_rotate)
+    viewer.furnitureTiltRequested.connect(panel.apply_furniture_tilt)
+    panel._insert_preset("Silla")
+    i = len(panel.furniture) - 1
+    m = panel.furniture[i]
+    sp = viewer._project(tuple(m.position))
+    if sp is None:
+        return "skipped (no se pudo proyectar)"
+    px, py = int(sp[0]), int(sp[1])
+    ac = Qt.AltModifier | Qt.ControlModifier
+    viewer.mousePressEvent(QMouseEvent(QEvent.MouseButtonPress, QPointF(px, py),
+                                       Qt.LeftButton, Qt.LeftButton, ac))
+    assert viewer._orient_furn_idx == i, "no agarró el mueble para orientar"
+    for k in range(1, 6):                       # arrastre horizontal Y vertical
+        viewer.mouseMoveEvent(QMouseEvent(QEvent.MouseMove,
+            QPointF(px + 15*k, py + 8*k), Qt.NoButton, Qt.LeftButton, ac))
+    viewer.mouseReleaseEvent(QMouseEvent(QEvent.MouseButtonRelease,
+        QPointF(px + 75, py + 40), Qt.LeftButton, Qt.NoButton, ac))
+    assert abs(m.orientation) > 1e-6, "no rotó (yaw)"
+    assert abs(getattr(m, "pitch", 0.0)) < 1e-9, "se inclinó sin querer (pitch != 0)"
+    assert viewer._orient_furn_idx == -1, "no soltó el gesto"
+    p0 = m.position                              # y sigue movible tras rotar
+    panel.apply_furniture_move(i, p0[0]+0.3, p0[1], p0[2])
+    assert abs(m.position[0] - (p0[0]+0.3)) < 1e-6, "se traba: no se mueve tras rotar"
+    return "gesto rotar = solo yaw; pitch queda 0; sigue movible"
 
 
 # ---------------------------------------------------------------------------
