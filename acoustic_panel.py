@@ -31,7 +31,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QListWidget, QListWidgetItem, QDoubleSpinBox, QSpinBox,
     QComboBox, QCheckBox, QSlider, QFileDialog, QMessageBox, QDialog,
     QDialogButtonBox, QLineEdit, QProgressBar, QSizePolicy, QFrame,
-    QScrollArea,
+    QScrollArea, QMenu,
 )
 
 from sources import OmniSource, SourceArray, RHO0, C0
@@ -567,6 +567,10 @@ class FurnitureEditDialog(QDialog):
         self.setWindowTitle("Editar mueble" if furn is not None else "Añadir mueble")
         mat_names = list(mat_names or [])
         Lx, Ly, _Lz = dims_hint or (5.0, 4.0, 3.0)
+        # Un preset (compound) tiene forma fija: se edita posición/orientación/
+        # material/etiqueta, NO tipo ni tamaño (se preservan sus partes).
+        self._compound_src = (furn if furn is not None
+                              and getattr(furn, "kind", "") == "compound" else None)
 
         form = QFormLayout(self)
 
@@ -615,7 +619,25 @@ class FurnitureEditDialog(QDialog):
         self.ed_prov.setPlaceholderText("medida propia / catálogo / …")
         form.addRow("Procedencia:", self.ed_prov)
 
-        if furn is not None:
+        if self._compound_src is not None:
+            # Preset: bloquear tipo y tamaño; permitir el resto.
+            self.combo_kind.setEnabled(False)
+            for w in (self.sb_sx, self.sb_sy, self.sb_sz,
+                      self.lbl_sx, self.lbl_sy, self.lbl_sz):
+                w.setEnabled(False)
+            lo, hi = furn.aabb(); d = hi - lo
+            self.lbl_sx.setText("(preset)")
+            self.sb_sx.setValue(float(d[0])); self.sb_sy.setValue(float(d[1]))
+            self.sb_sz.setValue(float(d[2]))
+            px, py, pz = furn.position
+            self.sb_x.setValue(px); self.sb_y.setValue(py); self.sb_z.setValue(pz)
+            self.sb_orient.setValue(float(getattr(furn, "orientation", 0.0) or 0.0))
+            self.sb_pitch.setValue(float(getattr(furn, "pitch", 0.0) or 0.0))
+            self.ed_label.setText(str(getattr(furn, "label", "") or ""))
+            self.ed_prov.setText(str(getattr(furn, "provenance", "") or ""))
+            if mat_name and mat_name in mat_names:
+                self.combo_mat.setCurrentText(mat_name)
+        elif furn is not None:
             self.combo_kind.setCurrentIndex(
                 1 if getattr(furn, "kind", "box") == "cylinder" else 0)
             px, py, pz = furn.position
@@ -660,6 +682,8 @@ class FurnitureEditDialog(QDialog):
         return self._KINDS[self.combo_kind.currentIndex()][0]
 
     def _on_kind_changed(self):
+        if self._compound_src is not None:
+            return   # preset: forma fija, no tocar los campos bloqueados
         cyl = self._kind() == "cylinder"
         # Cilindro: size = (diámetro, _, alto); el 2º lado y el yaw no aplican.
         self.lbl_sx.setText("Diám" if cyl else "An")
@@ -670,6 +694,20 @@ class FurnitureEditDialog(QDialog):
 
     def get_furniture(self):
         from furniture import Furniture
+        if self._compound_src is not None:
+            src = self._compound_src
+            furn = Furniture(
+                kind="compound",
+                parts=[Furniture.from_dict(p.to_dict()) for p in (src.parts or [])],
+                position=(float(self.sb_x.value()), float(self.sb_y.value()),
+                          float(self.sb_z.value())),
+                orientation=float(self.sb_orient.value()),
+                pitch=float(self.sb_pitch.value()),
+                label=self.ed_label.text().strip() or src.label,
+                provenance=self.ed_prov.text().strip())
+            mat = (self.combo_mat.currentText()
+                   if self.combo_mat.currentIndex() > 0 else None)
+            return furn, mat
         kind = self._kind()
         if kind == "cylinder":
             diam = float(self.sb_sx.value())
@@ -2013,6 +2051,13 @@ class AcousticPanel(QWidget):
         self.btn_edit_furn.clicked.connect(self._edit_furniture)
         self.btn_del_furn.clicked.connect(self._remove_furniture)
         self.btn_dup_furn.clicked.connect(self._duplicate_furniture)
+        self.btn_preset_furn = QPushButton("Insertar preset ▾")
+        self.btn_preset_furn.setToolTip(
+            "Muebles armados (silla, sillón, escritorio, mesa, banqueta,\n"
+            "velador, biblioteca): se insertan en el centro de la sala con un\n"
+            "material sugerido. Después movelos/rotalos como cualquier mueble.")
+        self.btn_preset_furn.clicked.connect(self._show_preset_menu)
+        vf.addWidget(self.btn_preset_furn)
         layout.addWidget(grp_furn)
 
         # --- Receptor ---
@@ -2602,11 +2647,71 @@ class AcousticPanel(QWidget):
         return self.list_furn.currentRow()
 
     def _furn_item_text(self, i, m) -> str:
-        cyl = getattr(m, "kind", "box") == "cylinder"
+        kind = getattr(m, "kind", "box")
+        mat = self._furniture_mat_names.get(i)
+        if kind == "compound":
+            lo, hi = m.aabb(); d = hi - lo
+            return (f"{m.label}  [preset {d[0]:.2f}×{d[1]:.2f}×{d[2]:.2f} m "
+                    f"· {mat or 'rígido'}]")
+        cyl = kind == "cylinder"
         sx, sy, sz = m.size
         dims = f"Ø{sx:.2f}×{sz:.2f}" if cyl else f"{sx:.2f}×{sy:.2f}×{sz:.2f}"
-        mat = self._furniture_mat_names.get(i)
         return f"{m.label}  [{'cilindro' if cyl else 'caja'} {dims} m · {mat or 'rígido'}]"
+
+    def _show_preset_menu(self):
+        """Menú desplegable con los presets de muebles, agrupados (General / Aula /
+        Estudio)."""
+        import furniture as fu
+        menu = QMenu(self)
+        groups = getattr(fu, "FURNITURE_PRESET_GROUPS", None)
+        if groups:
+            for cat, names in groups.items():
+                sub = menu.addMenu(cat)
+                for name in names:
+                    sub.addAction(name,
+                                  lambda _c=False, n=name: self._insert_preset(n))
+        else:
+            for name in fu.FURNITURE_PRESETS:
+                menu.addAction(name,
+                               lambda _c=False, n=name: self._insert_preset(n))
+        menu.exec_(self.btn_preset_furn.mapToGlobal(
+            self.btn_preset_furn.rect().bottomLeft()))
+
+    def _insert_preset(self, name: str):
+        """Inserta un preset (compound) en el centro de la sala, apoyado en el
+        piso, con su material sugerido. Respeta las colisiones (no lo agrega si
+        el centro está ocupado)."""
+        import furniture as fu
+        furn, mat = fu.make_preset(name)
+        placement = fu.preset_placement(name)
+        try:
+            lo_r, hi_r = self._room_bbox()
+            cx = float((lo_r[0] + hi_r[0]) / 2.0)
+            cy = float((lo_r[1] + hi_r[1]) / 2.0)
+            floor, ceil = float(lo_r[2]), float(hi_r[2])
+        except Exception:
+            cx, cy, floor, ceil = 0.0, 0.0, 0.0, 3.0
+        lo, hi = furn.aabb()                        # con position (0,0,0)
+        if placement == "ceiling":
+            z = ceil - float(hi[2]) - 0.10          # suspendido, ~10 cm bajo el techo
+        else:
+            z = floor - float(lo[2])                # apoyado en el piso
+        furn.position = (cx, cy, z)
+        conflict = self._furniture_conflict(furn)
+        if conflict:
+            QMessageBox.warning(
+                self, "No se puede colocar",
+                f"El preset «{furn.label}» {conflict}. Hacé lugar en el centro "
+                f"o mové lo que estorba, y volvé a insertarlo.")
+            return
+        self.furniture.append(furn)
+        if mat:
+            self._furniture_mat_names[len(self.furniture) - 1] = mat
+        self.list_furn.setCurrentRow(len(self.furniture) - 1)
+        self._refresh_furniture_list()
+        self._log(f"Preset «{furn.label}» insertado"
+                  f"{f' (material {mat})' if mat else ' (rígido)'}. "
+                  f"Movelo/rotalo y recalculá los modos para aplicarlo.")
 
     def _refresh_furniture_list(self):
         """Repuebla la lista de muebles y refresca el wireframe 3D."""
@@ -2629,34 +2734,22 @@ class AcousticPanel(QWidget):
         self.viewer.update()
 
     def _sync_furniture_positions_to_viewer(self):
-        """Pasa los centros de los muebles al viewer para picking (drag /
-        doble-click), igual que _sync_source_positions_to_viewer."""
+        """Pasa los centros y los bounding boxes de los muebles al viewer para el
+        picking (drag / doble-click). El bbox permite agarrar el mueble clickeando
+        en cualquier parte de su silueta, no solo cerca del centro (clave para los
+        muebles grandes)."""
         if hasattr(self.viewer, "set_furniture_positions"):
             self.viewer.set_furniture_positions(
                 [tuple(m.position) for m in self.furniture])
+        if hasattr(self.viewer, "set_furniture_bboxes"):
+            self.viewer.set_furniture_bboxes(
+                [m.aabb() for m in self.furniture])
 
     @staticmethod
     def _furniture_aabb(m):
-        """AABB (min, max) de un mueble en coords mundo. Caja: envolvente de las
-        8 esquinas rotadas por yaw+pitch (exacto). Cilindro: prisma vertical."""
-        cx, cy, cz = [float(v) for v in m.position]
-        sx, sy, sz = [float(v) for v in m.size]
-        if getattr(m, "kind", "box") == "cylinder":
-            r = sx / 2.0
-            return (np.array([cx - r, cy - r, cz - sz / 2.0]),
-                    np.array([cx + r, cy + r, cz + sz / 2.0]))
-        th = np.radians(float(getattr(m, "orientation", 0.0) or 0.0))
-        ph = np.radians(float(getattr(m, "pitch", 0.0) or 0.0))
-        c, s = np.cos(th), np.sin(th)
-        cp, sp = np.cos(ph), np.sin(ph)
-        ex = np.array([cp * c, cp * s, sp])           # ejes locales (== contains)
-        ey = np.array([-s, c, 0.0])
-        ez = np.array([-sp * c, -sp * s, cp])
-        c0 = np.array([cx, cy, cz])
-        hx, hy, hz = sx / 2.0, sy / 2.0, sz / 2.0
-        corners = np.array([c0 + a * hx * ex + b * hy * ey + d * hz * ez
-                            for a in (-1, 1) for b in (-1, 1) for d in (-1, 1)])
-        return corners.min(axis=0), corners.max(axis=0)
+        """AABB (min, max) en coords mundo. Delega en Furniture.aabb(), que maneja
+        caja/cilindro/compound con yaw+pitch (dibujo == carve == colisión)."""
+        return m.aabb()
 
     @staticmethod
     def _source_baffle_aabb(s):
@@ -2704,8 +2797,10 @@ class AcousticPanel(QWidget):
     def _furniture_conflict(self, cand, ignore_idx: int = -1):
         """Mensaje si `cand` NO puede colocarse, o None si está OK. Chequea, por
         AABB: (1) solape con otro mueble, (2) solape con un parlante (bafle),
-        (3) que no se salga de los límites del recinto. Conservador para cajas
-        rotadas/inclinadas — seguro para 'los objetos sólidos no se atraviesan'."""
+        (3) que no se salga de paredes/techo del recinto. Conservador para cajas
+        rotadas/inclinadas (seguro para 'los objetos sólidos no se atraviesan').
+        El PISO no atrapa: los muebles se apoyan ahí y al inclinarse un borde baja
+        de z=0, lo cual es inofensivo para el carve (no hay tets bajo el piso)."""
         amin, amax = self._furniture_aabb(cand)
         for i, m in enumerate(self.furniture):
             if i == ignore_idx:
@@ -2722,7 +2817,9 @@ class AcousticPanel(QWidget):
             pass
         try:
             lo, hi = self._room_bbox()
-            if np.any(amin < lo - 1e-4) or np.any(amax > hi + 1e-4):
+            amin_c = amin.copy()
+            amin_c[2] = max(float(amin_c[2]), float(lo[2]))   # el piso no atrapa
+            if np.any(amin_c < lo - 1e-4) or np.any(amax > hi + 1e-4):
                 return "se saldría de los límites del recinto"
         except Exception:
             pass

@@ -54,6 +54,13 @@ class Furniture:
                   el yaw). AFECTA EL CARVE (no es solo visual): un mueble
                   inclinado talla la region inclinada. pitch=0 reduce exacto al
                   caso solo-yaw. El cilindro lo ignora (se apoya vertical).
+    parts       : para kind="compound", lista de sub-Furniture (box/cylinder)
+                  definidas en el FRAME LOCAL del compound (su position = offset
+                  respecto del centro del compound). El compound aplica su propio
+                  yaw/pitch a todo el conjunto. contains = union de las partes;
+                  asi un preset (silla, escritorio...) se talla/mueve como UNA
+                  pieza. Las patas finas simplemente no resuelven en la malla
+                  (correcto). None para box/cylinder.
     label       : nombre para UI / informe de auditoria.
     provenance  : de donde salieron las dimensiones (medida propia, catalogo,
                   archivo importado + licencia). Trazabilidad (R6.6).
@@ -65,10 +72,14 @@ class Furniture:
     pitch: float = 0.0
     label: str = "mueble"
     provenance: str = ""
+    parts: Optional[list] = None
 
     # ----- geometria -------------------------------------------------------
     def volume(self) -> float:
-        """Volumen analitico [m^3]."""
+        """Volumen analitico [m^3]. Compound: suma de partes (aprox, ignora
+        solapes; suficiente para el criterio de significancia)."""
+        if self.kind == "compound" and self.parts:
+            return float(sum(p.volume() for p in self.parts))
         sx, sy, sz = self.size
         if self.kind == "cylinder":
             r = sx / 2.0
@@ -76,13 +87,41 @@ class Furniture:
         return float(sx * sy * sz)
 
     def max_dim(self) -> float:
+        if self.kind == "compound" and self.parts:
+            lo, hi = self.aabb()
+            return float(max(hi - lo))
         return float(max(self.size))
+
+    def _local_axes(self):
+        """Ejes locales (ex', ey', ez') del mueble segun su yaw+pitch. Compartidos
+        por contains, aabb y el wireframe -> lo dibujado coincide con lo tallado."""
+        th = np.radians(float(self.orientation or 0.0))
+        ph = np.radians(float(getattr(self, "pitch", 0.0) or 0.0))
+        c, s = np.cos(th), np.sin(th)
+        cp, sp = np.cos(ph), np.sin(ph)
+        ex = np.array([cp * c, cp * s, sp])
+        ey = np.array([-s, c, 0.0])
+        ez = np.array([-sp * c, -sp * s, cp])
+        return ex, ey, ez
+
+    def to_local(self, world_pts: np.ndarray) -> np.ndarray:
+        """Expresa puntos del mundo en el frame LOCAL del mueble (para compound)."""
+        q = np.asarray(world_pts, dtype=float) - np.asarray(self.position, float)
+        ex, ey, ez = self._local_axes()
+        return np.stack([q @ ex, q @ ey, q @ ez], axis=1)
 
     def contains(self, points: np.ndarray) -> np.ndarray:
         """Mascara (N,) bool: que puntos caen adentro del mueble.
 
         points : (N, 3).
         """
+        # Compound: union de las partes, evaluadas en el frame local del compound.
+        if self.kind == "compound" and self.parts:
+            local = self.to_local(points)
+            mask = np.zeros(len(local), dtype=bool)
+            for part in self.parts:
+                mask |= part.contains(local)
+            return mask
         p = np.asarray(points, dtype=float) - np.asarray(self.position, float)
         sx, sy, sz = self.size
         if self.kind == "cylinder":
@@ -104,22 +143,58 @@ class Furniture:
                 & (np.abs(yl) <= sy / 2.0)
                 & (np.abs(zl) <= sz / 2.0))
 
+    def aabb(self):
+        """Bounding box (min, max) en coords MUNDO. Caja/cilindro: envolvente de
+        las 8 esquinas rotadas por yaw+pitch. Compound: envolvente de las esquinas
+        de todas las partes transformadas por el frame del compound."""
+        ex, ey, ez = self._local_axes()
+        c0 = np.asarray(self.position, dtype=float)
+        pts = []
+        if self.kind == "compound" and self.parts:
+            for part in self.parts:
+                px, py, pz = part.position
+                sx, sy, sz = part.size
+                hx = sx / 2.0
+                hy = (sx / 2.0 if part.kind == "cylinder" else sy / 2.0)
+                hz = sz / 2.0
+                for a in (px - hx, px + hx):
+                    for b in (py - hy, py + hy):
+                        for d in (pz - hz, pz + hz):
+                            pts.append(c0 + a * ex + b * ey + d * ez)
+        else:
+            sx, sy, sz = self.size
+            hx = sx / 2.0
+            hy = (sx / 2.0 if self.kind == "cylinder" else sy / 2.0)
+            hz = sz / 2.0
+            for a in (-hx, hx):
+                for b in (-hy, hy):
+                    for d in (-hz, hz):
+                        pts.append(c0 + a * ex + b * ey + d * ez)
+        pts = np.asarray(pts)
+        return pts.min(axis=0), pts.max(axis=0)
+
     # ----- persistencia (.room v7) -----------------------------------------
     def to_dict(self) -> dict:
-        return {"kind": self.kind, "position": list(self.position),
-                "size": list(self.size), "orientation": self.orientation,
-                "pitch": self.pitch,
-                "label": self.label, "provenance": self.provenance}
+        d = {"kind": self.kind, "position": list(self.position),
+             "size": list(self.size), "orientation": self.orientation,
+             "pitch": self.pitch,
+             "label": self.label, "provenance": self.provenance}
+        if self.kind == "compound" and self.parts:
+            d["parts"] = [p.to_dict() for p in self.parts]
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "Furniture":
+        parts = d.get("parts")
+        parts = [cls.from_dict(pp) for pp in parts] if parts else None
         return cls(kind=str(d.get("kind", "box")),
                    position=tuple(d.get("position", (0, 0, 0))),
                    size=tuple(d.get("size", (0.5, 0.5, 0.5))),
                    orientation=float(d.get("orientation", 0.0)),
                    pitch=float(d.get("pitch", 0.0)),
                    label=str(d.get("label", "mueble")),
-                   provenance=str(d.get("provenance", "")))
+                   provenance=str(d.get("provenance", "")),
+                   parts=parts)
 
 
 # ---------------------------------------------------------------------------
@@ -347,10 +422,18 @@ def furniture_walls(muebles: List[Furniture], mat_by_furn: Dict[int, object],
     freq = np.asarray(freq, float)
     walls = []
     for fi, m in enumerate(muebles):
-        cx, cy, cz = m.position
-        sx, sy, sz = m.size
-        top_z = cz + sz / 2.0
-        area = (np.pi * (sx / 2.0) ** 2 if m.kind == "cylinder" else sx * sy)
+        if getattr(m, "kind", "box") == "compound":
+            # tope y huella desde el bounding box (el 'size' del compound es
+            # el default; la cara superior real la da el AABB).
+            lo, hi = m.aabb()
+            cx, cy = float((lo[0] + hi[0]) / 2.0), float((lo[1] + hi[1]) / 2.0)
+            top_z = float(hi[2])
+            area = float((hi[0] - lo[0]) * (hi[1] - lo[1]))
+        else:
+            cx, cy, cz = m.position
+            sx, sy, sz = m.size
+            top_z = cz + sz / 2.0
+            area = (np.pi * (sx / 2.0) ** 2 if m.kind == "cylinder" else sx * sy)
         mat = mat_by_furn.get(fi)
         if mat is not None:
             alpha = np.array([mat.alpha(float(ff)) for ff in freq])
@@ -405,6 +488,287 @@ def furniture_xi(sol: dict, surface_verts, surface_tris, room_groups,
         sol["nodes0"], sol["tets0"], muebles, mat_by_furn)
     return fm.compute_xi_per_mode_per_face(
         sol["freqs"], sol["phis"], sol["locator"], va, ta, ga, g2a, V_air)
+
+
+# ---------------------------------------------------------------------------
+# Presets de muebles (compound: forma coarse reconocible, tallado por union)
+# ---------------------------------------------------------------------------
+# Cada parte se define en el FRAME LOCAL del compound: position = offset desde el
+# centro del bounding box; z local 0 = centro en altura. El panel ubica el
+# compound apoyandolo en el piso (position.z = piso - aabb_local.min_z). Las
+# dimensiones siguen la tabla acordada con el usuario. Materiales = sugerencia
+# (si el nombre no esta en el catalogo, el mueble queda rigido, fallback seguro).
+
+def _fb(ox, oy, oz, sx, sy, sz):
+    return Furniture("box", position=(ox, oy, oz), size=(sx, sy, sz))
+
+
+def _fc(ox, oy, oz, diam, h):
+    return Furniture("cylinder", position=(ox, oy, oz), size=(diam, diam, h))
+
+
+def _silla():
+    p = [_fb(0.0, 0.0, -0.03, 0.45, 0.45, 0.06),      # asiento
+         _fb(0.0, -0.20, 0.20, 0.45, 0.05, 0.45)]     # respaldo
+    for sx in (-0.19, 0.19):
+        for sy in (-0.19, 0.19):
+            p.append(_fb(sx, sy, -0.24, 0.04, 0.04, 0.42))   # 4 patas
+    return Furniture("compound", parts=p, label="Silla"), "Madera"
+
+
+def _sillon():
+    p = [_fb(0.0, 0.05, -0.12, 0.85, 0.72, 0.42),     # cuerpo/asiento
+         _fb(0.0, -0.35, 0.12, 0.85, 0.15, 0.55),     # respaldo
+         _fb(-0.35, 0.05, 0.05, 0.15, 0.72, 0.45),    # apoyabrazos izq
+         _fb(0.35, 0.05, 0.05, 0.15, 0.72, 0.45)]     # apoyabrazos der
+    return Furniture("compound", parts=p, label="Sillón"), "Asientos tapizados"
+
+
+def _escritorio():
+    p = [_fb(0.0, 0.0, 0.345, 1.40, 0.70, 0.05)]      # tapa (refleja, SBIR)
+    for sx in (-0.65, 0.65):
+        for sy in (-0.30, 0.30):
+            p.append(_fb(sx, sy, -0.02, 0.06, 0.06, 0.70))   # 4 patas
+    return Furniture("compound", parts=p, label="Escritorio"), "Madera"
+
+
+def _mesa():
+    p = [_fb(0.0, 0.0, 0.345, 1.20, 0.80, 0.05)]      # tapa
+    for sx in (-0.55, 0.55):
+        for sy in (-0.35, 0.35):
+            p.append(_fb(sx, sy, -0.02, 0.06, 0.06, 0.70))
+    return Furniture("compound", parts=p, label="Mesa"), "Madera"
+
+
+def _banqueta():
+    p = [_fc(0.0, 0.0, 0.27, 0.35, 0.06)]             # asiento (disco)
+    for sx in (-0.13, 0.13):
+        for sy in (-0.13, 0.13):
+            p.append(_fb(sx, sy, -0.03, 0.03, 0.03, 0.54))
+    return Furniture("compound", parts=p, label="Banqueta"), "Madera"
+
+
+def _velador():
+    p = [_fc(0.0, 0.0, -0.72, 0.30, 0.06),            # base
+         _fc(0.0, 0.0, 0.0, 0.04, 1.35),              # caño
+         _fc(0.0, 0.0, 0.60, 0.30, 0.30)]             # pantalla
+    return Furniture("compound", parts=p, label="Velador de piso"), None
+
+
+def _biblioteca():
+    p = [_fb(0.0, -0.13, 0.0, 0.90, 0.04, 1.80),      # panel trasero
+         _fb(-0.43, 0.0, 0.0, 0.04, 0.30, 1.80),      # lateral izq
+         _fb(0.43, 0.0, 0.0, 0.04, 0.30, 1.80)]       # lateral der
+    for z in (-0.89, -0.45, 0.0, 0.45, 0.89):         # estantes
+        p.append(_fb(0.0, 0.0, z, 0.86, 0.28, 0.03))
+    return Furniture("compound", parts=p, label="Biblioteca"), "Madera"
+
+
+def _legs(w2, d2, zc, h, t=0.05):
+    return [_fb(sx, sy, zc, t, t, h) for sx in (-w2, w2) for sy in (-d2, d2)]
+
+
+# --- Aula ---
+def _pupitre():
+    p = [_fb(0, 0, 0.355, 0.60, 0.50, 0.04)] + _legs(0.26, 0.21, -0.02, 0.70, 0.04)
+    p.append(_fb(0, 0.0, 0.12, 0.55, 0.45, 0.03))     # bandeja bajo la tapa
+    return Furniture("compound", parts=p, label="Pupitre"), "Madera"
+
+
+def _silla_escolar():
+    p = [_fb(0, 0, -0.05, 0.40, 0.42, 0.05),
+         _fb(0, -0.18, 0.22, 0.40, 0.04, 0.40)] + _legs(0.17, 0.17, -0.22, 0.40, 0.035)
+    return Furniture("compound", parts=p, label="Silla escolar"), "Madera"
+
+
+def _escritorio_docente():
+    p = [_fb(0, 0, 0.345, 1.40, 0.70, 0.05),
+         _fb(0, -0.30, 0.0, 1.30, 0.03, 0.55)] + _legs(0.65, 0.30, -0.02, 0.70, 0.06)
+    return Furniture("compound", parts=p, label="Escritorio docente"), "Madera"
+
+
+def _mesa_grupal():
+    p = [_fb(0, 0, 0.345, 1.80, 1.20, 0.05)] + _legs(0.85, 0.55, -0.02, 0.70, 0.07)
+    return Furniture("compound", parts=p, label="Mesa grupal"), "Madera"
+
+
+def _pizarron():
+    p = [_fb(0, 0, 0.45, 1.80, 0.05, 0.90),           # tablero (refleja)
+         _fb(-0.78, 0, -0.35, 0.05, 0.05, 0.70),      # parantes
+         _fb(0.78, 0, -0.35, 0.05, 0.05, 0.70),
+         _fb(0, 0, -0.87, 1.55, 0.45, 0.05)]          # base con ruedas
+    return (Furniture("compound", parts=p, label="Pizarrón"),
+            "Panel de contrachapado, 1 cm de espesor")
+
+
+def _armario():
+    p = [_fb(0, 0, 0.03, 0.90, 0.45, 1.75),           # cuerpo cerrado
+         _fb(0, 0.235, 0.03, 0.90, 0.02, 1.60),       # frente/puertas
+         _fb(0, 0, -0.88, 0.90, 0.45, 0.10)]          # zócalo
+    return Furniture("compound", parts=p, label="Armario"), "Madera"
+
+
+def _estanteria():
+    p = [_fb(0.0, -0.13, 0.0, 0.90, 0.04, 1.80),
+         _fb(-0.43, 0.0, 0.0, 0.04, 0.30, 1.80),
+         _fb(0.43, 0.0, 0.0, 0.04, 0.30, 1.80)]
+    for z in (-0.89, -0.45, 0.0, 0.45, 0.89):
+        p.append(_fb(0.0, 0.0, z, 0.86, 0.28, 0.03))
+    return Furniture("compound", parts=p, label="Estantería abierta"), "Madera"
+
+
+def _casilleros():
+    p = [_fb(0, 0, 0, 1.05, 0.45, 1.80)]              # bloque metálico cerrado
+    for x in (-0.35, 0.0, 0.35):                      # divisiones de módulos (frente)
+        p.append(_fb(x, 0.23, 0, 0.02, 0.02, 1.75))
+    for z in (-0.6, 0.0, 0.6):
+        p.append(_fb(0, 0.23, z, 1.0, 0.02, 0.02))
+    return Furniture("compound", parts=p, label="Casilleros"), None   # metal = rígido
+
+
+def _carrito():
+    p = [_fb(0, 0, 0.05, 0.70, 0.50, 0.80)]           # cuerpo con bandejas
+    for z in (-0.25, 0.05, 0.30):
+        p.append(_fb(0, 0.24, z, 0.68, 0.02, 0.02))
+    for sx in (-0.30, 0.30):                          # ruedas
+        for sy in (-0.20, 0.20):
+            p.append(_fc(sx, sy, -0.44, 0.10, 0.06))
+    return Furniture("compound", parts=p, label="Carrito de dispositivos"), "Madera"
+
+
+def _taburete():
+    p = [_fc(0.0, 0.0, 0.27, 0.35, 0.06)]
+    for sx in (-0.13, 0.13):
+        for sy in (-0.13, 0.13):
+            p.append(_fb(sx, sy, -0.03, 0.03, 0.03, 0.54))
+    return Furniture("compound", parts=p, label="Taburete"), "Madera"
+
+
+# --- Estudio / tratamiento acústico ---
+def _gobo():
+    p = [_fb(0, 0, 0.10, 0.70, 0.08, 1.50),           # panel fonoabsorbente
+         _fb(0, 0, -0.83, 0.70, 0.40, 0.06)]          # base con ruedas
+    for sx in (-0.28, 0.28):
+        p.append(_fc(sx, 0.16, -0.89, 0.10, 0.05))
+    return (Furniture("compound", parts=p, label="Gobo (panel móvil)"),
+            "Panel acústico (espuma + tela)")
+
+
+def _bass_trap():
+    # Columna de esquina. NOTA: absorbente de LF; el modelo usa alpha(f) del
+    # material (aprox membrana). Sintonía real no modelada.
+    return (Furniture("cylinder", position=(0, 0, 0), size=(0.40, 0.40, 1.80),
+                      label="Bass trap (esquina)"),
+            "Panel de madera con camara de aire por detras")
+
+
+def _difusor():
+    # Skyline: bloques de distinta altura (COSMÉTICO: la difusión NO se modela).
+    p = [_fb(0, 0, -0.06, 0.60, 0.20, 0.10)]          # base
+    hs = [0.10, 0.22, 0.14, 0.28, 0.18]
+    xs = [-0.22, -0.11, 0.0, 0.11, 0.22]
+    for x, h in zip(xs, hs):
+        p.append(_fb(x, 0.0, 0.0 + h / 2, 0.10, 0.18, h))
+    return Furniture("compound", parts=p, label="Difusor QRD/Skyline"), "Madera"
+
+
+def _helmholtz():
+    # Caja resonante con boca (COSMÉTICO: la sintonía no se modela; se aproxima
+    # con un material tipo panel con cámara de aire).
+    p = [_fb(0, 0, 0, 0.60, 0.35, 0.70),
+         _fb(0, 0.18, 0.0, 0.20, 0.02, 0.10)]         # boca/ranura
+    return (Furniture("compound", parts=p, label="Resonador Helmholtz"),
+            "Panel de madera con camara de aire por detras")
+
+
+def _nube():
+    # Panel suspendido del techo (placement="ceiling").
+    p = [_fb(0, 0, 0, 1.40, 1.20, 0.10)]
+    for sx in (-0.6, 0.6):                            # tensores
+        for sy in (-0.5, 0.5):
+            p.append(_fc(sx, sy, 0.20, 0.02, 0.30))
+    return (Furniture("compound", parts=p, label="Nube acústica"),
+            "Cielorraso acustico (lana de roca), 20 mm, 100 kg/m3, suspendido a 100 mm")
+
+
+def _console_desk():
+    p = [_fb(0, 0.10, 0.30, 1.60, 0.60, 0.04),        # superficie de control
+         _fb(0, -0.30, 0.50, 1.60, 0.10, 0.34),       # puente de monitores
+         _fb(-0.78, 0, 0.15, 0.04, 0.80, 0.60),       # laterales
+         _fb(0.78, 0, 0.15, 0.04, 0.80, 0.60)]
+    return Furniture("compound", parts=p, label="Console desk"), "Madera"
+
+
+def _soporte_monitor():
+    p = [_fb(0, 0, -0.43, 0.35, 0.35, 0.04),          # base pesada (arena)
+         _fc(0, 0, 0.0, 0.12, 0.80),                  # columna
+         _fb(0, 0, 0.43, 0.30, 0.30, 0.03)]           # plato
+    return Furniture("compound", parts=p, label="Soporte de monitor"), None
+
+
+def _rack():
+    p = [_fb(0, 0, 0, 0.55, 0.65, 1.10)]              # frame 19"
+    for z in (-0.4, 0.0, 0.4):
+        p.append(_fb(0, 0.32, z, 0.50, 0.02, 0.03))   # unidades montadas
+    return Furniture("compound", parts=p, label="Rack 19\""), None
+
+
+def _sofa_control():
+    p = [_fb(0.0, 0.05, -0.12, 1.90, 0.75, 0.42),     # cuerpo (absorbente banda ancha)
+         _fb(0.0, -0.38, 0.12, 1.90, 0.15, 0.55),
+         _fb(-0.88, 0.05, 0.05, 0.14, 0.78, 0.45),
+         _fb(0.88, 0.05, 0.05, 0.14, 0.78, 0.45)]
+    return Furniture("compound", parts=p, label="Sofá de control"), "Asientos tapizados"
+
+
+def _silla_mezcla():
+    p = [_fb(0, 0, -0.10, 0.50, 0.48, 0.08),          # asiento
+         _fb(0, -0.22, 0.25, 0.48, 0.04, 0.45),       # respaldo de malla
+         _fc(0, 0, -0.35, 0.08, 0.40),                # columna
+         _fc(0, 0, -0.55, 0.60, 0.04)]                # base estrella (disco)
+    return Furniture("compound", parts=p, label="Silla de mezcla"), "Asientos tapizados"
+
+
+# Registro plano (nombre -> factory) + agrupación para el menú + placement.
+FURNITURE_PRESETS = {
+    "Silla": _silla, "Sillón": _sillon, "Escritorio": _escritorio, "Mesa": _mesa,
+    "Banqueta": _banqueta, "Velador de piso": _velador, "Biblioteca": _biblioteca,
+    "Pupitre": _pupitre, "Silla escolar": _silla_escolar,
+    "Escritorio docente": _escritorio_docente, "Mesa grupal": _mesa_grupal,
+    "Pizarrón": _pizarron, "Armario": _armario, "Estantería abierta": _estanteria,
+    "Casilleros": _casilleros, "Carrito de dispositivos": _carrito,
+    "Taburete": _taburete,
+    "Gobo (panel móvil)": _gobo, "Bass trap (esquina)": _bass_trap,
+    "Difusor QRD/Skyline": _difusor, "Resonador Helmholtz": _helmholtz,
+    "Nube acústica": _nube, "Console desk": _console_desk,
+    "Soporte de monitor": _soporte_monitor, "Rack 19\"": _rack,
+    "Sofá de control": _sofa_control, "Silla de mezcla": _silla_mezcla,
+}
+
+# Menú agrupado (orden de aparición).
+FURNITURE_PRESET_GROUPS = {
+    "General": ["Silla", "Sillón", "Escritorio", "Mesa", "Banqueta",
+                "Velador de piso", "Biblioteca"],
+    "Aula": ["Pupitre", "Silla escolar", "Escritorio docente", "Mesa grupal",
+             "Pizarrón", "Armario", "Estantería abierta", "Casilleros",
+             "Carrito de dispositivos", "Taburete"],
+    "Estudio / tratamiento": ["Gobo (panel móvil)", "Bass trap (esquina)",
+                              "Difusor QRD/Skyline", "Resonador Helmholtz",
+                              "Nube acústica", "Console desk", "Soporte de monitor",
+                              "Rack 19\"", "Sofá de control", "Silla de mezcla"],
+}
+
+# Colocación al insertar: "floor" (default) o "ceiling" (suspendido del techo).
+PRESET_PLACEMENT = {"Nube acústica": "ceiling"}
+
+
+def make_preset(name: str):
+    """Devuelve (Furniture compound, material sugerido) para el preset `name`."""
+    return FURNITURE_PRESETS[name]()
+
+
+def preset_placement(name: str) -> str:
+    return PRESET_PLACEMENT.get(name, "floor")
 
 
 # ---------------------------------------------------------------------------

@@ -186,6 +186,7 @@ class IsoViewer(gl.GLViewWidget):
         # Muebles: posiciones para picking + estado de arrastre/orientacion
         # (mismo mecanismo que las fuentes, con menor prioridad de picking).
         self._furniture_positions = []   # lista de (x,y,z) de los centros
+        self._furniture_bboxes = []      # lista de (min(3), max(3)) para picking por silueta
         self._dragging_furn_idx = -1     # >=0 mueble en arrastre, -1 ninguno
         self._orient_furn_idx = -1       # >=0 mueble rotando (Alt+Ctrl), -1 no
 
@@ -367,6 +368,11 @@ class IsoViewer(gl.GLViewWidget):
         `positions`: lista de tuplas (x, y, z)."""
         self._furniture_positions = list(positions)
 
+    def set_furniture_bboxes(self, bboxes):
+        """Guarda los bounding boxes (min, max) de los muebles para picking por
+        silueta (agarrar clickeando en cualquier parte del mueble)."""
+        self._furniture_bboxes = list(bboxes)
+
     def mouseDoubleClickEvent(self, ev):
         """Doble-click izquierdo sobre una esfera de fuente -> editar."""
         if ev.button() != Qt.LeftButton:
@@ -459,18 +465,40 @@ class IsoViewer(gl.GLViewWidget):
         return best_idx
 
     def _pick_furniture(self, px, py, radius_px: int = 28) -> int:
-        """Indice del mueble mas cercano al cursor (>=0) o -1. Se llama SOLO
-        cuando `_pick_source` no encontro nada (las fuentes tienen prioridad)."""
-        best_d2 = radius_px ** 2
+        """Indice del mueble bajo el cursor (>=0) o -1. Se llama SOLO cuando
+        `_pick_source` no encontro nada (las fuentes tienen prioridad).
+
+        Un mueble se agarra si el cursor cae dentro de su BOUNDING BOX proyectado
+        en pantalla (asi se puede agarrar clickeando en cualquier parte de la
+        silueta, no solo cerca del centro — clave para los muebles grandes), o si
+        esta a <= radius_px del centro. Entre varios candidatos, gana el de centro
+        mas cercano al cursor (desempata solapes)."""
+        best_d2 = None
         best_idx = -1
+        margin = 6
         for i, pos in enumerate(self._furniture_positions):
             sp = self._project(pos)
-            if sp is None:
-                continue
-            dx, dy = px - sp[0], py - sp[1]
-            d2 = dx * dx + dy * dy
-            if d2 < best_d2:
-                best_d2, best_idx = d2, i
+            d2 = None
+            if sp is not None:
+                d2 = (px - sp[0]) ** 2 + (py - sp[1]) ** 2
+            hit = (d2 is not None and d2 <= radius_px ** 2)
+            # Caja proyectada en pantalla (8 esquinas del bbox).
+            if not hit and i < len(self._furniture_bboxes):
+                lo, hi = self._furniture_bboxes[i]
+                xs, ys = [], []
+                for a in (lo[0], hi[0]):
+                    for b in (lo[1], hi[1]):
+                        for c in (lo[2], hi[2]):
+                            q = self._project((float(a), float(b), float(c)))
+                            if q is not None:
+                                xs.append(q[0]); ys.append(q[1])
+                if xs and (min(xs) - margin <= px <= max(xs) + margin
+                           and min(ys) - margin <= py <= max(ys) + margin):
+                    hit = True
+            if hit:
+                key = d2 if d2 is not None else 1e18
+                if best_idx < 0 or key < best_d2:
+                    best_d2, best_idx = key, i
         return best_idx
 
     def mousePressEvent(self, ev):
@@ -603,15 +631,16 @@ class IsoViewer(gl.GLViewWidget):
                 self.sourceTiltRequested.emit(self._orient_source_idx, d_pitch)
             return
 
-        # Orientacion de mueble (Alt+Ctrl+Left sostenido): horizontal = yaw,
-        # vertical = pitch (inclinacion). Ambos a la vez, igual que el bafle.
+        # Orientacion de mueble (Alt+Ctrl+Left sostenido): SOLO yaw (horizontal).
+        # A diferencia del bafle, el mueble NO se inclina con el gesto: al rotar,
+        # el arrastre siempre tiene algo de vertical y lo inclinaba sin querer
+        # (acumulando decenas de grados de pitch -> el mueble "se caia", su bbox
+        # crecia y chocaba con todo). El pitch de los muebles se edita por el
+        # spinbox "Inclinacion" del dialogo.
         if self._orient_furn_idx >= 0 and (btns & Qt.LeftButton):
             d_az = float(diff.x()) * self.BAFFLE_ROTATE_DEG_PER_PX
-            d_pitch = -float(diff.y()) * self.BAFFLE_TILT_DEG_PER_PX
             if d_az != 0.0:
                 self.furnitureRotateRequested.emit(self._orient_furn_idx, d_az)
-            if d_pitch != 0.0:
-                self.furnitureTiltRequested.emit(self._orient_furn_idx, d_pitch)
             return
 
         # Arrastre de fuente o receptor (Shift+LeftButton sostenido).

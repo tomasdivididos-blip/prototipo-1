@@ -247,6 +247,18 @@ def _furniture_wireframe(furn, nseg=24):
     su efecto acustico va por el carve/xi/SBIR del panel.
     """
     kind = getattr(furn, "kind", "box")
+    # Compound: unir los wireframes de las partes (cada una en el frame LOCAL del
+    # compound) transformados al mundo por su position + yaw/pitch. Lo dibujado
+    # coincide con lo tallado (mismos ejes que Furniture.contains).
+    if kind == "compound" and getattr(furn, "parts", None):
+        ex, ey, ez = furn._local_axes()
+        c0 = np.asarray(furn.position, dtype=float)
+        segs = []
+        for part in furn.parts:
+            for (x, y, z) in _furniture_wireframe(part, nseg):
+                w = c0 + x * ex + y * ey + z * ez
+                segs.append((float(w[0]), float(w[1]), float(w[2])))
+        return segs
     cx, cy, cz = [float(v) for v in furn.position]
     sx, sy, sz = [float(v) for v in furn.size]
     segs = []
