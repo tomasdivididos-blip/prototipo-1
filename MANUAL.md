@@ -350,14 +350,26 @@ El mueble se ve como un **wireframe verde-azulado** en el visor 3D (naranja al s
 |---|---|
 | **Shift + arrastrar** | mover en el plano horizontal (XY) |
 | **Ctrl + Shift + arrastrar** | mover en altura (Z) |
-| **Alt + Ctrl + arrastrar** | horizontal = girar (yaw), vertical = inclinar (pitch) |
+| **Alt + Ctrl + arrastrar** | girar (yaw) |
 | **Doble-click** | abrir el editor |
 
-> Las **fuentes tienen prioridad** de selección: el mueble se agarra solo si no hay una fuente o el receptor bajo el cursor.
+> Las **fuentes tienen prioridad** de selección. El mueble se agarra clickeando en **cualquier parte de su silueta**, no solo cerca del centro. La **inclinación (pitch)** se edita por el campo del diálogo, no con el mouse (rotar arrastrando siempre incluye algo de vertical y lo inclinaría sin querer).
 
 #### Objetos sólidos — no se superponen
 
-Un mueble **no puede** ocupar el mismo espacio que otro mueble, que el **bafle de un parlante**, ni salirse de los **límites del recinto**. Al arrastrarlo, **frena** al tocar el obstáculo; al Añadir/Editar con una posición inválida, avisa el motivo y no lo agrega. Del mismo modo, **las fuentes y el receptor se traban en las paredes** del recinto al arrastrarlos (se deslizan pegados al límite en vez de salirse).
+Un mueble **no puede** ocupar el mismo espacio que otro mueble, que el **bafle de un parlante**, ni salirse de las **paredes o el techo del recinto**. Al arrastrarlo, **frena** al tocar el obstáculo; al Añadir/Editar con una posición inválida, avisa el motivo y no lo agrega. El **piso no atrapa** al mueble (se apoya ahí). Del mismo modo, **las fuentes y el receptor se traban en las paredes** del recinto al arrastrarlos (se deslizan pegados al límite en vez de salirse).
+
+#### Presets armados
+
+El botón **"Insertar preset ▾"** ofrece muebles ya dimensionados, agrupados en **General**, **Aula** y **Estudio / tratamiento**. Cada uno se inserta en el centro de la sala (las **nubes acústicas** colgadas del techo) con forma reconocible y un material sugerido, y después se mueve/rota/edita como cualquier mueble.
+
+- **General**: silla, sillón, escritorio, mesa, banqueta, velador, biblioteca.
+- **Aula**: pupitre, silla escolar, escritorio docente, mesa grupal, pizarrón, armario, estantería abierta, casilleros, carrito de dispositivos, taburete.
+- **Estudio / tratamiento**: gobo, bass trap de esquina, difusor QRD/Skyline, resonador Helmholtz, nube acústica, console desk, soporte de monitor, rack 19", sofá de control, silla de mezcla.
+
+> **Alcance del modelo.** El FEM es de baja frecuencia (modal): capta el obstáculo, la absorción del material y la reflexión del tope. **No** simula la **difusión** (QRD/Skyline) ni la **sintonía** fina de resonadores Helmholtz o bass traps; esos presets entran como geometría más un material aproximado. Los **absorbentes de banda ancha** (sofá, gobos, nubes, paneles) sí se modelan bien, que es la fortaleza del modelo en LF.
+
+Internamente un preset es un mueble **compuesto** (unión de sub-piezas): se talla, mueve y choca como una sola pieza. Las partes finas (patas, tensores) no se resuelven en la malla, lo cual es correcto.
 
 ---
 
@@ -2174,4 +2186,24 @@ Un mueble no puede superponerse con otro mueble, con el **bafle de un parlante**
 
 ---
 
-*Manual actualizado al 19 de Julio de 2026 — v2.18.*
+**Cambios v2.19** (29 de julio 2026): **presets de muebles armados** (con forma) y fixes de manipulación surgidos del test visual. Uso en §6.4. Cuatro ejes.
+
+### A. Muebles compuestos (forma física)
+
+Nuevo tipo de mueble **compuesto** (unión de sub-piezas box/cylinder en su frame local): el `contains` es la unión de las partes, así un mueble con forma (una silla, un escritorio) se **talla, mueve, rota y choca como una sola pieza**. La forma es física (afecta el carve); las partes finas (patas, tensores) no resuelven en la malla, que es correcto. `contains/aabb/volumen/persistencia/wireframe` despachan por tipo; caja y cilindro **reducen exacto** al comportamiento previo.
+
+### B. 27 presets en menú agrupado
+
+Botón **"Insertar preset ▾"** con submenús **General** (7), **Aula** (10) y **Estudio / tratamiento** (10): desde silla/escritorio/biblioteca hasta pupitre, pizarrón, casilleros, gobos, bass traps, difusores, resonadores Helmholtz, nubes acústicas, console desk, racks y sofá de control. Cada uno con material sugerido válido del catálogo y colocación (las nubes suspendidas del techo; el resto en el piso). **Alcance del modelo**: la difusión (QRD) y la sintonía Helmholtz no se simulan (el FEM es LF modal); esos presets entran como geometría + material aproximado. Los absorbentes de banda ancha sí se modelan bien. Detalle en §6.4.
+
+### C. Fix de picking por silueta
+
+El mueble se agarra clickeando en **cualquier parte de su bounding box proyectado** en pantalla, no solo cerca del centro. Antes, los muebles grandes (sillón, mesa, biblioteca) tenían el centro en un hueco del wireframe y no se dejaban agarrar.
+
+### D. Fix de rotación: solo yaw
+
+**Alt + Ctrl + arrastrar** ahora gira solo en azimut (yaw). Antes el componente vertical del arrastre inclinaba el mueble sin querer, acumulando decenas de grados de pitch: el mueble "se caía", su bounding box crecía y chocaba con todo (se trababa). El pitch se edita por el campo del diálogo. El **piso ya no atrapa** al mueble (inclinar un borde bajo z=0 es inofensivo para el carve).
+
+---
+
+*Manual actualizado al 29 de Julio de 2026 — v2.19.*
