@@ -2296,7 +2296,28 @@ ahora:
     (F) \textbf{Colisiones (AABB)}: un mueble no se superpone con otro mueble ni
     con el bafle de un parlante, ni se sale del recinto (frena en el drag; avisa
     en Añadir/Editar). Además, fuentes y receptor se traban en las paredes del
-    recinto al arrastrarlos (clamp al bounding box).%
+    recinto al arrastrarlos (clamp al bounding box).\\[2pt]
+    \textbf{Cambios v2.19} (29 de julio): \textbf{presets de muebles armados}
+    (con forma) y fixes de manipulación del test visual.
+    (A) \textbf{Muebles compuestos}: nuevo tipo \emph{compound} (unión de
+    sub-piezas en frame local); el \texttt{contains} es la unión, así un mueble
+    con forma se talla/mueve/rota/choca como una sola pieza. La forma es física
+    (afecta el carve); las partes finas no resuelven en la malla (correcto).
+    \texttt{contains/aabb/volumen/persistencia/wireframe} despachan por tipo;
+    caja y cilindro reducen exacto.
+    (B) \textbf{27 presets} en menú agrupado (General 7 / Aula 10 / Estudio 10):
+    silla\ldots biblioteca $+$ pupitre, pizarrón, casilleros\ldots $+$ gobos,
+    bass traps, difusores QRD, resonadores Helmholtz, nubes, console desk, racks,
+    sofá de control. Material sugerido del catálogo y placement (nubes al techo).
+    \emph{Alcance}: la difusión (QRD) y la sintonía Helmholtz NO se simulan (FEM
+    LF modal) $\to$ geometría $+$ material aproximado; los absorbentes de banda
+    ancha sí. Detalle en \S6.4.
+    (C) \textbf{Picking por silueta}: el mueble se agarra clickeando en cualquier
+    parte de su bounding box proyectado (antes solo cerca del centro $\to$ los
+    grandes no se dejaban agarrar).
+    (D) \textbf{Rotación solo yaw}: Alt$+$Ctrl gira solo azimut; antes el arrastre
+    vertical lo inclinaba sin querer (el mueble ``se caía'' y se trababa). El
+    pitch se edita por el diálogo. El piso ya no atrapa al mueble.%
   }
 \end{center}
 

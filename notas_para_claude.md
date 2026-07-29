@@ -1625,6 +1625,53 @@ bien.
     Validación limpia definitiva del efecto físico del mueble sigue siendo A/B controlado
     (ver [[calibracion-rirs]]).
 
+- **29 Jul 2026 — Muebles: presets armados (compound) + v2.19 + PR #5.** Rama
+  `muebles-presets` off main, mergeada (commit `acce53f`). MANUAL v2.19 integrado
+  (.md §6.4 + changelog A-D, .tex, .pdf 36 pág). `smoke_test_furniture_ui.py` 27/27.
+  - **Decisión previa (experimento de física, `scratchpad/shape_matters*.py`):** ¿la
+    forma exacta de un mueble importa vs su bounding box? Resultado robusto (barrido):
+    efecto-forma es **segundo orden** (0.3-1.4% en freqs, ~1-3× el ruido de malla),
+    depende MUCHO de la posición (máx en esquinas = antinodos), y una forma cóncava
+    (L) ya se puede componer con 2 cajas. Cilindro vs su caja = cosmético (0.8×).
+    **Conclusión:** dibujar/CAD es UX, no mejora de predicción; CAD-para-predicción
+    descartado. El usuario igual quiere presets "con forma" (cosmético) + CAD para
+    escanear su estudio real (OBJ), que es un caso de captura, no de fidelidad.
+  - **Compound (forma física):** nuevo `kind="compound"` en `Furniture` con `parts`
+    (lista de sub-Furniture en frame LOCAL). `contains` = unión (transforma world→local
+    por yaw/pitch del compound, OR de las partes). `aabb()` método unificado (box/
+    cylinder/compound). `_local_axes()` compartido por contains/aabb/wireframe → dibujo
+    = carve. box/cylinder reducen EXACTO (benches intactos). Persistencia: `parts` en
+    to_dict/from_dict (el `.room` los serializa solo, sin bump de versión).
+  - **27 presets** (`FURNITURE_PRESETS` + `FURNITURE_PRESET_GROUPS` + `PRESET_PLACEMENT`):
+    menú agrupado General/Aula/Estudio. `make_preset(name)`→(Furniture, material).
+    Placement floor/ceiling (nubes al techo, `_insert_preset` calcula z). Materiales
+    sugeridos VÁLIDOS del catálogo (428 mats; usé Madera, Asientos tapizados, Panel
+    acústico, Panel de madera con cámara de aire, Cielorraso lana de roca, contrachapado;
+    metálicos = rígido). **Modelado honesto:** difusión (QRD) y sintonía Helmholtz NO
+    se simulan (FEM LF) → geometría + material aprox; absorbentes de banda ancha sí.
+  - **Fixes del test visual:**
+    1. **Picking por silueta** (viewer): `_pick_furniture` agarra si el cursor cae en
+       el bbox PROYECTADO en pantalla (8 esquinas), no solo a <28px del centro. El panel
+       pasa `set_furniture_bboxes`. Los muebles grandes (sillón/mesa/biblioteca) tenían
+       el centro en un hueco del wireframe → no se agarraban. (Headless no lo reproduce:
+       la cámara iso proyecta chico; test t26 usa una caja 3 m.)
+    2. **Rotación solo yaw:** Alt+Ctrl para muebles emite SOLO rotate (saqué el tilt del
+       gesto). El componente vertical del arrastre acumulaba pitch (decenas de grados) →
+       el mueble se "caía", su AABB crecía y se trababa. Pitch se edita por el diálogo.
+    3. **El piso no atrapa** a los muebles (`_furniture_conflict` tolera z<piso;
+       inofensivo para el carve). Antes, tiltear un mueble apoyado lo dejaba "hundido"
+       y bloqueaba movimientos posteriores.
+  - **Dialog:** `FurnitureEditDialog` maneja compound (`_compound_src`): edita posición/
+    orientación/pitch/material/etiqueta, preserva `parts`. `_furn_item_text` muestra "preset".
+  - **Falso susto de git:** el merge del PR #5 mostró "create mode juego/..." → parecía
+    contaminar main. NO fue así: `juego/` entró a main por el **Merge del PR #3**
+    (juego-quiz-acustica, commit `6a7ebe4`, mergeado en GitHub por el usuario). Mi rama
+    tenía 0 juego; el merge solo tocó los 5 archivos de muebles. **main ahora incluye el
+    juego (PWA) + la app acústica, todo del usuario.** Verificar con `git ls-tree` si dudás.
+  - **Siguiente (acordado):** feature **CAD (OBJ)** — `kind="mesh"` vía trimesh.contains
+    + pipeline CAD del recinto + embeber en `.room`. Caso de uso: escanear el estudio
+    con el celu → SketchUp → separar muebles → OBJ por pieza. Ver [[calibracion-rirs]].
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.
