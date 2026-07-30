@@ -259,6 +259,23 @@ def _furniture_wireframe(furn, nseg=24):
                 w = c0 + x * ex + y * ey + z * ez
                 segs.append((float(w[0]), float(w[1]), float(w[2])))
         return segs
+    # Mesh (CAD/OBJ): aristas de los triangulos, en coords mundo. Se dibujan las
+    # aristas UNICAS (cada una una vez); si la malla es enorme (escaneo) se
+    # submuestrea a MAX_EDGES para no colgar el render. Mismos ejes que
+    # Furniture.contains/aabb -> lo dibujado coincide con lo tallado.
+    if kind == "mesh" and getattr(furn, "mesh_verts", None) is not None:
+        ex, ey, ez = furn._local_axes()
+        c0 = np.asarray(furn.position, dtype=float)
+        M = np.stack([ex, ey, ez])                       # filas ex,ey,ez
+        v = np.asarray(furn.mesh_verts, float) @ M + c0  # local -> mundo
+        faces = np.asarray(furn.mesh_faces, int)
+        e = np.vstack([faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]])
+        e = np.unique(np.sort(e, axis=1), axis=0)
+        MAX_EDGES = 4000
+        if len(e) > MAX_EDGES:
+            e = e[np.linspace(0, len(e) - 1, MAX_EDGES).astype(int)]
+        pairs = v[e.reshape(-1)]                          # (2*Ne, 3)
+        return [tuple(float(c) for c in p) for p in pairs]
     cx, cy, cz = [float(v) for v in furn.position]
     sx, sy, sz = [float(v) for v in furn.size]
     segs = []
@@ -275,16 +292,16 @@ def _furniture_wireframe(furn, nseg=24):
         for k in range(0, nseg, step):
             segs.append(ring0[k]); segs.append(ring1[k])
         return segs
-    # Caja con yaw (sobre z) + pitch (sobre el eje local ey). Mismos ejes que
-    # Furniture.contains -> el wireframe coincide con lo que se talla.
-    th = np.radians(float(getattr(furn, "orientation", 0.0) or 0.0))
-    ph = np.radians(float(getattr(furn, "pitch", 0.0) or 0.0))
-    c, s = np.cos(th), np.sin(th)
-    cp, sp = np.cos(ph), np.sin(ph)
-    ex0 = np.array([c, s, 0.0]); ez0 = np.array([0.0, 0.0, 1.0])
-    ex = cp * ex0 + sp * ez0                 # ex' (inclina con pitch)
-    ey = np.array([-s, c, 0.0])              # ey' (invariante al pitch)
-    ez = -sp * ex0 + cp * ez0                # ez'
+    # Caja con yaw + pitch + roll. Los ejes se DELEGAN en Furniture._local_axes
+    # (fuente unica) en vez de recalcularlos aca: el wireframe no puede divergir
+    # de lo que se talla ni de la colision.
+    if hasattr(furn, "_local_axes"):
+        ex, ey, ez = furn._local_axes()
+    else:                                     # objeto minimo (tests): solo yaw
+        th = np.radians(float(getattr(furn, "orientation", 0.0) or 0.0))
+        c, s = np.cos(th), np.sin(th)
+        ex = np.array([c, s, 0.0]); ey = np.array([-s, c, 0.0])
+        ez = np.array([0.0, 0.0, 1.0])
     c0 = np.array([cx, cy, cz])
     hx, hy, hz = sx / 2.0, sy / 2.0, sz / 2.0
 

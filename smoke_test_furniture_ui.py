@@ -566,6 +566,271 @@ def t27_rotate_gesture_yaw_only():
     return "gesto rotar = solo yaw; pitch queda 0; sigue movible"
 
 
+@test
+def t28_mesh_wireframe():
+    """El wireframe de un mueble CAD (kind=mesh) dibuja aristas dentro del AABB
+    y rota con el yaw."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    obj = os.path.join(here, "silla_test.obj")
+    if not os.path.exists(obj):
+        return "skipped (falta silla_test.obj)"
+    f, _w = fu.load_furniture_mesh(obj, label="Silla CAD")
+    segs = np.asarray(_furniture_wireframe(f))
+    assert segs.ndim == 2 and segs.shape[1] == 3 and len(segs) > 0
+    lo, hi = f.aabb()
+    assert (segs.min(0) >= lo - 1e-6).all() and (segs.max(0) <= hi + 1e-6).all()
+    f.orientation = 45.0
+    segs2 = np.asarray(_furniture_wireframe(f))
+    assert not np.allclose(segs, segs2), "el yaw no rotó el wireframe del mesh"
+    return f"mesh wireframe: {len(segs)} puntos, dentro del AABB, rota con yaw"
+
+
+@test
+def t29_mesh_dialog_locks_and_edits():
+    """FurnitureEditDialog con un mueble CAD: bloquea tipo+tamaño, permite editar
+    posición/orientación/material, y get_furniture preserva la malla."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    obj = os.path.join(here, "silla_test.obj")
+    if not os.path.exists(obj):
+        return "skipped (falta silla_test.obj)"
+    f, _w = fu.load_furniture_mesh(obj, label="Silla CAD")
+    f.position = (1.0, 1.0, f.size[2] / 2.0)
+    dlg = FurnitureEditDialog(f, mat_name=None, mat_names=MAT_NAMES,
+                              dims_hint=(6, 8, 3))
+    assert not dlg.combo_kind.isEnabled(), "el tipo debería estar bloqueado"
+    assert not dlg.sb_sx.isEnabled(), "el tamaño debería estar bloqueado"
+    dlg.sb_x.setValue(2.0); dlg.sb_orient.setValue(30.0)
+    dlg.combo_mat.setCurrentText("Madera")
+    f2, mat = dlg.get_furniture()
+    assert f2.kind == "mesh" and f2.mesh_verts is not None
+    assert len(f2.mesh_faces) == len(f.mesh_faces), "editar perdió la malla"
+    assert abs(f2.position[0] - 2.0) < 1e-9 and abs(f2.orientation - 30.0) < 1e-9
+    assert mat == "Madera"
+    assert f2.contains(np.array([[2.0, 1.0, f.size[2] / 2.0]]))[0], \
+        "contains no respeta la pose editada"
+    return "mesh dialog: bloqueo tipo/tamaño + edición de pose + malla preservada"
+
+
+@test
+def t30_mesh_panel_insert_and_persist():
+    """Panel: un mueble CAD refresca la lista con etiqueta 'CAD' y round-trip
+    del .room (to_dict/from_dict) preserva la malla y el contains."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    obj = os.path.join(here, "silla_test.obj")
+    if not os.path.exists(obj):
+        return "skipped (falta silla_test.obj)"
+    _v, panel = make_panel()
+    f, _w = fu.load_furniture_mesh(obj, label="Silla CAD")
+    f.position = (2.0, 3.0, f.size[2] / 2.0)
+    panel.furniture.append(f)
+    panel._refresh_furniture_list()
+    i = len(panel.furniture) - 1
+    assert "CAD" in panel.list_furn.item(i).text(), "la lista no etiqueta CAD"
+    g = Furniture.from_dict(f.to_dict())
+    pts = np.random.default_rng(1).uniform(-1, 4, (300, 3))
+    assert np.array_equal(f.contains(pts), g.contains(pts)), "contains no round-trip"
+    return "mesh panel: etiqueta CAD + round-trip .room preserva malla/contains"
+
+
+@test
+def t31_duplicate_offset_and_escape():
+    """Duplicar NO deja la copia encima (offset -> sin solape), el original sigue
+    movible en una dirección libre, y un mueble YA solapado puede arrastrarse para
+    afuera (escape). Cubre el freeze reportado: importar mesh + duplicar -> trabado."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    obj = os.path.join(here, "silla_test.obj")
+    if not os.path.exists(obj):
+        return "skipped (falta silla_test.obj)"
+    _v, panel = make_panel()
+    f, _w = fu.load_furniture_mesh(obj, label="Silla CAD")
+    c = panel._room_center_default()
+    f.position = (c[0], c[1], f.size[2] / 2.0)
+    panel.furniture.append(f)
+    panel._refresh_furniture_list()
+    # Duplicar: la copia NO debe solapar al original.
+    panel.list_furn.setCurrentRow(0)
+    panel._duplicate_furniture()
+    assert len(panel.furniture) == 2, "no duplicó"
+    assert panel._furniture_conflict(panel.furniture[1], ignore_idx=1) is None, \
+        "la copia quedó solapando (offset insuficiente)"
+    # El original se mueve en una dirección libre (+Y, lejos de la copia en +X).
+    p0 = panel.furniture[0].position
+    panel.apply_furniture_move(0, p0[0], p0[1] + 0.5, p0[2])
+    assert abs(panel.furniture[0].position[1] - (p0[1] + 0.5)) < 1e-6, \
+        "el original no se mueve en dirección libre"
+    # Escape: forzar solape total y arrastrar para afuera -> debe poder salir.
+    panel.furniture[1].position = tuple(panel.furniture[0].position)
+    assert panel._furniture_conflict(panel.furniture[1], ignore_idx=1) is not None
+    p1 = panel.furniture[1].position
+    panel.apply_furniture_move(1, p1[0] + 0.6, p1[1], p1[2])
+    assert panel.furniture[1].position != p1, "no pudo escapar del solape (trabado)"
+    return "duplicar offset + original movible + escape de solape (no se traba)"
+
+
+def _gizmo_setup(z=1.5):
+    """Panel + visor con un mueble a `z` m y las señales de rotación conectadas."""
+    viewer, panel = make_panel()
+    viewer.resize(900, 700); viewer.repaint()
+    viewer.furnitureRotateRequested.connect(panel.apply_furniture_rotate)
+    viewer.furnitureTiltRequested.connect(panel.apply_furniture_tilt)
+    panel.move_receiver_to(2.5, 3.5, 0.2)      # receptor lejos, sin prioridad
+    panel._insert_preset("Silla")
+    i = len(panel.furniture) - 1
+    m = panel.furniture[i]
+    m.position = (m.position[0], m.position[1], z)
+    panel._refresh_furniture_list()
+    return viewer, panel, i
+
+
+@test
+def t32_gizmo_rings_geometry():
+    """El gizmo arma 3 anillos: yaw plano en z (gira sobre el z del mundo), pitch
+    (sobre ey local) y roll (sobre ex local), los dos verticales. El hit-test
+    devuelve el anillo correcto."""
+    viewer, _panel, i = _gizmo_setup()
+    rings = viewer._gizmo_rings(i)
+    assert set(rings) == {"yaw", "pitch", "roll"}, "faltan anillos"
+    assert np.ptp(rings["yaw"][:, 2]) < 1e-9, "el anillo yaw no es horizontal"
+    assert np.ptp(rings["pitch"][:, 2]) > 1e-3, "el anillo pitch no es vertical"
+    assert np.ptp(rings["roll"][:, 2]) > 1e-3, "el anillo roll no es vertical"
+    # pitch y roll son planos distintos (perpendiculares entre sí con yaw=pitch=0)
+    assert not np.allclose(rings["pitch"], rings["roll"]), \
+        "los anillos de pitch y roll coinciden"
+    top = rings["pitch"][np.argmax(rings["pitch"][:, 2])]
+    q = viewer._project(top)
+    if q is None:
+        return "skipped (no se pudo proyectar)"
+    assert viewer._gizmo_pick_axis(int(q[0]), int(q[1]), i) == "pitch", \
+        "el hit-test no reconoce el anillo de pitch"
+    return f"gizmo: 3 anillos (r={viewer._gizmo_radius(i):.2f} m) + hit-test OK"
+
+
+@test
+def t35_gizmo_roll_ring_rolls_only():
+    """Agarrar el anillo de ROLL vuelca el mueble de costado sin tocar yaw ni
+    pitch. El roll afecta el carve (no es cosmético): roll=0 reduce exacto."""
+    viewer, panel, i = _gizmo_setup(z=1.5)
+    from PyQt5.QtCore import Qt, QPointF, QEvent
+    from PyQt5.QtGui import QMouseEvent
+    viewer.furnitureRollRequested.connect(panel.apply_furniture_roll)
+    ac = Qt.AltModifier | Qt.ControlModifier
+    rings = viewer._gizmo_rings(i)
+    top = rings["roll"][np.argmax(rings["roll"][:, 2])]
+    q = viewer._project(top)
+    if q is None:
+        return "skipped (no se pudo proyectar)"
+    px, py = int(q[0]), int(q[1])
+    assert viewer._gizmo_pick_axis(px, py, i) == "roll", "hit-test no da roll"
+    viewer.mousePressEvent(QMouseEvent(QEvent.MouseButtonPress, QPointF(px, py),
+                                       Qt.LeftButton, Qt.LeftButton, ac))
+    assert viewer._orient_furn_axis == "roll", "no agarró el anillo de roll"
+    for k in range(1, 6):
+        viewer.mouseMoveEvent(QMouseEvent(QEvent.MouseMove,
+            QPointF(px + 14*k, py - 12*k), Qt.NoButton, Qt.LeftButton, ac))
+    viewer.mouseReleaseEvent(QMouseEvent(QEvent.MouseButtonRelease,
+        QPointF(px + 70, py - 60), Qt.LeftButton, Qt.NoButton, ac))
+    m = panel.furniture[i]
+    assert abs(m.roll) > 1e-6, "no volcó con el anillo de roll"
+    assert abs(m.orientation) < 1e-9 and abs(m.pitch) < 1e-9, \
+        "el roll tocó el yaw o el pitch"
+    return f"anillo roll: volcó {m.roll:.0f}° sin tocar yaw ni pitch"
+
+
+@test
+def t36_roll_zero_reduces_and_persists():
+    """roll=0 reduce EXACTO al comportamiento yaw+pitch (compat con .room viejos)
+    y el roll sobrevive el round-trip de persistencia."""
+    pts = np.random.default_rng(3).uniform(-2, 2, (2000, 3))
+    for yaw, pit in ((0, 0), (37, 0), (0, 25), (41, -18)):
+        a = Furniture("box", position=(0.3, -0.2, 0.5), size=(0.8, 0.6, 0.7),
+                      orientation=yaw, pitch=pit)
+        b = Furniture("box", position=(0.3, -0.2, 0.5), size=(0.8, 0.6, 0.7),
+                      orientation=yaw, pitch=pit, roll=0.0)
+        assert np.array_equal(a.contains(pts), b.contains(pts)), \
+            f"roll=0 cambió el tallado (yaw={yaw}, pitch={pit})"
+        assert np.allclose(a.aabb(), b.aabb()), "roll=0 cambió el AABB"
+    # roll=90 vuelca de costado: los semiejes y<->z se intercambian.
+    c = Furniture("box", position=(0, 0, 0), size=(1.0, 0.4, 0.2), roll=90.0)
+    assert abs(c.aabb()[1][1] - 0.1) < 1e-9 and abs(c.aabb()[1][2] - 0.2) < 1e-9, \
+        "roll=90 no volcó exactamente"
+    # persistencia + compat con dicts viejos (sin la clave 'roll').
+    d = Furniture.from_dict(c.to_dict())
+    assert abs(d.roll - 90.0) < 1e-9 and np.array_equal(c.contains(pts), d.contains(pts))
+    old = {"kind": "box", "position": [0, 0, 0], "size": [1, 1, 1],
+           "orientation": 10, "pitch": 5}
+    assert Furniture.from_dict(old).roll == 0.0, ".room viejo debería dar roll=0"
+    return "roll=0 reduce exacto + roll=90 vuelca + persistencia y compat OK"
+
+
+@test
+def t33_gizmo_pitch_ring_tilts_only():
+    """Agarrar el anillo de PITCH e inclinar un mueble levantado a 1.5 m: cambia
+    el pitch y NO el yaw, aunque el arrastre tenga componente horizontal.
+    (Antes no había forma de inclinar desde el visor: el gesto era solo yaw.)"""
+    viewer, panel, i = _gizmo_setup(z=1.5)
+    from PyQt5.QtCore import Qt, QPointF, QEvent
+    from PyQt5.QtGui import QMouseEvent
+    ac = Qt.AltModifier | Qt.ControlModifier
+    rings = viewer._gizmo_rings(i)
+    top = rings["pitch"][np.argmax(rings["pitch"][:, 2])]
+    q = viewer._project(top)
+    if q is None:
+        return "skipped (no se pudo proyectar)"
+    px, py = int(q[0]), int(q[1])
+    viewer.mousePressEvent(QMouseEvent(QEvent.MouseButtonPress, QPointF(px, py),
+                                       Qt.LeftButton, Qt.LeftButton, ac))
+    assert viewer._orient_furn_axis == "pitch", "no agarró el anillo de pitch"
+    for k in range(1, 6):                       # arrastre con AMBAS componentes
+        viewer.mouseMoveEvent(QMouseEvent(QEvent.MouseMove,
+            QPointF(px + 12*k, py - 10*k), Qt.NoButton, Qt.LeftButton, ac))
+    viewer.mouseReleaseEvent(QMouseEvent(QEvent.MouseButtonRelease,
+        QPointF(px + 60, py - 50), Qt.LeftButton, Qt.NoButton, ac))
+    m = panel.furniture[i]
+    assert abs(m.pitch) > 1e-6, "no inclinó con el anillo de pitch"
+    assert abs(m.orientation) < 1e-9, "rotó (yaw) sin querer al inclinar"
+    assert viewer._orient_furn_axis is None, "no soltó el eje"
+    return f"anillo pitch: inclinó {m.pitch:.0f}° sin tocar el yaw"
+
+
+@test
+def t34_gizmo_yaw_ring_and_hover():
+    """Agarrar el anillo de YAW rota sin inclinar (aunque el arrastre sea muy
+    vertical), y el gizmo aparece con Alt+Ctrl y se esconde al soltarlo."""
+    viewer, panel, i = _gizmo_setup(z=1.5)
+    from PyQt5.QtCore import Qt, QPointF, QEvent
+    from PyQt5.QtGui import QMouseEvent
+    ac = Qt.AltModifier | Qt.ControlModifier
+    rings = viewer._gizmo_rings(i)
+    side = rings["yaw"][np.argmax(rings["yaw"][:, 1])]
+    q = viewer._project(side)
+    if q is None:
+        return "skipped (no se pudo proyectar)"
+    px, py = int(q[0]), int(q[1])
+    # Hover con Alt+Ctrl (sin botón) -> gizmo visible.
+    viewer.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, QPointF(px, py),
+                                      Qt.NoButton, Qt.NoButton, ac))
+    assert viewer._gizmo_idx == i, "el gizmo no apareció con Alt+Ctrl"
+    # Soltar el modificador -> se esconde.
+    viewer.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, QPointF(px + 3, py),
+                                      Qt.NoButton, Qt.NoButton, Qt.NoModifier))
+    assert viewer._gizmo_idx == -1, "el gizmo no se escondió al soltar Alt+Ctrl"
+    # Agarrar el anillo yaw y arrastrar MUY vertical -> solo yaw.
+    viewer.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, QPointF(px, py),
+                                      Qt.NoButton, Qt.NoButton, ac))
+    viewer.mousePressEvent(QMouseEvent(QEvent.MouseButtonPress, QPointF(px, py),
+                                       Qt.LeftButton, Qt.LeftButton, ac))
+    assert viewer._orient_furn_axis == "yaw", "no agarró el anillo de yaw"
+    for k in range(1, 6):
+        viewer.mouseMoveEvent(QMouseEvent(QEvent.MouseMove,
+            QPointF(px + 15*k, py + 20*k), Qt.NoButton, Qt.LeftButton, ac))
+    viewer.mouseReleaseEvent(QMouseEvent(QEvent.MouseButtonRelease,
+        QPointF(px + 75, py + 100), Qt.LeftButton, Qt.NoButton, ac))
+    m = panel.furniture[i]
+    assert abs(m.orientation) > 1e-6, "no rotó con el anillo de yaw"
+    assert abs(m.pitch) < 1e-9, "se inclinó sin querer al rotar (bug de v2.19)"
+    return f"anillo yaw: rotó {m.orientation:.0f}° sin pitch + hover on/off"
+
+
 # ---------------------------------------------------------------------------
 def main():
     print("=" * 78)

@@ -54,6 +54,11 @@ class Furniture:
                   el yaw). AFECTA EL CARVE (no es solo visual): un mueble
                   inclinado talla la region inclinada. pitch=0 reduce exacto al
                   caso solo-yaw. El cilindro lo ignora (se apoya vertical).
+    roll        : giro [deg] alrededor del eje local ex (el "frente"), aplicado
+                  DESPUES del yaw y el pitch (convencion aviacion z-y'-x''):
+                  vuelca el mueble de costado. Tambien afecta el carve.
+                  roll=0 reduce EXACTO al caso yaw+pitch (compat total con los
+                  .room viejos). El cilindro lo ignora, como el pitch.
     parts       : para kind="compound", lista de sub-Furniture (box/cylinder)
                   definidas en el FRAME LOCAL del compound (su position = offset
                   respecto del centro del compound). El compound aplica su propio
@@ -61,6 +66,11 @@ class Furniture:
                   asi un preset (silla, escritorio...) se talla/mueve como UNA
                   pieza. Las patas finas simplemente no resuelven en la malla
                   (correcto). None para box/cylinder.
+    mesh_verts  : para kind="mesh" (CAD/OBJ importado), vertices (Nv,3) en el
+                  FRAME LOCAL del mueble (centrados: local (0,0,0) = position).
+                  El carve usa trimesh.contains sobre la malla local, con los
+                  puntos del mundo llevados al local por to_local (yaw/pitch).
+    mesh_faces  : para kind="mesh", triangulos (Nf,3) indices a mesh_verts.
     label       : nombre para UI / informe de auditoria.
     provenance  : de donde salieron las dimensiones (medida propia, catalogo,
                   archivo importado + licencia). Trazabilidad (R6.6).
@@ -70,16 +80,35 @@ class Furniture:
     size: Tuple[float, float, float] = (0.5, 0.5, 0.5)
     orientation: float = 0.0
     pitch: float = 0.0
+    roll: float = 0.0
     label: str = "mueble"
     provenance: str = ""
     parts: Optional[list] = None
+    mesh_verts: Optional[np.ndarray] = None
+    mesh_faces: Optional[np.ndarray] = None
 
     # ----- geometria -------------------------------------------------------
+    def _as_trimesh(self):
+        """Trimesh en el FRAME LOCAL a partir de mesh_verts/mesh_faces, o None.
+        trimesh es import perezoso (no es dependencia dura del modulo)."""
+        if self.mesh_verts is None or self.mesh_faces is None:
+            return None
+        import trimesh
+        return trimesh.Trimesh(vertices=np.asarray(self.mesh_verts, float),
+                               faces=np.asarray(self.mesh_faces, int),
+                               process=False)
+
     def volume(self) -> float:
         """Volumen analitico [m^3]. Compound: suma de partes (aprox, ignora
         solapes; suficiente para el criterio de significancia)."""
         if self.kind == "compound" and self.parts:
             return float(sum(p.volume() for p in self.parts))
+        if self.kind == "mesh":
+            tm = self._as_trimesh()
+            if tm is not None and tm.is_watertight:
+                return float(abs(tm.volume))
+            lo, hi = self.aabb()               # fallback: bbox (malla abierta)
+            return float(np.prod(np.maximum(hi - lo, 0.0)))
         sx, sy, sz = self.size
         if self.kind == "cylinder":
             r = sx / 2.0
@@ -87,14 +116,24 @@ class Furniture:
         return float(sx * sy * sz)
 
     def max_dim(self) -> float:
-        if self.kind == "compound" and self.parts:
+        if (self.kind == "compound" and self.parts) or self.kind == "mesh":
             lo, hi = self.aabb()
             return float(max(hi - lo))
         return float(max(self.size))
 
     def _local_axes(self):
-        """Ejes locales (ex', ey', ez') del mueble segun su yaw+pitch. Compartidos
-        por contains, aabb y el wireframe -> lo dibujado coincide con lo tallado."""
+        """Ejes locales (ex', ey', ez') del mueble segun yaw -> pitch -> roll.
+
+        FUENTE UNICA DE VERDAD de la orientacion: la usan contains, aabb, to_local
+        y el wireframe del visor -> lo dibujado coincide SIEMPRE con lo tallado
+        (no pueden desincronizarse porque no hay una segunda copia de esta cuenta).
+
+        Convencion aviacion (Tait-Bryan intrinseco z-y'-x''):
+          1. yaw   (orientation) sobre el eje z del MUNDO,
+          2. pitch sobre el ey resultante,
+          3. roll  sobre el ex resultante (el "frente").
+        roll=0 devuelve exactamente los ejes de yaw+pitch (compat total).
+        """
         th = np.radians(float(self.orientation or 0.0))
         ph = np.radians(float(getattr(self, "pitch", 0.0) or 0.0))
         c, s = np.cos(th), np.sin(th)
@@ -102,6 +141,10 @@ class Furniture:
         ex = np.array([cp * c, cp * s, sp])
         ey = np.array([-s, c, 0.0])
         ez = np.array([-sp * c, -sp * s, cp])
+        rl = np.radians(float(getattr(self, "roll", 0.0) or 0.0))
+        if rl:                       # roll=0 -> se saltea: reduccion EXACTA
+            cr, sr = np.cos(rl), np.sin(rl)
+            ey, ez = cr * ey + sr * ez, -sr * ey + cr * ez
         return ex, ey, ez
 
     def to_local(self, world_pts: np.ndarray) -> np.ndarray:
@@ -122,23 +165,25 @@ class Furniture:
             for part in self.parts:
                 mask |= part.contains(local)
             return mask
+        # Mesh (CAD/OBJ): puntos del mundo al frame local, test punto-adentro por
+        # trimesh (ray-parity / winding). Confiable si la malla es watertight.
+        if self.kind == "mesh":
+            pts = np.atleast_2d(np.asarray(points, dtype=float))
+            tm = self._as_trimesh()
+            if tm is None:
+                return np.zeros(len(pts), dtype=bool)
+            return np.asarray(tm.contains(self.to_local(pts)), dtype=bool)
         p = np.asarray(points, dtype=float) - np.asarray(self.position, float)
         sx, sy, sz = self.size
         if self.kind == "cylinder":
             r = sx / 2.0
             return ((p[:, 0] ** 2 + p[:, 1] ** 2 <= r * r)
                     & (np.abs(p[:, 2]) <= sz / 2.0))
-        # box con yaw (+pitch): proyectar el punto sobre los ejes locales.
-        # ejes: yaw th sobre z -> ex=(c,s,0), ey=(-s,c,0), ez=(0,0,1);
-        # luego pitch ph sobre ey -> ex'=cp*ex+sp*ez, ez'=-sp*ex+cp*ez, ey'=ey.
-        # pitch=0 reduce EXACTO al caso solo-yaw (cp=1, sp=0).
-        th = np.radians(self.orientation)
-        ph = np.radians(float(getattr(self, "pitch", 0.0) or 0.0))
-        c, s = np.cos(th), np.sin(th)
-        cp, sp = np.cos(ph), np.sin(ph)
-        xl = (cp * c) * p[:, 0] + (cp * s) * p[:, 1] + sp * p[:, 2]   # . ex'
-        yl = (-s) * p[:, 0] + c * p[:, 1]                            # . ey'
-        zl = (-sp * c) * p[:, 0] + (-sp * s) * p[:, 1] + cp * p[:, 2]  # . ez'
+        # box con yaw+pitch+roll: proyectar el punto sobre los ejes locales.
+        # Se DELEGA en _local_axes (fuente unica) en vez de repetir la cuenta:
+        # asi el tallado no puede divergir del dibujo ni de la colision.
+        ex, ey, ez = self._local_axes()
+        xl, yl, zl = p @ ex, p @ ey, p @ ez
         return ((np.abs(xl) <= sx / 2.0)
                 & (np.abs(yl) <= sy / 2.0)
                 & (np.abs(zl) <= sz / 2.0))
@@ -150,6 +195,14 @@ class Furniture:
         ex, ey, ez = self._local_axes()
         c0 = np.asarray(self.position, dtype=float)
         pts = []
+        if self.kind == "mesh":
+            if self.mesh_verts is None:
+                return c0.copy(), c0.copy()
+            # Directo desde mesh_verts (sin construir trimesh): esto corre por
+            # frame en el drag (colision), conviene que sea barato.
+            M = np.stack([ex, ey, ez])                 # (3,3): filas ex,ey,ez
+            world = c0 + np.asarray(self.mesh_verts, float) @ M   # local -> mundo
+            return world.min(axis=0), world.max(axis=0)
         if self.kind == "compound" and self.parts:
             for part in self.parts:
                 px, py, pz = part.position
@@ -177,24 +230,34 @@ class Furniture:
     def to_dict(self) -> dict:
         d = {"kind": self.kind, "position": list(self.position),
              "size": list(self.size), "orientation": self.orientation,
-             "pitch": self.pitch,
+             "pitch": self.pitch, "roll": self.roll,
              "label": self.label, "provenance": self.provenance}
         if self.kind == "compound" and self.parts:
             d["parts"] = [p.to_dict() for p in self.parts]
+        if self.kind == "mesh" and self.mesh_verts is not None:
+            # Redondeo a 0.1 mm: recorta el JSON sin efecto sobre el carve (la
+            # malla FEM es mucho mas gruesa). La decimacion (para escaneos con
+            # decenas de miles de caras) la hace el loader, no la persistencia.
+            d["mesh_verts"] = np.asarray(self.mesh_verts, float).round(4).tolist()
+            d["mesh_faces"] = np.asarray(self.mesh_faces, int).tolist()
         return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "Furniture":
         parts = d.get("parts")
         parts = [cls.from_dict(pp) for pp in parts] if parts else None
+        mv, mf = d.get("mesh_verts"), d.get("mesh_faces")
         return cls(kind=str(d.get("kind", "box")),
                    position=tuple(d.get("position", (0, 0, 0))),
                    size=tuple(d.get("size", (0.5, 0.5, 0.5))),
                    orientation=float(d.get("orientation", 0.0)),
                    pitch=float(d.get("pitch", 0.0)),
+                   roll=float(d.get("roll", 0.0)),   # aditivo: .room viejo -> 0
                    label=str(d.get("label", "mueble")),
                    provenance=str(d.get("provenance", "")),
-                   parts=parts)
+                   parts=parts,
+                   mesh_verts=(np.asarray(mv, float) if mv is not None else None),
+                   mesh_faces=(np.asarray(mf, int) if mf is not None else None))
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +271,71 @@ def significance_threshold(f_valid: float, c: float = C0) -> float:
 
 def is_significant(furn: Furniture, f_valid: float, c: float = C0) -> bool:
     return furn.max_dim() >= significance_threshold(f_valid, c)
+
+
+# ---------------------------------------------------------------------------
+# Import CAD: OBJ (o cualquier formato que trimesh entienda) -> Furniture mesh
+# ---------------------------------------------------------------------------
+def load_furniture_mesh(path: str, label: Optional[str] = None,
+                        max_faces: Optional[int] = None
+                        ) -> Tuple[Furniture, List[str]]:
+    """Carga un archivo CAD como mueble kind="mesh".
+
+    Caso de uso (tesis): escanear el estudio con el celular -> SketchUp ->
+    exportar cada pieza como OBJ -> importar aca. El carve usa trimesh.contains,
+    que es CONFIABLE con malla WATERTIGHT (superficie cerrada). Un escaneo real
+    suele venir abierto: se intenta reparar (merge + fill_holes + fix_normals) y
+    se AVISA si sigue abierto (contains puede errar en las zonas sin tapar).
+
+    La malla se guarda CENTRADA en el frame local (local (0,0,0) = position del
+    mueble), de modo que world = position + R(yaw,pitch) @ local (reconstruccion
+    exacta con yaw=pitch=0). `size` se setea al bbox para info/UI.
+
+    Devuelve (Furniture, warnings). max_faces (opcional) decima escaneos pesados.
+    """
+    import os
+    import trimesh
+    warnings: List[str] = []
+    # process=False: NO weldea vertices al cargar. Un modelo multi-cuerpo (p.ej.
+    # una silla = asiento + respaldo + patas que se tocan) queda watertight por
+    # cuerpo; weldear las junturas lo volveria non-manifold. La reparacion se
+    # aplica SOLO si la malla no es watertight (tipico de un escaneo real).
+    tm = trimesh.load(path, force="mesh", process=False)
+    if tm is None or len(getattr(tm, "faces", [])) == 0:
+        raise ValueError(f"no se pudo leer una malla de {path}")
+
+    if not tm.is_watertight:
+        try:
+            tm.merge_vertices()                     # une vertices duplicados
+        except Exception:
+            pass
+        if not tm.is_watertight:                    # aun abierta: tapar huecos
+            try:
+                trimesh.repair.fill_holes(tm)
+                trimesh.repair.fix_normals(tm)
+            except Exception:
+                pass
+        if not tm.is_watertight:
+            warnings.append(
+                "malla no watertight tras reparar: el carve (punto-adentro) "
+                "puede fallar en zonas abiertas. Cerra los huecos en el CAD.")
+
+    if max_faces and len(tm.faces) > int(max_faces):
+        try:
+            tm = tm.simplify_quadric_decimation(int(max_faces))
+            warnings.append(f"decimada a ~{len(tm.faces)} caras")
+        except Exception:
+            warnings.append("no se pudo decimar (sigue con la malla completa)")
+
+    center = tm.bounds.mean(axis=0)                    # centro del bbox
+    verts_local = np.asarray(tm.vertices, float) - center
+    name = label or os.path.splitext(os.path.basename(path))[0]
+    furn = Furniture(
+        kind="mesh", position=tuple(float(c) for c in center),
+        size=tuple(float(e) for e in tm.extents),
+        mesh_verts=verts_local, mesh_faces=np.asarray(tm.faces, int),
+        label=name, provenance=f"CAD import: {os.path.basename(path)}")
+    return furn, warnings
 
 
 # ---------------------------------------------------------------------------
@@ -422,8 +550,8 @@ def furniture_walls(muebles: List[Furniture], mat_by_furn: Dict[int, object],
     freq = np.asarray(freq, float)
     walls = []
     for fi, m in enumerate(muebles):
-        if getattr(m, "kind", "box") == "compound":
-            # tope y huella desde el bounding box (el 'size' del compound es
+        if getattr(m, "kind", "box") in ("compound", "mesh"):
+            # tope y huella desde el bounding box (el 'size' del compound/mesh es
             # el default; la cara superior real la da el AABB).
             lo, hi = m.aabb()
             cx, cy = float((lo[0] + hi[0]) / 2.0), float((lo[1] + hi[1]) / 2.0)

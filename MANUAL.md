@@ -320,7 +320,7 @@ Los 8 valores corresponden a las bandas de octava: **63 / 125 / 250 / 500 / 1000
 
 ### 6.4 Muebles
 
-Un **mueble** es un objeto sólido (caja o cilindro) que entra en el modelo modal como un **obstáculo real**. No es un adorno visual: afecta la física por **tres canales**:
+Un **mueble** es un objeto sólido (caja, cilindro, preset armado o **malla CAD importada**) que entra en el modelo modal como un **obstáculo real**. No es un adorno visual: afecta la física por **tres canales**:
 
 1. **Obstáculo rígido (carve).** La malla del aire se **talla**: los tetraedros dentro del mueble se quitan del dominio. La superficie del hueco queda como pared rígida (condición natural, gratis). Resultado: los **modos se corren** por sí solos (exacto, no perturbativo).
 2. **Absorción (A36).** Si al mueble le asignás un **material**, sus caras absorben según la presión modal sobre ellas — igual que las paredes. Un sillón tapizado domina por **absorción**, no por desplazar volumen; modelarlo rígido es cualitativamente errado.
@@ -338,22 +338,35 @@ En el grupo **Muebles** (pestaña Acústica): **Añadir / Editar / Quitar / Dupl
 | **Centro (X, Y, Z)** | posición del centro geométrico [m]; el mueble nuevo aparece **en el medio de la sala** |
 | **Tamaño** | caja = Ancho × Largo × Alto; cilindro = Diámetro × Alto |
 | **Orientación (yaw)** | giro alrededor del eje vertical (solo caja) |
-| **Inclinación (pitch)** | inclinación (solo caja); **afecta el carve**, no es solo visual |
+| **Inclinación (pitch)** | inclinación adelante/atrás (solo caja); **afecta el carve**, no es solo visual |
+| **Vuelco (roll)** | vuelca el mueble de costado (gira sobre su frente); **también afecta el carve** |
 | **Material** | del catálogo, o **Rígido** (sin absorción) |
 | **Etiqueta / Procedencia** | nombre y trazabilidad de las medidas |
+| **CAD** | botón **"Importar CAD (OBJ)…"**: trae una malla 3D como mueble (§6.4.1) |
+
+Los tres ángulos siguen la convención de aviación: primero **yaw** (sobre el eje vertical del mundo), después **pitch** (sobre el eje transversal resultante), después **roll** (sobre el frente resultante).
 
 El mueble se ve como un **wireframe verde-azulado** en el visor 3D (naranja al seleccionarlo en la lista). Se guarda en el `.room` junto con su material.
 
-#### Mover en el visor 3D (mismos gestos que las fuentes)
+#### Mover y rotar en el visor 3D
 
 | Gesto | Acción |
 |---|---|
 | **Shift + arrastrar** | mover en el plano horizontal (XY) |
 | **Ctrl + Shift + arrastrar** | mover en altura (Z) |
-| **Alt + Ctrl + arrastrar** | girar (yaw) |
+| **Alt + Ctrl** (mantener) | aparece el **gizmo de rotación** (3 anillos) |
+| **Alt + Ctrl + arrastrar** | girar sobre el **anillo agarrado** |
 | **Doble-click** | abrir el editor |
 
-> Las **fuentes tienen prioridad** de selección. El mueble se agarra clickeando en **cualquier parte de su silueta**, no solo cerca del centro. La **inclinación (pitch)** se edita por el campo del diálogo, no con el mouse (rotar arrastrando siempre incluye algo de vertical y lo inclinaría sin querer).
+**Gizmo de rotación.** Manteniendo **Alt + Ctrl** sobre un mueble aparecen tres anillos, uno por eje. El que está bajo el cursor se **resalta en magenta**: ese es el que se va a mover. Se hace click y se arrastra, y el mueble gira **solo sobre ese eje**.
+
+| Anillo | Color | Eje | Efecto |
+|---|---|---|---|
+| **Yaw** | celeste | vertical del mundo | gira sobre el piso |
+| **Pitch** | ámbar | transversal local | inclina adelante/atrás |
+| **Roll** | verde | frente local | vuelca de costado |
+
+> Las **fuentes tienen prioridad** de selección. El mueble se agarra clickeando en **cualquier parte de su silueta**, no solo cerca del centro. El eje se elige **antes** de mover (con el click sobre el anillo), que es lo que evita inclinar sin querer al rotar. Los tres ángulos también se editan por sus campos numéricos en el diálogo.
 
 #### Objetos sólidos — no se superponen
 
@@ -370,6 +383,18 @@ El botón **"Insertar preset ▾"** ofrece muebles ya dimensionados, agrupados e
 > **Alcance del modelo.** El FEM es de baja frecuencia (modal): capta el obstáculo, la absorción del material y la reflexión del tope. **No** simula la **difusión** (QRD/Skyline) ni la **sintonía** fina de resonadores Helmholtz o bass traps; esos presets entran como geometría más un material aproximado. Los **absorbentes de banda ancha** (sofá, gobos, nubes, paneles) sí se modelan bien, que es la fortaleza del modelo en LF.
 
 Internamente un preset es un mueble **compuesto** (unión de sub-piezas): se talla, mueve y choca como una sola pieza. Las partes finas (patas, tensores) no se resuelven en la malla, lo cual es correcto.
+
+#### 6.4.1 Importar un mueble desde CAD (OBJ)
+
+El botón **"Importar CAD (OBJ)…"** del editor trae una **malla 3D** como mueble. Formatos: `.obj`, `.stl`, `.ply`, `.off`, `.glb`, `.gltf`.
+
+El caso de uso pensado es **capturar un recinto real**: escanear el estudio con el celular, abrirlo en SketchUp, separar cada pieza y exportarla por separado. La malla importada se talla, absorbe y refleja exactamente igual que un preset; se mueve, rota y choca como cualquier otro mueble.
+
+Al importar, el mueble aparece en el centro de la sala apoyado en el piso, y el diálogo muestra la cantidad de caras. El **tipo y el tamaño quedan bloqueados** (la forma la define la malla); se editan posición, los tres ángulos, material, etiqueta y procedencia. La malla se guarda **embebida en el `.room`**, así el archivo sigue siendo autocontenido.
+
+> **La malla tiene que ser cerrada (watertight).** El tallado pregunta "¿este punto está adentro?", y esa pregunta solo tiene respuesta confiable si la superficie está cerrada. Al importar se intenta **reparar** automáticamente (unir vértices duplicados, tapar huecos, corregir normales); si aun así queda abierta, el programa **avisa** y conviene cerrar los huecos en el CAD antes de confiar en el resultado.
+
+> **Sobre la fidelidad de la forma.** Un experimento controlado mostró que, en la banda modal, la forma exacta de un mueble frente a su caja envolvente es un efecto de **segundo orden** (0,3 % a 1,4 % en las frecuencias, del orden del ruido de malla), y que depende mucho más de **dónde** está el mueble (el máximo se da en las esquinas, que son antinodos). Importar CAD sirve para **capturar** un recinto real con comodidad, no para ganar precisión de predicción.
 
 ---
 
@@ -2206,4 +2231,24 @@ El mueble se agarra clickeando en **cualquier parte de su bounding box proyectad
 
 ---
 
-*Manual actualizado al 29 de Julio de 2026 — v2.19.*
+**Cambios v2.20** (30 de julio 2026): **importar muebles desde CAD** y **gizmo de rotación de 3 ejes**. Uso en §6.4 y §6.4.1. Cuatro ejes.
+
+### A. Muebles desde archivo CAD
+
+Nuevo tipo de mueble **malla** (`.obj`, `.stl`, `.ply`, `.off`, `.glb`, `.gltf`): la forma la define un archivo CAD en vez de una primitiva. El tallado usa un test punto-adentro sobre la malla, así que la pieza importada afecta modos, absorción y SBIR igual que un preset. Caso de uso: **escanear un estudio real** con el celular, separar las piezas en SketchUp y exportarlas una por una. Al importar se **repara** la malla si hace falta (unir vértices, tapar huecos, corregir normales) y se **avisa** si queda abierta, porque el test punto-adentro solo es confiable con superficie cerrada. La malla se embebe en el `.room` (archivo autocontenido). Detalle y alcance en §6.4.1.
+
+### B. Gizmo de rotación de 3 ejes
+
+Manteniendo **Alt + Ctrl** sobre un mueble aparecen **tres anillos** (yaw celeste, pitch ámbar, roll verde). El anillo bajo el cursor se resalta en magenta y, al arrastrar, el mueble gira **solo sobre ese eje**. El eje se elige **antes** de mover, con un click explícito: por eso ya no puede inclinarse sin querer al rotar (el problema que en v2.19 se había resuelto quitando el gesto). Los anillos se dibujan con los mismos ejes locales que usa el tallado, así el anillo que se ve es el eje que efectivamente se mueve.
+
+### C. Tercer eje de rotación (roll)
+
+Los muebles ahora tienen **roll** además de yaw y pitch: vuelca la pieza de costado, girando sobre su frente. Convención de aviación (yaw sobre el vertical del mundo, después pitch sobre el transversal, después roll sobre el frente). Como el pitch, **afecta el carve**, no es cosmético. `roll = 0` reduce **exacto** al comportamiento anterior y los `.room` previos cargan con roll nulo, sin cambio de versión de archivo. Editable por el anillo verde del gizmo o por su campo en el diálogo.
+
+### D. Fix: muebles que se trababan al duplicar
+
+Duplicar un mueble dejaba la copia en la **posición exacta** del original: los dos quedaban solapados al 100 % y la regla de "los sólidos no se atraviesan" bloqueaba todo movimiento de ambos, sin salida. Ahora la copia nace **desplazada** al costado, y además un mueble que ya esté solapado **puede arrastrarse para afuera** (antes solo se podía frenar, nunca escapar). Afectaba también a los presets, no solo al CAD.
+
+---
+
+*Manual actualizado al 30 de Julio de 2026 — v2.20.*

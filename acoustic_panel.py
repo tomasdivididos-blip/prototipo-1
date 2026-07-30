@@ -571,6 +571,14 @@ class FurnitureEditDialog(QDialog):
         # material/etiqueta, NO tipo ni tamaño (se preservan sus partes).
         self._compound_src = (furn if furn is not None
                               and getattr(furn, "kind", "") == "compound" else None)
+        # Un mueble CAD (kind="mesh") tiene forma fija importada: se edita
+        # posición/orientación/material/etiqueta, NO tipo ni tamaño (se preserva
+        # la malla). Mismo trato que un preset compound.
+        self._mesh_src = (furn if furn is not None
+                          and getattr(furn, "kind", "") == "mesh" else None)
+        self._mat_names = mat_names
+        self._default_pos = default_pos
+        self._dims = (Lx, Ly)
 
         form = QFormLayout(self)
 
@@ -606,6 +614,10 @@ class FurnitureEditDialog(QDialog):
         self.sb_pitch = self._spin(-90, 90, 1, 5.0)
         self.sb_pitch.setSuffix(" °")
         form.addRow("Inclinación (pitch):", self.sb_pitch)
+        self.sb_roll = self._spin(-180, 180, 1, 5.0)
+        self.sb_roll.setSuffix(" °")
+        self.sb_roll.setToolTip("Vuelca el mueble de costado (gira sobre su frente).")
+        form.addRow("Vuelco (roll):", self.sb_roll)
 
         # Material (Rígido = sin absorción)
         self.combo_mat = QComboBox()
@@ -619,24 +631,23 @@ class FurnitureEditDialog(QDialog):
         self.ed_prov.setPlaceholderText("medida propia / catálogo / …")
         form.addRow("Procedencia:", self.ed_prov)
 
-        if self._compound_src is not None:
-            # Preset: bloquear tipo y tamaño; permitir el resto.
-            self.combo_kind.setEnabled(False)
-            for w in (self.sb_sx, self.sb_sy, self.sb_sz,
-                      self.lbl_sx, self.lbl_sy, self.lbl_sz):
-                w.setEnabled(False)
-            lo, hi = furn.aabb(); d = hi - lo
-            self.lbl_sx.setText("(preset)")
-            self.sb_sx.setValue(float(d[0])); self.sb_sy.setValue(float(d[1]))
-            self.sb_sz.setValue(float(d[2]))
-            px, py, pz = furn.position
-            self.sb_x.setValue(px); self.sb_y.setValue(py); self.sb_z.setValue(pz)
-            self.sb_orient.setValue(float(getattr(furn, "orientation", 0.0) or 0.0))
-            self.sb_pitch.setValue(float(getattr(furn, "pitch", 0.0) or 0.0))
-            self.ed_label.setText(str(getattr(furn, "label", "") or ""))
-            self.ed_prov.setText(str(getattr(furn, "provenance", "") or ""))
-            if mat_name and mat_name in mat_names:
-                self.combo_mat.setCurrentText(mat_name)
+        # Importar CAD (OBJ/STL/PLY…): trae una malla como mueble kind="mesh".
+        self.btn_import_cad = QPushButton("Importar CAD (OBJ)…")
+        self.btn_import_cad.setToolTip(
+            "Cargar una malla 3D (OBJ, STL, PLY). Ideal: escanear el estudio y "
+            "exportar cada pieza por separado. La malla debe ser cerrada "
+            "(watertight) para que el tallado sea confiable.")
+        self.btn_import_cad.clicked.connect(self._on_import_cad)
+        self.lbl_cad = QLabel("")
+        self.lbl_cad.setWordWrap(True)
+        crow = QHBoxLayout(); crow.setSpacing(6)
+        crow.addWidget(self.btn_import_cad); crow.addWidget(self.lbl_cad, 1)
+        form.addRow("CAD:", crow)
+
+        fixed_src = self._compound_src or self._mesh_src
+        if fixed_src is not None:
+            # Preset compound o mesh CAD: forma fija -> bloquear tipo y tamaño.
+            self._lock_fixed_geometry(fixed_src, mat_name, mat_names)
         elif furn is not None:
             self.combo_kind.setCurrentIndex(
                 1 if getattr(furn, "kind", "box") == "cylinder" else 0)
@@ -646,6 +657,7 @@ class FurnitureEditDialog(QDialog):
             self.sb_sx.setValue(sx); self.sb_sy.setValue(sy); self.sb_sz.setValue(sz)
             self.sb_orient.setValue(float(getattr(furn, "orientation", 0.0) or 0.0))
             self.sb_pitch.setValue(float(getattr(furn, "pitch", 0.0) or 0.0))
+            self.sb_roll.setValue(float(getattr(furn, "roll", 0.0) or 0.0))
             self.ed_label.setText(str(getattr(furn, "label", "") or ""))
             self.ed_prov.setText(str(getattr(furn, "provenance", "") or ""))
             if mat_name and mat_name in mat_names:
@@ -681,9 +693,60 @@ class FurnitureEditDialog(QDialog):
     def _kind(self):
         return self._KINDS[self.combo_kind.currentIndex()][0]
 
+    def _lock_fixed_geometry(self, src, mat_name, mat_names):
+        """Bloquea tipo+tamaño y puebla placement desde un mueble de forma fija
+        (preset compound o mesh CAD). El tamaño se muestra desde el AABB."""
+        self.combo_kind.setEnabled(False)
+        for w in (self.sb_sx, self.sb_sy, self.sb_sz,
+                  self.lbl_sx, self.lbl_sy, self.lbl_sz):
+            w.setEnabled(False)
+        is_mesh = getattr(src, "kind", "") == "mesh"
+        lo, hi = src.aabb(); d = hi - lo
+        self.lbl_sx.setText("(CAD)" if is_mesh else "(preset)")
+        self.sb_sx.setValue(float(d[0])); self.sb_sy.setValue(float(d[1]))
+        self.sb_sz.setValue(float(d[2]))
+        px, py, pz = src.position
+        self.sb_x.setValue(px); self.sb_y.setValue(py); self.sb_z.setValue(pz)
+        self.sb_orient.setValue(float(getattr(src, "orientation", 0.0) or 0.0))
+        self.sb_pitch.setValue(float(getattr(src, "pitch", 0.0) or 0.0))
+        self.sb_roll.setValue(float(getattr(src, "roll", 0.0) or 0.0))
+        self.ed_label.setText(str(getattr(src, "label", "") or ""))
+        self.ed_prov.setText(str(getattr(src, "provenance", "") or ""))
+        if mat_name and mat_name in (mat_names or []):
+            self.combo_mat.setCurrentText(mat_name)
+        if is_mesh and src.mesh_faces is not None:
+            self.lbl_cad.setText(f"malla: {len(src.mesh_faces)} caras")
+
+    def _on_import_cad(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Importar CAD", "",
+            "Mallas 3D (*.obj *.stl *.ply *.off *.glb *.gltf);;Todos (*)")
+        if not path:
+            return
+        try:
+            import furniture
+            furn, warns = furniture.load_furniture_mesh(path)
+        except Exception as e:
+            QMessageBox.warning(self, "Importar CAD", f"No se pudo importar:\n{e}")
+            return
+        # Reubicar en la sala: XY en el default, apoyado en el piso (z=0). La
+        # malla se guarda centrada en su bbox, asi que position.z = alto/2 deja
+        # el fondo en z=0.
+        sx, sy, sz = furn.size
+        if self._default_pos is not None:
+            cx, cy = float(self._default_pos[0]), float(self._default_pos[1])
+        else:
+            cx, cy = self._dims[0] / 2.0, self._dims[1] / 2.0
+        furn.position = (cx, cy, float(sz) / 2.0)
+        self._mesh_src = furn
+        self._compound_src = None
+        self._lock_fixed_geometry(furn, None, self._mat_names)
+        if warns:
+            QMessageBox.warning(self, "Importar CAD", "\n".join(warns))
+
     def _on_kind_changed(self):
-        if self._compound_src is not None:
-            return   # preset: forma fija, no tocar los campos bloqueados
+        if self._compound_src is not None or self._mesh_src is not None:
+            return   # forma fija (preset/CAD): no tocar los campos bloqueados
         cyl = self._kind() == "cylinder"
         # Cilindro: size = (diámetro, _, alto); el 2º lado y el yaw no aplican.
         self.lbl_sx.setText("Diám" if cyl else "An")
@@ -691,6 +754,7 @@ class FurnitureEditDialog(QDialog):
         self.sb_sy.setVisible(not cyl)
         self.sb_orient.setEnabled(not cyl)
         self.sb_pitch.setEnabled(not cyl)
+        self.sb_roll.setEnabled(not cyl)
 
     def get_furniture(self):
         from furniture import Furniture
@@ -703,8 +767,25 @@ class FurnitureEditDialog(QDialog):
                           float(self.sb_z.value())),
                 orientation=float(self.sb_orient.value()),
                 pitch=float(self.sb_pitch.value()),
+                roll=float(self.sb_roll.value()),
                 label=self.ed_label.text().strip() or src.label,
                 provenance=self.ed_prov.text().strip())
+            mat = (self.combo_mat.currentText()
+                   if self.combo_mat.currentIndex() > 0 else None)
+            return furn, mat
+        if self._mesh_src is not None:
+            src = self._mesh_src
+            furn = Furniture(
+                kind="mesh",
+                mesh_verts=src.mesh_verts, mesh_faces=src.mesh_faces,
+                size=src.size,
+                position=(float(self.sb_x.value()), float(self.sb_y.value()),
+                          float(self.sb_z.value())),
+                orientation=float(self.sb_orient.value()),
+                pitch=float(self.sb_pitch.value()),
+                roll=float(self.sb_roll.value()),
+                label=self.ed_label.text().strip() or src.label,
+                provenance=self.ed_prov.text().strip() or src.provenance)
             mat = (self.combo_mat.currentText()
                    if self.combo_mat.currentIndex() > 0 else None)
             return furn, mat
@@ -712,17 +793,18 @@ class FurnitureEditDialog(QDialog):
         if kind == "cylinder":
             diam = float(self.sb_sx.value())
             size = (diam, diam, float(self.sb_sz.value()))
-            orient = pitch = 0.0
+            orient = pitch = roll = 0.0
         else:
             size = (float(self.sb_sx.value()), float(self.sb_sy.value()),
                     float(self.sb_sz.value()))
             orient = float(self.sb_orient.value())
             pitch = float(self.sb_pitch.value())
+            roll = float(self.sb_roll.value())
         furn = Furniture(
             kind=kind,
             position=(float(self.sb_x.value()), float(self.sb_y.value()),
                       float(self.sb_z.value())),
-            size=size, orientation=orient, pitch=pitch,
+            size=size, orientation=orient, pitch=pitch, roll=roll,
             label=self.ed_label.text().strip() or "mueble",
             provenance=self.ed_prov.text().strip())
         mat = self.combo_mat.currentText() if self.combo_mat.currentIndex() > 0 else None
@@ -2649,9 +2731,10 @@ class AcousticPanel(QWidget):
     def _furn_item_text(self, i, m) -> str:
         kind = getattr(m, "kind", "box")
         mat = self._furniture_mat_names.get(i)
-        if kind == "compound":
+        if kind in ("compound", "mesh"):
             lo, hi = m.aabb(); d = hi - lo
-            return (f"{m.label}  [preset {d[0]:.2f}×{d[1]:.2f}×{d[2]:.2f} m "
+            tag = "CAD" if kind == "mesh" else "preset"
+            return (f"{m.label}  [{tag} {d[0]:.2f}×{d[1]:.2f}×{d[2]:.2f} m "
                     f"· {mat or 'rígido'}]")
         cyl = kind == "cylinder"
         sx, sy, sz = m.size
@@ -2744,6 +2827,12 @@ class AcousticPanel(QWidget):
         if hasattr(self.viewer, "set_furniture_bboxes"):
             self.viewer.set_furniture_bboxes(
                 [m.aabb() for m in self.furniture])
+        # Ejes locales para el gizmo de rotación: MISMA fuente de verdad que
+        # contains/aabb/wireframe (`Furniture._local_axes`), así el anillo que
+        # ves es el eje que realmente se va a mover.
+        if hasattr(self.viewer, "set_furniture_axes"):
+            self.viewer.set_furniture_axes(
+                [m._local_axes() for m in self.furniture])
 
     @staticmethod
     def _furniture_aabb(m):
@@ -2893,15 +2982,18 @@ class AcousticPanel(QWidget):
         self._log(f"Mueble {i} editado. Recalculá los modos para aplicarlo.")
 
     def apply_furniture_move(self, idx: int, x: float, y: float, z: float):
-        """Mueve un mueble por drag (Shift). Colisión-stop: si la nueva posición
-        lo haría solapar con otro, NO se aplica (frena al contacto). Actualiza el
+        """Mueve un mueble por drag (Shift). Colisión-stop: frena al contacto si
+        el movimiento CREARÍA un solape nuevo. Si el mueble YA estaba solapado
+        (p.ej. una copia recién duplicada encima), NO se bloquea -> se puede
+        arrastrar para afuera (si no, quedaría trabado sin salida). Actualiza el
         wireframe IN-PLACE (sin reconstruir la lista -> sin cuelgue por frame)."""
         if not (0 <= idx < len(self.furniture)):
             return
         m = self.furniture[idx]
+        was_conflicting = self._furniture_conflict(m, ignore_idx=idx) is not None
         old = m.position
         m.position = (float(x), float(y), float(z))
-        if self._furniture_conflict(m, ignore_idx=idx):
+        if not was_conflicting and self._furniture_conflict(m, ignore_idx=idx):
             m.position = old   # frena: no atraviesa materia ni sale del recinto
             return
         self.furn_markers.set_positions(self.furniture, selected_idx=idx)
@@ -2910,15 +3002,16 @@ class AcousticPanel(QWidget):
 
     def apply_furniture_rotate(self, idx: int, d_yaw: float):
         """Rota (yaw) un mueble por gesto Alt+Ctrl. Solo cajas (el cilindro es
-        invariante). Colisión-stop igual que el move."""
+        invariante). Colisión-stop con escape igual que el move."""
         if not (0 <= idx < len(self.furniture)):
             return
         m = self.furniture[idx]
         if getattr(m, "kind", "box") == "cylinder":
             return
+        was_conflicting = self._furniture_conflict(m, ignore_idx=idx) is not None
         old = float(getattr(m, "orientation", 0.0) or 0.0)
         m.orientation = float((old + d_yaw) % 360.0)
-        if self._furniture_conflict(m, ignore_idx=idx):
+        if not was_conflicting and self._furniture_conflict(m, ignore_idx=idx):
             m.orientation = old
             return
         self.furn_markers.set_positions(self.furniture, selected_idx=idx)
@@ -2926,18 +3019,39 @@ class AcousticPanel(QWidget):
 
     def apply_furniture_tilt(self, idx: int, d_pitch: float):
         """Inclina (pitch) un mueble por gesto Alt+Ctrl (vertical). Solo cajas;
-        clamp -90..90. El pitch afecta el carve. Colisión-stop igual que rotate."""
+        clamp -90..90. El pitch afecta el carve. Colisión-stop con escape igual
+        que rotate."""
         if not (0 <= idx < len(self.furniture)):
             return
         m = self.furniture[idx]
         if getattr(m, "kind", "box") == "cylinder":
             return
+        was_conflicting = self._furniture_conflict(m, ignore_idx=idx) is not None
         old = float(getattr(m, "pitch", 0.0) or 0.0)
         m.pitch = float(max(-90.0, min(90.0, old + d_pitch)))
-        if self._furniture_conflict(m, ignore_idx=idx):
+        if not was_conflicting and self._furniture_conflict(m, ignore_idx=idx):
             m.pitch = old
             return
         self.furn_markers.set_positions(self.furniture, selected_idx=idx)
+        self.viewer.update()
+
+    def apply_furniture_roll(self, idx: int, d_roll: float):
+        """Vuelca (roll) un mueble por el anillo del gizmo. Solo cajas/compound/
+        mesh; el cilindro es invariante. Colisión-stop con escape igual que los
+        otros dos ejes. El roll afecta el carve (no es cosmético)."""
+        if not (0 <= idx < len(self.furniture)):
+            return
+        m = self.furniture[idx]
+        if getattr(m, "kind", "box") == "cylinder":
+            return
+        was_conflicting = self._furniture_conflict(m, ignore_idx=idx) is not None
+        old = float(getattr(m, "roll", 0.0) or 0.0)
+        m.roll = float((old + d_roll) % 360.0)
+        if not was_conflicting and self._furniture_conflict(m, ignore_idx=idx):
+            m.roll = old
+            return
+        self.furn_markers.set_positions(self.furniture, selected_idx=idx)
+        self._sync_furniture_positions_to_viewer()
         self.viewer.update()
 
     def _remove_furniture(self):
@@ -2959,6 +3073,23 @@ class AcousticPanel(QWidget):
         from furniture import Furniture
         m = Furniture.from_dict(self.furniture[i].to_dict())
         m.label = f"{m.label}_dup"
+        # Desplazar la copia para que NO caiga exactamente encima del original
+        # (si no, ambos se solapan al 100% y la colisión-stop los traba). Se
+        # corre por su propio ancho + un gap en +X; si eso saldría del recinto,
+        # se corre en -X. La lógica de escape cubre cualquier solape residual.
+        lo, hi = self._furniture_aabb(m)
+        w = float(hi[0] - lo[0]) + 0.15
+        px, py, pz = m.position
+        nx = px + w
+        try:
+            rlo, rhi = self._room_bbox()
+            if hi[0] + w > rhi[0] - 1e-3:
+                nx = px - w
+                if lo[0] - w < rlo[0] + 1e-3:      # tampoco entra en -X: cede algo
+                    nx = px + 0.3
+        except Exception:
+            pass
+        m.position = (nx, py, pz)
         self.furniture.append(m)
         mat = self._furniture_mat_names.get(i)
         if mat:

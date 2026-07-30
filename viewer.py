@@ -126,6 +126,7 @@ class IsoViewer(gl.GLViewWidget):
     furnitureEditRequested   = pyqtSignal(int)                       # idx (doble-click)
     furnitureRotateRequested = pyqtSignal(int, float)               # idx, d_yaw   (Alt+Ctrl horiz)
     furnitureTiltRequested   = pyqtSignal(int, float)               # idx, d_pitch (Alt+Ctrl vert)
+    furnitureRollRequested   = pyqtSignal(int, float)               # idx, d_roll  (anillo roll)
     # Plano de corte interactivo
     slicePlaneHovered     = pyqtSignal(int, float)  # axis, offset (mientras mueve)
     slicePlaneConfirmed   = pyqtSignal(int, float)  # axis, offset (al hacer click)
@@ -189,6 +190,11 @@ class IsoViewer(gl.GLViewWidget):
         self._furniture_bboxes = []      # lista de (min(3), max(3)) para picking por silueta
         self._dragging_furn_idx = -1     # >=0 mueble en arrastre, -1 ninguno
         self._orient_furn_idx = -1       # >=0 mueble rotando (Alt+Ctrl), -1 no
+        self._furniture_axes = []        # (ex,ey,ez) por mueble, para el gizmo
+        self._gizmo_items = None         # {'yaw','pitch'} -> GLLinePlotItem
+        self._gizmo_idx = -1             # mueble con gizmo visible, -1 ninguno
+        self._orient_furn_axis = None    # 'yaw' | 'pitch' mientras se arrastra
+        self.setMouseTracking(True)      # hover del gizmo (sin boton apretado)
 
         # Plano de corte interactivo
         self._slice_placement = False
@@ -317,7 +323,9 @@ class IsoViewer(gl.GLViewWidget):
     def stop_slice_placement(self):
         """Desactiva el modo de colocacion del plano."""
         self._slice_placement = False
-        self.setMouseTracking(False)
+        # OJO: NO apagar el mouse tracking. El gizmo de rotacion necesita los
+        # eventos de movimiento sin boton para resaltar el anillo bajo el cursor.
+        self.setMouseTracking(True)
         if self._slice_preview is not None:
             self._slice_preview.clear()
         self.update()
@@ -372,6 +380,127 @@ class IsoViewer(gl.GLViewWidget):
         """Guarda los bounding boxes (min, max) de los muebles para picking por
         silueta (agarrar clickeando en cualquier parte del mueble)."""
         self._furniture_bboxes = list(bboxes)
+
+    def set_furniture_axes(self, axes):
+        """Guarda los ejes locales (ex, ey, ez) de cada mueble, tal como los
+        devuelve `Furniture._local_axes()`. El gizmo de rotacion los usa para
+        dibujar el anillo de pitch en el plano correcto (el pitch gira sobre ey),
+        asi el anillo coincide con el eje que realmente se va a mover."""
+        self._furniture_axes = list(axes)
+
+    # -----------------------------------------------------------------------
+    # Gizmo de rotacion de muebles (2 anillos: yaw + pitch), estilo CAD
+    # -----------------------------------------------------------------------
+    # Por que un gizmo y no "deducir el eje del arrastre": con 2 grados de
+    # libertad del mouse no se puede desambiguar 3 ejes sin una regla implicita,
+    # y toda regla implicita te entera del eje elegido DESPUES de mover (fue
+    # exactamente el bug de v2.19: el arrastre horizontal siempre traia algo de
+    # vertical y el mueble se inclinaba solo). Con el gizmo el eje se elige
+    # ANTES, con un click explicito sobre el anillo resaltado.
+    GIZMO_SEGS = 48
+    _GIZMO_COL_YAW   = (0.45, 0.75, 1.00, 0.55)     # celeste tenue (inactivo)
+    _GIZMO_COL_PITCH = (1.00, 0.80, 0.35, 0.55)     # ambar tenue (inactivo)
+    _GIZMO_COL_ROLL  = (0.55, 1.00, 0.60, 0.55)     # verde tenue (inactivo)
+    _GIZMO_COL_HOT   = (1.00, 0.35, 0.75, 1.00)     # magenta (anillo bajo el cursor)
+    _GIZMO_AXES = ("yaw", "pitch", "roll")
+
+    def _gizmo_base_color(self, name: str):
+        return {"yaw": self._GIZMO_COL_YAW,
+                "pitch": self._GIZMO_COL_PITCH,
+                "roll": self._GIZMO_COL_ROLL}[name]
+
+    def _gizmo_radius(self, idx: int) -> float:
+        """Radio de los anillos: la media-diagonal del mueble + un margen, para
+        que el gizmo envuelva la pieza y sus anillos sean agarrables."""
+        try:
+            lo, hi = self._furniture_bboxes[idx]
+            r = float(np.linalg.norm(np.asarray(hi) - np.asarray(lo))) / 2.0
+        except Exception:
+            r = 0.4
+        return max(0.25, r * 1.15)
+
+    def _gizmo_rings(self, idx: int):
+        """{'yaw': (N,3), 'pitch': (N,3), 'roll': (N,3)} con los anillos en MUNDO.
+
+        Cada anillo se dibuja en el plano PERPENDICULAR a su eje de giro, con los
+        ejes locales que da `Furniture._local_axes` (la misma fuente que usa el
+        tallado) -> el anillo que ves es el eje que se va a mover.
+          yaw   : gira sobre z del mundo   -> circulo en el plano XY.
+          pitch : gira sobre ey local      -> circulo en el plano (ex, ez).
+          roll  : gira sobre ex local      -> circulo en el plano (ey, ez).
+        """
+        if not (0 <= idx < len(self._furniture_positions)):
+            return {}
+        c = np.asarray(self._furniture_positions[idx], dtype=float)
+        r = self._gizmo_radius(idx)
+        t = np.linspace(0.0, 2.0 * np.pi, self.GIZMO_SEGS, endpoint=True)
+        ct, st = np.cos(t)[:, None], np.sin(t)[:, None]
+        try:
+            ex, ey, ez = [np.asarray(a, dtype=float)
+                          for a in self._furniture_axes[idx]]
+        except Exception:
+            ex = np.array([1.0, 0.0, 0.0]); ey = np.array([0.0, 1.0, 0.0])
+            ez = np.array([0.0, 0.0, 1.0])
+        yaw = c + r * (ct * np.array([1.0, 0.0, 0.0]) + st * np.array([0.0, 1.0, 0.0]))
+        pitch = c + r * (ct * ex + st * ez)
+        roll = c + r * (ct * ey + st * ez)
+        return {"yaw": yaw, "pitch": pitch, "roll": roll}
+
+    def _gizmo_pick_axis(self, px, py, idx: int):
+        """Cual de los dos anillos esta mas cerca del cursor, en PANTALLA.
+        Devuelve 'yaw' | 'pitch' | None."""
+        rings = self._gizmo_rings(idx)
+        best, best_d = None, np.inf
+        for name, pts in rings.items():
+            for p in pts:
+                q = self._project(p)
+                if q is None:
+                    continue
+                d = (q[0] - px) ** 2 + (q[1] - py) ** 2
+                if d < best_d:
+                    best_d, best = d, name
+        return best
+
+    def _update_gizmo(self, idx: int, hot: str = None):
+        """Dibuja/actualiza el gizmo del mueble `idx` (o lo oculta si idx<0).
+
+        Patron probado del proyecto: items GLLinePlotItem PERSISTENTES con color
+        UNICO, actualizados in-place con `setData` (NUNCA removeItem/addItem por
+        frame, NUNCA GLMeshItem(shader=None) que no renderiza en esta escena).
+        """
+        if self._gizmo_items is None:
+            self._gizmo_items = {}
+            for name in self._GIZMO_AXES:
+                it = gl.GLLinePlotItem(
+                    pos=np.zeros((0, 3), dtype=np.float32),
+                    color=self._gizmo_base_color(name),
+                    width=2.5, antialias=True, mode="line_strip")
+                self.addItem(it)
+                self._gizmo_items[name] = it
+        if idx < 0:
+            for it in self._gizmo_items.values():
+                it.setVisible(False)
+            self._gizmo_idx = -1
+            self.update()
+            return
+        rings = self._gizmo_rings(idx)
+        for name, it in self._gizmo_items.items():
+            pts = rings.get(name)
+            if pts is None or len(pts) == 0:
+                it.setVisible(False)
+                continue
+            base = self._gizmo_base_color(name)
+            it.setData(pos=np.asarray(pts, dtype=np.float32),
+                       color=(self._GIZMO_COL_HOT if name == hot else base),
+                       width=(4.0 if name == hot else 2.5))
+            it.setVisible(True)
+        self._gizmo_idx = idx
+        self.update()
+
+    def hide_rotation_gizmo(self):
+        """Oculta el gizmo (al soltar Alt+Ctrl, salir del widget, etc.)."""
+        if self._gizmo_items is not None:
+            self._update_gizmo(-1)
 
     def mouseDoubleClickEvent(self, ev):
         """Doble-click izquierdo sobre una esfera de fuente -> editar."""
@@ -579,8 +708,17 @@ class IsoViewer(gl.GLViewWidget):
             if idx >= 0:
                 self._orient_source_idx = idx
             else:
-                # Ninguna fuente: rotar el mueble bajo el cursor (yaw).
-                self._orient_furn_idx = self._pick_furniture(ev.x(), ev.y())
+                # Ninguna fuente: rotar el mueble bajo el cursor. El EJE lo
+                # decide el anillo del gizmo mas cercano al cursor (explicito),
+                # no la direccion del arrastre (implicito, el bug de v2.19).
+                fidx = self._pick_furniture(ev.x(), ev.y())
+                if fidx < 0 and self._gizmo_idx >= 0:
+                    fidx = self._gizmo_idx      # click sobre el anillo, no el mueble
+                self._orient_furn_idx = fidx
+                if fidx >= 0:
+                    self._orient_furn_axis = (
+                        self._gizmo_pick_axis(ev.x(), ev.y(), fidx) or "yaw")
+                    self._update_gizmo(fidx, hot=self._orient_furn_axis)
             return
 
         # Ctrl + Click derecho -> colocar fuente acustica a 1 m del piso
@@ -631,16 +769,42 @@ class IsoViewer(gl.GLViewWidget):
                 self.sourceTiltRequested.emit(self._orient_source_idx, d_pitch)
             return
 
-        # Orientacion de mueble (Alt+Ctrl+Left sostenido): SOLO yaw (horizontal).
-        # A diferencia del bafle, el mueble NO se inclina con el gesto: al rotar,
-        # el arrastre siempre tiene algo de vertical y lo inclinaba sin querer
-        # (acumulando decenas de grados de pitch -> el mueble "se caia", su bbox
-        # crecia y chocaba con todo). El pitch de los muebles se edita por el
-        # spinbox "Inclinacion" del dialogo.
+        # Orientacion de mueble (Alt+Ctrl+Left sostenido): gira SOLO sobre el eje
+        # del anillo agarrado (gizmo). Un eje por gesto -> no se puede inclinar
+        # sin querer mientras se rota (el bug de v2.19), y el eje se ve resaltado
+        # ANTES de empezar a mover.
         if self._orient_furn_idx >= 0 and (btns & Qt.LeftButton):
-            d_az = float(diff.x()) * self.BAFFLE_ROTATE_DEG_PER_PX
-            if d_az != 0.0:
-                self.furnitureRotateRequested.emit(self._orient_furn_idx, d_az)
+            if self._orient_furn_axis == "pitch":
+                d = -float(diff.y()) * self.BAFFLE_TILT_DEG_PER_PX
+                if d != 0.0:
+                    self.furnitureTiltRequested.emit(self._orient_furn_idx, d)
+            elif self._orient_furn_axis == "roll":
+                d = -float(diff.y()) * self.BAFFLE_TILT_DEG_PER_PX
+                if d != 0.0:
+                    self.furnitureRollRequested.emit(self._orient_furn_idx, d)
+            else:
+                d = float(diff.x()) * self.BAFFLE_ROTATE_DEG_PER_PX
+                if d != 0.0:
+                    self.furnitureRotateRequested.emit(self._orient_furn_idx, d)
+            self._update_gizmo(self._orient_furn_idx, hot=self._orient_furn_axis)
+            return
+
+        # Hover del gizmo: con Alt+Ctrl apretado y SIN boton, mostrar los anillos
+        # del mueble bajo el cursor y resaltar el que se agarraria. Es lo que
+        # hace explicito el eje antes del click (estilo CAD).
+        if not btns:
+            mods = ev.modifiers()
+            if (mods & Qt.AltModifier) and (mods & Qt.ControlModifier):
+                px, py = int(lpos.x()), int(lpos.y())
+                fidx = self._pick_furniture(px, py)
+                if fidx < 0 and self._gizmo_idx >= 0:
+                    fidx = self._gizmo_idx      # no soltar mientras se apunta al anillo
+                if fidx >= 0:
+                    self._update_gizmo(fidx, hot=self._gizmo_pick_axis(px, py, fidx))
+                else:
+                    self.hide_rotation_gizmo()
+            elif self._gizmo_idx >= 0:
+                self.hide_rotation_gizmo()      # se solto Alt+Ctrl
             return
 
         # Arrastre de fuente o receptor (Shift+LeftButton sostenido).
@@ -717,6 +881,7 @@ class IsoViewer(gl.GLViewWidget):
             return
         if ev.button() == Qt.LeftButton and self._orient_furn_idx >= 0:
             self._orient_furn_idx = -1
+            self._orient_furn_axis = None
             return
         if ev.button() == Qt.LeftButton and self._dragging_source_idx != -1:
             self._dragging_source_idx = -1
@@ -728,6 +893,18 @@ class IsoViewer(gl.GLViewWidget):
             self._inclining_wall = None
             self._incline_press_y = None
             self.wallDragEnded.emit()
+
+    def keyReleaseEvent(self, ev):
+        """Al soltar Alt o Ctrl se esconde el gizmo (salvo que se este rotando)."""
+        if ev.key() in (Qt.Key_Alt, Qt.Key_Control) and self._orient_furn_idx < 0:
+            self.hide_rotation_gizmo()
+        super().keyReleaseEvent(ev)
+
+    def leaveEvent(self, ev):
+        """El cursor salio del visor: no dejar el gizmo colgado."""
+        if self._orient_furn_idx < 0:
+            self.hide_rotation_gizmo()
+        super().leaveEvent(ev)
 
     # ---------- Ejes ----------
     def _add_axes(self, length, arrow):

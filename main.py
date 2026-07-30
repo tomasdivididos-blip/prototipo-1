@@ -164,6 +164,7 @@ class MainWindow(QMainWindow):
         self.viewer.furnitureEditRequested.connect(self._on_furniture_edit_from_viewer)
         self.viewer.furnitureRotateRequested.connect(self._on_furniture_rotate_from_viewer)
         self.viewer.furnitureTiltRequested.connect(self._on_furniture_tilt_from_viewer)
+        self.viewer.furnitureRollRequested.connect(self._on_furniture_roll_from_viewer)
 
         self._on_params(self.controls.get_params())
         self._setup_shortcuts()
@@ -772,6 +773,11 @@ class MainWindow(QMainWindow):
     def _on_furniture_tilt_from_viewer(self, idx: int, d_pitch: float):
         """Alt+Ctrl+Left drag vertical sobre un mueble: inclinar pitch (solo cajas)."""
         self.acoustic.apply_furniture_tilt(idx, d_pitch)
+        self._note_activity()
+
+    def _on_furniture_roll_from_viewer(self, idx: int, d_roll: float):
+        """Anillo de roll del gizmo: vuelca el mueble de costado (solo cajas)."""
+        self.acoustic.apply_furniture_roll(idx, d_roll)
         self._note_activity()
 
     def _on_source_edit_from_viewer(self, idx: int):
