@@ -1672,6 +1672,54 @@ bien.
     + pipeline CAD del recinto + embeber en `.room`. Caso de uso: escanear el estudio
     con el celu → SketchUp → separar muebles → OBJ por pieza. Ver [[calibracion-rirs]].
 
+- **30 Jul 2026 — CAD (OBJ) para muebles + gizmo de rotación 3 ejes + roll. v2.20 + PR.**
+  Rama `muebles-cad` off main. MANUAL v2.20 integrado (.md §6.4/§6.4.1 + changelog
+  A-D, .tex, .pdf 36 pág, compila limpio). `smoke_test_furniture_ui.py` **36/36**,
+  `bench_cad.py` nuevo (9 oráculos), los 5 benches de muebles verdes.
+  - **`kind="mesh"` en `Furniture`**: `mesh_verts`/`mesh_faces` en frame LOCAL
+    (centrado en su bbox), `contains` vía `trimesh.contains` con world→local por
+    `to_local`. `aabb` desde `mesh_verts` directo (NO construir trimesh: corre por
+    frame en el drag). Persistencia embebida en el `.room` (verts redondeados a
+    0.1 mm), aditiva, sin bump de versión. La silla fixture pesa 2.3 KB.
+  - **`load_furniture_mesh(path)`**: **GOTCHA CLAVE** — `trimesh.load` con el
+    `process=True` default **weldea vértices y ROMPE el watertight** de un modelo
+    multi-cuerpo (silla = asiento+respaldo+patas que se tocan → V pasó de 0.023 a
+    0.187 y quedó no-watertight). Hay que cargar con **`process=False`**; la
+    reparación (merge/fill_holes/fix_normals) se aplica SOLO si no es watertight.
+  - **Fixture `silla_test.obj`** (72 caras, watertight) generada con trimesh, NO
+    bajada de internet: sirve de oráculo (geometría conocida). Decisión: para
+    testear `contains` conviene malla limpia propia; el caso "escaneo sucio" se
+    cubre con la reparación + aviso, no con el fixture.
+  - **Gizmo de rotación (`viewer.py`, autocontenido)**: 3 anillos (yaw celeste /
+    pitch ámbar / roll verde), hover con Alt+Ctrl, anillo bajo el cursor en
+    magenta, click+arrastre gira SOLO ese eje. **El eje se elige ANTES de mover**
+    → resuelve de raíz el problema de v2.19 sin volver al trackball. Requiere
+    `setMouseTracking(True)` permanente (ojo: `stop_slice_placement` lo apagaba).
+    Panel pasa `set_furniture_axes([m._local_axes()])`.
+  - **Roll (3er eje) — cómo se metió sin romper nada (patrón reusable):**
+    1. `contains` (box) y `_furniture_wireframe` (box) **duplicaban** la cuenta de
+       ejes de `_local_axes`. Primero se los hizo **delegar** (refactor no-op) y se
+       corrieron los benches ANTES de tocar el roll. 2. Recién ahí se agregó el roll
+       en `_local_axes` (única fuente de verdad) → se propaga solo a contains/aabb/
+       to_local/wireframe/colisión. 3. `if rl:` saltea la rotación → `roll=0` reduce
+       EXACTO por construcción. 4. Persistencia `.get("roll", 0.0)`.
+       Convención **aviación z-y'-x''** (yaw mundo-z → pitch ey' → roll ex').
+       El roll **afecta el carve** (no es cosmético): roll=90° en una caja
+       1.0×0.4×0.2 intercambia exacto los semiejes y↔z.
+  - **BUG FIXEADO: muebles trabados al duplicar** (lo reportó el usuario como
+    "se traba y no puedo mover nada, ni borrando"). NO era cuelgue de cómputo
+    (`contains` 13 ms, `aabb` 0.05 ms). Era la colisión: **el duplicado nacía en la
+    posición EXACTA del original** → solape 100% → la colisión-stop revertía TODO
+    movimiento de ambos, sin salida. Doble fix: (a) la copia nace **desplazada**
+    (su ancho + 0.15 m, en −X si no entra); (b) **escape de solape**: solo se frena
+    si el movimiento CREA un solape nuevo (`was_conflicting`), si ya estaba solapado
+    se deja arrastrar para afuera. Aplica a move/rotate/tilt/roll. **No era
+    exclusivo del CAD**: duplicar cualquier preset tenía el mismo trap (latente).
+  - **Decisión de alcance:** CAD sirve para **capturar** un recinto real (escaneo →
+    SketchUp → OBJ por pieza), NO para ganar precisión (el efecto-forma vs bbox es
+    de 2º orden, ver entrada del 29 Jul). Documentado como nota en §6.4.1.
+  - **Nuevos:** `silla_test.obj`, `bench_cad.py`.
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.

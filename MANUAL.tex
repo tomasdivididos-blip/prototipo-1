@@ -132,7 +132,7 @@
   \vspace{2cm}
   {\large Ingeniería en Sonido\par}
   \vspace{0.3cm}
-  {\normalsize Versión del Manual 2.16 — 5 de Julio de 2026\par}
+  {\normalsize Versión del Manual 2.20 — 30 de Julio de 2026\par}
   \vspace{0.5cm}
   {\small\color{cGray} con importación CAD y router de mallado best-effort\par}
   \vfill
@@ -1825,7 +1825,7 @@ ahora:
 \begin{center}
   \small\textcolor{cGray}{%
     Prototipo 1 --- Modelador de Recintos 3D con Simulación Acústica FEM\\
-    Manual de Usuario $\cdot$ v2.14 $\cdot$ 27 de Junio de 2026\\[2pt]
+    Manual de Usuario $\cdot$ v2.20 $\cdot$ 30 de Julio de 2026\\[2pt]
     \textbf{Cambios v2.0}: import CAD (STL/OBJ/PLY/STEP/IGES/glTF), motor
     boundary-fitted con gmsh, router automático con badge UI, diálogo de
     reparación guiada, persistencia \texttt{.room} v3.\\[2pt]
@@ -2317,7 +2317,31 @@ ahora:
     grandes no se dejaban agarrar).
     (D) \textbf{Rotación solo yaw}: Alt$+$Ctrl gira solo azimut; antes el arrastre
     vertical lo inclinaba sin querer (el mueble ``se caía'' y se trababa). El
-    pitch se edita por el diálogo. El piso ya no atrapa al mueble.%
+    pitch se edita por el diálogo. El piso ya no atrapa al mueble.\\[2pt]
+    \textbf{Cambios v2.20} (30 de julio): \textbf{importar muebles desde CAD} y
+    \textbf{gizmo de rotación de 3 ejes}.
+    (A) \textbf{Mueble desde CAD}: nuevo tipo \emph{mesh} (\texttt{.obj}, \texttt{.stl},
+    \texttt{.ply}, \texttt{.off}, \texttt{.glb}, \texttt{.gltf}); el carve usa un test
+    punto-adentro sobre la malla, así la pieza importada afecta modos, absorción y
+    SBIR igual que un preset. Caso de uso: escanear un estudio real, separar las
+    piezas en SketchUp y exportarlas una por una. Al importar se repara la malla si
+    hace falta (unir vértices, tapar huecos, normales) y se avisa si queda abierta
+    (el test punto-adentro solo es confiable con superficie cerrada). La malla se
+    embebe en el \texttt{.room}. Detalle y alcance en \S6.4.1.
+    (B) \textbf{Gizmo de rotación}: manteniendo Alt$+$Ctrl aparecen tres anillos
+    (yaw celeste, pitch ámbar, roll verde); el anillo bajo el cursor se resalta y
+    al arrastrar el mueble gira solo sobre ese eje. El eje se elige \emph{antes} de
+    mover, con click explícito $\to$ no se puede inclinar sin querer al rotar. Los
+    anillos usan los mismos ejes locales que el tallado.
+    (C) \textbf{Tercer eje (roll)}: vuelca el mueble de costado (gira sobre su
+    frente). Convención aviación (yaw $\to$ pitch $\to$ roll). Como el pitch,
+    \emph{afecta el carve}. \texttt{roll=0} reduce exacto y los \texttt{.room}
+    previos cargan con roll nulo (sin bump de versión).
+    (D) \textbf{Fix: se trababan al duplicar}: la copia nacía en la posición exacta
+    del original $\to$ solape del 100\% y ningún movimiento posible en ninguno de
+    los dos. Ahora la copia nace desplazada, y un mueble ya solapado puede
+    arrastrarse para afuera (antes solo frenaba, nunca escapaba). Afectaba también
+    a los presets.%
   }
 \end{center}
 
