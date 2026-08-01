@@ -2809,6 +2809,9 @@ class AcousticPanel(QWidget):
         self.furn_markers.update(self.furniture,
                                  selected_idx=self._selected_furn_idx())
         self._sync_furniture_positions_to_viewer()
+        # Un mueble nuevo/movido puede tapar un parche -> revisar el aviso.
+        if self._patches:
+            self._refresh_patches_summary()
         self.viewer.update()
 
     def _on_furn_selection(self):
@@ -2879,6 +2882,53 @@ class AcousticPanel(QWidget):
             out.append(float(v) if h2 < l2 else min(max(float(v), l2), h2))
         return tuple(out)
 
+    def point_inside_furniture(self, x, y, z) -> int:
+        """Indice del mueble que CONTIENE el punto, o -1. Usa el mismo
+        `Furniture.contains` que el tallado, así que responde exactamente por
+        el aire que el FEM removió.
+
+        CRÍTICO: si la fuente o el receptor caen adentro de un mueble tallado,
+        ahí NO hay malla y `FieldEvaluator` devuelve **NaN**, que se propaga a
+        toda la FRF sin lanzar ningún error. Por eso el movimiento se bloquea."""
+        import numpy as _np
+        p = _np.array([[float(x), float(y), float(z)]])
+        for i, m in enumerate(getattr(self, "furniture", []) or []):
+            try:
+                if bool(m.contains(p)[0]):
+                    return i
+            except Exception:
+                continue
+        return -1
+
+    def source_placement_conflict(self, idx: int, x, y, z):
+        """Mensaje si la fuente `idx` no puede ir a (x,y,z), o None si está OK.
+
+        Dos reglas, de distinta naturaleza:
+          1. el PUNTO (el monopolo) no puede quedar dentro de un mueble -> NaN;
+          2. el BAFLE (la caja del parlante) no puede atravesar un mueble, que
+             es la contraparte de la regla que ya aplican los muebles contra los
+             parlantes (MANUAL §6.4). Sin esto la regla valía en un solo sentido.
+        """
+        i = self.point_inside_furniture(x, y, z)
+        if i >= 0:
+            m = self.furniture[i]
+            return (f"quedaría DENTRO del mueble «{m.label}» (ahí no hay aire: "
+                    f"la respuesta daría NaN)")
+        if not (0 <= idx < len(self.sources)):
+            return None
+        try:
+            import copy as _copy
+            s = _copy.copy(self.sources[idx])
+            s.position = (float(x), float(y), float(z))
+            amin, amax = self._source_baffle_aabb(s)
+            for m in getattr(self, "furniture", []) or []:
+                bmin, bmax = self._furniture_aabb(m)
+                if self._aabb_overlap(amin, amax, bmin, bmax):
+                    return f"el bafle se superpondría con el mueble «{m.label}»"
+        except Exception:
+            pass
+        return None
+
     @staticmethod
     def _aabb_overlap(amin, amax, bmin, bmax, tol=1e-4):
         return bool(np.all(amin < bmax - tol) and np.all(bmin < amax - tol))
@@ -2902,6 +2952,14 @@ class AcousticPanel(QWidget):
                 bmin, bmax = self._source_baffle_aabb(s)
                 if self._aabb_overlap(amin, amax, bmin, bmax):
                     return f"se solaparía con el parlante «{getattr(s, 'label', 'fuente')}»"
+        except Exception:
+            pass
+        # El RECEPTOR es un punto pelado (no tiene bafle que lo proteja): si un
+        # mueble lo envuelve queda sin aire alrededor y el campo evalua NaN.
+        try:
+            import numpy as _np
+            if bool(cand.contains(_np.array([list(self.receiver)], dtype=float))[0]):
+                return "dejaría al receptor adentro (ahí no hay aire: daría NaN)"
         except Exception:
             pass
         try:
@@ -4595,14 +4653,53 @@ class AcousticPanel(QWidget):
             self._xi_per_mode = self._compute_xi_from_materials()
         self._update_modal_crossover()
 
+    def _patches_blocked_by_furniture(self):
+        """Etiquetas de los muebles que tapan algún parche (AABB del prisma del
+        parche vs AABB del mueble). Lista vacía = ninguno.
+
+        NO se bloquea: el prisma es dibujo, el α sigue estando sobre la pared, y
+        el modelo no se rompe. Pero el aviso tiene contenido acústico REAL: un
+        mueble delante de un absorbente lo tapa, así que el α del catálogo (que
+        se midió con incidencia libre sobre la muestra) deja de ser el que
+        corresponde en esa zona."""
+        import numpy as _np
+        out = []
+        muebles = getattr(self, "furniture", []) or []
+        if not muebles or not self._patches:
+            return out
+        cen = self._room_centroid()
+        for p in self._patches:
+            pv, _pf = self._patch_quad(p, cen)
+            if pv is None:
+                continue
+            v = _np.asarray(pv, float)
+            amin, amax = v.min(axis=0), v.max(axis=0)
+            for m in muebles:
+                bmin, bmax = self._furniture_aabb(m)
+                if self._aabb_overlap(amin, amax, bmin, bmax):
+                    lbl = getattr(m, "label", "mueble")
+                    if lbl not in out:
+                        out.append(lbl)
+        return out
+
     def _refresh_patches_summary(self):
         n = len(self._patches)
         if n == 0:
             self.lbl_patch_summary.setText("Sin parches")
         else:
             area = sum(p.area for p in self._patches)
-            self.lbl_patch_summary.setText(
-                f"{n} parche(s) · {area:.2f} m² · absorción con cuadratura fina activa")
+            txt = (f"{n} parche(s) · {area:.2f} m² · absorción con cuadratura "
+                   f"fina activa")
+            tapados = self._patches_blocked_by_furniture()
+            if tapados:
+                nombres = ", ".join(f"«{t}»" for t in tapados[:3])
+                if len(tapados) > 3:
+                    nombres += f" y {len(tapados)-3} más"
+                txt += (f"\n⚠ Se superpone con {nombres}: un mueble delante del "
+                        f"absorbente lo tapa, así que su α efectivo va a ser "
+                        f"menor que el del catálogo.")
+                self._log(f"Aviso: parche(s) tapado(s) por {nombres}.")
+            self.lbl_patch_summary.setText(txt)
         self._refresh_patch_overlay()
 
     def _refresh_patch_overlay(self, patches=None):
@@ -4635,37 +4732,82 @@ class AcousticPanel(QWidget):
                 col = pdlg._material_color(p.material_name, alpha=255)
                 rgba = (col.red() / 255.0, col.green() / 255.0,
                         col.blue() / 255.0, 0.75)
-                data.append((_np.array(pv), _np.array(pf), rgba))
+                edges = self._patch_edge_segments(pv, len(p.polygon_uv()))
+                data.append((_np.array(pv), _np.array(pf), rgba, edges))
             self.viewer.set_patches(data or None)
         except Exception as e:
             self._log(f"Aviso overlay parches: {e}")
 
+    @staticmethod
+    def _patch_edge_segments(verts, n):
+        """Aristas del parche como PARES de puntos para GLLinePlotItem(mode='lines').
+
+        `verts` viene de `_patch_quad`: n puntos si es plano, 2n si es prisma
+        (0..n-1 = contorno contra la pared, n..2n-1 = contorno del frente).
+        Prisma -> 3n aristas: los dos contornos + los montantes que los unen.
+        Sirve para que el parche se lea con CUALQUIER color de relleno."""
+        import numpy as _np
+        if verts is None or n < 2:
+            return None
+        v = _np.asarray(verts, dtype=float)
+        segs = []
+        rings = [0] if len(v) < 2 * n else [0, n]
+        for base in rings:                      # contorno(s)
+            for i in range(n):
+                segs.append(v[base + i])
+                segs.append(v[base + (i + 1) % n])
+        if len(v) >= 2 * n:                     # montantes del prisma
+            for i in range(n):
+                segs.append(v[i])
+                segs.append(v[i + n])
+        return _np.asarray(segs, dtype=_np.float32)
+
     def _patch_quad(self, p, centroid):
         """Geometria 3D de UN parche: (verts (Nv,3), faces (Nf,3) locales).
 
-        Offset chico hacia el interior para no quedar exactamente sobre la cara.
-        Triangula el poligono (ear clipping) para soportar no convexos."""
+        El parche se dibuja como PRISMA (paralelepipedo) de `p.depth` metros de
+        espesor hacia el INTERIOR de la sala: la tapa de atras se apoya en la
+        pared y la de adelante queda a `depth` del muro, como un panel real.
+        Con depth<=0 degenera al quad plano de siempre.
+
+        Triangula el poligono (ear clipping) para soportar no convexos, y arma
+        las caras laterales uniendo los dos contornos."""
         import absorption_patch as _ap
         na = p.normal_axis
-        # Separacion de la cara hacia el interior: suficiente para que no haya
-        # z-fighting con la superficie opaca en render translucent (1 cm no
-        # alcanzaba). El parche igual se lee "sobre" la cara.
-        OFF = 0.04
-        off = OFF
+        # Sentido "hacia adentro" del recinto sobre el eje de la normal.
+        sgn = 1.0
         if centroid is not None:
-            off = OFF if centroid[na] >= p.plane_coord else -OFF
+            sgn = 1.0 if centroid[na] >= p.plane_coord else -1.0
+        # Separacion minima de la cara: evita quedar coplanar con la pared.
+        OFF = 0.004
+        depth = float(max(0.0, getattr(p, "depth", 0.0) or 0.0))
         uv = p.polygon_uv()
         tris = _ap.triangulate_uv(uv)
         if not tris:
             return None, None
-        verts = []
-        for (u, v) in uv:
-            c = [0.0, 0.0, 0.0]
-            c[na] = p.plane_coord + off
-            c[p.u_axis] = u
-            c[p.v_axis] = v
-            verts.append(c)
-        return verts, [list(t) for t in tris]
+
+        def _ring(dist):
+            out = []
+            for (u, v) in uv:
+                c = [0.0, 0.0, 0.0]
+                c[na] = p.plane_coord + sgn * dist
+                c[p.u_axis] = u
+                c[p.v_axis] = v
+                out.append(c)
+            return out
+
+        if depth <= 1e-6:                       # sin espesor: quad plano (legacy)
+            return _ring(OFF), [list(t) for t in tris]
+
+        n = len(uv)
+        verts = _ring(OFF) + _ring(OFF + depth)   # 0..n-1 = pared, n..2n-1 = frente
+        faces = [list(t) for t in tris]                       # tapa contra la pared
+        faces += [[int(a) + n, int(b) + n, int(c) + n] for (a, b, c) in tris]
+        for i in range(n):                                     # caras laterales
+            j = (i + 1) % n
+            faces.append([i, j, j + n])
+            faces.append([i, j + n, i + n])
+        return verts, faces
 
     def _room_centroid(self):
         try:

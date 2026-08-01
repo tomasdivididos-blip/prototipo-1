@@ -189,10 +189,16 @@ class MainWindow(QMainWindow):
         return a == b
 
     def _shift_scene_objects(self, delta):
-        """Traslada fuentes y receptor por `delta` (cambio de convencion de
-        origen: el recinto se movio, los objetos deben moverse CON el para
-        que nada cambie fisicamente). Refresca los markers al final para que
-        el visor muestre las posiciones nuevas sin depender del caller."""
+        """Traslada TODO lo anclado al recinto por `delta` (cambio de convencion
+        de origen: el recinto se movio, los objetos deben moverse CON el para
+        que nada cambie fisicamente): fuentes, receptor, puntos de escucha,
+        MUEBLES y PARCHES de absorcion. Refresca los markers al final para que
+        el visor muestre las posiciones nuevas sin depender del caller.
+
+        OJO: muebles (v2.18) y parches (v2.17) se agregaron DESPUES del origen
+        configurable (v2.16) y no estaban contemplados aca -> se quedaban en el
+        lugar viejo mientras el recinto se movia. Si sumas un objeto nuevo
+        anclado al recinto, agregalo tambien a esta lista."""
         import numpy as _np
         d = _np.asarray(delta, dtype=float)
         ap = self.acoustic
@@ -213,6 +219,21 @@ class MainWindow(QMainWindow):
                 p["position"] = tuple(
                     (_np.asarray(p["position"], dtype=float) + d).tolist())
             ap._refresh_listen_points()
+        except Exception:
+            pass
+        try:
+            for m in getattr(ap, "furniture", []):
+                q = _np.asarray(m.position, dtype=float) + d
+                m.position = (float(q[0]), float(q[1]), float(q[2]))
+            if getattr(ap, "furniture", None):
+                ap._refresh_furniture_list()
+        except Exception:
+            pass
+        try:
+            for pt in getattr(ap, "_patches", []):
+                pt.translate(d)
+            if getattr(ap, "_patches", None):
+                ap._refresh_patches_summary()
         except Exception:
             pass
 
@@ -711,7 +732,15 @@ class MainWindow(QMainWindow):
         """Shift+drag en el viewer 3D: mover fuente acustica (actualiza en-lugar).
         Se traba en los limites del recinto (clamp al bbox)."""
         x, y, z = self.acoustic._clamp_to_room_bbox(x, y, z)
+        # Colision-stop contra muebles: frena al contacto en vez de atravesarlos.
+        # Si YA estaba en conflicto (p.ej. se agrego un mueble encima), se deja
+        # mover para que pueda salir -- mismo criterio de escape que los muebles.
         srcs = self.acoustic.sources
+        if 0 <= idx < len(srcs):
+            was = self.acoustic.source_placement_conflict(
+                idx, *srcs.sources[idx].position) is not None
+            if (not was) and self.acoustic.source_placement_conflict(idx, x, y, z):
+                return
         if 0 <= idx < len(srcs):
             # Mutar SOLO la posicion en-lugar: preserva orientacion/pitch/bafle/
             # respuesta/sensibilidad/mounted (antes reconstruia y los perdia).
@@ -753,7 +782,13 @@ class MainWindow(QMainWindow):
         """Shift+drag sobre la cruz del receptor: moverlo a nueva posicion.
         Se traba en los limites del recinto (clamp al bbox)."""
         x, y, z = self.acoustic._clamp_to_room_bbox(x, y, z)
-        self.acoustic.move_receiver_to(x, y, z)
+        # El receptor tampoco puede entrar en un mueble: ahi no hay malla y el
+        # campo evalua NaN. Escape permitido si ya estaba adentro.
+        ap = self.acoustic
+        if ap.point_inside_furniture(x, y, z) >= 0 and \
+                ap.point_inside_furniture(*ap.receiver) < 0:
+            return
+        ap.move_receiver_to(x, y, z)
         self._note_activity()
 
     def _on_furniture_moved_from_viewer(self, idx: int, x: float, y: float, z: float):

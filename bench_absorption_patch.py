@@ -309,6 +309,193 @@ def test_polygon_patch_physics():
     print("   OK (poligono corre y el rect-como-poly es exacto)")
 
 
+def test_depth_is_geometric_only():
+    """El espesor del parche (prisma) es GEOMETRICO: no toca xi ni el RT60.
+
+    Es la invariante que hace segura la feature. El alpha(f) del catalogo ya esta
+    medido CON el espesor de la construccion (ISO 354), asi que si el espesor
+    ademas entrara al solver estariamos contando la misma fisica dos veces.
+    """
+    print("\n[T9] espesor = geometrico puro (no cambia la acustica)")
+    sv, st, freqs, phis, loc, V, groups = _build_shoebox()
+    floor = _floor_group(groups)
+    rig = _const_material("rig", 0.02)
+    absb = _const_material("abs", 0.65)
+    g2m = {g.signature: rig for g in groups}
+
+    p_thin = ap.make_patch(floor, -1.5, -1.0, 1.5, 1.0, "abs", depth=0.0)
+    p_thick = ap.make_patch(floor, -1.5, -1.0, 1.5, 1.0, "abs", depth=0.40)
+    assert p_thin.key == p_thick.key, "el espesor NO debe entrar a la clave"
+    assert abs(p_thin.area - p_thick.area) < 1e-12, "el espesor no cambia el area"
+
+    xi_a = ap.compute_xi_per_mode_with_patches(
+        freqs, phis, loc, sv, st, groups, g2m, [p_thin], {p_thin.key: absb}, V)
+    xi_b = ap.compute_xi_per_mode_with_patches(
+        freqs, phis, loc, sv, st, groups, g2m, [p_thick], {p_thick.key: absb}, V)
+    assert np.array_equal(xi_a, xi_b), "el espesor cambio xi (deberia ser invariante)"
+
+    rt_a = ap.sabine_rt60_with_patches(V, groups, g2m, [p_thin], {p_thin.key: absb})
+    rt_b = ap.sabine_rt60_with_patches(V, groups, g2m, [p_thick], {p_thick.key: absb})
+    assert rt_a == rt_b, "el espesor cambio el RT60 (deberia ser invariante)"
+    print("   xi y RT60 identicos con espesor 0 cm y 40 cm  OK")
+
+    # Volumen informativo y lectura lambda/4.
+    assert abs(p_thick.volume - p_thick.area * 0.40) < 1e-12
+    assert abs(ap.quarter_wave_limit(0.10) - 343.0 / 0.4) < 1e-9
+    print(f"   10 cm -> lambda/4 = {ap.quarter_wave_limit(0.10):.0f} Hz "
+          f"(muy por encima de la banda modal: el poroso al ras casi no toca modos)")
+
+    # Persistencia: round-trip y compat con .room v8 previo (sin 'depth').
+    q = ap.AbsorptionPatch.from_dict(p_thick.to_dict())
+    assert abs(q.depth - 0.40) < 1e-12, "el espesor no sobrevivio el round-trip"
+    d_old = p_thick.to_dict()
+    d_old.pop("depth")
+    assert abs(ap.AbsorptionPatch.from_dict(d_old).depth
+               - ap.DEFAULT_PATCH_DEPTH) < 1e-12, ".room viejo deberia dar 10 cm"
+    print("   round-trip + compat .room v8 sin 'depth' -> 10 cm  OK")
+
+
+def test_thickness_from_material_name():
+    """El espesor se lee del NOMBRE del material del catalogo, sumando lo que
+    aporta profundidad y descartando la geometria en-plano.
+
+    Es lo que mantiene coherente el dibujo con la fisica: alpha(f) se midio CON
+    un espesor concreto (para una misma lana, alpha a 63 Hz cambia ~15x entre
+    20 y 100 mm), asi que el prisma debe mostrar ESE espesor por defecto.
+    """
+    print("\n[T10] espesor leido del nombre del material")
+    f = ap.thickness_from_material_name
+    casos = [
+        # (nombre, mm esperados)
+        ("Lana de vidrio 100 mm, 25 kg/m3", 100),
+        ("Lana de vidrio 20 mm, 25 kg/m3", 20),
+        ("Lana de roca 75 mm, 23 kg/m3, con velo de fibra de vidrio", 75),
+        # capa + descuelgue: la construccion ocupa la suma
+        ("Cielorraso acustico (lana de roca), 20 mm, 100 kg/m3, "
+         "suspendido a 200 mm", 220),
+        ("Placa de yeso de 13 mm sobre bastidor, 100 mm de lana mineral "
+         "por detras", 113),
+        # el "20% abierto" no lleva unidad -> no debe comerse los 40 mm
+        ("Panel perforado, 20% abierto, absorbente de 40 mm a 30 kg/m3", 40),
+        # franjas/intervalos son EN-PLANO: 40 + 100, NO 12 + 20 + 40 + 100
+        ("Panel estriado, franjas de 12,0 mm a intervalos de 20,0 mm, "
+         "absorbente de 40 mm a 81 kg/m3, cavidad de 100,0 mm", 140),
+        ("Vidrio simple, >4 mm", 4),
+    ]
+    for name, mm in casos:
+        got = f(name)
+        assert got is not None, f"no parseo: {name}"
+        assert abs(got * 1000 - mm) < 1e-6, \
+            f"{name!r}: esperaba {mm} mm, dio {got*1000:.0f} mm"
+        print(f"   {mm:4d} mm  <- {name[:58]}")
+    # sin espesor declarado -> None (el dibujo se queda con el default)
+    assert f("Hormigon pintado") is None
+    assert f("") is None and f(None) is None
+    print("   sin espesor en el nombre -> None (queda el default)  OK")
+
+
+def test_patch_translate():
+    """El parche se traslada con el recinto al cambiar la convencion de origen.
+
+    Regresion del bug: muebles (v2.18) y parches (v2.17) se agregaron DESPUES
+    del origen configurable (v2.16), asi que `main._shift_scene_objects` no los
+    conocia y se quedaban en el lugar viejo mientras el recinto se movia.
+    """
+    print("\n[T12] traslacion del parche con el origen")
+    import numpy as _np
+
+    class _G:
+        normal = _np.array([0.0, 1.0, 0.0])
+        centroid = _np.array([0.0, -4.0, 1.5])
+        signature = "w"
+
+    d = _np.array([3.0, 4.0, 0.0])            # centro -> esquina inferior
+
+    p = ap.make_patch(_G(), -1.0, 0.4, 1.0, 1.9, "X")
+    na, ua, va = p.normal_axis, p.u_axis, p.v_axis
+    pc0, u00, v00, area0 = p.plane_coord, p.u0, p.v0, p.area
+    p.translate(d)
+    assert abs((p.plane_coord - pc0) - d[na]) < 1e-12, "no se movio en la normal"
+    assert abs((p.u0 - u00) - d[ua]) < 1e-12, "no se movio en u"
+    assert abs((p.v0 - v00) - d[va]) < 1e-12, "no se movio en v"
+    assert abs(p.area - area0) < 1e-12, "trasladar no debe cambiar el area"
+    print(f"   rect: plane {pc0:+.2f}->{p.plane_coord:+.2f}, u0 {u00:+.2f}->{p.u0:+.2f}"
+          f", area invariante  OK")
+
+    # Poligonal: los vertices tambien se mueven, y el area se conserva.
+    q = ap.make_polygon_patch(_G(), [(-1, 0), (1, 0), (1.4, 1), (0, 1.8)], "X")
+    poly0 = list(q.poly)
+    a0 = q.area
+    q.translate(d)
+    assert all(abs((b[0] - a[0]) - d[ua]) < 1e-12 and abs((b[1] - a[1]) - d[va]) < 1e-12
+               for a, b in zip(poly0, q.poly)), "el poligono no se traslado"
+    assert abs(q.area - a0) < 1e-12
+    print("   poligonal: vertices trasladados, area invariante  OK")
+
+    # Ida y vuelta devuelve el parche exacto al lugar original.
+    q.translate(-d)
+    assert all(abs(a[0] - b[0]) < 1e-12 and abs(a[1] - b[1]) < 1e-12
+               for a, b in zip(poly0, q.poly)), "ida y vuelta no es identidad"
+    print("   ida y vuelta = identidad  OK")
+
+
+def test_patch_prism_edges():
+    """Geometria del prisma y de sus ARISTAS (para verlo con cualquier relleno).
+
+    Se prueba el helper puro del panel sin levantar la GUI: para un poligono de
+    n vertices, el prisma tiene 2n vertices y 3n aristas (los dos contornos +
+    los montantes); con espesor 0 degenera al contorno plano de n aristas.
+    """
+    print("\n[T11] prisma: geometria y aristas")
+    import numpy as _np
+
+    class _G:                      # FaceGroup minimo (pared del eje Y)
+        normal = _np.array([0.0, 1.0, 0.0])
+        centroid = _np.array([0.0, -4.0, 1.5])
+        signature = "w"
+
+    room_centroid = _np.array([0.0, 0.0, 1.5])       # interior en +Y
+
+    # El constructor del prisma y el de aristas son metodos del panel, pero
+    # puros: se importan sin instanciar la GUI.
+    from acoustic_panel import AcousticPanel
+    quad = AcousticPanel._patch_quad
+    edges_of = AcousticPanel._patch_edge_segments
+
+    class _Fake:                   # portador de los metodos (no toca Qt)
+        _patch_quad = quad
+    fake = _Fake()
+
+    p = ap.make_patch(_G(), -1.0, 0.5, 1.0, 2.0, "X", depth=0.10)
+    pv, pf = fake._patch_quad(p, room_centroid)
+    n = len(p.polygon_uv())
+    assert len(pv) == 2 * n, f"prisma deberia tener {2*n} vertices, tiene {len(pv)}"
+    assert len(pf) == 2 * len(ap.triangulate_uv(p.polygon_uv())) + 2 * n, \
+        "caras del prisma: 2 tapas + 2 triangulos por lateral"
+    ys = _np.asarray(pv, float)[:, 1]
+    assert abs((ys.max() - ys.min()) - 0.10) < 1e-9, "el espesor dibujado no es 10 cm"
+    assert (ys >= _G.centroid[1] - 1e-9).all(), "el prisma sale hacia AFUERA"
+    print(f"   rect: {len(pv)} verts, {len(pf)} caras, espesor {ys.max()-ys.min():.3f} m")
+
+    e = edges_of(pv, n)
+    assert len(e) // 2 == 3 * n, f"esperaba {3*n} aristas, hay {len(e)//2}"
+    print(f"   aristas del prisma: {len(e)//2} (2 contornos de {n} + {n} montantes)")
+
+    # Poligono de 5 lados.
+    p5 = ap.make_polygon_patch(
+        _G(), [(-1, 0), (1, 0), (1.4, 1), (0, 1.8), (-1.4, 1)], "X")
+    pv5, _f5 = fake._patch_quad(p5, room_centroid)
+    n5 = len(p5.polygon_uv())
+    assert len(edges_of(pv5, n5)) // 2 == 3 * n5
+    print(f"   poligono de {n5} lados: {3*n5} aristas  OK")
+
+    # Espesor 0 -> quad plano, solo el contorno.
+    p.depth = 0.0
+    pv0, pf0 = fake._patch_quad(p, room_centroid)
+    assert len(pv0) == n and len(edges_of(pv0, n)) // 2 == n
+    print("   espesor 0 -> quad plano con contorno de n aristas (legacy)  OK")
+
+
 if __name__ == "__main__":
     t0 = time.perf_counter()
     test_tessellation_area()
@@ -319,4 +506,8 @@ if __name__ == "__main__":
     test_sabine_rt60_patches()
     test_polygon_geometry()
     test_polygon_patch_physics()
+    test_depth_is_geometric_only()
+    test_thickness_from_material_name()
+    test_patch_translate()
+    test_patch_prism_edges()
     print(f"\nTODOS OK  ({time.perf_counter() - t0:.1f} s)")

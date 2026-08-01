@@ -33,6 +33,7 @@ from PyQt5.QtGui import QPainter, QPen, QColor, QBrush, QFont, QPolygonF
 from PyQt5.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QComboBox,
     QListWidget, QListWidgetItem, QDialogButtonBox, QGroupBox, QAbstractItemView,
+    QDoubleSpinBox,
 )
 
 import absorption_patch as ap
@@ -480,6 +481,34 @@ class PatchEditorDialog(QDialog):
         mv.addWidget(self.combo_mat)
         right.addWidget(gb_mat)
 
+        # Espesor: el parche se dibuja como prisma hacia el interior de la sala.
+        # Es geométrico/documental (ver AbsorptionPatch.depth): el α(f) del
+        # catálogo ya está medido con el espesor de esa construcción.
+        gb_depth = QGroupBox("Espesor del tratamiento")
+        dv = QVBoxLayout(gb_depth)
+        drow = QHBoxLayout()
+        self.sb_depth = QDoubleSpinBox()
+        self.sb_depth.setRange(0.0, 2.0)
+        self.sb_depth.setDecimals(3)
+        self.sb_depth.setSingleStep(0.01)
+        # Semilla: el espesor de la construccion del material ya seleccionado.
+        _d0 = ap.thickness_from_material_name(self.combo_mat.currentText())
+        self.sb_depth.setValue(float(_d0) if _d0 else ap.DEFAULT_PATCH_DEPTH)
+        self.sb_depth.setSuffix(" m")
+        self.sb_depth.setToolTip(
+            "Profundidad del panel hacia el interior de la sala.\n"
+            "Se dibuja como prisma. No entra al solver: el α(f) del catálogo\n"
+            "ya incluye el espesor de la construcción medida.")
+        self.sb_depth.valueChanged.connect(self._on_depth_changed)
+        drow.addWidget(self.sb_depth, 1)
+        dv.addLayout(drow)
+        self.lbl_depth_note = QLabel("-")
+        self.lbl_depth_note.setStyleSheet("color: #f9e2af; font-size: 8pt;")
+        self.lbl_depth_note.setWordWrap(True)
+        dv.addWidget(self.lbl_depth_note)
+        right.addWidget(gb_depth)
+        self._update_depth_note()
+
         gb_grid = QGroupBox("Grilla")
         gv2 = QVBoxLayout(gb_grid)
         self.combo_grid = QComboBox()
@@ -580,7 +609,8 @@ class PatchEditorDialog(QDialog):
         if self._cur_group is None:
             return
         p = ap.make_patch(self._cur_group, u0, v0, u1, v1,
-                          material_name=self.combo_mat.currentText())
+                          material_name=self.combo_mat.currentText(),
+                          depth=float(self.sb_depth.value()))
         self._patches.append(p)
         self._sel_patch = len(self._patches) - 1
         self._refresh_all()
@@ -589,7 +619,8 @@ class PatchEditorDialog(QDialog):
         if self._cur_group is None or len(pts) < 3:
             return
         p = ap.make_polygon_patch(self._cur_group, pts,
-                                  material_name=self.combo_mat.currentText())
+                                  material_name=self.combo_mat.currentText(),
+                                  depth=float(self.sb_depth.value()))
         self._patches.append(p)
         self._sel_patch = len(self._patches) - 1
         self._refresh_all()
@@ -601,12 +632,16 @@ class PatchEditorDialog(QDialog):
         cps = self._cur_patches()
         if 0 <= local_idx < len(cps):
             self._sel_patch = cps[local_idx][0]
-            name = self._patches[self._sel_patch].material_name
-            i = self.combo_mat.findText(name)
+            sel = self._patches[self._sel_patch]
+            i = self.combo_mat.findText(sel.material_name)
             if i >= 0:
                 self.combo_mat.blockSignals(True)
                 self.combo_mat.setCurrentIndex(i)
                 self.combo_mat.blockSignals(False)
+            self.sb_depth.blockSignals(True)     # reflejar el espesor del parche
+            self.sb_depth.setValue(float(getattr(sel, "depth", 0.0) or 0.0))
+            self.sb_depth.blockSignals(False)
+            self._update_depth_note()
         self._refresh_all()
 
     def _on_patchlist_changed(self, local_idx):
@@ -616,8 +651,52 @@ class PatchEditorDialog(QDialog):
             self._refresh_canvas()
 
     def _on_material_changed(self, name):
+        # El espesor del DIBUJO se autocompleta con el de la construcción de la
+        # que salió el α (leído del nombre del catálogo). Así el prisma que ves
+        # es, por defecto, el espesor que la física ya está usando: es la única
+        # relación honesta entre los dos (α se midió CON ese espesor).
+        d = ap.thickness_from_material_name(name)
+        if d:
+            self.sb_depth.blockSignals(True)
+            self.sb_depth.setValue(float(d))
+            self.sb_depth.blockSignals(False)
+            if 0 <= self._sel_patch < len(self._patches):
+                self._patches[self._sel_patch].depth = float(d)
         if 0 <= self._sel_patch < len(self._patches):
             self._patches[self._sel_patch].material_name = name
+        self._update_depth_note()
+        self._refresh_all()
+
+    def _update_depth_note(self):
+        """Muestra el λ/4 del espesor elegido y AVISA si el espesor dibujado no
+        coincide con el de la construcción de la que salió el α.
+
+        El aviso importa: el α del catálogo se midió con un espesor concreto, y
+        para una misma lana el α a 63 Hz cambia ~15x entre 20 y 100 mm. Dibujar
+        un espesor y usar el α de otro deja el modelo incoherente."""
+        d = float(self.sb_depth.value())
+        if d <= 0.0:
+            self.lbl_depth_note.setText("Sin espesor: se dibuja plano sobre la cara.")
+            return
+        txt = (f"λ/4 ≈ {ap.quarter_wave_limit(d):.0f} Hz — un poroso de este "
+               f"espesor montado al ras trabaja recién por encima de esa "
+               f"frecuencia.")
+        d_mat = ap.thickness_from_material_name(self.combo_mat.currentText())
+        if d_mat and abs(d_mat - d) > 0.005:      # discrepancia > 5 mm
+            txt += (f"\n⚠ Estás dibujando {d*1000:.0f} mm, pero el α elegido se "
+                    f"midió con {d_mat*1000:.0f} mm. El solver usa el α: el "
+                    f"dibujo queda decorativo.")
+            self.lbl_depth_note.setStyleSheet("color: #f38ba8; font-size: 8pt;")
+        else:
+            self.lbl_depth_note.setStyleSheet("color: #f9e2af; font-size: 8pt;")
+        self.lbl_depth_note.setText(txt)
+
+    def _on_depth_changed(self, val):
+        """El espesor aplica al parche seleccionado; si no hay ninguno, queda
+        como valor por defecto de los próximos."""
+        self._update_depth_note()
+        if 0 <= self._sel_patch < len(self._patches):
+            self._patches[self._sel_patch].depth = float(val)
             self._refresh_all()
 
     def _on_delete(self, local_idx):

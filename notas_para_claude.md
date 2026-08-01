@@ -1720,6 +1720,65 @@ bien.
     de 2º orden, ver entrada del 29 Jul). Documentado como nota en §6.4.1.
   - **Nuevos:** `silla_test.obj`, `bench_cad.py`.
 
+- **31 Jul 2026 — Parches con espesor (prisma) + reglas de superposición. v2.21.**
+  Rama `parches-prisma` off main. MANUAL v2.21 (.md §6.4/§10.5 + changelog A-F,
+  .tex, .pdf 36 pág, limpio). `bench_absorption_patch.py` T9-T12,
+  `smoke_test_furniture_ui.py` **38/38**.
+  - **`AbsorptionPatch.depth`** (default `DEFAULT_PATCH_DEPTH=0.10`): el parche se
+    dibuja como PRISMA extruido hacia el interior. **GEOMÉTRICO PURO**, no toca el
+    solver (test T9: ξ y RT60 idénticos con 0 cm y 40 cm). El espesor **NO entra al
+    hash de `key`** a propósito: si entrara, cambiarlo generaría clave nueva y el
+    parche perdería su material.
+  - **Por qué el espesor no entra a la física (discusión larga con el usuario,
+    NO reabrir sin dato nuevo):** el α(f) del catálogo se midió ISO 354 CON el
+    espesor de esa construcción (la norma obliga a declarar el tipo de montaje
+    justamente por eso). Medido en el catálogo: misma lana 25 kg/m3, **α a 63 Hz
+    cambia 15× entre 20 y 100 mm**. O sea el espesor YA afecta, vía α. Sumarlo
+    como obstáculo = doble conteo. Y **mover la frontera sería PEOR**: experimento
+    (`scratchpad/exp_panel_boundary.py`) → correr la pared 10 cm da +2,56 % en los
+    modos con componente en ese eje, contra un ruido de malla de 1,41 % (ratio
+    1,1×). O sea NO se pierde en el ruido, pero es un sesgo **que no converge**
+    (el de malla sí: 2,17 % con npm=2 → 0,74 % con npm=3,5). La física decide: a
+    34 Hz el panel es **λ/100** y trabaja al 4 % de su λ/4 → es transparente, la
+    frontera sigue en la pared. Nuevo helper `quarter_wave_limit(d)=c/4d`.
+  - **`thickness_from_material_name(name)`**: parsea la construcción del nombre del
+    catálogo. **GOTCHA:** 111 de 240 nombres tienen DOS números y sumar a ciegas
+    está mal: `"franjas de 12 mm a intervalos de 20 mm, absorbente de 40 mm,
+    cavidad de 100 mm"` → profundidad = **140**, no 172 (franjas/intervalos son
+    geometría EN-PLANO). Se clasifica cada número por su contexto previo.
+    Sub-bug encontrado: tener `"abierto"` en la lista de exclusión rompía
+    `"20% abierto, absorbente de 40 mm"` (el "20%" no lleva unidad, nunca matcheaba,
+    solo ensuciaba el contexto del siguiente). El diálogo autocompleta el espesor
+    del material y AVISA si no coincide.
+  - **Aristas del prisma** (`_patch_edge_segments` + `set_patches` con 4º elemento):
+    blancas ADITIVAS → siempre por encima del relleno (los colores de material
+    llegan a 230/255, nunca saturan). n=contorno plano, 3n=prisma.
+  - **BUG GRAVE FIXEADO: fuente/receptor DENTRO de un mueble → `FieldEvaluator`
+    devuelve NaN** (medido) y contamina toda la FRF **sin lanzar error**. Bloqueo
+    en los DOS sentidos: `point_inside_furniture` + `source_placement_conflict`
+    (main: source/receiver move) y chequeo del receptor en `_furniture_conflict`.
+    El **receptor era el más expuesto**: es un punto pelado sin bafle, y con los
+    defaults (mueble al centro + receptor al centro) quedaba adentro al toque.
+  - **Regla de sólidos ahora SIMÉTRICA**: el MANUAL §6.4 ya prometía que el mueble
+    no ocupa el lugar del bafle, pero valía en un solo sentido (mueble→parlante sí,
+    parlante→mueble no). Se mantiene el **escape** de solape en todos los casos.
+  - **Aviso (no bloqueo) mueble tapando parche** (`_patches_blocked_by_furniture`):
+    el prisma es dibujo y α sigue en la pared, pero el aviso tiene contenido real
+    (mueble delante del absorbente → α efectivo menor que el de catálogo).
+  - **FIX: muebles y parches NO se trasladaban con `origin_mode`.** `main.
+    _shift_scene_objects` movía fuentes/receptor/puntos pero no ellos (arrastre
+    histórico: origen v2.16, parches v2.17, muebles v2.18). Nuevo
+    `AbsorptionPatch.translate(delta)` (cada componente del delta va al eje del
+    marco (normal,u,v) de la cara). **Si agregás un objeto anclado al recinto,
+    sumalo a `_shift_scene_objects`.**
+  - **Freeze reportado por el usuario: NO reproducido.** Descartados con medición:
+    `_capture_state` 0,1 ms; sin colisión bloqueando la fuente; el clamp NO atrapa
+    (verificado que puede volver); cuadratura fina ~100 ms (3-6× vs A36); sin fuga
+    de items GL. Con `PROTO1_WATCHDOG=1` no se colgó. Probablemente era el clamp
+    contra la pared + el desconcierto visual de las cajas superpuestas.
+    **Recordatorio de sintaxis:** `VAR=1 cmd` es de bash; en cmd va
+    `set PROTO1_WATCHDOG=1 && ...`, en PowerShell `$env:PROTO1_WATCHDOG="1"`.
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.

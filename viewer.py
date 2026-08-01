@@ -397,6 +397,11 @@ class IsoViewer(gl.GLViewWidget):
     # exactamente el bug de v2.19: el arrastre horizontal siempre traia algo de
     # vertical y el mueble se inclinaba solo). Con el gizmo el eje se elige
     # ANTES, con un click explicito sobre el anillo resaltado.
+    # Aristas de los parches de absorcion (prismas). Blanco aditivo = siempre
+    # por encima del relleno, sea cual sea el color del material.
+    PATCH_EDGE_COLOR = (1.0, 1.0, 1.0, 0.95)
+    PATCH_EDGE_WIDTH = 1.8
+
     GIZMO_SEGS = 48
     _GIZMO_COL_YAW   = (0.45, 0.75, 1.00, 0.55)     # celeste tenue (inactivo)
     _GIZMO_COL_PITCH = (1.00, 0.80, 0.35, 0.55)     # ambar tenue (inactivo)
@@ -1029,8 +1034,15 @@ class IsoViewer(gl.GLViewWidget):
     def set_patches(self, patches=None):
         """Overlay de parches de absorcion: un GLMeshItem por parche.
 
-        `patches`: lista de (verts (Nv,3), faces (Nf,3), rgba (4,)). None/vacio
-        = quitar.
+        `patches`: lista de (verts (Nv,3), faces (Nf,3), rgba (4,)) y, opcional,
+        un 4to elemento `edges` (Ne*2, 3) con las aristas en PARES de puntos.
+        None/vacio = quitar.
+
+        Las aristas se dibujan BLANCAS con `GLLinePlotItem`. Con blending
+        aditivo el blanco SUMA sobre lo que haya debajo, asi que el contorno
+        queda por encima de cualquier color de relleno (los colores de material
+        llegan a 230/255 por canal, nunca saturan). Es el mismo patron probado
+        del recinto y de los muebles: pos float32, color unico, mode='lines'.
 
         IMPORTANTE — por que un item por parche con COLOR UNIFORME y no un mesh
         combinado con `faceColors`: un `GLMeshItem` con `shader=None` +
@@ -1051,7 +1063,9 @@ class IsoViewer(gl.GLViewWidget):
         if not patches:
             self.update()
             return
-        for (verts, faces, rgba) in patches:
+        for entry in patches:
+            verts, faces, rgba = entry[0], entry[1], entry[2]
+            edges = entry[3] if len(entry) > 3 else None
             if verts is None or faces is None or len(faces) == 0:
                 continue
             item = gl.GLMeshItem(
@@ -1060,6 +1074,14 @@ class IsoViewer(gl.GLViewWidget):
                 smooth=False, color=tuple(rgba), shader=None, glOptions="additive")
             self.addItem(item)
             self._patch_items.append(item)
+            if edges is not None and len(edges) >= 2:
+                eitem = gl.GLLinePlotItem(
+                    pos=np.asarray(edges, dtype=np.float32),
+                    color=self.PATCH_EDGE_COLOR, width=self.PATCH_EDGE_WIDTH,
+                    antialias=True, mode="lines")
+                eitem.setGLOptions("additive")
+                self.addItem(eitem)
+                self._patch_items.append(eitem)
         self.update()
 
     def set_highlight_patch(self, verts=None, faces=None):
