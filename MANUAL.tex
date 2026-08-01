@@ -132,7 +132,7 @@
   \vspace{2cm}
   {\large Ingeniería en Sonido\par}
   \vspace{0.3cm}
-  {\normalsize Versión del Manual 2.20 — 30 de Julio de 2026\par}
+  {\normalsize Versión del Manual 2.21 — 31 de Julio de 2026\par}
   \vspace{0.5cm}
   {\small\color{cGray} con importación CAD y router de mallado best-effort\par}
   \vfill
@@ -1825,7 +1825,7 @@ ahora:
 \begin{center}
   \small\textcolor{cGray}{%
     Prototipo 1 --- Modelador de Recintos 3D con Simulación Acústica FEM\\
-    Manual de Usuario $\cdot$ v2.20 $\cdot$ 30 de Julio de 2026\\[2pt]
+    Manual de Usuario $\cdot$ v2.21 $\cdot$ 31 de Julio de 2026\\[2pt]
     \textbf{Cambios v2.0}: import CAD (STL/OBJ/PLY/STEP/IGES/glTF), motor
     boundary-fitted con gmsh, router automático con badge UI, diálogo de
     reparación guiada, persistencia \texttt{.room} v3.\\[2pt]
@@ -2341,7 +2341,38 @@ ahora:
     del original $\to$ solape del 100\% y ningún movimiento posible en ninguno de
     los dos. Ahora la copia nace desplazada, y un mueble ya solapado puede
     arrastrarse para afuera (antes solo frenaba, nunca escapaba). Afectaba también
-    a los presets.%
+    a los presets.\\[2pt]
+    \textbf{Cambios v2.21} (31 de julio): \textbf{parches con espesor} (prisma) y
+    \textbf{reglas de superposición} entre objetos de la escena.
+    (A) \textbf{Parche como prisma}: se dibuja con el espesor real del tratamiento
+    (10 cm por defecto) hacia el interior de la sala, con las aristas resaltadas
+    para leerlo con cualquier color de relleno. Espesor 0 $\to$ plano, como antes.
+    (B) \textbf{Espesor desde el material}: al elegir un material se autocompleta
+    leyendo la construcción del nombre (suma capa absorbente $+$ cavidad $+$
+    cámara de aire $+$ descuelgue; descarta la geometría en-plano de los paneles
+    ranurados). Cubre 240 de 429 materiales; avisa si el espesor dibujado no
+    coincide con el del $\alpha$ elegido, y muestra el $\lambda/4$.
+    \emph{El espesor NO entra al solver}: el $\alpha(f)$ del catálogo ya se midió
+    con ese espesor (misma lana, $\alpha$ a 63\,Hz cambia $\sim$15$\times$ entre
+    20 y 100 mm) $\to$ sumarlo seria contarlo dos veces; y correr la frontera
+    seria peor (a 34\,Hz un panel de 10 cm es $\lambda/100$: la onda lo atraviesa).
+    Detalle en \S10.5.
+    (C) \textbf{Fuente y receptor nunca dentro de un mueble}: el mueble se modela
+    quitando el aire, asi que un punto ahi adentro evaluaba \textbf{NaN} y
+    contaminaba toda la FRF sin dar error. Se bloquea en los dos sentidos (mover
+    el punto al mueble, y poner el mueble sobre el punto). El receptor estaba
+    especialmente expuesto por ser un punto sin bafle.
+    (D) \textbf{Regla de solidos simetrica}: el bafle del parlante ahora tambien
+    frena contra los muebles (antes solo frenaba el mueble contra el parlante,
+    aunque el manual ya prometia lo contrario). Se mantiene el escape: lo que ya
+    esta superpuesto se puede arrastrar para afuera.
+    (E) \textbf{Aviso de mueble tapando un parche}: no bloquea (el prisma es
+    dibujo), pero un mueble delante del absorbente lo tapa y su $\alpha$ efectivo
+    baja respecto del catalogo.
+    (F) \textbf{Fix: muebles y parches se mueven con el origen}: al cambiar la
+    convencion de origen se trasladaban fuentes, receptor y puntos de escucha,
+    pero muebles y parches se quedaban en el lugar viejo (el origen configurable
+    es de v2.16; parches y muebles se agregaron despues).%
   }
 \end{center}
 

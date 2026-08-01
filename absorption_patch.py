@@ -52,6 +52,7 @@ lista de dicts (`AbsorptionPatch.to_dict`). La clave de material del parche es s
 from __future__ import annotations
 
 import hashlib
+import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
@@ -224,6 +225,88 @@ def triangulate_uv(uv):
 
 
 # ---------------------------------------------------------------------------
+# Espesor del tratamiento
+# ---------------------------------------------------------------------------
+# Espesor por defecto de un parche [m]. 10 cm es el espesor tipico de un panel
+# absorbente de banda ancha. Es geometrico (dibujo + lectura de lambda/4); el
+# solver sigue usando el alpha(f) del catalogo, que ya incluye el espesor real
+# de la construccion medida.
+DEFAULT_PATCH_DEPTH = 0.10
+
+
+# Numeros con unidad de longitud dentro del nombre de un material del catalogo.
+_LEN_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(mm|cm)\b", re.I)
+
+# Contexto (palabras ANTES del numero) que indica geometria EN-PLANO, no
+# profundidad: el ancho de las ranuras de un panel estriado y su separacion.
+# Sumarlas seria un error (ej.: "franjas de 12 mm a intervalos de 20 mm,
+# absorbente de 40 mm, cavidad de 100 mm" -> profundidad = 140, no 172).
+_IN_PLANE_WORDS = ("franja", "intervalo", "diametro", "diámetro", "paso",
+                   "ancho", "separacion", "separación")
+# ("abierto" NO va aca: el "20% abierto" de los perforados no lleva unidad de
+#  longitud, asi que nunca matchea, y en cambio ensuciaba el contexto del
+#  numero siguiente -> "20% abierto, absorbente de 40 mm" perdia los 40 mm.)
+
+# Ventana de texto previo que se mira para clasificar cada numero.
+_CTX_CHARS = 26
+
+
+def thickness_from_material_name(name: str) -> Optional[float]:
+    """Profundidad [m] que ocupa la construccion, leida del NOMBRE del material.
+
+    El catalogo describe la construccion completa en el nombre
+    ("Lana de vidrio 100 mm, 25 kg/m3", "Cielorraso ... 20 mm ... suspendido a
+    100 mm"). Esta funcion suma los espesores que aportan PROFUNDIDAD (la capa
+    absorbente, la cavidad, la camara de aire, el descuelgue) y descarta los que
+    son geometria en-plano (ancho de franjas, intervalos, diametro de
+    perforaciones).
+
+    Devuelve None si el nombre no declara espesor (no se puede inferir).
+
+    OJO: es lectura de texto libre, o sea heuristica. Se usa solo para
+    PRE-CARGAR el espesor del dibujo y para avisar de inconsistencias; NUNCA
+    entra al solver, donde manda alpha(f) del catalogo. Un parseo equivocado es
+    un error de dibujo, no de fisica.
+    """
+    if not name:
+        return None
+    total_mm = 0.0
+    found = False
+    for m in _LEN_RE.finditer(name):
+        ctx = name[max(0, m.start() - _CTX_CHARS):m.start()].lower()
+        if any(w in ctx for w in _IN_PLANE_WORDS):
+            continue                       # ancho/separacion: no es profundidad
+        val = float(m.group(1).replace(",", "."))
+        if m.group(2).lower() == "cm":
+            val *= 10.0
+        total_mm += val
+        found = True
+    if not found or total_mm <= 0.0:
+        return None
+    return total_mm / 1000.0
+
+
+def quarter_wave_limit(depth: float, c: float = 343.0) -> float:
+    """Frecuencia [Hz] a partir de la cual un absorbente POROSO de `depth` metros
+    montado al ras empieza a trabajar: f = c / (4 d).
+
+    Regla de lambda/4: el poroso actua sobre la VELOCIDAD de particula, que es
+    nula sobre la pared rigida y maxima a un cuarto de onda de ella. Por debajo
+    de esta frecuencia el panel es casi transparente.
+
+    Numero que importa en este software: 10 cm -> ~860 Hz, MUY por encima de la
+    banda modal que resuelve el FEM. Es decir, un poroso de 10 cm al ras casi no
+    toca los modos; para graves hacen falta espesores mucho mayores, montaje
+    despegado de la pared, o dispositivos de presion (membrana/perforado), que es
+    lo que ya avisa el criterio B27 (`face_materials.lf_modal_absorption_hints`).
+    """
+    d = float(depth)
+    if d <= 0.0:
+        return float("inf")
+    return float(c / (4.0 * d))
+
+
+# ---------------------------------------------------------------------------
 # Dataclass del parche
 # ---------------------------------------------------------------------------
 @dataclass
@@ -239,6 +322,15 @@ class AbsorptionPatch:
         v0, v1         : rango del rectangulo sobre v_axis (v0 <= v1).
         material_name  : nombre del material del catalogo aplicado en el parche.
         label          : etiqueta legible opcional.
+        depth          : espesor del tratamiento [m], hacia el INTERIOR de la sala
+                         (default 0.10 = 10 cm, el espesor tipico de un panel
+                         absorbente). Es GEOMETRICO/DOCUMENTAL: dibuja el parche
+                         como prisma en vez de plano y permite leer cuanto invade
+                         el recinto y hasta donde llega su lambda/4. NO entra al
+                         solver: el alpha(f) del catalogo YA esta medido CON el
+                         espesor de esa construccion (ISO 354), asi que sumarlo
+                         como obstaculo seria contarlo dos veces. Ver la nota de
+                         `quarter_wave_limit`.
     """
     face_signature: str
     normal_axis: int
@@ -255,6 +347,7 @@ class AbsorptionPatch:
     # (retrocompatible con .room v8 previo). Cuando esta seteado, u0..v1 son su
     # bounding box (se mantienen para rechazo rapido y display).
     poly: Optional[List[Tuple[float, float]]] = None
+    depth: float = DEFAULT_PATCH_DEPTH
 
     def polygon_uv(self) -> List[Tuple[float, float]]:
         """Vertices efectivos del parche en (u, v): el poligono si lo tiene,
@@ -271,9 +364,24 @@ class AbsorptionPatch:
         return float(max(0.0, self.u1 - self.u0) * max(0.0, self.v1 - self.v0))
 
     @property
+    def volume(self) -> float:
+        """Volumen que ocupa el prisma [m^3] = area x espesor. Informativo (cuanto
+        invade el recinto); NO se descuenta del volumen de aire del solver."""
+        return float(self.area * max(0.0, self.depth))
+
+    @property
+    def quarter_wave_hz(self) -> float:
+        """f = c/(4d) del espesor de este parche (ver `quarter_wave_limit`)."""
+        return quarter_wave_limit(self.depth)
+
+    @property
     def key(self) -> str:
-        """Clave estable (hash de cara + geometria). Sirve de id para el mapa
-        parche->Material y para persistencia."""
+        """Clave estable (hash de cara + geometria EN-PLANO). Sirve de id para el
+        mapa parche->Material y para persistencia.
+
+        OJO: el espesor NO entra al hash a proposito. Si entrara, cambiar el
+        espesor generaria una clave nueva y el parche perderia su material
+        asignado."""
         if self.poly:
             geo = "poly=" + ";".join(f"{a:.3f},{b:.3f}" for (a, b) in self.poly)
         else:
@@ -287,6 +395,23 @@ class AbsorptionPatch:
             return points_in_poly(self.poly, u, v)
         return (u >= self.u0) & (u <= self.u1) & (v >= self.v0) & (v <= self.v1)
 
+    def translate(self, delta) -> None:
+        """Traslada el parche por `delta` (3,) en coords MUNDO, in-place.
+
+        Se usa al cambiar la convencion de origen (`origin_mode`): el recinto se
+        mueve y todo lo anclado a el tiene que moverse CON el, si no el parche
+        queda flotando fuera de su cara. Como la geometria del parche vive en el
+        marco (normal, u, v) de la cara, cada componente del delta va al eje que
+        le corresponde.
+        """
+        d = np.asarray(delta, dtype=float)
+        self.plane_coord = float(self.plane_coord + d[self.normal_axis])
+        du, dv = float(d[self.u_axis]), float(d[self.v_axis])
+        self.u0 += du; self.u1 += du
+        self.v0 += dv; self.v1 += dv
+        if self.poly:
+            self.poly = [(float(a + du), float(b + dv)) for (a, b) in self.poly]
+
     def to_dict(self) -> dict:
         d = {
             "face_signature": self.face_signature,
@@ -298,6 +423,7 @@ class AbsorptionPatch:
             "v0": float(self.v0), "v1": float(self.v1),
             "material_name": self.material_name,
             "label": self.label,
+            "depth": float(self.depth),
         }
         if self.poly:
             d["poly"] = [[float(a), float(b)] for (a, b) in self.poly]
@@ -318,11 +444,17 @@ class AbsorptionPatch:
             material_name=str(d.get("material_name", "")),
             label=str(d.get("label", "")),
             poly=poly,
+            # .room v8 previo (sin "depth") -> espesor por defecto: los parches
+            # viejos pasan a dibujarse como prisma, que es el comportamiento
+            # pedido. Como el espesor no toca el solver, la acustica del archivo
+            # cargado no cambia ni un digito.
+            depth=float(d.get("depth", DEFAULT_PATCH_DEPTH)),
         )
 
 
 def make_patch(group, u0: float, v0: float, u1: float, v1: float,
-               material_name: str = "", label: str = "") -> AbsorptionPatch:
+               material_name: str = "", label: str = "",
+               depth: float = DEFAULT_PATCH_DEPTH) -> AbsorptionPatch:
     """Crea un parche a partir de un FaceGroup y un rectangulo en local (u, v).
 
     El marco local se deriva de la normal del grupo (cara axis-aligned). La
@@ -335,12 +467,13 @@ def make_patch(group, u0: float, v0: float, u1: float, v1: float,
         normal_axis=na, plane_coord=plane, u_axis=ua, v_axis=va,
         u0=float(min(u0, u1)), u1=float(max(u0, u1)),
         v0=float(min(v0, v1)), v1=float(max(v0, v1)),
-        material_name=material_name, label=label,
+        material_name=material_name, label=label, depth=float(depth),
     )
 
 
 def make_polygon_patch(group, uv_points, material_name: str = "",
-                       label: str = "") -> AbsorptionPatch:
+                       label: str = "",
+                       depth: float = DEFAULT_PATCH_DEPTH) -> AbsorptionPatch:
     """Crea un parche POLIGONAL a partir de un FaceGroup y una lista de vertices
     en local (u, v). El rectangulo u0..v1 se fija como bounding box del poligono."""
     na, ua, va = axis_aligned_frame(group.normal)
@@ -351,7 +484,7 @@ def make_polygon_patch(group, uv_points, material_name: str = "",
         normal_axis=na, plane_coord=plane, u_axis=ua, v_axis=va,
         u0=float(p[:, 0].min()), u1=float(p[:, 0].max()),
         v0=float(p[:, 1].min()), v1=float(p[:, 1].max()),
-        material_name=material_name, label=label,
+        material_name=material_name, label=label, depth=float(depth),
         poly=[(float(a), float(b)) for (a, b) in p],
     )
 

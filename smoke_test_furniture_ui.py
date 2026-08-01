@@ -831,6 +831,70 @@ def t34_gizmo_yaw_ring_and_hover():
     return f"anillo yaw: rotó {m.orientation:.0f}° sin pitch + hover on/off"
 
 
+@test
+def t37_point_never_inside_furniture():
+    """Fuente y receptor NUNCA pueden quedar dentro de un mueble tallado.
+
+    Es el bug mas grave del lote: ahi no hay malla y `FieldEvaluator` devuelve
+    **NaN**, que se propaga a toda la FRF SIN lanzar error. Se bloquea en los
+    dos sentidos: moviendo el punto contra el mueble, y poniendo el mueble
+    encima del punto."""
+    _v, panel = make_panel()
+    import sources as S
+    panel.sources.add(S.OmniSource(position=(2.0, 2.0, 1.2)))
+    panel._refresh_sources_list()
+    # Receptor LEJOS de la fuente: si no, el mueble de prueba (d) toca primero
+    # el bafle y el chequeo del receptor nunca se alcanza.
+    panel.move_receiver_to(-2.2, 2.8, 1.2)
+    m = Furniture("box", position=(0.0, 0.0, 1.0), size=(1.4, 1.4, 1.6),
+                  label="bloque")
+    panel.furniture.append(m)
+    panel._refresh_furniture_list()
+
+    # (a) el PUNTO de la fuente no entra
+    assert panel.point_inside_furniture(0.0, 0.0, 1.0) == 0, "contains no detecta"
+    msg = panel.source_placement_conflict(0, 0.0, 0.0, 1.0)
+    assert msg and "DENTRO" in msg, f"deberia bloquear el punto: {msg!r}"
+    # (b) el BAFLE tampoco atraviesa (simetria con la regla de los muebles)
+    msg_b = panel.source_placement_conflict(0, 0.78, 0.0, 1.0)
+    assert msg_b and "bafle" in msg_b, f"deberia bloquear el bafle: {msg_b!r}"
+    # (c) lejos, libre
+    assert panel.source_placement_conflict(0, 2.5, 2.0, 1.2) is None
+    # (d) un mueble NO puede envolver al receptor (punto pelado, sin bafle)
+    sobre = Furniture("box", position=tuple(panel.receiver), size=(0.8, 0.8, 0.8),
+                      label="encima")
+    msg_r = panel._furniture_conflict(sobre)
+    assert msg_r and "receptor" in msg_r, f"deberia proteger al receptor: {msg_r!r}"
+    return "punto de fuente/receptor nunca dentro de un mueble (evita NaN)"
+
+
+@test
+def t38_patch_blocked_by_furniture_warns():
+    """Un mueble delante de un parche AVISA (no bloquea): el prisma es dibujo y
+    el alpha sigue sobre la pared, pero el mueble tapa el absorbente y su alpha
+    efectivo baja respecto del catalogo."""
+    import absorption_patch as _ap
+    import face_materials as _fm
+    _v, panel = make_panel()
+    sv, st = panel.get_surface()
+    groups = _fm.group_faces_by_planar_region(sv, st)
+    piso = next(g for g in groups if g.kind == "floor")
+    p = _ap.make_patch(piso, -1.5, -1.5, 1.5, 1.5, material_name="Madera")
+    p.depth = 1.0                      # prisma alto: envuelve lo que haya encima
+    panel._patches = [p]
+    panel._refresh_patches_summary()
+    assert not panel._patches_blocked_by_furniture(), "sin muebles no deberia avisar"
+    panel.furniture.append(Furniture("box", position=(0.0, 0.0, 0.4),
+                                     size=(0.8, 0.8, 0.8), label="bloque"))
+    panel._refresh_furniture_list()
+    tapados = panel._patches_blocked_by_furniture()
+    assert "bloque" in tapados, f"deberia detectar el mueble encima: {tapados}"
+    assert "⚠" in panel.lbl_patch_summary.text(), "el resumen deberia avisar"
+    # pero NO bloquea: el parche sigue ahi
+    assert len(panel._patches) == 1, "el parche no debe borrarse"
+    return "parche tapado por mueble: avisa sin bloquear"
+
+
 # ---------------------------------------------------------------------------
 def main():
     print("=" * 78)

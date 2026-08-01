@@ -372,6 +372,12 @@ El mueble se ve como un **wireframe verde-azulado** en el visor 3D (naranja al s
 
 Un mueble **no puede** ocupar el mismo espacio que otro mueble, que el **bafle de un parlante**, ni salirse de las **paredes o el techo del recinto**. Al arrastrarlo, **frena** al tocar el obstáculo; al Añadir/Editar con una posición inválida, avisa el motivo y no lo agrega. El **piso no atrapa** al mueble (se apoya ahí). Del mismo modo, **las fuentes y el receptor se traban en las paredes** del recinto al arrastrarlos (se deslizan pegados al límite en vez de salirse).
 
+La regla vale en **los dos sentidos**: el parlante también frena contra los muebles (antes solo frenaba el mueble contra el parlante). Y hay una regla más estricta para los **puntos**: ni la fuente ni el receptor pueden quedar **adentro** de un mueble, ni arrastrándolos ahí ni poniéndoles un mueble encima.
+
+> **Por qué esa regla es obligatoria.** El mueble se modela quitando el aire que ocupa (se talla la malla). Si el punto de la fuente o del receptor queda dentro de ese hueco, ahí **no hay malla**: el campo modal evalúa **NaN** y eso contamina toda la FRF sin dar ningún error. Ojo con la diferencia: el parlante se **dibuja** como una caja pero para la física es un **punto**; el mueble sí tiene volumen real en el modelo.
+
+Si algo quedó superpuesto (por ejemplo al agregar un mueble encima), **se puede arrastrar para afuera**: la regla solo frena los movimientos que *crean* una superposición nueva, nunca deja un objeto atrapado sin salida.
+
 #### Presets armados
 
 El botón **"Insertar preset ▾"** ofrece muebles ya dimensionados, agrupados en **General**, **Aula** y **Estudio / tratamiento**. Cada uno se inserta en el centro de la sala (las **nubes acústicas** colgadas del techo) con forma reconocible y un material sugerido, y después se mueve/rota/edita como cualquier mueble.
@@ -740,7 +746,13 @@ Además de asignar **un material por cara**, se puede dibujar una **región (par
 - Los parches **no pueden solaparse**: si el candidato pisaría a otro se dibuja en rojo y no se agrega.
 - El material se elige del combo (se aplica al parche nuevo o al seleccionado); botón derecho sobre un parche lo borra.
 
-Los parches se **pintan sobre la cara en el visor 3D** (color del material) y se guardan en el `.room`.
+**Espesor del tratamiento.** El parche se dibuja como un **prisma** hacia el interior de la sala, con el espesor real del panel (por defecto **10 cm**). Al elegir un material del catálogo el espesor **se autocompleta** con el de esa construcción: "Lana de vidrio 100 mm" → 10 cm, "Cielorraso 20 mm suspendido a 200 mm" → 22 cm. Si lo cambiás a mano y no coincide con el del material, el diálogo **avisa**.
+
+> **El espesor es geométrico, no entra al solver.** El α(f) del catálogo se midió (ISO 354) **con** el espesor de esa construcción: para una misma lana, el α a 63 Hz cambia unas **15 veces** entre 20 y 100 mm. O sea que el espesor **ya está afectando** el cálculo, por α. Sumarlo además como obstáculo sería contar la misma física dos veces. Y desplazar la pared hacia adentro sería peor: a 34 Hz un panel de 10 cm es λ/100, la onda lo atraviesa y rebota contra el muro rígido de atrás, así que la frontera acústica sigue siendo la pared. El diálogo muestra el **λ/4 = c/4d** del espesor elegido, que es la frecuencia debajo de la cual un poroso al ras es casi transparente (10 cm → ~858 Hz, muy por encima de la banda modal).
+
+Los parches se **pintan sobre la cara en el visor 3D** (color del material, con las **aristas del prisma resaltadas** para que se lean con cualquier color de relleno) y se guardan en el `.room`.
+
+**Muebles delante de un parche.** Si un mueble se superpone con el prisma de un parche, aparece un **aviso** (no se bloquea): un mueble delante del absorbente lo tapa, así que su α efectivo en esa zona va a ser menor que el del catálogo.
 
 **Desde el diálogo Materiales…** los parches también aparecen listados debajo de las caras, como `↳ Parche (rect/polígono) en <cara>`, con su área y categoría. Ahí podés **cambiarle el material** con su combo (igual que a una cara), y al **posar el cursor sobre la fila** el parche se **resalta en el 3D** con el mismo brillo ámbar que usan las caras.
 
@@ -2251,4 +2263,34 @@ Duplicar un mueble dejaba la copia en la **posición exacta** del original: los 
 
 ---
 
-*Manual actualizado al 30 de Julio de 2026 — v2.20.*
+**Cambios v2.21** (31 de julio 2026): **parches con espesor** (prisma) y **reglas de superposición** entre objetos de la escena. Uso en §6.4 y §10.5. Seis ejes.
+
+### A. Parches como prisma, con espesor
+
+El parche de absorción se dibuja como un **prisma** hacia el interior de la sala en vez de un plano pegado a la pared, con el espesor real del tratamiento (**10 cm** por defecto). Las **aristas** se resaltan para que el prisma se lea con cualquier color de relleno. Con espesor 0 se dibuja plano, como antes.
+
+### B. El espesor sale del material, y avisa si no coincide
+
+Al elegir un material del catálogo, el espesor se **autocompleta** leyendo la construcción del nombre: suma lo que aporta profundidad (capa absorbente, cavidad, cámara de aire, descuelgue) y descarta la geometría en-plano (ancho de franjas, intervalos de un panel ranurado). Cubre **240 de los 429** materiales; el resto se queda con el default. Si el espesor dibujado no coincide con el del α elegido, el diálogo avisa. También muestra el **λ/4** del espesor.
+
+**Por qué el espesor no entra al solver**: el α(f) del catálogo ya se midió con el espesor de esa construcción (para una misma lana, el α a 63 Hz cambia ~15× entre 20 y 100 mm). Sumarlo como obstáculo sería contarlo dos veces, y correr la frontera hacia adentro sería peor: en la banda modal un panel de 10 cm es λ/100 y la onda lo atraviesa. Detalle en §10.5.
+
+### C. Fuente y receptor nunca adentro de un mueble
+
+Un mueble se modela quitando el aire que ocupa. Si el punto de la fuente o del receptor caía en ese hueco, el campo modal evaluaba **NaN** y contaminaba toda la FRF **sin dar error**. Ahora se bloquea en los dos sentidos: no se puede arrastrar el punto adentro de un mueble, ni colocar un mueble encima del punto. El receptor estaba especialmente expuesto por ser un punto sin bafle que lo cubriera.
+
+### D. La regla de sólidos ahora vale en los dos sentidos
+
+El manual ya decía que un mueble no puede ocupar el lugar del bafle de un parlante, pero la regla se aplicaba en un solo sentido: el mueble frenaba contra el parlante y el parlante atravesaba al mueble. Ahora el bafle también frena. En todos los casos se mantiene el **escape**: lo que ya está superpuesto se puede arrastrar para afuera.
+
+### E. Aviso de mueble tapando un parche
+
+Si un mueble se superpone con el prisma de un parche, aparece un aviso. No se bloquea (el prisma es dibujo y el α sigue sobre la pared), pero la advertencia tiene contenido acústico real: un mueble delante del absorbente lo tapa y su α efectivo baja respecto del catálogo.
+
+### F. Fix: muebles y parches se mueven con el origen
+
+Al cambiar la convención de origen (por ejemplo a "esquina inferior") se trasladaban las fuentes, el receptor y los puntos de escucha, pero **los muebles y los parches se quedaban en el lugar viejo**. Es un arrastre histórico: el origen configurable es de v2.16 y los parches (v2.17) y muebles (v2.18) se agregaron después, sin sumarse a esa lista.
+
+---
+
+*Manual actualizado al 31 de Julio de 2026 — v2.21.*
