@@ -33,6 +33,42 @@ DIST_SRC = PROJECT_ROOT / "dist" / "Prototipo1"
 TEST_DIR = Path(os.environ.get("TEMP", "/tmp")) / "prototipo1_test_profe"
 WAIT_SECONDS = 15  # cuanto esperar antes de declarar "vivo"
 
+# Palabras que, en el titulo de una ventana del proceso, delatan que arranco
+# mal aunque el proceso siga corriendo (dialogos de PyInstaller / Qt / Windows).
+ERROR_TITLE_HINTS = ("unhandled exception", "failed to execute",
+                     "error", "excepcion", "excepción")
+
+
+def _error_window_titles(pid: int):
+    """Titulos de ventana del proceso `pid` que parezcan de error. [] si esta
+    todo bien o si no se pudo consultar (best-effort, solo Windows)."""
+    import subprocess as _sp
+    ps = (f"Get-Process -Id {pid} -ErrorAction SilentlyContinue | "
+          f"Select-Object -ExpandProperty MainWindowTitle")
+    try:
+        out = _sp.run(["powershell", "-NoProfile", "-Command", ps],
+                      capture_output=True, timeout=20)
+        titles = out.stdout.decode("utf-8", errors="replace").splitlines()
+    except Exception:
+        return []                       # sin PowerShell: no se puede chequear
+    bad = []
+    for t in titles:
+        t = t.strip()
+        if t and any(h in t.lower() for h in ERROR_TITLE_HINTS):
+            bad.append(t)
+    return bad
+
+
+def _kill(proc):
+    try:
+        proc.terminate()
+        proc.wait(timeout=5)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
 
 def step(label: str):
     print(f"\n[*] {label}")
@@ -118,7 +154,20 @@ def main() -> int:
     except subprocess.TimeoutExpired:
         elapsed = time.perf_counter() - t0
         print(f"    OK — proceso sigue vivo tras {elapsed:.1f} s (PID {proc.pid}).")
-        print(f"           GUI deberia estar visible en pantalla.")
+
+        # "Vivo" NO alcanza: un dialogo de error de PyInstaller (por ejemplo
+        # "Failed to execute script 'main'... DLL load failed while importing
+        # QtCore") tambien es un proceso vivo, y este test daba OK igual.
+        # Paso de verdad el 13 Ago 2026. Ahora se mira el TITULO de la ventana.
+        bad = _error_window_titles(proc.pid)
+        if bad:
+            print(f"    FAIL — el proceso esta vivo pero mostrando un ERROR:")
+            for t in bad:
+                print(f"             \"{t}\"")
+            print("           (un dialogo de excepcion tambien 'sobrevive' 15 s)")
+            _kill(proc)
+            return 1
+        print(f"           sin ventanas de error; GUI visible en pantalla.")
 
     # 6. Matar el proceso limpio
     step("Cerrando el proceso (test completo)")

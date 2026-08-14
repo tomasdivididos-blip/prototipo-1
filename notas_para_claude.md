@@ -512,7 +512,76 @@ PyQt5/PyQt6, bundle pesando 1.9 GB sin excludes, `materials/` no
 bundleado por falta de `--add-data`. Todos fixeados en `build.bat`
 desde v2.12.
 
-**Detalle completo** en MANUAL.md §20 "Distribución del programa".
+**Detalle completo** en MANUAL.md §20 "Distribución del programa (.exe)" — la
+sección se ESCRIBIÓ recién el 13 Ago 2026 (antes las notas la daban por hecha
+pero no existía en el .md; si buscás §20 en un manual viejo, no está).
+
+**Números reales medidos (v2.22, 13 Ago 2026):** carpeta **1032 MB**, ZIP
+**414 MB**. Antes eran 1524 / 570; bajó sacando peso muerto que Anaconda
+arrastra (Qt5WebEngineCore 107 MB, panel 101, botocore 92, llvmlite/numba 66,
+bokeh). **Irreducible:** `mkl_*.dll` ~370 MB (BLAS de numpy/scipy, variantes de
+despacho por CPU — sacarlas rompe en otras máquinas), `gmsh-4.15.dll` 86 MB,
+PyQt5 81 MB.
+
+### ⚠⚠ GOTCHA MAYOR: las DLLs de Qt y el PATH de conda (14 Ago 2026)
+
+**Síntoma:** el build dice "BUILD OK", el `.exe` se genera, y al abrirlo muere con
+`ImportError: DLL load failed while importing QtCore`.
+
+**Causa:** Anaconda NO guarda las DLLs de Qt en `site-packages\PyQt5\Qt5\bin\`
+como un pip normal: las pone en **`<env>\Library\bin\`** y con otro nombre
+(**`Qt5Core_conda.dll`**). PyInstaller las busca recorriendo el **PATH**, así que
+si `build.bat` se lanza desde una consola SIN el entorno conda activado (cmd
+pelado, doble click desde el Explorador, o un agente), no las encuentra y **las
+omite EN SILENCIO**. El bundle queda con `PyQt5/*.pyd` pero sin una sola
+`Qt5*.dll`.
+
+**Fix aplicado:** `build.bat` ahora se arma el PATH solo, derivándolo de `%PYEXE%`
+(`Library\bin` + `Library\mingw-w64\bin` + `DLLs`). El build quedó reproducible
+desde cualquier consola.
+
+**Chequeo rápido de un bundle:** `find dist/Prototipo1/_internal -iname "Qt5*.dll" | wc -l`
+→ tiene que dar **> 0**. `verify_distribution.py` ahora lo exige.
+
+**NO fue culpa de los `--exclude-module PyQt5.*`.** Los acusé primero, los saqué,
+recompilé y el problema seguía. (Igual quedaron afuera: no vale 107 MB el riesgo
+de tocar el hook de PyQt5.)
+
+### ⚠ Los dos chequeos automáticos MINTIERON (arreglados el 14 Ago)
+
+Por eso el `.exe` roto llegó hasta el usuario:
+- `verify_distribution.py` solo miraba que existiera la CARPETA `PyQt5/`, que
+  existía (con los `.pyd`); faltaban las DLLs. → Ahora exige
+  `Qt5Core`/`Qt5Gui`/`Qt5Widgets`.
+- `test_distribution_smoke.py` daba OK con "el proceso sigue vivo 15 s", y **un
+  diálogo de excepción TAMBIÉN es un proceso vivo**. → Ahora lee el título de las
+  ventanas del proceso (`Get-Process ... MainWindowTitle`) y falla si encuentra
+  "unhandled exception" / "failed to execute" / "error".
+
+### ⚠ Cómo correr `build.bat` desde el agente (GOTCHA que me costó 2 builds fantasma)
+
+`cmd /c build.bat < /dev/null` desde la tool Bash **NO ejecuta el .bat**: sale
+solo el banner de cmd, exit 0, y el `dist/` que quede es el VIEJO. Perdí tiempo
+inspeccionando un bundle de junio creyendo que era nuevo. **Siempre verificar la
+fecha del .exe** (`ls -la dist/Prototipo1/Prototipo1.exe`) antes de sacar
+conclusiones. Lo que SÍ funciona, vía la tool PowerShell:
+
+    cd "C:\Users\aceve\OneDrive\Escritorio\prototipo 1"; cmd /c ".\build.bat < nul"
+
+(el `.\` es necesario, y `< nul` saltea el `pause` final).
+
+**Para el usuario, en cmd:** `cd /d "...\prototipo 1" && build.bat`.
+
+### El .exe NO va al repo
+
+GitHub bloquea archivos >100 MB y el historial queda inflado para siempre. El
+`.gitignore` ya excluye `dist/`, `build/`, `*.exe`, `*.zip`. **La vía correcta es
+GitHub Releases** (hasta 2 GB por archivo, no toca el historial):
+`gh release create vX.YY Prototipo1_vX.YY.zip --title ... --notes ...`.
+
+**`pack_distribution.py` ya no hardcodea la versión**: la lee del último
+`**Cambios vX.YY**` de MANUAL.md. Antes decía `v2.12` y quedó congelado ocho
+versiones (el destinatario recibía un ZIP que mentía sobre su contenido).
 
 ### Importes del módulo
 La app importa todos los módulos al arrancar. Si rompés un import
@@ -1778,6 +1847,27 @@ bien.
     contra la pared + el desconcierto visual de las cajas superpuestas.
     **Recordatorio de sintaxis:** `VAR=1 cmd` es de bash; en cmd va
     `set PROTO1_WATCHDOG=1 && ...`, en PowerShell `$env:PROTO1_WATCHDOG="1"`.
+
+- **13 Ago 2026 — Empaquetado del `.exe` al día + primera GitHub Release. v2.22.**
+  Rama `dist-exe` off main. El usuario quiso un `.exe` para pasarle a sus
+  compañeros "y subirlo al repo". MANUAL v2.22 (**§20 NUEVA** + changelog A-C,
+  .tex, .pdf 36 pág, limpio). Detalle operativo en §6 de este archivo.
+  - **El pipeline YA existía** (v2.12, `build.bat`/`verify_distribution.py`/
+    `test_distribution_smoke.py`/`pack_distribution.py`). No había que crearlo,
+    sí ponerlo al día: era de junio, anterior a muebles/CAD/parches.
+  - **Bundle 1524 → 1032 MB, ZIP 570 → 414 MB** sacando peso muerto de Anaconda
+    (Qt5WebEngineCore 107, panel 101, botocore 92, llvmlite 66, bokeh). Verificado
+    que trimesh y gmsh siguen adentro y que el smoke test pasa.
+  - **`pack_distribution.py` leía `v2.12` hardcodeado** desde hace ocho versiones
+    → ahora lo saca del changelog del MANUAL.
+  - **`verify_distribution.py` marcaba FAIL en un bundle correcto** (rango
+    100-800 MB contra 1030 reales) → 700-1400 MB.
+  - **ERROR MÍO A NO REPETIR:** afirmé que trimesh/gmsh "no se bundleaban" y que
+    lo había arreglado. **Falso**: mis dos primeros builds nunca corrieron (ver el
+    gotcha de `cmd /c` en §6) y lo que inspeccioné era el `dist/` de junio, que ya
+    los traía. Los `--collect-all` quedaron como seguro, no como fix. **Lección:
+    antes de afirmar que un artefacto de build cambió, mirar su TIMESTAMP.**
+  - **Release**: primera del repo. El `.exe` NO va al repositorio (ver §6).
 
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug

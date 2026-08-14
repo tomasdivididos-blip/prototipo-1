@@ -22,7 +22,27 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent
 DIST_DIR = PROJECT_ROOT / "dist" / "Prototipo1"
-OUT_ZIP = PROJECT_ROOT / "Prototipo1_v2.12.zip"
+
+
+def _version() -> str:
+    """Version del release, leida del sello del MANUAL (unica fuente de verdad).
+
+    El nombre del ZIP estaba hardcodeado en 'v2.12' y quedo desactualizado ocho
+    versiones seguidas: al destinatario le llegaba un archivo que mentia sobre
+    lo que contenia. Se lee del changelog en vez de duplicar el numero.
+    """
+    import re
+    man = PROJECT_ROOT / "MANUAL.md"
+    try:
+        txt = man.read_text(encoding="utf-8")
+    except Exception:
+        return "vX"
+    # Ultimo "**Cambios v2.NN**" del changelog.
+    vs = re.findall(r"\*\*Cambios (v[\d.]+)\*\*", txt)
+    return vs[-1] if vs else "vX"
+
+
+OUT_ZIP = PROJECT_ROOT / f"Prototipo1_{_version()}.zip"
 
 
 def main() -> int:

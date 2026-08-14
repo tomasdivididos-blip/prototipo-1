@@ -116,6 +116,30 @@ def main() -> int:
         hint="PyInstaller no detecto PyQt5. La GUI no va a arrancar.",
     )
 
+    # 4b. DLLs del runtime de Qt.
+    #
+    # NO alcanza con que exista la carpeta PyQt5/ y sus .pyd: los .pyd son solo
+    # los bindings, y sin las Qt5*.dll el .exe muere en el import con
+    # "DLL load failed while importing QtCore". Paso de verdad el 13 Ago 2026 al
+    # excluir submodulos de PyQt5 (envenena el hook y se deja de copiar
+    # PyQt5\Qt5\bin\ entero). El smoke test NO lo detecto porque el dialogo de
+    # error es un proceso vivo -> este chequeo es la red de seguridad real.
+    QT_CORE_DLLS = ["Qt5Core", "Qt5Gui", "Qt5Widgets"]
+    found_dlls = {}
+    for stem in QT_CORE_DLLS:
+        hits = list(INTERNAL_DIR.rglob(f"{stem}*.dll"))
+        found_dlls[stem] = hits
+    missing = [s for s, h in found_dlls.items() if not h]
+    all_ok &= check(
+        f"DLLs del runtime de Qt presentes ({len(QT_CORE_DLLS) - len(missing)}"
+        f"/{len(QT_CORE_DLLS)}: {', '.join(QT_CORE_DLLS)})",
+        not missing,
+        hint=f"FALTAN {', '.join(missing)}.dll -> el .exe va a morir con "
+              f"'DLL load failed while importing QtCore'. Causa tipica: algun "
+              f"--exclude-module PyQt5.* en build.bat (NO excluir submodulos "
+              f"de PyQt5; borrar la DLL del dist post-build si hace falta).",
+    )
+
     # 5. Python DLL
     print(f"\n[*] Python runtime DLL:")
     py_dlls = list(INTERNAL_DIR.glob("python*.dll"))
@@ -129,12 +153,18 @@ def main() -> int:
     print(f"\n[*] Tamano total:")
     total_bytes = sum(p.stat().st_size for p in DIST_DIR.rglob("*") if p.is_file())
     total_mb = total_bytes / (1024 ** 2)
-    in_range = 100 < total_mb < 800
+    # Rango realista medido en v2.21: ~1030 MB. El piso lo ponen los mkl_*.dll
+    # (~370 MB, el BLAS de numpy/scipy; son variantes de despacho por CPU y
+    # sacarlas rompe en maquinas con otro juego de instrucciones) mas
+    # gmsh-4.15.dll (~86 MB) y PyQt5 (~81 MB). Si sube muy por encima, volvio a
+    # colarse peso muerto (botocore / panel / bokeh / llvmlite / QtWebEngine):
+    # comparar con `du -sm dist/Prototipo1/_internal/* | sort -rn | head`.
+    in_range = 700 < total_mb < 1400
     all_ok &= check(
-        f"dist/Prototipo1/ ocupa {total_mb:.0f} MB (rango esperado 100-800 MB)",
+        f"dist/Prototipo1/ ocupa {total_mb:.0f} MB (rango esperado 700-1400 MB)",
         in_range,
-        hint="Tamano fuera de rango. Si <100 MB faltan dependencias; si "
-              ">800 MB algo se duplico.",
+        hint="Tamano fuera de rango. Si <700 MB faltan dependencias; si "
+              ">1400 MB se colo peso muerto (revisar los excludes de build.bat).",
     )
 
     # 7. Resumen
