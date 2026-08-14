@@ -23,7 +23,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['PyQt6', 'PySide6', 'PySide2', 'pandas', 'IPython', 'ipykernel', 'jupyter', 'jupyter_client', 'jupyter_core', 'notebook', 'sphinx', 'sphinxcontrib', 'docutils', 'jedi', 'parso', 'pytest', 'black', 'nacl', 'bcrypt', 'cryptography', 'openpyxl', 'pyarrow', 'tables', 'sqlalchemy', 'lxml', 'pygments', 'tkinter', '_tkinter', 'botocore', 'boto3', 'numba', 'llvmlite', 'panel', 'bokeh', 'holoviews', 'datashader', 'PyQt5.QtWebEngineWidgets', 'PyQt5.QtWebEngineCore', 'PyQt5.QtWebEngine', 'PyQt5.QtWebKit', 'PyQt5.QtWebKitWidgets'],
+    excludes=['PyQt6', 'PySide6', 'PySide2', 'pandas', 'IPython', 'ipykernel', 'jupyter', 'jupyter_client', 'jupyter_core', 'notebook', 'sphinx', 'sphinxcontrib', 'docutils', 'jedi', 'parso', 'pytest', 'black', 'nacl', 'bcrypt', 'cryptography', 'openpyxl', 'pyarrow', 'tables', 'sqlalchemy', 'lxml', 'pygments', 'tkinter', '_tkinter', 'botocore', 'boto3', 'numba', 'llvmlite', 'panel', 'bokeh', 'holoviews', 'datashader'],
     noarchive=False,
     optimize=0,
 )
