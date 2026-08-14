@@ -129,12 +129,18 @@ def main() -> int:
     print(f"\n[*] Tamano total:")
     total_bytes = sum(p.stat().st_size for p in DIST_DIR.rglob("*") if p.is_file())
     total_mb = total_bytes / (1024 ** 2)
-    in_range = 100 < total_mb < 800
+    # Rango realista medido en v2.21: ~1030 MB. El piso lo ponen los mkl_*.dll
+    # (~370 MB, el BLAS de numpy/scipy; son variantes de despacho por CPU y
+    # sacarlas rompe en maquinas con otro juego de instrucciones) mas
+    # gmsh-4.15.dll (~86 MB) y PyQt5 (~81 MB). Si sube muy por encima, volvio a
+    # colarse peso muerto (botocore / panel / bokeh / llvmlite / QtWebEngine):
+    # comparar con `du -sm dist/Prototipo1/_internal/* | sort -rn | head`.
+    in_range = 700 < total_mb < 1400
     all_ok &= check(
-        f"dist/Prototipo1/ ocupa {total_mb:.0f} MB (rango esperado 100-800 MB)",
+        f"dist/Prototipo1/ ocupa {total_mb:.0f} MB (rango esperado 700-1400 MB)",
         in_range,
-        hint="Tamano fuera de rango. Si <100 MB faltan dependencias; si "
-              ">800 MB algo se duplico.",
+        hint="Tamano fuera de rango. Si <700 MB faltan dependencias; si "
+              ">1400 MB se colo peso muerto (revisar los excludes de build.bat).",
     )
 
     # 7. Resumen

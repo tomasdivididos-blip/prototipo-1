@@ -132,7 +132,7 @@
   \vspace{2cm}
   {\large Ingeniería en Sonido\par}
   \vspace{0.3cm}
-  {\normalsize Versión del Manual 2.21 — 31 de Julio de 2026\par}
+  {\normalsize Versión del Manual 2.22 — 13 de Agosto de 2026\par}
   \vspace{0.5cm}
   {\small\color{cGray} con importación CAD y router de mallado best-effort\par}
   \vfill
@@ -1825,7 +1825,7 @@ ahora:
 \begin{center}
   \small\textcolor{cGray}{%
     Prototipo 1 --- Modelador de Recintos 3D con Simulación Acústica FEM\\
-    Manual de Usuario $\cdot$ v2.21 $\cdot$ 31 de Julio de 2026\\[2pt]
+    Manual de Usuario $\cdot$ v2.22 $\cdot$ 13 de Agosto de 2026\\[2pt]
     \textbf{Cambios v2.0}: import CAD (STL/OBJ/PLY/STEP/IGES/glTF), motor
     boundary-fitted con gmsh, router automático con badge UI, diálogo de
     reparación guiada, persistencia \texttt{.room} v3.\\[2pt]
@@ -2372,7 +2372,27 @@ ahora:
     (F) \textbf{Fix: muebles y parches se mueven con el origen}: al cambiar la
     convencion de origen se trasladaban fuentes, receptor y puntos de escucha,
     pero muebles y parches se quedaban en el lugar viejo (el origen configurable
-    es de v2.16; parches y muebles se agregaron despues).%
+    es de v2.16; parches y muebles se agregaron despues).\\[2pt]
+    \textbf{Cambios v2.22} (13 de agosto): \textbf{empaquetado del \texttt{.exe}
+    puesto al dia} (seccion \S20 nueva).
+    (A) \textbf{Bundle 490 MB mas liviano}: \texttt{build.bat} excluye lo que
+    Anaconda arrastra y el proyecto no usa (Qt5WebEngineCore 107 MB, panel 101,
+    botocore 92, llvmlite/numba 66, bokeh). Carpeta 1524 $\to$ \textbf{1032 MB},
+    ZIP 570 $\to$ \textbf{414 MB}, sin perder ninguna funcion. Lo que queda es
+    irreducible: \texttt{mkl\_*.dll} ($\sim$370 MB, BLAS de numpy/scipy con
+    variantes de despacho por CPU), gmsh ($\sim$86 MB) y PyQt5 ($\sim$81 MB).
+    (B) \textbf{El ZIP dejo de mentir su version}: el nombre estaba hardcodeado
+    en \texttt{v2.12} y quedo congelado ocho versiones; ahora
+    \texttt{pack\_distribution.py} lo lee del changelog de este manual.
+    (C) \textbf{\S20 nueva $+$ verificador al dia}: flujo completo (compilar,
+    verificar, smoke test, prueba visual, empaquetar), desglose del tamano y
+    \emph{por que el ejecutable NO va al repositorio} (GitHub bloquea $>$100 MB
+    y el historial queda inflado para siempre $\to$ la via correcta es GitHub
+    Releases). El rango de \texttt{verify\_distribution.py} estaba en 100-800 MB
+    y marcaba FAIL en un bundle correcto; ahora 700-1400 MB. Ademas
+    \texttt{--collect-all} para trimesh y gmsh: no corregia un bug (PyInstaller
+    ya los detectaba) pero los dos resuelven cosas en runtime que el analisis
+    estatico no ve.%
   }
 \end{center}
 

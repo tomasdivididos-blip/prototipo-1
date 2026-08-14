@@ -4,9 +4,13 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = [('materials', 'materials')]
 binaries = []
-hiddenimports = ['pyqtgraph.opengl']
+hiddenimports = ['pyqtgraph.opengl', 'networkx']
 hiddenimports += collect_submodules('OpenGL')
 tmp_ret = collect_all('pyqtgraph')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('trimesh')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('gmsh')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
@@ -19,7 +23,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['PyQt6', 'PySide6', 'PySide2', 'pandas', 'IPython', 'ipykernel', 'jupyter', 'jupyter_client', 'jupyter_core', 'notebook', 'sphinx', 'sphinxcontrib', 'docutils', 'jedi', 'parso', 'pytest', 'black', 'nacl', 'bcrypt', 'cryptography', 'openpyxl', 'pyarrow', 'tables', 'sqlalchemy', 'lxml', 'pygments', 'tkinter', '_tkinter'],
+    excludes=['PyQt6', 'PySide6', 'PySide2', 'pandas', 'IPython', 'ipykernel', 'jupyter', 'jupyter_client', 'jupyter_core', 'notebook', 'sphinx', 'sphinxcontrib', 'docutils', 'jedi', 'parso', 'pytest', 'black', 'nacl', 'bcrypt', 'cryptography', 'openpyxl', 'pyarrow', 'tables', 'sqlalchemy', 'lxml', 'pygments', 'tkinter', '_tkinter', 'botocore', 'boto3', 'numba', 'llvmlite', 'panel', 'bokeh', 'holoviews', 'datashader', 'PyQt5.QtWebEngineWidgets', 'PyQt5.QtWebEngineCore', 'PyQt5.QtWebEngine', 'PyQt5.QtWebKit', 'PyQt5.QtWebKitWidgets'],
     noarchive=False,
     optimize=0,
 )

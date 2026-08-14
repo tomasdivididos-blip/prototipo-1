@@ -24,6 +24,7 @@
 17. [Indicador de ejes y rotación con eje fijo](#17-indicador-de-ejes-y-rotación-con-eje-fijo)
 18. [Rendimiento y benchmarks](#18-rendimiento-y-benchmarks)
 19. [Predicción de geometría — pestaña Predicción](#19-predicción-de-geometría--pestaña-predicción)
+20. [Distribución del programa (.exe)](#20-distribución-del-programa-exe)
 
 ---
 
@@ -1455,6 +1456,64 @@ El resultado se muestra como **una card individual** con el mismo formato que lo
 
 ---
 
+## 20. Distribución del programa (.exe)
+
+Para pasarle el programa a alguien que **no tiene Python instalado**, se empaqueta en un `.exe` autocontenido con PyInstaller.
+
+### Generar el ejecutable
+
+```
+build.bat
+```
+
+Deja todo en `dist\Prototipo1\`:
+
+| Archivo | Qué es |
+|---|---|
+| `Prototipo1.exe` | el programa (doble click, no necesita Python) |
+| `MANUAL.pdf` | este manual |
+| `ejemplo.room` | sala 5×4×3 de muestra |
+| `LEEME.txt` | instrucciones de 5 párrafos para el destinatario |
+| `_internal\` | dependencias, DLLs y los 19 JSON de materiales |
+
+El destinatario copia **la carpeta entera** y hace doble click en el `.exe`. La primera vez Windows puede mostrar SmartScreen: *"Más info" → "Ejecutar de todos modos"* (el ejecutable no está firmado digitalmente).
+
+### Flujo completo recomendado
+
+1. `build.bat` — compila (unos 8-10 minutos).
+2. `python verify_distribution.py` — chequea que estén el `.exe`, los materiales, PyQt5 y que el tamaño sea razonable.
+3. `python test_distribution_smoke.py` — copia el bundle a otra carpeta, lo lanza y verifica que sobreviva 15 s. Detecta el caso clásico de "anda en la carpeta fuente por casualidad".
+4. Prueba visual humana: abrir el `.exe`, ver 19 materiales, cargar `ejemplo.room`, correr el FEM.
+5. `python pack_distribution.py` — genera `Prototipo1_vX.YY.zip` (el número de versión se lee del changelog de este manual).
+
+### Tamaño
+
+La carpeta pesa **~1,0 GB** y el ZIP **~414 MB**. Es grande porque incluye el intérprete de Python, Qt y las librerías numéricas. Lo que no se puede sacar sin romper nada:
+
+- **~370 MB de `mkl_*.dll`** — el BLAS de numpy/scipy. Son variantes de despacho por tipo de CPU; sacarlas hace que el programa falle en máquinas con otro juego de instrucciones.
+- **~86 MB de `gmsh-4.15.dll`** — el mallador boundary-fitted opcional.
+- **~81 MB de PyQt5** — la interfaz.
+
+`build.bat` ya excluye ~490 MB de dependencias que Anaconda arrastra y el proyecto no usa (SDK de AWS, dashboards, JIT, navegador embebido). Si alguna vez el bundle vuelve a superar 1,4 GB, `verify_distribution.py` avisa: se coló peso muerto de nuevo.
+
+### Cómo compartirlo
+
+> **No subas el `.exe` ni el ZIP al repositorio.** GitHub bloquea archivos de más de 100 MB, y aunque entraran quedarían en el historial para siempre, inflando el repo de manera irreversible. El `.gitignore` ya excluye `dist/`, `build/`, `*.exe` y `*.zip` justamente por eso.
+
+La vía correcta es **GitHub Releases**: acepta hasta 2 GB por archivo, no toca el historial del repositorio y le da a quien lo descargue un link directo asociado a un número de versión.
+
+```
+gh release create v2.22 Prototipo1_v2.22.zip --title "..." --notes "..."
+```
+
+Alternativas si preferís no usar GitHub: WeTransfer (2 GB) o Google Drive.
+
+### macOS
+
+PyInstaller **no compila cruzado**: no se puede generar un `.app` de Mac desde Windows. Para ese caso está `Prototipo1_Mac.zip`, que es un paquete *correr desde fuente*: el destinatario instala Python 3 y lanza `run.command`. Para un `.app` real de doble click hay que correr el build en una Mac.
+
+---
+
 ## Apéndice — Optimizaciones internas v2.3
 
 Para usuarios técnicos que quieran inspeccionar el código:
@@ -2293,4 +2352,22 @@ Al cambiar la convención de origen (por ejemplo a "esquina inferior") se trasla
 
 ---
 
-*Manual actualizado al 31 de Julio de 2026 — v2.21.*
+**Cambios v2.22** (13 de agosto 2026): **empaquetado del `.exe` puesto al día**. Uso en §20 (sección nueva). Tres ejes.
+
+### A. Bundle 490 MB más liviano
+
+`build.bat` excluye dependencias que Anaconda arrastra y el proyecto no usa: `Qt5WebEngineCore` (107 MB, un navegador embebido), `panel` (101 MB), `botocore` (92 MB, el SDK de AWS), `llvmlite`/`numba` (66 MB) y `bokeh`. La carpeta bajó de **1524 a 1032 MB** y el ZIP de **570 a 414 MB**, sin perder ninguna función. Lo que queda es irreducible sin romper algo: los `mkl_*.dll` del BLAS de numpy/scipy (~370 MB, con variantes por tipo de CPU), `gmsh` (~86 MB) y PyQt5 (~81 MB).
+
+### B. El ZIP dejó de mentir sobre su versión
+
+El nombre del paquete estaba escrito a mano como `Prototipo1_v2.12.zip` y quedó congelado **ocho versiones**: al destinatario le llegaba un archivo que decía v2.12 conteniendo v2.21. Ahora `pack_distribution.py` lee la versión del changelog de este manual, que es la única fuente de verdad.
+
+### C. Sección §20 nueva + verificador al día
+
+Se documenta el flujo completo (compilar → verificar → smoke test → prueba visual → empaquetar), el desglose del tamaño y —lo más importante— **por qué el ejecutable no va al repositorio** y cuál es la vía correcta (GitHub Releases). El rango de tamaño de `verify_distribution.py` estaba en 100-800 MB, o sea que marcaba FAIL en un bundle correcto; ahora es 700-1400 MB, con la pista de qué revisar si se dispara.
+
+Además se agregó `--collect-all` para `trimesh` y `gmsh` en `build.bat`. No corregía un bug (PyInstaller ya los detectaba por análisis estático), pero los dos resuelven cosas en runtime que ese análisis no ve, así que queda como seguro explícito del feature de CAD.
+
+---
+
+*Manual actualizado al 13 de Agosto de 2026 — v2.22.*

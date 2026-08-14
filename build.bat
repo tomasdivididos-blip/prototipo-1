@@ -47,6 +47,19 @@ REM     collect multiple Qt bindings" si Anaconda tiene varios. PyQt5 only.
 REM   --exclude-module pandas / IPython / sphinx / ...: deps transitivas que
 REM     scipy/matplotlib/trimesh arrastran pero el proyecto no usa. Sin
 REM     estos excludes el bundle pesa 1.9 GB en lugar de ~400-600 MB.
+REM   --collect-all trimesh / gmsh (v2.21): los dos se importan DENTRO de
+REM     funciones (import perezoso) y ademas cargan cosas en runtime que el
+REM     analisis estatico no ve: trimesh resuelve sus handlers de formato de
+REM     forma dinamica y trae archivos de datos; gmsh es un wrapper sobre una
+REM     DLL nativa. Sin --collect-all el .exe arranca igual pero "Importar CAD
+REM     (OBJ)" y el import de recinto CAD fallan recien al usarlos.
+REM   --exclude-module botocore / panel / bokeh / numba / llvmlite /
+REM     QtWebEngine* (v2.21): ~370 MB de peso muerto que Anaconda arrastra y el
+REM     proyecto no toca (SDK de AWS, dashboards, JIT, navegador embebido).
+REM     Lo que QUEDA y no se puede sacar sin romper nada: los mkl_*.dll
+REM     (~370 MB, el BLAS de numpy/scipy; son variantes de despacho por CPU y
+REM     sacarlas rompe en maquinas con otro juego de instrucciones) y
+REM     gmsh-4.15.dll (~86 MB, el mallador boundary-fitted opcional).
 "%PYEXE%" -m PyInstaller ^
     --onedir ^
     --windowed ^
@@ -56,6 +69,9 @@ REM     estos excludes el bundle pesa 1.9 GB en lugar de ~400-600 MB.
     --collect-all pyqtgraph ^
     --collect-submodules OpenGL ^
     --hidden-import=pyqtgraph.opengl ^
+    --collect-all trimesh ^
+    --collect-all gmsh ^
+    --hidden-import=networkx ^
     --add-data "materials;materials" ^
     --exclude-module PyQt6 ^
     --exclude-module PySide6 ^
@@ -85,6 +101,19 @@ REM     estos excludes el bundle pesa 1.9 GB en lugar de ~400-600 MB.
     --exclude-module pygments ^
     --exclude-module tkinter ^
     --exclude-module _tkinter ^
+    --exclude-module botocore ^
+    --exclude-module boto3 ^
+    --exclude-module numba ^
+    --exclude-module llvmlite ^
+    --exclude-module panel ^
+    --exclude-module bokeh ^
+    --exclude-module holoviews ^
+    --exclude-module datashader ^
+    --exclude-module PyQt5.QtWebEngineWidgets ^
+    --exclude-module PyQt5.QtWebEngineCore ^
+    --exclude-module PyQt5.QtWebEngine ^
+    --exclude-module PyQt5.QtWebKit ^
+    --exclude-module PyQt5.QtWebKitWidgets ^
     main.py
 
 if errorlevel 1 (
