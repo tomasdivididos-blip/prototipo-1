@@ -1496,6 +1496,25 @@ La carpeta pesa **~1,0 GB** y el ZIP **~414 MB**. Es grande porque incluye el in
 
 `build.bat` ya excluye ~490 MB de dependencias que Anaconda arrastra y el proyecto no usa (SDK de AWS, dashboards, JIT, navegador embebido). Si alguna vez el bundle vuelve a superar 1,4 GB, `verify_distribution.py` avisa: se coló peso muerto de nuevo.
 
+### Si el `.exe` no arranca
+
+**"DLL load failed while importing QtCore"** al abrirlo. El bundle salió sin las
+DLLs del runtime de Qt. Pasa porque Anaconda no las guarda junto a PyQt5 sino en
+`<entorno>\Library\bin\` (con nombre `Qt5Core_conda.dll`), y PyInstaller las
+busca recorriendo el PATH: si se compila desde una consola sin el entorno conda
+activado, no las encuentra y **las omite sin avisar** — el build igual termina
+diciendo "BUILD OK".
+
+Desde v2.22 `build.bat` arma ese PATH por su cuenta, así que no debería volver a
+pasar. Para comprobarlo en un bundle ya generado, tiene que haber al menos una
+DLL de Qt en `_internal\`:
+
+```
+dir /s /b dist\Prototipo1\_internal\Qt5*.dll
+```
+
+Si no aparece ninguna, recompilá. `verify_distribution.py` también lo verifica.
+
 ### Cómo compartirlo
 
 > **No subas el `.exe` ni el ZIP al repositorio.** GitHub bloquea archivos de más de 100 MB, y aunque entraran quedarían en el historial para siempre, inflando el repo de manera irreversible. El `.gitignore` ya excluye `dist/`, `build/`, `*.exe` y `*.zip` justamente por eso.
@@ -2367,6 +2386,15 @@ El nombre del paquete estaba escrito a mano como `Prototipo1_v2.12.zip` y quedó
 Se documenta el flujo completo (compilar → verificar → smoke test → prueba visual → empaquetar), el desglose del tamaño y —lo más importante— **por qué el ejecutable no va al repositorio** y cuál es la vía correcta (GitHub Releases). El rango de tamaño de `verify_distribution.py` estaba en 100-800 MB, o sea que marcaba FAIL en un bundle correcto; ahora es 700-1400 MB, con la pista de qué revisar si se dispara.
 
 Además se agregó `--collect-all` para `trimesh` y `gmsh` en `build.bat`. No corregía un bug (PyInstaller ya los detectaba por análisis estático), pero los dos resuelven cosas en runtime que ese análisis no ve, así que queda como seguro explícito del feature de CAD.
+
+### D. Fix crítico: el `.exe` salía sin las DLLs de Qt
+
+El ejecutable se generaba, el build decía "BUILD OK", y al abrirlo moría con `DLL load failed while importing QtCore`. Anaconda no guarda las DLLs de Qt junto a PyQt5 sino en `<entorno>\Library\bin\` y con otro nombre (`Qt5Core_conda.dll`); PyInstaller las busca recorriendo el PATH, así que compilando desde una consola sin el entorno conda activado **las omitía en silencio**. `build.bat` ahora arma ese PATH por su cuenta, así que el build es reproducible desde cualquier consola.
+
+Los dos chequeos automáticos tampoco lo detectaban, y quedaron corregidos:
+
+- `verify_distribution.py` solo miraba que existiera la **carpeta** `PyQt5/`, que existía (con los `.pyd`); lo que faltaba eran las DLLs. Ahora exige `Qt5Core`, `Qt5Gui` y `Qt5Widgets`.
+- `test_distribution_smoke.py` daba OK con "el proceso sigue vivo 15 s", pero **un diálogo de excepción también es un proceso vivo**. Ahora lee el título de las ventanas del proceso y falla si encuentra una de error.
 
 ---
 

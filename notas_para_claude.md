@@ -523,6 +523,41 @@ bokeh). **Irreducible:** `mkl_*.dll` ~370 MB (BLAS de numpy/scipy, variantes de
 despacho por CPU — sacarlas rompe en otras máquinas), `gmsh-4.15.dll` 86 MB,
 PyQt5 81 MB.
 
+### ⚠⚠ GOTCHA MAYOR: las DLLs de Qt y el PATH de conda (14 Ago 2026)
+
+**Síntoma:** el build dice "BUILD OK", el `.exe` se genera, y al abrirlo muere con
+`ImportError: DLL load failed while importing QtCore`.
+
+**Causa:** Anaconda NO guarda las DLLs de Qt en `site-packages\PyQt5\Qt5\bin\`
+como un pip normal: las pone en **`<env>\Library\bin\`** y con otro nombre
+(**`Qt5Core_conda.dll`**). PyInstaller las busca recorriendo el **PATH**, así que
+si `build.bat` se lanza desde una consola SIN el entorno conda activado (cmd
+pelado, doble click desde el Explorador, o un agente), no las encuentra y **las
+omite EN SILENCIO**. El bundle queda con `PyQt5/*.pyd` pero sin una sola
+`Qt5*.dll`.
+
+**Fix aplicado:** `build.bat` ahora se arma el PATH solo, derivándolo de `%PYEXE%`
+(`Library\bin` + `Library\mingw-w64\bin` + `DLLs`). El build quedó reproducible
+desde cualquier consola.
+
+**Chequeo rápido de un bundle:** `find dist/Prototipo1/_internal -iname "Qt5*.dll" | wc -l`
+→ tiene que dar **> 0**. `verify_distribution.py` ahora lo exige.
+
+**NO fue culpa de los `--exclude-module PyQt5.*`.** Los acusé primero, los saqué,
+recompilé y el problema seguía. (Igual quedaron afuera: no vale 107 MB el riesgo
+de tocar el hook de PyQt5.)
+
+### ⚠ Los dos chequeos automáticos MINTIERON (arreglados el 14 Ago)
+
+Por eso el `.exe` roto llegó hasta el usuario:
+- `verify_distribution.py` solo miraba que existiera la CARPETA `PyQt5/`, que
+  existía (con los `.pyd`); faltaban las DLLs. → Ahora exige
+  `Qt5Core`/`Qt5Gui`/`Qt5Widgets`.
+- `test_distribution_smoke.py` daba OK con "el proceso sigue vivo 15 s", y **un
+  diálogo de excepción TAMBIÉN es un proceso vivo**. → Ahora lee el título de las
+  ventanas del proceso (`Get-Process ... MainWindowTitle`) y falla si encuentra
+  "unhandled exception" / "failed to execute" / "error".
+
 ### ⚠ Cómo correr `build.bat` desde el agente (GOTCHA que me costó 2 builds fantasma)
 
 `cmd /c build.bat < /dev/null` desde la tool Bash **NO ejecuta el .bat**: sale

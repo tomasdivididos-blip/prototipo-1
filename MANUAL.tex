@@ -2392,7 +2392,22 @@ ahora:
     y marcaba FAIL en un bundle correcto; ahora 700-1400 MB. Ademas
     \texttt{--collect-all} para trimesh y gmsh: no corregia un bug (PyInstaller
     ya los detectaba) pero los dos resuelven cosas en runtime que el analisis
-    estatico no ve.%
+    estatico no ve.
+    (D) \textbf{Fix critico: el \texttt{.exe} salia sin las DLLs de Qt}. Anaconda
+    no guarda las DLLs de Qt junto a PyQt5 sino en
+    \texttt{<env>\textbackslash Library\textbackslash bin\textbackslash} y con
+    otro nombre (\texttt{Qt5Core\_conda.dll}); PyInstaller las busca recorriendo
+    el PATH, asi que al compilar desde una consola sin el entorno conda activado
+    \emph{las omitia en silencio} --- el build decia ``BUILD OK'' y el programa
+    moria al abrirlo con \texttt{DLL load failed while importing QtCore}.
+    \texttt{build.bat} ahora arma ese PATH por su cuenta. Los dos chequeos
+    automaticos tampoco lo detectaban: \texttt{verify\_distribution.py} solo
+    miraba que existiera la CARPETA \texttt{PyQt5/} (existia, con los
+    \texttt{.pyd}; faltaban las DLLs) y \texttt{test\_distribution\_smoke.py}
+    daba OK con ``el proceso sigue vivo 15 s'' --- pero un dialogo de excepcion
+    tambien es un proceso vivo. Ahora el primero exige
+    \texttt{Qt5Core/Qt5Gui/Qt5Widgets} y el segundo lee el titulo de las ventanas
+    del proceso.%
   }
 \end{center}
 

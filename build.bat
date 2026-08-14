@@ -20,6 +20,20 @@ if "%PYEXE%"=="" (
 )
 
 echo Usando Python: %PYEXE%
+
+REM --- PATH de las DLLs nativas de conda (CRITICO) ---
+REM  Anaconda NO guarda las DLLs de Qt en site-packages\PyQt5\Qt5\bin\ como un
+REM  pip normal: las pone en <env>\Library\bin\ y con otro nombre
+REM  (Qt5Core_conda.dll). PyInstaller las encuentra recorriendo el PATH, asi que
+REM  si el .bat se lanza desde una consola SIN el entorno conda activado (un cmd
+REM  pelado, doble click desde el Explorador, o un agente), no las ve y las
+REM  OMITE EN SILENCIO: el build termina "OK", el .exe se genera, y recien al
+REM  abrirlo muere con "DLL load failed while importing QtCore".
+REM  Paso de verdad el 13-14 Ago 2026. Agregar el PATH aca hace el build
+REM  reproducible desde cualquier consola.
+for %%D in ("%PYEXE%") do set "PYDIR=%%~dpD"
+set "PATH=%PYDIR%Library\bin;%PYDIR%Library\mingw-w64\bin;%PYDIR%DLLs;%PYDIR%;%PATH%"
+echo PATH de DLLs: %PYDIR%Library\bin
 echo.
 
 REM --- Instalar PyInstaller si falta ---
@@ -53,9 +67,18 @@ REM     analisis estatico no ve: trimesh resuelve sus handlers de formato de
 REM     forma dinamica y trae archivos de datos; gmsh es un wrapper sobre una
 REM     DLL nativa. Sin --collect-all el .exe arranca igual pero "Importar CAD
 REM     (OBJ)" y el import de recinto CAD fallan recien al usarlos.
-REM   --exclude-module botocore / panel / bokeh / numba / llvmlite /
-REM     QtWebEngine* (v2.21): ~370 MB de peso muerto que Anaconda arrastra y el
-REM     proyecto no toca (SDK de AWS, dashboards, JIT, navegador embebido).
+REM   *** NO EXCLUIR SUBMODULOS DE PyQt5 ***  (probado y roto, 13 Ago 2026)
+REM     Poner --exclude-module PyQt5.QtWebEngineCore / QtWebEngine / QtWebKit
+REM     ahorraba 107 MB PERO envenena el hook de PyQt5: PyInstaller deja de
+REM     copiar PyQt5\Qt5\bin\ ENTERO, o sea TODAS las Qt5*.dll, no solo las del
+REM     navegador. El .exe se genera igual y arranca hasta el import, y ahi
+REM     muere con "DLL load failed while importing QtCore". Peor todavia: el
+REM     smoke test daba OK porque el dialogo de error ES un proceso vivo.
+REM     Si hace falta bajar esos 107 MB, hay que borrar la DLL del dist DESPUES
+REM     del build, nunca excluir el modulo.
+REM   --exclude-module botocore / panel / bokeh / numba / llvmlite: ~350 MB de
+REM     peso muerto que Anaconda arrastra y el proyecto no toca (SDK de AWS,
+REM     dashboards, JIT). Estos son seguros: no los toca Qt.
 REM     Lo que QUEDA y no se puede sacar sin romper nada: los mkl_*.dll
 REM     (~370 MB, el BLAS de numpy/scipy; son variantes de despacho por CPU y
 REM     sacarlas rompe en maquinas con otro juego de instrucciones) y
@@ -109,11 +132,6 @@ REM     gmsh-4.15.dll (~86 MB, el mallador boundary-fitted opcional).
     --exclude-module bokeh ^
     --exclude-module holoviews ^
     --exclude-module datashader ^
-    --exclude-module PyQt5.QtWebEngineWidgets ^
-    --exclude-module PyQt5.QtWebEngineCore ^
-    --exclude-module PyQt5.QtWebEngine ^
-    --exclude-module PyQt5.QtWebKit ^
-    --exclude-module PyQt5.QtWebKitWidgets ^
     main.py
 
 if errorlevel 1 (

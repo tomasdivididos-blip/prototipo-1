@@ -116,6 +116,30 @@ def main() -> int:
         hint="PyInstaller no detecto PyQt5. La GUI no va a arrancar.",
     )
 
+    # 4b. DLLs del runtime de Qt.
+    #
+    # NO alcanza con que exista la carpeta PyQt5/ y sus .pyd: los .pyd son solo
+    # los bindings, y sin las Qt5*.dll el .exe muere en el import con
+    # "DLL load failed while importing QtCore". Paso de verdad el 13 Ago 2026 al
+    # excluir submodulos de PyQt5 (envenena el hook y se deja de copiar
+    # PyQt5\Qt5\bin\ entero). El smoke test NO lo detecto porque el dialogo de
+    # error es un proceso vivo -> este chequeo es la red de seguridad real.
+    QT_CORE_DLLS = ["Qt5Core", "Qt5Gui", "Qt5Widgets"]
+    found_dlls = {}
+    for stem in QT_CORE_DLLS:
+        hits = list(INTERNAL_DIR.rglob(f"{stem}*.dll"))
+        found_dlls[stem] = hits
+    missing = [s for s, h in found_dlls.items() if not h]
+    all_ok &= check(
+        f"DLLs del runtime de Qt presentes ({len(QT_CORE_DLLS) - len(missing)}"
+        f"/{len(QT_CORE_DLLS)}: {', '.join(QT_CORE_DLLS)})",
+        not missing,
+        hint=f"FALTAN {', '.join(missing)}.dll -> el .exe va a morir con "
+              f"'DLL load failed while importing QtCore'. Causa tipica: algun "
+              f"--exclude-module PyQt5.* en build.bat (NO excluir submodulos "
+              f"de PyQt5; borrar la DLL del dist post-build si hace falta).",
+    )
+
     # 5. Python DLL
     print(f"\n[*] Python runtime DLL:")
     py_dlls = list(INTERNAL_DIR.glob("python*.dll"))
