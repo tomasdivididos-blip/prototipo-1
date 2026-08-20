@@ -1043,6 +1043,9 @@ class MainWindow(QMainWindow):
                 "pitch": float(getattr(s, "pitch", 0.0) or 0.0),
                 "mounted": bool(getattr(s, "mounted", False)),
                 "active": bool(getattr(s, "active", True)),
+                # v2.23: polaridad del cableado (+1 / -1). Aditivo, sin bump de
+                # version: un .room viejo carga con +1 = comportamiento previo.
+                "polarity": int(getattr(s, "polarity", 1) or 1),
             })
         # v4: asignacion de materiales por grupo de caras (estilo EASE).
         # Se guarda el mapeo {signature: material_name}. La firma es estable
@@ -1083,6 +1086,9 @@ class MainWindow(QMainWindow):
             ],
             # v8: parches de absorcion sub-cara (region + material dentro de una cara).
             "absorption_patches": [p.to_dict() for p in getattr(ap, "_patches", [])],
+            # v2.23: modelo de amortiguamiento ("a36" | "perturbation"). Aditivo:
+            # sin la clave -> "a36" (comportamiento historico) al cargar.
+            "damping_model": getattr(ap, "_damping_model", "a36"),
         }
 
     def _serialize_external_geometry(self):
@@ -1250,6 +1256,7 @@ class MainWindow(QMainWindow):
             kwargs["pitch"] = float(s.get("pitch", 0.0) or 0.0)
             kwargs["mounted"] = bool(s.get("mounted", False))
             kwargs["active"] = bool(s.get("active", True))
+            kwargs["polarity"] = int(s.get("polarity", 1) or 1)
             src = OmniSource(**kwargs)
             # v5: reconstruir la curva de respuesta Q(f) si el .room la trae.
             resp = s.get("response")
@@ -1287,6 +1294,19 @@ class MainWindow(QMainWindow):
                 ap._refresh_patches_summary()
         except Exception:
             ap._patches = []
+
+        # v2.23: modelo de amortiguamiento. Sin la clave -> "a36" (historico).
+        try:
+            dm = str(ac.get("damping_model", "a36")).lower()
+            ap._damping_model = "perturbation" if dm == "perturbation" else "a36"
+            if hasattr(ap, "combo_damping"):
+                idx = ap.combo_damping.findData(ap._damping_model)
+                if idx >= 0:
+                    ap.combo_damping.blockSignals(True)
+                    ap.combo_damping.setCurrentIndex(idx)
+                    ap.combo_damping.blockSignals(False)
+        except Exception:
+            ap._damping_model = "a36"
 
     def _update_title(self):
         base = "Prototipo 1 - Modelador de Recintos 3D"

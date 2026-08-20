@@ -33,12 +33,37 @@ from sources import RHO0, C0
 # ---------------------------------------------------------------------------
 # Grilla de receptores por defecto (§8.5)
 # ---------------------------------------------------------------------------
+def receivers_inside(locator, phis: np.ndarray,
+                     receivers: np.ndarray) -> np.ndarray:
+    """Mascara (N_R,) True para los receptores que el locator SI puede evaluar.
+
+    Un punto fuera de la malla devuelve NaN. Si ese NaN se convierte en 0 (como
+    hacia `_modal_terms` hasta v2.23), el receptor entra al promedio con presion
+    nula = -600 dB: un outlier que hace explotar la dispersion espacial. Medido:
+    en un pentagono 2/25 puntos afuera llevaban `FoM_espacial` de 5.5 a 72.9 dB.
+    """
+    receivers = np.atleast_2d(np.asarray(receivers, dtype=float))
+    if receivers.size == 0:
+        return np.zeros(0, dtype=bool)
+    vals = locator.evaluate_many(phis[:, 0], receivers)
+    return np.isfinite(np.real(vals))
+
+
 def default_receiver_grid(nodes: np.ndarray, nx: int = 5, ny: int = 5,
                           z: float = 1.2, central_frac: float = 0.60,
-                          wall_margin: float = 0.5) -> np.ndarray:
+                          wall_margin: float = 0.5,
+                          locator=None, phis: np.ndarray = None) -> np.ndarray:
     """Grilla nx×ny a altura de oido sobre el `central_frac` central de la
     planta, excluyendo `wall_margin` de cada pared (evita el peor-caso de
-    esquina del paper). Devuelve (nx*ny, 3)."""
+    esquina del paper).
+
+    La grilla sale del **bounding box** de los nodos, asi que en una planta NO
+    rectangular (pentagono, L, hexagono con taper) parte de los puntos cae
+    FUERA del recinto. Pasando `locator` (+ `phis`) esos puntos se descartan, y
+    si se cae mucho por debajo de nx*ny se re-muestrea mas denso para conservar
+    un tamano de muestra util. Sin `locator` el comportamiento es el historico
+    (util para shoebox, donde no se pierde ningun punto).
+    """
     nodes = np.asarray(nodes, dtype=float)
     xmin, ymin, zmin = nodes.min(axis=0)
     xmax, ymax, zmax = nodes.max(axis=0)
@@ -55,10 +80,35 @@ def default_receiver_grid(nodes: np.ndarray, nx: int = 5, ny: int = 5,
     ax, bx = span(xmin, xmax)
     ay, by = span(ymin, ymax)
     zc = float(np.clip(z, zmin + 0.1, zmax - 0.1))
-    xs = np.linspace(ax, bx, nx)
-    ys = np.linspace(ay, by, ny)
-    X, Y = np.meshgrid(xs, ys, indexing="ij")
-    return np.column_stack([X.ravel(), Y.ravel(), np.full(X.size, zc)])
+
+    def build(mx, my):
+        xs = np.linspace(ax, bx, mx)
+        ys = np.linspace(ay, by, my)
+        X, Y = np.meshgrid(xs, ys, indexing="ij")
+        return np.column_stack([X.ravel(), Y.ravel(), np.full(X.size, zc)])
+
+    grid = build(nx, ny)
+    if locator is None or phis is None:
+        return grid
+
+    want = nx * ny
+    ok = receivers_inside(locator, phis, grid)
+    if ok.all():
+        return grid
+    # Se perdieron puntos: densificar y quedarse con `want` validos repartidos
+    # parejo (no los primeros, que sesgarian hacia una esquina de la planta).
+    dense = build(2 * nx, 2 * ny)
+    ok_d = receivers_inside(locator, phis, dense)
+    cand = dense[ok_d]
+    if len(cand) >= want:
+        idx = np.linspace(0, len(cand) - 1, want).astype(int)
+        return cand[idx]
+    # Ni densificando alcanza: devolver lo que haya (mejor pocos validos que
+    # muchos con ceros inventados). Si no queda ninguno, el centroide.
+    if len(cand) > 0:
+        return cand
+    keep = grid[ok]
+    return keep if len(keep) else nodes.mean(axis=0)[None, :]
 
 
 # ---------------------------------------------------------------------------
@@ -90,10 +140,23 @@ def _modal_terms(locator, freqs, phis, sources, receivers, freq_axis, damping,
           else np.asarray(damping, dtype=float)[:Nm])
 
     # phi en receptores (N_R, Nm) y en fuentes (Ns, Nm).
+    # Un receptor FUERA de la malla da NaN. Convertirlo a 0 (lo que se hacia
+    # hasta v2.23) lo mete al promedio con presion nula = -600 dB y arruina
+    # toda metrica espacial SIN avisar. Ahora falla fuerte: el caller tiene que
+    # filtrar con `receivers_inside` / `default_receiver_grid(locator=...)`.
     phi_r = np.zeros((N_R, Nm), dtype=float)
     for n in range(Nm):
         vals = locator.evaluate_many(phis[:, n], receivers)
-        phi_r[:, n] = np.nan_to_num(vals.real)
+        re = vals.real
+        if n == 0:
+            bad = ~np.isfinite(re)
+            if bad.any():
+                raise ValueError(
+                    f"{int(bad.sum())} de {N_R} receptores caen FUERA de la "
+                    f"malla (el bounding box no es el recinto). Filtralos con "
+                    f"modal_metrics.receivers_inside(...) o pedí la grilla con "
+                    f"default_receiver_grid(..., locator=..., phis=...).")
+        phi_r[:, n] = np.nan_to_num(re)
     src_pos = sources.positions()
     Ns = len(src_pos)
     phi_s = np.zeros((Ns, Nm), dtype=float)

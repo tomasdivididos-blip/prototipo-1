@@ -617,16 +617,28 @@ def compute_xi_per_mode_with_patches(
     default_alpha: float = 0.03,
     h_target: float = 0.2,
     kmax: int = 8,
+    model: str = "a36",
+    c: float = 343.0,
 ) -> Optional[np.ndarray]:
-    """xi_n por modo con parches de absorcion sub-cara (A36 refinado).
+    """xi_n por modo con parches de absorcion sub-cara (cuadratura FINA).
 
-    Igual que `face_materials.compute_xi_per_mode_per_face` pero cada cara se
-    integra sobre un teselado FINO y cada punto usa el alpha del parche que lo
-    cubre (o el del material anfitrion de la cara si ninguno lo cubre):
+    Cada cara se integra sobre un teselado fino y cada punto usa el alpha del
+    parche que lo cubre (o el del material anfitrion de la cara si ninguno lo
+    cubre). Los puntos se agrupan por "slot" (cada material distinto = un slot).
 
-        alpha_eff(n) = sum_p alpha(p, f_n) phi_n(p)^2 dA_p / sum_p phi_n(p)^2 dA_p
-        T60(n)       = 0.161 V / (S_total alpha_eff(n))
-        xi(n)        = 1.1 / (f_n T60(n))
+    Dos modelos de amortiguamiento (Etapa 1.b, v2.23) sobre la MISMA maquinaria
+    de teselado + slots; solo cambia como se convierte la absorcion en xi:
+
+      model="a36" (default): Sabine por modo, via el COCIENTE de integrales
+        alpha_eff(n) = sum_s alpha_s(f_n) Ws / sum_s Ws
+        T60(n) = 0.161 V / (S_total alpha_eff(n)) ;  xi = 1.1/(f T60)
+
+      model="perturbation": perturbacion de frontera de 1er orden, via la
+        integral de superficie ABSOLUTA por slot (Ws ya lo es):
+        delta(n) = (c/2) sum_s beta_s(f_n) Ws   [Np/s] ;  xi = delta/omega_n
+        con beta_s = inversion de Paris del alpha_s (ver face_materials).
+        La teselacion fina de los parches es JUSTO la cuadratura que la
+        perturbacion necesita para la integral absoluta -> aca es natural.
 
     - `group_to_material`: signature de FaceGroup -> Material (anfitrion de la cara).
     - `patch_to_material`: patch.key -> Material (material del parche).
@@ -691,23 +703,43 @@ def compute_xi_per_mode_with_patches(
     SLOT = np.concatenate(slot_all)
     n_slots = len(slot_mats)
 
+    # Mismo criterio que A36 (face_materials, v2.23): los puntos de cuadratura
+    # que el locator NO ubica se DESCARTAN y cada slot se re-escala por su
+    # cobertura de area, en vez de entrar con phi=0 (que los hacia pesar cero
+    # en silencio y subestimaba la absorcion de las caras oblicuas).
+    VALID = np.isfinite(np.real(locator.evaluate_many(phis[:, 0], PTS)))
+    area_tot_s = np.bincount(SLOT, weights=AREA, minlength=n_slots)
+    area_ok_s = np.bincount(SLOT[VALID], weights=AREA[VALID], minlength=n_slots)
+    cover_s = np.where(area_ok_s > 0,
+                       area_tot_s / np.maximum(area_ok_s, 1e-12), 0.0)
+
+    is_pert = (str(model).lower() == "perturbation")
+    if is_pert:
+        from face_materials import beta_from_alpha_random
+
     xi = np.empty(Nm, dtype=float)
     for n in range(Nm):
         fn = float(freqs[n])
         vals = locator.evaluate_many(phis[:, n], PTS)      # complejo (Np,)
-        w = np.nan_to_num(np.real(vals)) ** 2 * AREA        # phi^2 * dA
+        w = np.where(VALID, np.nan_to_num(np.real(vals)) ** 2, 0.0) * AREA
         J = float(w.sum())
         if J <= 0:
-            # Modo sin presion evaluable en frontera: cae a Sabine por area/slot.
-            wj = AREA
-            J = float(wj.sum())
-            Ws = np.bincount(SLOT, weights=wj, minlength=n_slots)
+            # Modo sin presion evaluable en frontera: fallback por area/slot.
+            Ws = np.bincount(SLOT, weights=AREA, minlength=n_slots)
+            J = float(Ws.sum())
         else:
-            Ws = np.bincount(SLOT, weights=w, minlength=n_slots)
+            # Ws[s] = INT_slot phi_n^2 dS  (ABSOLUTO, re-escalado por cobertura).
+            Ws = np.bincount(SLOT, weights=w, minlength=n_slots) * cover_s
+            J = float(Ws.sum())      # J coherente con los pesos re-escalados
         alpha_s = np.array([_alpha_of(slot_mats[s], fn, default_alpha)
                             for s in range(n_slots)], dtype=float)
-        alpha_eff = float((alpha_s * Ws).sum() / max(J, 1e-30))
-        alpha_eff = max(alpha_eff, 1e-6)
-        T60 = 0.161 * V / (S_total * alpha_eff)
-        xi[n] = 1.1 / max(fn * T60, 1e-9)
+        if is_pert:
+            # perturbacion: la integral ABSOLUTA por slot (Ws) x beta, sin RT60.
+            beta_s = beta_from_alpha_random(alpha_s)
+            delta = 0.5 * c * float((beta_s * Ws).sum())       # Np/s
+            xi[n] = delta / max(2.0 * np.pi * fn, 1e-9)
+        else:
+            alpha_eff = max(float((alpha_s * Ws).sum() / max(J, 1e-30)), 1e-6)
+            T60 = 0.161 * V / (S_total * alpha_eff)
+            xi[n] = 1.1 / max(fn * T60, 1e-9)
     return xi

@@ -270,6 +270,14 @@ class OmniSource:
     # FoM, campo 3D, comparaciones) la excluyen. Permite analizar parlante por
     # parlante sin borrar y recrear fuentes.
     active:         bool  = True
+    # v2.23: polaridad del cableado. +1 = 0° (normal), -1 = 180° (invertida).
+    # Es una propiedad del DRIVE, no del transductor: un FRD/TRF mide el
+    # parlante, dar vuelta los cables es otra cosa que multiplica por -1. Por
+    # eso vive aparte de `response` y se COMPONE con ella en vez de pisarla
+    # (el atajo manual viejo horneaba la fase pi dentro de la curva, lo que
+    # destruia el FRD cargado y no se podia leer de vuelta en la UI).
+    # polarity=+1 reduce EXACTO al comportamiento historico.
+    polarity:       int   = 1
 
     def __post_init__(self):
         x, y, z = self.position
@@ -285,17 +293,26 @@ class OmniSource:
         self.pitch = float(self.pitch)
         self.mounted = bool(self.mounted)
         self.active = bool(self.active)
+        self.polarity = -1 if int(self.polarity) < 0 else 1
 
     def effective_Q(self) -> complex:
         """Q efectivo (escalar): recalculado desde sensibilidad si corresponde.
 
         NO aplica la curva de respuesta — es el Q baseline / de banda ancha.
         Para el Q dependiente de f usar effective_Q_spectrum().
+
+        SI aplica la polaridad (factor +-1). Se hace aca a proposito: es el
+        unico punto por el que pasan TODOS los caminos de computo
+        (effective_Q_spectrum -> amplitudes_spectrum -> FRF / campo modal /
+        SBIR / FoM / optimizador de ubicacion, y tambien amplitudes() del
+        path legacy), asi que la polaridad entra en todos sin tocar ninguno.
         """
         if self.sensitivity_dB is not None:
-            return q_from_sensitivity(self.sensitivity_dB,
-                                      self.power_W, self.f_ref)
-        return self.Q
+            q = q_from_sensitivity(self.sensitivity_dB,
+                                   self.power_W, self.f_ref)
+        else:
+            q = self.Q
+        return q * self.polarity
 
     def effective_Q_spectrum(self, freq_axis) -> np.ndarray:
         """Q(f) complejo sobre freq_axis -> (Nf,) complex.

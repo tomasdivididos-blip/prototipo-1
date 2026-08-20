@@ -105,15 +105,23 @@ class SourceLayout:
         return self.positions.shape[0]
 
     def to_source_array(self) -> SourceArray:
-        """Construye la SourceArray (delay/polaridad -> response, bafle -> dims)."""
+        """Construye la SourceArray (delay -> response, polaridad -> campo).
+
+        v2.23: la polaridad va al campo `OmniSource.polarity`, NO horneada en
+        la curva g(f). El resultado numerico es identico (effective_Q ya aplica
+        el +-1), pero asi las fuentes que el usuario aplica desde una card de
+        Ubicacion llegan a Acustica con el toggle de polaridad reflejando su
+        estado real, en vez de con la fase pi escondida adentro de la curva.
+        """
         arr = SourceArray()
         for i in range(self.n_sources):
-            resp = _delay_polarity_response(float(self.delays_s[i]),
-                                            bool(self.inverted[i]))
+            # inverted=False aca a proposito: la polaridad ya no entra al g(f).
+            resp = _delay_polarity_response(float(self.delays_s[i]), False)
             arr.add(OmniSource(
                 tuple(self.positions[i]), Q=1.0 + 0.0j,
                 label=f"{self.label or 'L'}{i+1}",
                 response=resp, baffle_size=self.baffle,
+                polarity=(-1 if bool(self.inverted[i]) else 1),
             ))
         return arr
 
@@ -176,8 +184,17 @@ class LocationContext:
         nodes = np.asarray(modal_result.nodes, dtype=float)
         freqs = np.asarray(modal_result.freqs, dtype=float)
         if receivers is None:
-            receivers = mm.default_receiver_grid(nodes)
+            # locator+phis: sin esto, en planta no rectangular los receptores
+            # de afuera entran con presion 0 y el sub-score de FoM del
+            # optimizador queda dominado por ese artefacto (no por el layout).
+            receivers = mm.default_receiver_grid(
+                nodes, locator=modal_result.locator, phis=modal_result.phis)
         receivers = np.atleast_2d(np.asarray(receivers, dtype=float))
+        # Receptores pasados a mano (o de un .room) tambien pueden caer afuera.
+        _ok = mm.receivers_inside(modal_result.locator, modal_result.phis,
+                                  receivers)
+        if not _ok.all() and _ok.any():
+            receivers = receivers[_ok]
         center = receivers.mean(axis=0)
         if fa_fom is None:
             f_hi = float(f_max_valid) if f_max_valid else float(freqs[-1])
