@@ -590,6 +590,106 @@ def modal_density(freqs: np.ndarray, f_grid: np.ndarray,
     return counts / np.maximum(width, 1e-9)
 
 
+# ---------------------------------------------------------------------------
+# RT60 efectivo por banda desde el amortiguamiento modal (Etapa 2a, v2.24)
+# ---------------------------------------------------------------------------
+# Bandas de octava estandar (mismas claves int que material_library.BANDS).
+_OCTAVE_CENTERS = (63, 125, 250, 500, 1000, 2000, 4000, 8000)
+
+
+def _t30_of_decay(deltas: np.ndarray,
+                  weights: np.ndarray,
+                  lo_db: float = -5.0,
+                  hi_db: float = -35.0,
+                  n_t: int = 4000) -> float:
+    """T30 (RT60) por integral de Schroeder del decay sintetico de una banda.
+
+        E(t) = sum_n w_n exp(-2 delta_n t)        (delta_n = tasa de AMPLITUD)
+        EDC(t) = INT_t^inf E dt'  (integral de Schroeder hacia atras)
+        RT60 = -60 / pendiente[dB/s] de 10 log10 EDC, ajustada entre lo_db y hi_db
+
+    Devuelve nan si la EDC no baja hasta hi_db dentro de la ventana temporal
+    (el llamador cae a 6.91/<delta> en ese caso).
+
+    La integral de Schroeder de una SUMA de exponenciales es cerrada y EXACTA:
+        EDC(t) = INT_t^inf sum_n w_n e^{-2 d_n t'} dt' = sum_n (w_n/2 d_n) e^{-2 d_n t}
+    -> se evalua analiticamente (sin cuadratura ni truncacion; el mono-exp da
+    T30 = 6.91/delta a precision de maquina).
+    """
+    d = np.asarray(deltas, dtype=float)
+    w = np.asarray(weights, dtype=float)
+    d_min = float(d.min())
+    if d_min <= 0:
+        return float("nan")
+    # t_end pasa holgadamente de -35 dB para el modo mas lento (aqui ~-52 dB).
+    t_end = 6.0 / d_min
+    t = np.linspace(0.0, t_end, int(n_t))
+    coef = w / (2.0 * d)                          # w_n / (2 d_n)
+    edc = (coef[:, None] * np.exp(-2.0 * d[:, None] * t[None, :])).sum(axis=0)
+    edc = edc / max(float(edc[0]), 1e-300)       # 0 dB en t=0
+    L = 10.0 * np.log10(np.maximum(edc, 1e-30))
+    i0 = int(np.argmax(L <= lo_db))
+    i1 = int(np.argmax(L <= hi_db))
+    if i1 <= i0:
+        return float("nan")
+    slope = float(np.polyfit(t[i0:i1], L[i0:i1], 1)[0])   # dB/s
+    if slope >= 0:
+        return float("nan")
+    return -60.0 / slope
+
+
+def rt60_by_band_from_modal_decay(freqs: np.ndarray,
+                                  deltas: np.ndarray,
+                                  bands=None,
+                                  weights: Optional[np.ndarray] = None) -> dict:
+    """RT60 por banda desde los decaimientos modales delta_n [Np/s] (Etapa 2a).
+
+    Es la definicion de norma (ISO 3382, pendiente de la curva de decaimiento)
+    aplicada al decay SINTETICO del modelo de perturbacion de frontera: cada
+    banda arma su energia como la SUMA de las exponenciales de sus modos y se le
+    mide el T30 (ver `_t30_of_decay`).
+
+    Por que NO 6.91/<delta>: la pendiente de una suma de exponenciales no es la
+    media de las tasas. La cola del decaimiento la domina el modo MENOS
+    amortiguado (axial), asi que la pendiente real es mas chata (RT mas largo).
+    Sesgo medido ~9-12% (shoebox 5x4x3, alpha 0.1-0.3); el T30 revela que la
+    banda de 32 Hz suena ~40% mas que lo que dice Sabine. Solo cuando la banda
+    tiene un unico modo el T30 coincide con 6.91/delta (decay mono-exponencial).
+
+    Pesos w_n: por defecto iguales (misma energia inicial por modo) -> RT
+    independiente de posicion y conservador (lo manda el modo lento). Pasar
+    w_n = |a_n(receptor)|^2 daria un RT resuelto en posicion.
+
+    delta_n = xi_n * 2*pi*f_n (tasa de amplitud). Devuelve {banda_centro(int):
+    RT60} solo para las bandas con >=1 modo con delta>0. Bandas por encima del
+    modo mas alto (regimen difuso) las resuelve Sabine en el llamador.
+    """
+    freqs = np.asarray(freqs, dtype=float)
+    deltas = np.asarray(deltas, dtype=float)
+    if freqs.size == 0 or deltas.size != freqs.size:
+        return {}
+    if bands is None:
+        bands = _OCTAVE_CENTERS
+    if weights is None:
+        weights = np.ones_like(freqs)
+    else:
+        weights = np.asarray(weights, dtype=float)
+
+    out: dict = {}
+    root2 = np.sqrt(2.0)
+    for fc in bands:
+        lo, hi = fc / root2, fc * root2
+        m = (freqs >= lo) & (freqs < hi) & (deltas > 0)
+        if not np.any(m):
+            continue
+        d, w = deltas[m], weights[m]
+        rt = _t30_of_decay(d, w)
+        if not np.isfinite(rt) or rt <= 0:
+            rt = 6.91 / float(np.average(d, weights=w))   # fallback mono-exp
+        out[int(fc)] = float(rt)
+    return out
+
+
 def modal_overlap_crossover(freqs: np.ndarray,
                             rt60,                      # float o callable f->RT60
                             f_lo: float = 20.0,

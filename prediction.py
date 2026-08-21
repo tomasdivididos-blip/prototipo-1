@@ -1490,14 +1490,70 @@ def _location_prediction(cand: Candidate, ls, mode: str = "location",
     )
 
 
+class _BandAlphaMaterial:
+    """Material de alpha por banda (dict {banda: alpha}) para la perturbacion en
+    el path de ubicacion (Etapa 2c). Interpola lineal en frecuencia entre las
+    bandas del catalogo; provee `.alpha(f)` escalar, que es lo unico que pide
+    `face_materials._alpha_for`."""
+    def __init__(self, bands_dict, name="zona"):
+        items = sorted((float(b), float(a)) for b, a in (bands_dict or {}).items())
+        self._b = np.array([x[0] for x in items], float) if items else np.array([500.0])
+        self._a = np.array([x[1] for x in items], float) if items else np.array([0.03])
+        self.name = name
+
+    def alpha(self, f):
+        return float(np.interp(float(f), self._b, self._a))
+
+
+def _perturbation_damping_for_location(mr, v, t, inputs):
+    """xi_n por perturbacion de frontera para el path de ubicacion (Etapa 2c),
+    a partir de `inputs.surface_alpha` (alpha por banda por zona piso/paredes/
+    techo). Devuelve xi (Nm,) o None si no hay datos de material o falla.
+
+    Los modos ya estan resueltos (mr con phis/locator), asi que reusar la
+    perturbacion aca es barato: es la misma fisica que en el panel de Acustica,
+    con xi POR MODO en vez del 1.1/(f_n·RT) uniforme."""
+    if (getattr(inputs, "alpha_mode", "target") or "target") != "materials":
+        return None
+    sa = getattr(inputs, "surface_alpha", None)
+    if not sa:
+        return None
+    try:
+        import acoustic_analysis as aa
+        import face_materials as fm
+        af, aw, ac = sa
+        mat_floor = _BandAlphaMaterial(af, "piso")
+        mat_wall = _BandAlphaMaterial(aw, "paredes")
+        mat_ceil = _BandAlphaMaterial(ac, "techo")
+        groups = fm.group_faces_by_planar_region(v, t)
+        g2m = {}
+        for g in groups:
+            if g.kind == "floor":
+                g2m[g.signature] = mat_floor
+            elif g.kind == "ceiling":
+                g2m[g.signature] = mat_ceil
+            else:                                  # wall / tilted
+                g2m[g.signature] = mat_wall
+        V = aa.compute_mesh_volume(v, t)
+        return fm.perturbation_xi_per_mode(
+            mr.freqs, mr.phis, mr.locator, v, t, groups, g2m, V)
+    except Exception:
+        return None
+
+
 def _build_location_context(cand: Candidate, inputs: PredictInputs,
                             n_per_meter: float = 2.0, n_modes: int = 40,
-                            surface=None):
+                            surface=None, damping_model: str = "sabine"):
     """FEM completo del recinto (con locator) + paredes + grilla -> LocationContext.
 
     `surface` (v, t): si viene, usa esa malla real (forma irregular renderizada)
     en vez de reconstruir una caja. Garantiza ademas que las fuentes reales
-    caigan dentro del recinto evaluado (mismo sistema de coords)."""
+    caigan dentro del recinto evaluado (mismo sistema de coords).
+
+    `damping_model` (Etapa 2c): "sabine" (default, no regresivo) arma el xi
+    uniforme 1.1/(f_n·RT); "perturbation" usa el xi POR MODO de la perturbacion
+    de frontera cuando hay materiales por superficie (alpha_mode="materials").
+    Si la perturbacion no aplica (sin materiales) cae al uniforme."""
     import acoustic_analysis as aa
     import face_materials as fm
     import sbir
@@ -1510,10 +1566,15 @@ def _build_location_context(cand: Candidate, inputs: PredictInputs,
              for g in fm.group_faces_by_planar_region(v, t)]
     h_max = mr.mesh_info.get("h_max", 0.0)
     f_max = (C0 / (6.0 * h_max)) if h_max > 0 else None
-    # Damping desde el RT60 objetivo (el RT que la sala VA A tener): xi_n =
-    # 1.1/(f_n·RT60_target). Constante en banda (RT objetivo es un solo numero).
-    rt = max(float(effective_rt60(inputs, cand)), 1e-3)
-    damping = 1.1 / (np.maximum(np.asarray(mr.freqs, float), 1e-6) * rt)
+    # Damping: default = uniforme desde el RT60 objetivo (el RT que la sala VA A
+    # tener), xi_n = 1.1/(f_n·RT60_target), constante en banda. Etapa 2c: con
+    # damping_model="perturbation" y materiales por superficie, xi POR MODO.
+    damping = None
+    if damping_model == "perturbation":
+        damping = _perturbation_damping_for_location(mr, v, t, inputs)
+    if damping is None:
+        rt = max(float(effective_rt60(inputs, cand)), 1e-3)
+        damping = 1.1 / (np.maximum(np.asarray(mr.freqs, float), 1e-6) * rt)
     # Forma irregular: el AABB incluye zonas fuera de la sala (pared inclinada,
     # planta no rectangular). inside_fn testea contra la superficie REAL para
     # que el optimizador no recomiende fuentes fuera del recinto.
@@ -1534,7 +1595,7 @@ def predict_locations(inputs: PredictInputs, cand: Candidate,
                       n_per_meter: float = 2.0, n_modes: int = 40,
                       top_n: int = 3,
                       progress: Optional[Callable[[str], None]] = None,
-                      surface=None) -> list:
+                      surface=None, damping_model: str = "sabine") -> list:
     """Modo UBICACION: recinto fijo `cand` -> top-N layouts de fuentes.
 
     `surface` (v, t): si el recinto es de forma irregular, la malla REAL
@@ -1550,7 +1611,7 @@ def predict_locations(inputs: PredictInputs, cand: Candidate,
                  if surface is not None else
                  "FEM del recinto fijo (para ubicacion)...")
     ctx = _build_location_context(cand, inputs, n_per_meter, n_modes,
-                                  surface=surface)
+                                  surface=surface, damping_model=damping_model)
     if weights is None:
         weights = lo.default_location_weights(inputs.use)
     if progress:
@@ -1563,7 +1624,8 @@ def predict_combined(inputs: PredictInputs,
                      weights: Optional[dict] = None,
                      geom_top_k: int = 3, top_n: int = 3,
                      n_per_meter: float = 2.0, n_modes: int = 40,
-                     progress: Optional[Callable[[str], None]] = None
+                     progress: Optional[Callable[[str], None]] = None,
+                     damping_model: str = "sabine"
                      ) -> list:
     """Modo COMBINADO: optimiza geometria Y ubicacion. Para las top-K geometrias,
     busca su mejor layout y combina ambos scores -> top-N predicciones."""
@@ -1578,7 +1640,8 @@ def predict_combined(inputs: PredictInputs,
         if progress:
             progress(f"Ubicacion para geometria {i}/{len(geom_preds)} "
                      f"({gp.candidate.ratio_name})...")
-        ctx = _build_location_context(gp.candidate, inputs, n_per_meter, n_modes)
+        ctx = _build_location_context(gp.candidate, inputs, n_per_meter, n_modes,
+                                      damping_model=damping_model)
         w = weights or lo.default_location_weights(inputs.use)
         tops = lo.optimize_layout(ctx, weights=w, top_n=1)
         if not tops:
@@ -1597,7 +1660,7 @@ def predict_axis(inputs: PredictInputs, mode: str = "geometry",
                  fixed_candidate: Optional[Candidate] = None,
                  weights: Optional[dict] = None,
                  progress: Optional[Callable[[str], None]] = None,
-                 surface=None) -> list:
+                 surface=None, damping_model: str = "sabine") -> list:
     """Dispatcher de los 3 ejes de prediccion.
 
       mode="geometry" -> list[Prediction]          (forma del recinto)
@@ -1617,9 +1680,11 @@ def predict_axis(inputs: PredictInputs, mode: str = "geometry",
             # Fallback: si no hay diseno fijo, usar el mejor candidato generado.
             cand = generate_candidates(inputs)[0]
         return predict_locations(inputs, cand, weights=weights,
-                                 progress=progress, surface=surface)
+                                 progress=progress, surface=surface,
+                                 damping_model=damping_model)
     if m == "combined":
-        return predict_combined(inputs, weights=weights, progress=progress)
+        return predict_combined(inputs, weights=weights, progress=progress,
+                                damping_model=damping_model)
     raise ValueError(f"modo desconocido: {mode!r} (geometry|location|combined)")
 
 
@@ -1668,7 +1733,8 @@ def evaluate_design(params: dict, inputs: PredictInputs,
                     weights: Optional[dict] = None,
                     surface=None, shape_mode: str = "exact",
                     n_per_meter: float = 2.0, n_modes: int = 40,
-                    progress: Optional[Callable[[str], None]] = None):
+                    progress: Optional[Callable[[str], None]] = None,
+                    damping_model: str = "sabine"):
     """Scorea el diseño ACTUAL segun el eje elegido.
 
       mode="geometry" -> Prediction          (solo la forma)
@@ -1727,7 +1793,7 @@ def evaluate_design(params: dict, inputs: PredictInputs,
 
     if progress: progress("FEM del recinto actual (ubicacion)...")
     ctx = _build_location_context(cand, inputs, n_per_meter, n_modes,
-                                  surface=surface)
+                                  surface=surface, damping_model=damping_model)
     _assert_sources_inside(ctx, layout)
     if progress: progress("Evaluando tu ubicacion de fuentes...")
     ls = lo.evaluate_layout(ctx, layout, weights=weights)

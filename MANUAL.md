@@ -2440,4 +2440,51 @@ El campo de presión **se actualiza al editar una fuente** (antes solo se recomp
 
 ---
 
-*Manual actualizado al 19 de Agosto de 2026 — v2.23.*
+**Cambios v2.24** (20 de agosto 2026): **RT60 efectivo por banda desde la perturbación** (Etapa 2a). Cuando el modelo de amortiguamiento es **Perturbación de frontera** y hay modos resueltos, el tiempo de reverberación de la **banda modal** (por debajo de la frecuencia de Schroeder) ya no sale de Sabine sino del **decaimiento real de los modos**, y con eso se alimentan los números escalares que dependían de él.
+
+### RT60 efectivo: T30 del decaimiento modal, no la media de las tasas
+
+Cada modo tiene su propio amortiguamiento ξₙ (por eso existe el modelo de perturbación). Para colapsar ese conjunto en un RT60 por banda no se promedian las tasas: un conjunto de modos con decaimientos distintos **no** decae como una sola exponencial. Se arma la curva de energía de la banda como la suma de las exponenciales de sus modos, se integra a la Schroeder y se le mide la pendiente **T30** (−5 a −35 dB), que es la definición de norma (ISO 3382) del tiempo de reverberación. La media de tasas 6.91/⟨δ⟩ queda ~10 % por debajo de ese T30, porque la cola del decaimiento la manda el modo **menos amortiguado** (el axial). Medido en una sala de 5×4×3 m, la banda de 32 Hz suena **~40 % más** de lo que dice Sabine: son los modos axiales bajos ringueando, un efecto que Sabine (plano en α) no puede mostrar.
+
+Por encima del modo más alto (régimen difuso) el RT60 lo sigue dando Sabine, que ahí sí es válido. El cruce entre ambos es justo la frontera física entre el régimen modal y el difuso.
+
+### Qué cambia en pantalla (solo con el modelo de perturbación activo)
+
+- **RT60 medio** (grupo Materiales): con perturbación agrega la nota *«T30 perturbación (banda modal)»* y refleja el decaimiento por modo. Con Sabine (por defecto) no cambia ni un dígito.
+- **Ver RT60 calculado**: botón nuevo **«+ Perturbación (T30, banda modal)»** que superpone la curva T30 para compararla contra Sabine/Eyring. Requiere modos resueltos.
+- **Cruce de solapamiento modal (f_cross)**: el ancho de media potencia B_HP = 2.2/RT60 usa el RT60 de la perturbación en la banda modal, así que f_cross refleja el amortiguamiento por modo.
+
+### Frecuencia de Schroeder de dos pasadas (Etapa 2b)
+
+La frecuencia de Schroeder tiene un problema de orden: se necesita **antes** de resolver los modos, para dimensionar la malla, pero el amortiguamiento por modo solo existe **después** de resolverlos. Se resuelve en dos pasadas:
+
+- **Antes de resolver (dimensionar la malla):** f_Schroeder se estima con Sabine. Es un estimador de tamaño de malla, no un resultado físico, así que Sabine alcanza.
+- **Después de resolver (con el modelo de perturbación):** f_Schroeder se recalcula con el T30 por banda. Como los graves suenan más largo que lo que dice Sabine, f_Schroeder sube. El programa refresca el valor y, si la malla quedó corta para cubrir esa banda nueva, **avisa** cuánto subir la densidad y volver a resolver (no re-malla solo). Una segunda resolución ya usa este f_Schroeder refinado.
+
+### Predicción de ubicación con amortiguamiento por modo (Etapa 2c)
+
+La predicción de **ubicación** (colocar las fuentes en un recinto fijo) resuelve el FEM del recinto real, así que ahí también hay modos. Con el modelo de perturbación activo y materiales por superficie asignados, el optimizador de ubicación usa el amortiguamiento **por modo** de la perturbación en lugar del ξ uniforme (un solo RT para todos los modos). Esto hace que las figuras de mérito con las que se rankean las ubicaciones vean el mismo amortiguamiento selectivo que la pestaña Acústica. Sin materiales por superficie (o con el modelo Sabine), sigue con el ξ uniforme de siempre.
+
+La predicción de **geometría** (que genera y compara muchas salas candidatas) sigue con Sabine: no tiene sentido resolver el FEM completo de cada candidato solo para el ranking de formas.
+
+### La perturbación es ahora el modelo por defecto (Etapa 3)
+
+Con la frecuencia de Schroeder, el cruce modal, el RT60 y la predicción de ubicación ya coherentes con el modelo elegido, la perturbación de frontera pasa a ser el **modelo por defecto** de una sesión nueva: es más exacta que Sabine por debajo de Schroeder (validada a mejor del 1 % contra el problema de impedancia exacto hasta α ≈ 0.3), que es el objetivo del programa. Sabine sigue disponible en el combo (es el límite de campo difuso de la perturbación).
+
+Compatibilidad hacia atrás: un archivo `.room` guardado antes de esta versión (sin el dato del modelo) se abre en **Sabine**, para conservar exactamente los números con los que se guardó. Un `.room` nuevo guarda su modelo real, así que reabrirlo lo restaura tal cual.
+
+### La absorción es un dato consciente, no un default silencioso (Opción C)
+
+Un número físico no debería salir de una absorción que no elegiste. Ahora:
+
+- **Calcular los modos NO exige absorción.** Las frecuencias y formas modales son de pared rígida, no dependen del material, así que se resuelven igual. Si no elegiste absorción, aparece un aviso: los modos son válidos, la malla se dimensiona con un α = 0.05 conservador, y la frecuencia de Schroeder, el RT60 y la FRF no se muestran hasta que asignes materiales o un α.
+- **Los números que dependen del material quedan en «— asigná absorción»** hasta que elijas: el RT60 medio y la frecuencia de Schroeder.
+- **Al pedir un número dependiente del material** (Calcular f_Schroeder, Calcular FRF) se abre el diálogo de absorción. Si lo cancelás, la absorción queda sin elegir (ya no se asume un α = 0.05 por lo bajo).
+
+### Nº de modos necesario para cubrir hasta f_Schroeder
+
+Al **Calcular f_Schroeder**, el campo «Nº modos» se **auto-carga** con la cantidad de modos necesaria para cubrir hasta esa frecuencia (densidad de Weyl), topeada en 500. Así la primera corrida ya llena todas las bandas por debajo de f_Schroeder (antes, con pocos modos, la curva de RT de la perturbación mostraba una sola banda). Si la sala pide más de 500 modos (salas muy vivas), lo deja en el tope y avisa que cubrir f_Schroeder por completo no es alcanzable ahí. Si todavía no elegiste absorción, no se puede calcular f_Schroeder y sale el aviso correspondiente.
+
+---
+
+*Manual actualizado al 20 de Agosto de 2026 — v2.24.*

@@ -272,10 +272,27 @@ didáctica clara, pero necesita **más rigurosidad y menos gracia**.
 
 ### ✅ Hacé esto
 
-- **Ecuaciones en LaTeX, NUNCA en ASCII.** Inline con `$...$`, display con `$$...$$`.
-  El usuario entiende el ASCII pero gasta energía traduciéndolo; dale la notación
-  matemática de verdad. Ej.: `$\delta_n = \tfrac{c}{2}\sum_g \beta_g\,\oint_g \phi_n^2\,dS$`,
-  no `delta = (c/2)·sum_g beta·INT phi^2 dS`.
+- **Notación matemática de verdad, NUNCA ASCII. Pero OJO con el inline (20 Ago 2026):**
+  el cliente de Claude Code **no renderiza el inline `$...$`** (queda el signo peso crudo);
+  sí renderiza el display `$$...$$` en su propio renglón. Convención acordada con el usuario:
+  - **Símbolos sueltos dentro de una oración → caracteres Unicode** (α, β, ξₙ, δₙ, ωₙ, φₙ,
+    Σ, ∮, √, π, ρ₀c, Zₛ, f₀). Son notación real (β = la letra, no la palabra "beta" → NO es
+    ASCII) y renderizan como texto plano en cualquier cliente. Límite: Unicode tiene
+    subíndices ₀₁₂ ₙ ₘ ₛ ₖ ₗ y superíndices ² ³ ⁿ, pero no toda letra (no hay subíndice "g");
+    para esos, forma legible (βg, Z_c) o mandarlo a un display.
+  - **Ecuaciones completas de varios términos → bloque display `$$...$$`** en su propio
+    renglón. Ej.: $$\delta_n = \tfrac{c}{2}\sum_g \beta_g\,\oint_g \phi_n^2\,dS$$
+  - NUNCA inline `$...$` crudo. NUNCA ASCII (nada de "delta = (c/2)·sum_g beta·INT phi^2 dS").
+- **Toda respuesta lleva referencia; nada sin respaldo (tip del usuario, 20 Ago 2026).**
+  Cada afirmación técnica de fondo tiene que apuntar a una fuente concreta: link, o
+  libro + capítulo/sección/ecuación, o paper. Si NO hay referencia, decirlo explícitamente
+  ("esto es razonamiento propio / derivación mía, sin cita"). Si la fuente existe pero no
+  la tenés a mano, buscarla: googlearla, o mirar la carpeta
+  `C:\Users\aceve\OneDrive\Escritorio\prototipo 1\referencias` (canon completo: Beranek,
+  Morse & Ingard, Kuttruff, Cox & D'Antonio, Fahy, Ihlenburg FEM, Möser, Vorländer, + los
+  papers Fazenda 2015 / Gunawan 2018 / MDCF Wang-Du-Yu 2026; índice en `referencias/_indice.md`,
+  minado barato con `referencias/_scrape.py` vía pdftotext). No dejar una cuenta física
+  "colgada" sin de dónde sale.
 - **Mostrá las cuentas.** Deriva, no afirmes. Cuando digas "esto da X", mostrá el
   paso intermedio y, si hay un número, ponelo (medido con un bench si hace falta).
   El usuario prefiere ver `$f_S \propto \alpha^{-1/2}$` derivado de Sabine + Schroeder
@@ -2199,9 +2216,108 @@ bien.
     panel llama esta variante en vez de caer a A36. Verificado (T8): parche = material del
     anfitrión → no-op bit a bit (dif 2e-8) vs perturbación sin parches; parche absorbente sube
     el ξ; `model="a36"` default intacto.
-  - **PENDIENTE:** test visual humano del combo + Etapa 2 (RT60 efectivo = 6.91/⟨δ_pert⟩ →
-    rutear f_Schroeder/cruce/RT60 panel). Integrar TODO al MANUAL (gate de absorción + polaridad
-    + fixes de auditoría + perturbación 1+1.b) en un changelog v2.23.
+  - **HECHO:** test visual humano del combo → OK (confirmado por el usuario, 19 Ago).
+    Integración al MANUAL → HECHA (changelog v2.23 completo hasta la línea ~2443:
+    gate de absorción + polaridad + fixes de auditoría + perturbación 1+1.b). El commit
+    `e9254b5 v2.23` NO está atrasado; el working tree está limpio.
+- **20 Ago 2026 — Etapa 2a de la perturbación HECHA (RT60 efectivo por banda).**
+  Decisión de modelado tomada por el usuario: **T30 por integral de Schroeder**, NO
+  `6.91/⟨δ⟩`. Razón (medida en shoebox 5×4×3): la media de tasas queda ~9-12 % por
+  debajo del T30 real porque la pendiente de una suma de exponenciales no es la media
+  de las tasas; la cola la manda el modo menos amortiguado (axial). El T30 por banda
+  revela que la banda de 32 Hz suena ~40 % más que Sabine (Sab/T30=0.72) = el resultado
+  físico que la perturbación existe para mostrar. Alcance elegido: **solo post-solve
+  (2a), seleccionable, default Sabine**. `bench_rt60_effective.py` **17/17**.
+  - **Núcleo:** `modal_metrics.rt60_by_band_from_modal_decay(freqs, deltas, bands, weights)`
+    + `_t30_of_decay`. La EDC de una suma de exponenciales es **cerrada y exacta**
+    `EDC(t)=Σ (w_n/2δ_n) e^{-2δ_n t}` → se evalúa analíticamente (sin cuadratura ni
+    truncación; el mono-exp da T30=6.91/δ a precisión de máquina). Pesos w_n iguales
+    (position-independent, conservador). δ_n = ξ_n·2π f_n.
+  - **Blend:** perturbación T30 en las bandas con modos (< f_S), Sabine en las bandas
+    de arriba (régimen difuso, donde Sabine SÍ vale). El cruce es la frontera física.
+  - **Un solo lugar (análogo a `_schroeder_context`):** `AcousticPanel._effective_rt60_
+    by_band(V, groups, g2m) → (rt_dict, src)`. Con `_damping_model=="a36"` reduce EXACTO
+    a `_sabine_rt60` (bit a bit). Usa la cache viva `_xi_per_mode` (no recomputa).
+  - **Ruteo:** `_rt60_callable` (→ f_cross/B_HP) y `_refresh_materials_summary`
+    (→ label "RT60 medio", con nota "T30 perturbación (banda modal)") pasan por el
+    helper. `_on_damping_model_changed` y `_on_face_materials_applied` refrescan label +
+    cruce (y recomputan ξ ANTES del label, para que no muestre el ξ de la asignación
+    anterior). Diálogo "Ver RT60": botón nuevo "+ Perturbación (T30)" vía
+    `_perturbation_rt60_by_band` (toggle-independiente; `_compute_xi_from_materials`
+    ganó un param `model=`).
+  - **FUERA de 2a (confirmado en el mapeo):** f_S/`_schroeder_context` (PRE-solve,
+    chicken-egg con el auto-tuner) = Etapa 2b; prediction (Sabine-forward por candidato,
+    sin modos) = paso aparte; **SBIR NO es consumidor de RT60** (usa α → R=√(1-α)),
+    así que las notas viejas lo listaban mal.
+  - **Nuevo:** `bench_rt60_effective.py`. MANUAL: changelog v2.24.
+
+- **20 Ago 2026 — Etapa 2b HECHA (f_Schroeder de dos pasadas).** `bench_rt60_effective.py`
+  ahora **21/21** (T10-T12 nuevos); `bench_schroeder_autotuner` 27/27 (regresión OK).
+  - **El chicken-egg y su solución:** f_S se necesita PRE-solve (dimensionar malla) pero
+    los δₙ existen POST-solve. Dos pasadas: (Pass 1) pre-solve → estimador Sabine para el
+    tamaño de malla; (Pass 2) post-solve con perturbación → f_S del T30 por banda.
+  - **Implementación mínima (clave):** `_schroeder_context` ahora usa
+    `_effective_rt60_by_band` en vez de `_sabine_rt60` directo. Como el helper cae a Sabine
+    sin modos, el pre-solve queda Sabine SOLO (Pass 1 automático) y el post-solve con
+    perturbación usa el T30 (Pass 2). Un re-solve con la misma geometría aprovecha el xi
+    de la pasada anterior (refinamiento iterativo); `on_geometry_changed` resetea
+    modal_result+xi, así que nunca se usa xi stale. Devuelve `rt_src` nuevo.
+  - **Coherencia post-solve:** `_post_solve_schroeder_coherence()` (llamado tras recomputar
+    xi en el flujo de solve): recalcula f_S con perturbación, refresca `lbl_schroeder`, y si
+    f_S > f_max de la malla (dimensionada con Sabine) **avisa** cuánto subir npm y re-resolver.
+    NO re-malla solo, NO abre el gate. Los graves más largos del T30 → f_S sube (medido +1%
+    con material poco reflectante; más con hormigón).
+  - **Auto-tuner:** se beneficia gratis (llama `_schroeder_context`): en un re-solve usa el
+    f_S de perturbación para dimensionar. El primer solve sigue Sabine (no hay modos).
+  - **PENDIENTE:** test visual humano (2a label/curva/f_cross + 2b f_S post-solve + aviso);
+    Etapa 2c (predicción) y Etapa 3 (default); módulo de modelado de Z (Capa 0, ortogonal).
+
+- **20 Ago 2026 — Etapa 2c HECHA (predicción de ubicación con ξ por modo).**
+  `bench_predict_location.py` con test nuevo `location_perturbation_damping` (TODOS OK).
+  - **Hallazgo:** el path de ubicación (`predict_locations`/`evaluate_design`, modo
+    location/combined) YA resuelve el FEM del recinto real (mr con phis/locator), pero
+    `_build_location_context` armaba el damping como ξₙ=1.1/(fₙ·RT) UNIFORME (un solo RT
+    para todos los modos). El de geometría (genera muchos candidatos sin FEM completo)
+    NO se toca: sigue Sabine-forward por diseño.
+  - **Implementación (self-contained en prediction.py):** `_perturbation_damping_for_location`
+    computa ξ por modo desde `inputs.surface_alpha` (α por banda por zona piso/paredes/techo,
+    envuelto en `_BandAlphaMaterial` que da `.alpha(f)`) vía `fm.perturbation_xi_per_mode`.
+    `_build_location_context` ganó `damping_model` (default "sabine", NO regresivo): con
+    "perturbation" + alpha_mode=="materials" usa la perturbación; si no, cae al uniforme.
+    Threading: `predict_locations`/`predict_combined`/`predict_axis`/`evaluate_design`.
+  - **Wiring UI:** `PredictionPanel(get_damping_model=...)` + `_damping_model_now()`; main.py
+    lo cablea a `lambda: acoustic._damping_model`. El gate solo dispara con =="perturbation"
+    (así "a36" cae a uniforme sin mapear). Medido: δ sabine CV≈0 (uniforme), δ perturbación
+    CV=27% (por modo).
+  - **Escalonamiento:** 1+1.b, 2a, 2b, 2c HECHAS.
+
+- **20 Ago 2026 — Etapa 3 (perturbación = DEFAULT) + Opción C (gate) + Nº modos.**
+  Test visual humano de TODO el ciclo: PASÓ (6/6 pasos, confirmado por el usuario).
+  `bench_schroeder_autotuner` **33/33** (T16 Opción C + T17 auto-carga), `bench_perturbation_xi`
+  21/21, `bench_rt60_effective` 21/21.
+  - **Etapa 3:** `_damping_model` init = "perturbation"; combo reordenado (perturbación
+    índice 0 = default), tooltip actualizado. `.room` viejo SIN la clave → carga "a36"
+    (reproducibilidad); nuevo guarda su modelo real. main.py load/save comentado. Se
+    reescribió `bench_perturbation_xi` T7 (ya no asume default a36).
+  - **Opción C (gate de materiales, pedido del usuario, decisión suya):** los modos φₙ/fₙ
+    son de pared rígida → el solve NO exige absorción. `_has_absorption_choice()` nuevo
+    (α elegido o ≥1 material). Sin elección: (a) `_solve_fem` avisa UNA vez por sesión
+    (`_warned_no_absorption`) que la malla usa α=0.05 y f_S/RT60/FRF no se muestran;
+    (b) label RT60 y f_S en "— asigná absorción"; (c) `_ensure_absorption_choice` ahora
+    devuelve bool y al CANCELAR NO pone α=0.05 silencioso (queda sin elegir); (d) el gate
+    salta en Calcular f_Schroeder y Calcular FRF (con warning si se cancela). Se sacó el
+    gate del auto-tuner del solve (el fallback α=0.05 de `_schroeder_context` dimensiona
+    la malla, conservador, sin diálogo).
+  - **Nº modos (request 2, alternativa elegida por el usuario):** al Calcular f_Schroeder,
+    `sb_nmodes` se auto-carga con Weyl(f_S) clampeado a 500 (antes default 12 → curva de
+    perturbación con 1 sola banda, causa de la confusión del test visual T2). "Calcular
+    modos" NO fuerza el N (respeta lo puesto). Sin absorción → no hay f_S → warning.
+  - **Escalonamiento COMPLETO:** 1+1.b, 2a, 2b, 2c, 3 HECHAS. Único pendiente grande:
+    **módulo de modelado de Z (Capa 0, ortogonal)** — próximo tema tras `/clear`.
+  - Nota del test visual (no bug): la curva T30 de perturbación queda por encima de
+    Sabine/Eyring en la banda modal (RT modal > difuso bajo Schroeder) y casi plana con
+    material uniforme. El usuario reportó "~1 arriba"; se ofreció revisar si fuera un orden
+    de magnitud.
   - **Nuevo:** `bench_perturbation_xi.py` (21/21). Referencias sumadas: Kuttruff, Morse & Ingard.
   - **BUG del test visual, ARREGLADO + confirmado por el usuario:** editar una fuente (incl.
     invertir polaridad o cambiar TRF) **no recomputaba el campo |p|** → quedaba viejo en

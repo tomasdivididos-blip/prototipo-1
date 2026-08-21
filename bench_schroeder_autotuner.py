@@ -239,6 +239,41 @@ check("T15f sin materiales, el label muestra el α elegido",
       "0.010" in panel6.lbl_abs_choice.text(), panel6.lbl_abs_choice.text())
 
 # ---------------------------------------------------------------------------
+print("\nT16  Opción C: sin absorción no se muestran números dependientes")
+panelC, _vc, _tc = make_panel()
+check("T16 sin materiales ni α -> _has_absorption_choice False",
+      panelC._has_absorption_choice() is False)
+panelC._refresh_materials_summary()
+check("T16b el label RT60 dice «asigná absorción»",
+      "asigná absorción" in panelC.lbl_rt60.text(), panelC.lbl_rt60.text())
+panelC._abs_choice_alpha = 0.10
+check("T16c con α elegido -> _has_absorption_choice True",
+      panelC._has_absorption_choice() is True)
+panelD, _vd, _td = make_panel()
+panelD.apply_zone_materials("Hormigón visto", "Hormigón visto", "Hormigón visto")
+check("T16d con materiales asignados -> _has_absorption_choice True",
+      panelD._has_absorption_choice() is True)
+# El gate headless con geometría y sin elegir devuelve True (fallback α=0.05).
+panelE, _ve, _te = make_panel()
+got = panelE._ensure_absorption_choice()
+check("T16e gate headless -> True (fallback α=0.05, sin diálogo)",
+      got is True and panelE._abs_choice_alpha == 0.05)
+
+# ---------------------------------------------------------------------------
+print("\nT17  Request 2: Calcular f_S auto-carga Nº modos = Weyl(f_S)")
+panelW, _vw, _tw = make_panel()
+panelW.apply_zone_materials("Hormigón visto", "Hormigón visto", "Hormigón visto")
+n_before = panelW.sb_nmodes.value()
+fsW = panelW.compute_and_show_schroeder()
+ctxW = panelW._schroeder_context()
+cap = panelW.sb_nmodes.maximum()
+weyl = panelW._weyl_modal_count(ctxW["fs"], ctxW["V"], ctxW["S"])
+n_expected = int(min(max(weyl, 2), cap))
+check("T17 Nº modos auto-cargado al Weyl de f_S",
+      panelW.sb_nmodes.value() == n_expected and n_expected != n_before,
+      f"antes={n_before}, después={panelW.sb_nmodes.value()}, Weyl={weyl}, cap={cap}")
+
+# ---------------------------------------------------------------------------
 print()
 print(f"RESULTADO: {len(_PASS)}/{len(_PASS) + len(_FAIL)} OK")
 if _FAIL:

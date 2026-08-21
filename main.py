@@ -94,6 +94,9 @@ class MainWindow(QMainWindow):
             get_design_params=self.controls.get_params,
             get_sources=lambda: self.acoustic.sources,
             get_surface=self._get_current_surface,
+            # Etapa 2c: el FEM de ubicacion usa el modelo de amortiguamiento
+            # elegido en Acustica (perturbacion -> xi por modo con materiales).
+            get_damping_model=lambda: getattr(self.acoustic, "_damping_model", "a36"),
         )
         self.tabs.addTab(self.prediction, "Predicción")
         self.prediction.applyAsParamsRequested.connect(
@@ -1086,9 +1089,10 @@ class MainWindow(QMainWindow):
             ],
             # v8: parches de absorcion sub-cara (region + material dentro de una cara).
             "absorption_patches": [p.to_dict() for p in getattr(ap, "_patches", [])],
-            # v2.23: modelo de amortiguamiento ("a36" | "perturbation"). Aditivo:
-            # sin la clave -> "a36" (comportamiento historico) al cargar.
-            "damping_model": getattr(ap, "_damping_model", "a36"),
+            # v2.23: modelo de amortiguamiento ("a36" | "perturbation"). Se guarda
+            # el estado REAL. Default de sesion nueva = "perturbation" (Etapa 3),
+            # pero un .room viejo SIN la clave carga como "a36" (reproducibilidad).
+            "damping_model": getattr(ap, "_damping_model", "perturbation"),
         }
 
     def _serialize_external_geometry(self):
@@ -1295,7 +1299,10 @@ class MainWindow(QMainWindow):
         except Exception:
             ap._patches = []
 
-        # v2.23: modelo de amortiguamiento. Sin la clave -> "a36" (historico).
+        # v2.23: modelo de amortiguamiento. Sin la clave (.room pre-v2.24) -> "a36"
+        # a proposito: el archivo se guardo bajo Sabine, se preserva su numero.
+        # El default de sesion nueva es "perturbation" (Etapa 3), pero eso NO pisa
+        # un archivo viejo. Con la clave presente se respeta lo guardado.
         try:
             dm = str(ac.get("damping_model", "a36")).lower()
             ap._damping_model = "perturbation" if dm == "perturbation" else "a36"

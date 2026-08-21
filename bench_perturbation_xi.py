@@ -199,7 +199,11 @@ panel.sources.add(OmniSource((1.2, 0.9, 1.0), sensitivity_dB=90.0))
 panel.apply_zone_materials("Alfombra fina", "Alfombra fina", "Alfombra fina")
 panel.modal_result = aa.run_fem_modal(vp, tp, n_modes=20, n_per_meter=3.0)
 
-check("T7 default = a36", panel._damping_model == "a36")
+# Etapa 3 (v2.24): el default es perturbación (antes a36).
+check("T7 default = perturbation (Etapa 3)",
+      panel._damping_model == "perturbation")
+# A36 explícito para el baseline uniforme.
+panel.combo_damping.setCurrentIndex(panel.combo_damping.findData("a36"))
 xi_a36 = panel._compute_xi_from_materials()
 d_a36 = xi_a36 * 2 * np.pi * np.asarray(panel.modal_result.freqs)
 panel.combo_damping.setCurrentIndex(panel.combo_damping.findData("perturbation"))
