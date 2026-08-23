@@ -655,7 +655,40 @@ def perturbation_xi_per_mode(
     Nm = int(phis.shape[1])
     if Nm == 0 or freqs.size < Nm or V <= 0:
         return None
+    Sg_all = _modal_surface_integrals(phis, locator, verts, tris, groups, subdiv)
+    if Sg_all is None:
+        return None
 
+    # alpha -> beta por grupo y por banda del catalogo. Se cachea por frecuencia
+    # unica para no reinvertir Paris en cada modo.
+    xi = np.empty(Nm, dtype=float)
+    beta_cache: Dict[tuple, np.ndarray] = {}
+    for n in range(Nm):
+        fn = float(freqs[n])
+        key = round(fn, 3)
+        beta_g = beta_cache.get(key)
+        if beta_g is None:
+            alpha_g = np.array(
+                [_alpha_for(g, group_to_material, fn, default_alpha)
+                 for g in groups], dtype=float)
+            beta_g = beta_from_alpha_random(alpha_g)
+            beta_cache[key] = beta_g
+        delta = 0.5 * c * float((beta_g * Sg_all[n]).sum())   # Np/s
+        xi[n] = delta / max(2.0 * np.pi * fn, 1e-9)
+    return xi
+
+
+def _modal_surface_integrals(phis, locator, verts, tris, groups, subdiv):
+    """INT_g phi_n^2 dS por modo y por grupo -> (Nm, Ng), con re-escala por
+    cobertura de area (fix A2: los centroides fuera de la malla escalonada se
+    descartan y se re-escala por el area muestreada). Es geometria + forma modal:
+    NO depende de la frecuencia. Fuente unica de verdad de la cuadratura de
+    superficie que comparten la perturbacion real y la compleja."""
+    if phis is None or len(groups) == 0 or locator is None:
+        return None
+    Nm = int(phis.shape[1])
+    if Nm == 0:
+        return None
     tris = np.asarray(tris, dtype=int)
     Nt = len(tris)
     if Nt == 0:
@@ -685,28 +718,67 @@ def perturbation_xi_per_mode(
     cover = np.where(area_ok_g > 0,
                      area_tot_g / np.maximum(area_ok_g, 1e-12), 0.0)
 
-    # alpha -> beta por grupo y por banda del catalogo. Se cachea por (grupo,
-    # frecuencia unica) para no reinvertir Paris en cada modo.
-    xi = np.empty(Nm, dtype=float)
-    beta_cache: Dict[tuple, np.ndarray] = {}
+    Sg_all = np.empty((Nm, Ng), dtype=float)
     for n in range(Nm):
-        fn = float(freqs[n])
         vals = locator.evaluate_many(phis[:, n], cen)
         w = np.where(valid, np.nan_to_num(np.real(vals)) ** 2, 0.0) * area
         # INT_g phi^2 dS  (phi M-normalizada -> INT phi^2 dV = 1)
-        Sg = np.bincount(gid, weights=w, minlength=Ng) * cover
+        Sg_all[n] = np.bincount(gid, weights=w, minlength=Ng) * cover
+    return Sg_all
+
+
+def perturbation_xi_shift_per_mode(
+    freqs, phis, locator, verts, tris, groups, group_to_material, V,
+    default_alpha=0.03, subdiv=2, c=343.0, beta_provider=None,
+):
+    """Perturbacion de frontera con admitancia beta COMPLEJA. Devuelve
+    (xi, f_new):
+
+        delta_c(n) = (c/2) sum_g beta_g S_{n,g}          (complejo)
+        xi[n]    = Re(delta_c) / omega_n                 (amortiguamiento)
+        f_new[n] = f_n - Im(delta_c) / (2 pi)            (corrimiento por reactancia)
+
+    Deriva de la expansion de 1er orden del QEP complejo
+    (c^2 K + i c beta C w - M w^2 = 0): w ~ omega_n + (i c/2) beta S_n, de donde
+    Im(w) = (c/2) Re(beta) S_n (amortiguamiento) y Re(w) = omega_n - (c/2) Im(beta)
+    S_n (corrimiento). Validado <few% vs el QEP exacto en bench_perturbation_complex.py.
+
+    CONVENCION: el solver modal / QEP usa e^{+i w t} (Re(beta)>0 -> perdida).
+    impedance.py usa e^{-i w t} (Delany-Bazley) -> al conectar, pasar conj(beta_imp).
+
+    Si beta_provider is None: usa alpha->beta REAL (Im=0) -> reduce EXACTO a
+    perturbation_xi_per_mode y f_new == freqs (puente de no-regresion).
+    beta_provider(groups, fn) -> array compleja (Ng,)."""
+    if phis is None or len(groups) == 0 or locator is None:
+        return None
+    freqs = np.asarray(freqs, dtype=float)
+    Nm = int(phis.shape[1])
+    if Nm == 0 or freqs.size < Nm or V <= 0:
+        return None
+    Sg_all = _modal_surface_integrals(phis, locator, verts, tris, groups, subdiv)
+    if Sg_all is None:
+        return None
+
+    xi = np.empty(Nm, dtype=float)
+    f_new = np.empty(Nm, dtype=float)
+    cache: Dict[tuple, np.ndarray] = {}
+    for n in range(Nm):
+        fn = float(freqs[n])
         key = round(fn, 3)
-        beta_g = beta_cache.get(key)
+        beta_g = cache.get(key)
         if beta_g is None:
-            alpha_g = np.array(
-                [_alpha_for(g, group_to_material, fn, default_alpha)
-                 for g in groups], dtype=float)
-            beta_g = beta_from_alpha_random(alpha_g)
-            beta_cache[key] = beta_g
-        delta = 0.5 * c * float((beta_g * Sg).sum())     # Np/s
-        omega_n = 2.0 * np.pi * fn
-        xi[n] = delta / max(omega_n, 1e-9)
-    return xi
+            if beta_provider is None:
+                alpha_g = np.array(
+                    [_alpha_for(g, group_to_material, fn, default_alpha)
+                     for g in groups], dtype=float)
+                beta_g = beta_from_alpha_random(alpha_g).astype(complex)
+            else:
+                beta_g = np.asarray(beta_provider(groups, fn), dtype=complex)
+            cache[key] = beta_g
+        cdelta = 0.5 * c * complex((beta_g * Sg_all[n]).sum())
+        xi[n] = cdelta.real / max(2.0 * np.pi * fn, 1e-9)
+        f_new[n] = fn - cdelta.imag / (2.0 * np.pi)
+    return xi, f_new
 
 
 # Categorias de la libreria de materiales (material_library / carpeta materials/).

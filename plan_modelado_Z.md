@@ -104,14 +104,18 @@ reproducibilidad, estilo Etapa 3 de la perturbación).
 
 ## 3. Escalonamiento
 
-- **Etapa 1a — motor local empírico:** `impedance.py` con rigid/resistive/porous
-  (Delany-Bazley + Miki) + cámara de aire + TMM + measured_Zf. β compleja local.
-  Bench: rígido→β=0; resistivo→reproduce Paris; poroso+cámara→pico λ/4; α(f) sana.
+- **Etapa 1a [HECHA] — motor local empírico:** `impedance.py` con rigid/resistive/
+  porous (Delany-Bazley + Miki) + cámara de aire + TMM + measured_Zf. β compleja
+  local. `bench_impedance.py` 22/22 (rígido→β=0; resistivo→reproduce Paris bit a bit;
+  poroso+cámara→pico λ/4 exacto; α(f) sana; DB no físico en graves, Miki sí).
 - **Etapa 1b — JCA:** `porous_jca` (fluido equivalente). Bench: JCA reduce a límites
   conocidos; contra figuras de Allard&Atalla; alta σ → Miki.
-- **Etapa 1c — perturbación compleja:** generalizar `perturbation_xi_per_mode` a
-  β compleja (Re→δ, Im→Δf). Bench: contra QEP complejo exacto (matriz C) <1%;
-  β real reduce bit a bit al resultado actual.
+- **Etapa 1c [HECHA] — perturbación compleja:** `perturbation_xi_shift_per_mode`
+  (β compleja → Re=amortiguamiento ξ, Im=corrimiento de fₙ). Cuadratura de superficie
+  factorizada en `_modal_surface_integrals` (fuente única). Convención: solver
+  e^{+iωt}, impedance.py e^{-iωt} → conj(β) al conectar. `bench_perturbation_complex.py`
+  11/11 (puente real bit a bit; vs QEP complejo exacto <3% con matching por autovector;
+  corrimiento reactivo +5..+11 Hz validado).
 - **Etapa 2 — reacción extendida:** `measured_Zft` + ángulo por modo (exacto shoebox,
   aprox. irregular, marcado en pantalla). Bench: oráculo shoebox.
 - **Etapa 3 — resonantes + UI:** perforado/membrana/Helmholtz + diálogo construcción
