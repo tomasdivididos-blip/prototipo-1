@@ -11,6 +11,38 @@
 
 ---
 
+## 0. Objetivo del proyecto (el norte, no negociable)
+
+**El programa (por ahora "Prototipo 1") busca ser la simulación de acústica más
+exacta posible por debajo de la frecuencia de Schroeder.** Ese es el único criterio
+rector. En banda modal (campo NO difuso, modos discretos), donde las herramientas
+estadísticas de sala (Sabine, Eyring, ray-tracing, teoría difusa) dejan de valer.
+
+Reglas que se desprenden de esto y mandan sobre cualquier otra consideración:
+
+- **La exactitud física manda sobre la velocidad, la comodidad y la simplicidad de
+  código.** Si una aproximación mete error que cambia una decisión acústica, se
+  reemplaza; si el error está por debajo del ruido de modelado, se documenta el
+  límite y se sigue.
+- **Respetar a rajatabla las condiciones NECESARIAS Y SUFICIENTES de cada herramienta
+  física y matemática que se use.** Antes de aplicar una fórmula: ¿bajo qué supuestos
+  se derivó? ¿se cumplen acá? Si no se cumplen, se dice y se acota el error, no se
+  aplica igual. Ej.: Sabine supone campo difuso → aplicarla bajo Schroeder es un
+  supuesto violado (por eso el modelo de perturbación de frontera, ver
+  `[[damping-perturbation]]`); el FEM P1 tiene error `$O(h^2)$` → hay que garantizar
+  ppw suficiente para la banda pedida.
+- **Toda afirmación de exactitud se valida:** contra solución analítica cuando existe
+  (modos de caja, oráculos), contra el problema exacto cuando hay uno más caro (matriz
+  C de impedancia), y contra medición cuando hay dato (RIRs). Un modelo sin bench de
+  validación no entra.
+- **El régimen de validez es parte del resultado.** Cada método reporta hasta dónde
+  vale (f_max de malla, α máximo de una perturbación, etc.) y el soft no muestra
+  números fuera de ese régimen sin avisar.
+
+Cuando una decisión de diseño entre en conflicto con esto, gana esto.
+
+---
+
 ## 1. Orden de lectura recomendado
 
 1. **Este archivo** (`notas_para_claude.md`) — el "manual de instrucciones"
@@ -233,43 +265,70 @@ de `_source_positions`, es independiente de los items GL.
 
 ## 3. Estilo de respuesta que funciona
 
-Lo que el usuario te confirmó (explícita o implícitamente) que le sirve:
+**Registro: ingenieril, no divulgativo-gracioso** (actualizado 19 Ago 2026, pedido
+explícito del usuario). El usuario es ingeniero en acústica: valorá su tiempo con
+rigor, cuentas y comparaciones, no con chistes ni metáforas de color. Le gusta la
+didáctica clara, pero necesita **más rigurosidad y menos gracia**.
 
 ### ✅ Hacé esto
 
-- **Explicaciones que van de lo concreto a lo abstracto**. Ejemplo concreto
-  primero (5 nodos, 2 tets, números reales) → patrón general después.
-- **Diagramas ASCII** cuando ayuden (cubo con esquinas numeradas, tabla de
-  formas (shapes) de arrays, etc.).
-- **Tablas comparativas** para trade-offs (P1 vs P2, naive vs KDTree, etc.).
-- **Anotar la forma `(shape)` de cada array** en cada paso del código.
-  Ej.: `coords = nodes[tets]  # (Ne, 4, 3)`.
-- **Conectar el truco de NumPy con el paso del método FEM**. Sin esto, los
-  `einsum` y broadcasting son cripto para él.
-- **Cerrar con una pregunta concreta**: "¿Querés que te muestre A o B?",
-  para que él pueda decidir el siguiente paso.
-- **Markdown con secciones cortas**, encabezados claros, bullets de máx
-  2-3 líneas. Nada de párrafos murallón.
-- **Negritas para los conceptos clave**, no para énfasis emocional.
-- **Cajas dedicadas para conceptos opacos**. Cuando inventaste algo nuevo
-  (KDTree, `nodes[tets]`, einsum), ponelo en un bloque visualmente
-  separado dentro del flujo principal — no como apéndice al final.
+- **Notación matemática de verdad, NUNCA ASCII. Pero OJO con el inline (20 Ago 2026):**
+  el cliente de Claude Code **no renderiza el inline `$...$`** (queda el signo peso crudo);
+  sí renderiza el display `$$...$$` en su propio renglón. Convención acordada con el usuario:
+  - **Símbolos sueltos dentro de una oración → caracteres Unicode** (α, β, ξₙ, δₙ, ωₙ, φₙ,
+    Σ, ∮, √, π, ρ₀c, Zₛ, f₀). Son notación real (β = la letra, no la palabra "beta" → NO es
+    ASCII) y renderizan como texto plano en cualquier cliente. Límite: Unicode tiene
+    subíndices ₀₁₂ ₙ ₘ ₛ ₖ ₗ y superíndices ² ³ ⁿ, pero no toda letra (no hay subíndice "g");
+    para esos, forma legible (βg, Z_c) o mandarlo a un display.
+  - **Ecuaciones completas de varios términos → bloque display `$$...$$`** en su propio
+    renglón. Ej.: $$\delta_n = \tfrac{c}{2}\sum_g \beta_g\,\oint_g \phi_n^2\,dS$$
+  - NUNCA inline `$...$` crudo. NUNCA ASCII (nada de "delta = (c/2)·sum_g beta·INT phi^2 dS").
+- **Toda respuesta lleva referencia; nada sin respaldo (tip del usuario, 20 Ago 2026).**
+  Cada afirmación técnica de fondo tiene que apuntar a una fuente concreta: link, o
+  libro + capítulo/sección/ecuación, o paper. Si NO hay referencia, decirlo explícitamente
+  ("esto es razonamiento propio / derivación mía, sin cita"). Si la fuente existe pero no
+  la tenés a mano, buscarla: googlearla, o mirar la carpeta
+  `C:\Users\aceve\OneDrive\Escritorio\prototipo 1\referencias` (canon completo: Beranek,
+  Morse & Ingard, Kuttruff, Cox & D'Antonio, Fahy, Ihlenburg FEM, Möser, Vorländer, + los
+  papers Fazenda 2015 / Gunawan 2018 / MDCF Wang-Du-Yu 2026; índice en `referencias/_indice.md`,
+  minado barato con `referencias/_scrape.py` vía pdftotext). No dejar una cuenta física
+  "colgada" sin de dónde sale.
+- **Mostrá las cuentas.** Deriva, no afirmes. Cuando digas "esto da X", mostrá el
+  paso intermedio y, si hay un número, ponelo (medido con un bench si hace falta).
+  El usuario prefiere ver `$f_S \propto \alpha^{-1/2}$` derivado de Sabine + Schroeder
+  que "f_S baja con más absorción".
+- **Comparaciones cuantitativas siempre.** Tablas con columnas de error/costo/rango de
+  validez (modelo A vs B vs exacto; error medio y máximo; a qué α se rompe). Un
+  trade-off sin números no sirve.
+- **Explicaciones de lo concreto a lo abstracto.** Caso chico con números reales
+  (cubo 8:10:12, 5 nodos 2 tets) → patrón general después.
+- **Diagramas ASCII para estructura** (esquinas de un cubo, shapes de arrays): OK.
+  La restricción del ASCII es SOLO para ecuaciones.
+- **Anotá la forma `(shape)` de cada array** en cada paso: `coords = nodes[tets]  # (Ne, 4, 3)`.
+- **Conectá el truco de NumPy con el paso del método** (einsum ↔ producto tensorial, etc.).
+- **En las recomendaciones, mostrá MÁS de una opción, con ejemplos.** El usuario
+  confirmó que las recomendaciones vienen bien y son ventajosas; quiere ver el
+  abanico, no solo la ganadora. Formato: por cada opción, qué es · costo/beneficio
+  numérico · un ejemplo concreto de cómo se vería · cuándo conviene. Cerrá con tu
+  recomendación *y* las alternativas, no solo la recomendación.
+- **Cajas dedicadas para conceptos opacos**, dentro del flujo, no como apéndice.
+- **Negritas para conceptos clave**, no para énfasis emocional. Secciones cortas.
 
 ### ❌ No hagas esto
 
-- Respuestas largas sin estructura. Si supera 200 líneas, partilo en
-  secciones.
-- Asumir que entiende qué hace una función de NumPy. Especialmente
-  `einsum`, `broadcasting`, `fancy indexing`, `np.linalg.inv` en lote.
-- Saltar al "hagamos esto" sin explicar el "por qué este enfoque y no otro".
-- Sugerir librerías pesadas (FEniCS, PETSc, dolfinx) sin contexto.
-  Decisión ya tomada: **sin dependencias pesadas**. Solo `numpy + scipy +
-  matplotlib + PyQt5`.
-- Modificar la API pública de `build_KM`, `build_volume_mesh`,
-  `solve_modes`, `mesh_info`. Son contratos estables.
-- Borrar `n_per_meter` como palanca controlable. Ya consideramos
-  reemplazarlo por auto-tuner y decidimos NO.
+- **Chistes, wordplay, jerga graciosa, metáforas de color, entusiasmo performativo.**
+  ("brutal", "clava", "lindo", "tierra de nadie", loading-messages jocosos). Sobrio.
+- **Ecuaciones en ASCII/monospace** cuando podés usar LaTeX. Es la queja #1.
+- **Afirmar sin la cuenta.** Nada de "es mejor" sin el número que lo respalda.
+- Asumir que entiende una función de NumPy sin explicarla (`einsum`, broadcasting,
+  fancy indexing, `np.linalg.inv` en lote).
+- Saltar al "hagamos esto" sin el "por qué este enfoque y no otro", con criterio físico.
+- **Proponer librerías de terceros para la física/numérica.** Ver §5 D0: el núcleo se
+  construye desde numpy/scipy. NADA de FEniCS, scikit-fem, PETSc, dolfinx, sfepy, etc.
+- Modificar la API pública de `build_KM`, `build_volume_mesh`, `solve_modes`, `mesh_info`.
+- Borrar `n_per_meter` como palanca (decisión D4).
 - Emojis salvo que él los use primero.
+- Respuestas largas sin estructura (>200 líneas → partir en secciones).
 
 ---
 
@@ -310,6 +369,28 @@ superposición modal, y mapas 2D/3D de presión.
 ## 5. Decisiones tomadas con su rationale (condensadas)
 
 Para no tener que re-discutir cada vez:
+
+### D0. Núcleo de simulación construido desde cero sobre numpy + scipy
+**Decisión fundacional (reafirmada 19 Ago 2026).** Toda la física y la numérica se
+**construyen**, no se importan de terceros. La base es `numpy` + `scipy` y nada más
+para el núcleo: ensamblaje FEM, solver de autovalores (`scipy.sparse.linalg.eigsh`),
+cuadraturas, integrales, mallado (voxel propio), evaluación de campo (KDTree de scipy).
+
+**Por qué (alineado con §0):** el objetivo es la simulación más exacta y auditable
+bajo Schroeder. Una librería de terceros mete un backend que no controlás ni podés
+auditar línea por línea; para un instrumento de tesis eso es inaceptable. Además,
+transparencia pedagógica y cero dependencias C++ en Windows+Anaconda.
+
+**Qué SÍ está permitido (y por qué no viola D0):** son I/O y presentación, no física.
+- `PyQt5` / `pyqtgraph` → GUI y render 3D.
+- `matplotlib` → gráficos.
+- `trimesh` → parseo de mallas CAD (formato, no simulación).
+- `gmsh` → mallador boundary-fitted OPCIONAL (el voxel propio es el de producción).
+
+**Qué está PROHIBIDO** (rechazar aunque sea liviano, ver §5 D2): FEniCS, dolfinx,
+Firedrake, scikit-fem, PETSc, sfepy, pyMOR, cualquier framework de FEM/EDP. Si el
+usuario trae uno, pedile el caso de uso concreto que el núcleo actual no cubre; si no
+hay caso, no hay migración.
 
 ### D1. P1 lineal sobre P2 cuadrático
 **Decisión v2.10**: solver de producción se queda en P1. P2 explorado,
@@ -459,10 +540,11 @@ PYTHONIOENCODING=utf-8 /c/Users/aceve/anaconda3/python.exe script.py
 ```
 Alternativa: en el código, usá solo ASCII o `print('...'.encode('utf-8'))`.
 
-### LaTeX
-MiKTeX está en `/c/Users/aceve/AppData/Local/Programs/MiKTeX/miktex/bin/x64/pdflatex.exe`.
-Compilación del manual: `pdflatex -interaction=nonstopmode MANUAL.tex` × 2
-pasadas (para resolver TOC). Limpiar `.aux .log .toc .out` después.
+### LaTeX (LEGADO — ya no se usa para el manual)
+**Desde el 19 Ago 2026 el manual se mantiene SOLO en `MANUAL.md`.** Ya no se generan
+ni sincronizan `MANUAL.tex` ni `MANUAL.pdf` (decisión del usuario). Los `.tex`/`.pdf`
+existentes quedan como snapshot histórico hasta v2.22; no los toques ni los actualices.
+(Ruta de MiKTeX por si alguna vez hace falta: `/c/Users/aceve/AppData/Local/Programs/MiKTeX/miktex/bin/x64/pdflatex.exe`.)
 
 ### Git
 **El proyecto YA tiene git inicializado** (desde 7-8 Jul 2026 — cambió la regla
@@ -741,7 +823,7 @@ que haya 19 JSON en `_internal/materials/`.
 | Pide cuestionario / autoevaluación | Estilo de `cuestionario_acoustic.html`: HTML autocontenido, vanilla JS, opciones bloquean al marcar, explicación inline |
 | Pide planificar algo grande | Markdown `plan*.md` con fases enumeradas, métricas de éxito, riesgos. Estilo del ahora-borrado `planP2.md` |
 | Pide bench / medición | Script Python con `time.perf_counter()`, reporte tabular con columnas alineadas, opcional JSON de salida |
-| Pide actualizar el manual | EDITAR `MANUAL.md` (markdown), DESPUÉS editar `MANUAL.tex` (versión condensada), DESPUÉS recompilar `MANUAL.pdf` con `pdflatex` × 2 pasadas. **NO omitir ninguno**: los tres viven sincronizados desde v2.0. Limpiar `.aux .log .toc .out` después |
+| Pide actualizar el manual | EDITAR **solo `MANUAL.md`** (desde 19 Ago 2026 no más `.tex`/`.pdf`). Agregar el bloque de changelog con el estilo de los anteriores (`**Cambios vX.YY** (fecha): título. N ejes.` + secciones `### A`, `### B`…) y actualizar el sello de versión al final. Ecuaciones en LaTeX |
 | Confiesa que no entiende algo (NumPy, FEM, etc.) | Pasada profunda con la caja dedicada. Sin embellecimientos. Mini-experimento que pueda correr para verificar |
 | Pide borrar archivos | Antes de borrar: grep referencias, listar consecuencias, **pedir confirmación** explícita. Mantener archivos que tengan valor independiente del feature que descartó |
 | Pide automatizar `n_per_meter` (auto-tuner, derivar de `f_max`, sacar el slider, etc.) | **Push back con cortesía**. Ya se evaluó en v2.9 y se decidió NO. Ver D4. Mostrale el compromiso aplicado en v2.12: label "npm sugerido" + botón `[Aplicar]` debajo del slider. Si insiste en sacar el slider entero, requiere actualizar D4 con rationale nuevo (no sobrescribir) |
@@ -789,16 +871,43 @@ Patrón observado y que funciona:
 3. **Identificar la decisión de fondo** ("¿estamos optimizando precisión
    o velocidad?"). Hacer la pregunta si no está claro.
 4. **Proponer un plan** corto (3-5 pasos), con métricas de éxito y costo
-   estimado.
+   estimado, **y mostrar las alternativas** (§3: no solo la ganadora).
 5. **Ejecutar** una vez que el usuario apruebe ("si", "dale", etc.).
-6. **Verificar** con un experimento concreto (demo + comparación contra
-   estado anterior).
-7. **Documentar** en el manual (añadir bloque al changelog, sincronizar
-   .tex y .pdf).
+6. **Verificar** con un experimento concreto (bench + comparación numérica
+   contra estado anterior / analítico / exacto — ver §0).
+7. **Documentar** en `MANUAL.md` (solo el .md; bloque de changelog).
 8. **Resumir** lo que cambió y preguntar qué sigue.
 
-Si la idea es grande (>1 hora), usar `TaskCreate` para tracking; si es
-chica, hacerlo inline.
+Si la idea es grande, hacer la verificación con benches; si es chica, inline.
+
+---
+
+## 10b. Protocolo de recap (para poder hacer /clear y seguir trabajando)
+
+**Objetivo del usuario (19 Ago 2026):** trabajar hasta que el contexto se llene,
+hacer un resumen que persista, y hacer `/clear` para seguir con contexto fresco sin
+perder nada. Cada "recap" tiene que dejar el estado guardado en disco Y en el repo.
+
+**Cuándo hacer un recap:** cuando el usuario lo pida ("recap", "resumí", "voy a
+clear"), o proactivamente cuando notes que el contexto se está llenando y hay trabajo
+sin persistir. Ante la duda, ofrecelo.
+
+**Qué hace un recap (los tres pasos, SIEMPRE los tres):**
+
+1. **`MANUAL.md`** — si hubo cambios funcionales visibles al usuario, agregar/actualizar
+   el bloque de changelog `**Cambios vX.YY**` (solo el .md; ecuaciones en LaTeX).
+2. **`notas_para_claude.md`** — agregar la entrada de la sesión en §13 con fecha:
+   qué se hizo, decisiones tomadas, gotchas, benches, qué quedó pendiente. Actualizar
+   §5 (decisiones) o las reglas si cambió algo estructural. Actualizar la memoria
+   persistente (`memory/*.md` + `MEMORY.md`) si corresponde.
+3. **Repo** — commitear y pushear TODO lo necesario para dejar el repo al día:
+   `git add -A`, commit con mensaje descriptivo (terminar con `Co-Authored-By: Claude`),
+   `git push`. Si estás en una rama de trabajo (ej. `dist-exe`), pushear ahí; no mergear
+   a `main` sin pedir. Reportar el hash del commit.
+
+**Regla:** un recap no está completo hasta que los tres pasos están hechos y el push
+confirmado. El objetivo es que un `/clear` + re-lectura de los `.md` deje a la próxima
+instancia exactamente donde quedó esta, sin agujeros.
 
 ---
 
@@ -809,7 +918,7 @@ chica, hacerlo inline.
 - **"hace eso"** = imperativo, sin pluralizar. Argentino.
 - **"explicame X"** = quiere profundidad y derivación, no respuesta
   ejecutiva.
-- **"agregalo al manual"** = MANUAL.md **y** .tex **y** .pdf. Los tres.
+- **"agregalo al manual"** = SOLO `MANUAL.md` (desde 19 Ago 2026; ya no .tex/.pdf).
 - **"podes...?"** = sí, podés. Hacelo.
 - **"que tan necesario es?"** = quiere un trade-off claro con costos
   numéricos.
@@ -864,15 +973,14 @@ bien.
 - Flujo normal: `git add -A; git commit -m "..."; git push`.
 - (Histórico: antes NO había git; se inicializó el 7-8 Jul 2026.)
 
-### Caso 4 — Actualizar manual (testa la regla de los 3 archivos)
+### Caso 4 — Actualizar manual (SOLO .md desde 19 Ago 2026)
 
 > *Documentá esto en el manual.*
 
 **Debe incluir:**
-- Plan explícito: edito `MANUAL.md`, después `MANUAL.tex`, después
-  recompilo `MANUAL.pdf` con `pdflatex` × 2 pasadas.
-- Limpieza de auxiliares `.aux .log .toc .out` al final.
-- **NO** debe modificar solo el `.md` y olvidarse del `.tex` / `.pdf`.
+- Editar **solo `MANUAL.md`** con el bloque de changelog en el estilo existente
+  (`**Cambios vX.YY**` + ejes `### A/B/…`) y actualizar el sello de versión final.
+- **NO** debe tocar `MANUAL.tex` ni `MANUAL.pdf` (legado, congelados en v2.22).
 
 ### Caso 5 — FEniCS / librería pesada (testa D2)
 
@@ -1868,6 +1976,362 @@ bien.
     los traía. Los `--collect-all` quedaron como seguro, no como fix. **Lección:
     antes de afirmar que un artefacto de build cambió, mirar su TIMESTAMP.**
   - **Release**: primera del repo. El `.exe` NO va al repositorio (ver §6).
+
+- **18 Ago 2026 — f_Schroeder coherente + gate de absorción + tope de npm. (v2.23, WIP)**
+  Rama `dist-exe`. Dos temas que estaban anotados como pendientes: el α=0.05 del auto-tuner
+  y el nivel #6c de C13/C21. `bench_schroeder_autotuner.py` **21/21**; regresión verde
+  (smoke_furniture_ui 38/38, absorption_patch, origin_mode, xi_perface, undo 5/5,
+  prediction_materials 9/9, modal_metrics).
+  - **BUG DE COHERENCIA (el hallazgo de la sesión):** había **dos** cálculos de f_Schroeder
+    y no se hablaban. El label del panel resolvía el punto fijo con el RT de materiales
+    (v2.16) y el auto-tuner de malla usaba `schroeder_frequency(V,S,alpha=0.05)` fijo. La app
+    se contradecía a sí misma en el mismo log. Ahora hay **un solo lugar**:
+    `AcousticPanel._schroeder_context()` → dict(fs, V, S, src_txt, n_asig, n_groups), llamado
+    por `compute_and_show_schroeder` Y por el bloque auto-density de `_compute_modes_async`.
+  - **Cuánto pesaba el error:** `f_S ∝ α^(−1/2)`. Sala 5×4×3 (V=60, S=94): α=0.05 → 370 Hz;
+    alfombra fina (α=0.20, el default REAL del mapa) → 185 Hz; hormigón (α=0.02) → 585 Hz.
+    O sea el α fijo erraba **en los dos sentidos**: sala tratada = malla 2× más fina de lo
+    necesario (**8× nodos** al pedo); sala viva = malla que NO cubre el régimen modal, en
+    silencio (medido: hormigón real 571 Hz vs 370 del α fijo, ratio 1.54×).
+  - **Gate de absorción (`AbsorptionChoiceDialog`, decisión del usuario).** El
+    `FaceMaterialMap` SIEMPRE devuelve su `default`, así que "no asignaste nada" **no** se
+    detecta por RT=None — se detecta contando asignaciones EXPLÍCITAS
+    (`_n_assigned_groups`). Sin ellas, f_S salía del default alfabético ("Alfombra fina",
+    α=0.20) que el usuario nunca eligió. Ahora se pregunta **una vez por sesión**
+    (`_abs_choice_asked`) con 3 caminos: α uniforme / preset de los 5 `MATERIAL_PRESETS` /
+    un material del catálogo para todas. Los dos últimos **asignan de verdad** (reusan
+    `apply_zone_materials`), así que el gate no vuelve y ξ/RT60/SBIR quedan coherentes con
+    f_S. Label `lbl_abs_choice` muestra la elección recordada.
+  - **GOTCHA respetado:** el gate abre un diálogo modal y `QT_QPA_PLATFORM=offscreen`
+    segfaultea con modales (ver entrada 16 Jun). `_ensure_absorption_choice` chequea
+    `QApplication.platformName()=="offscreen"` y cae al fallback sin preguntar, para que los
+    benches puedan correr el camino completo.
+  - **Tope de npm 10 → 30** (pedido del usuario: "que el clip sea para la sala más viva
+    posible, α=0"). **α=0 NO es cota: es una divergencia** (RT=0.161V/(αS) → f_S y npm
+    infinitos; ni con la absorción del aire como único sumidero se salva, da npm≈90 y 45 M
+    de nodos). La versión física es el **piso del catálogo, α=0.01** ("Superficie totalmente
+    reflectante"), que pide npm≈25.7 en un booth de 2.5 m → 30 cubre todo el rango
+    representable. **Invariancia de escala linda:** `npm ∝ S^(−1/2)` y `nodos ∝ V·S^(−3/2)`,
+    que para un cubo se cancela → a α=0.01 son ~188 k nodos y ~4080 modos **sea cual sea el
+    tamaño**; lo que cambia con el tamaño es el npm (28.7 a 2 m, 1.9 a 30 m).
+  - **El npm NO era el cuello de botella (dato que cambió el diseño):** el primer tope que
+    revienta es el de **Nº de modos (500)**, en α≈0.04, con npm todavía en 7.2. Cubrir f_S en
+    una sala rígida pediría ~4000 modos: `eigsh` no llega. Por eso el auto-tuner ahora
+    **clampea `f_target` por el presupuesto de modos** (nueva inversa de Weyl
+    `_weyl_freq_for_count`, bisección) y **lo dice en el log**. Sin ese clamp, subir el tope a
+    30 habría hecho que una sala viva mallara 60 k nodos para calcular modos que nunca se
+    piden; con el clamp queda en 20 k (medido: npm 10.0 → 7.0). El label de Weyl también dejó
+    de aconsejar "refiná la malla", que es consejo equivocado para un problema de conteo de
+    modos.
+  - **C13/C21 #6c: protocolo de medición ESCRITO** (`plan_gaps_criterios.md` §6c, 9
+    sub-secciones). Re-clasificado de "BLOQUEADO por falta de datos" a "esperando una
+    medición propia". Puntos que definen el diseño: (1) **no** hay que medir la sala con el
+    EQ puesto — un EQ global es ganancia común y la invariancia ya está probada
+    analíticamente; el EQ se aplica numéricamente sobre las mediciones; (2) banda
+    20 Hz–min(120, 0.6·f_S), acotada por ppw≥15 y por el régimen M>1 donde la FRF puntual es
+    ill-posed; (3) grilla de **25 puntos = `default_receiver_grid`** (5×5 @ z=1.2), porque el
+    error del estimador de dispersión va como `1/√(2(N−1))`; (4) **requisito #1: no normalizar
+    por archivo**, que es lo que inutilizó los RIRs de TP7 para `fom_espacial`; (5) el control
+    es **A/B** (misma sala en dos estados o dos salas) y se valida que el modelo predice **el
+    cambio**, no un número aislado. Insumo del **paper B** de la tesis.
+  - **TEST VISUAL HECHO — el gate funciona; salió UN bug, arreglado.** El usuario probó:
+    salta la ventana → eligió "Absorción del 1%" para todas → f_S OK → cambió los materiales
+    → **f_S cambió pero el label seguía diciendo "Absorción del 1% en todas las caras"**.
+    Causa: `_refresh_abs_choice_label` imprimía un texto CONGELADO (`_abs_choice_txt`) escrito
+    una sola vez al resolver el gate. **Fix: el label ahora se DERIVA del estado actual** en
+    cada refresco (materiales asignados > α elegido, **el mismo orden de prioridad que
+    `_schroeder_context`**, que es el punto: el label existe para decir cuál de los dos se
+    usó). Enganchado en `_on_face_materials_applied` (choke point único de TODO cambio de
+    material: diálogo aplicado/recargado/cerrado y `apply_zone_materials`),
+    `_on_patches_applied` (los parches también mueven el RT) y `compute_and_show_schroeder`.
+    Muestra 1 material / hasta 3 enumerados / "N materiales por cara", y avisa las caras sin
+    asignar. **Regla general: si un label resume estado, derivarlo en el refresco; no guardar
+    el string.** Tests T15a-f.
+  - **Gotcha de testing headless:** `isVisible()` siempre da False sin ventana mostrada; para
+    verificar un `setVisible` explícito hay que usar `isHidden()` (mismo patrón que el toggle
+    de pesos de T8).
+  - **FALTA:** integrar al MANUAL (solo `.md` desde 19 Ago 2026).
+  - **Nuevo:** `bench_schroeder_autotuner.py` (27/27).
+
+- **18 Ago 2026 (cont.) — POLARIDAD como campo propio de la fuente. (v2.23, WIP)**
+  El usuario pidió "polaridad 0°/180° como toggle en editar fuente". **Ya existía desde
+  v2.13 (T5) pero mal puesta**, con tres problemas que la hacían inservible para su caso:
+  (1) no era toggle (checkbox + botón Aplicar, dentro del grupo Q(f)); (2) **`_apply_manual`
+  hacía `self._frd_raw = None` y reemplazaba `self._response` entero → invertir polaridad
+  BORRABA el FRD/TRF cargado** (fatal con las `Focal_L/R.trf`); (3) quedaba horneada en
+  `phase_rad` de la curva → **no se podía leer de vuelta**: al reabrir el diálogo o cargar un
+  `.room`, el checkbox salía destildado aunque la fuente estuviera invertida.
+  `bench_polarity.py` **22/22**; regresión verde (source_response, location_opt,
+  predict_location, sbir, trf 20/20, frd, furniture_ui 38/38, undo 5/5).
+  - **Diseño (aprobado por el usuario): `OmniSource.polarity: int = 1` (±1), ORTOGONAL a
+    `response`.** Rationale: la polaridad es del **cableado**, no del transductor. Un FRD/TRF
+    mide el parlante; dar vuelta los cables multiplica por −1. Componer es correcto,
+    reemplazar es error de modelado.
+  - **Se aplica en `effective_Q()`, un solo lugar.** Verificado que TODOS los caminos de
+    cómputo pasan por ahí (`effective_Q_spectrum` → `amplitudes_spectrum` → FRF / campo modal
+    / SBIR / FoM / T8, y también `amplitudes()` del path legacy `fem_modal.py`). Una línea y
+    lo agarran todos sin tocar ninguno. `polarity=+1` reduce **exacto** (T2 bit a bit).
+  - **UI:** toggle "Invertida (180°)" con label de estado, arriba junto a la sensibilidad.
+    **Se sacó `chk_invert` de la fila del atajo manual** (delay y fase se quedan: esos SÍ son
+    de dominio frecuencial). `_clear_resp` ya no toca la polaridad. Tag **`[180°]`** en la
+    lista de fuentes, al lado de `[MUTE]` — sin él una fuente invertida se veía idéntica a
+    una normal (el `∠` de la lista sale de `s.Q` CRUDO, que no lleva la polaridad).
+  - **`.room`:** `"polarity"` aditivo, `.get("polarity", 1)`, **sin bump de versión** (mismo
+    patrón que pitch/mounted).
+  - **T8 migrado también:** `location_opt.SourceLayout.to_source_array` mandaba la polaridad
+    por la curva; ahora va al campo. Numéricamente idéntico, pero las fuentes que el usuario
+    aplica desde una card de Ubicación llegan a Acústica con el toggle reflejando su estado.
+  - **BUG ADYACENTE ARREGLADO:** `_duplicate_source` perdía bafle/orientación/pitch/mounted/
+    active al duplicar (solo copiaba posición/Q/sens/response). Mismo tipo de bug que el del
+    drag arreglado en v2.13.
+  - **Limitación conocida y aceptada:** un `.room` viejo con polaridad horneada en su curva
+    sigue sonando igual (la curva no se toca) pero el toggle nuevo se ve en 0°. Se descartó
+    migrar detectando fase π: una curva medida puede tener fase cerca de π por razones
+    legítimas.
+  - **Reporte del test visual: "no hay cambio en el campo sonoro" con UNA fuente.
+    ES FÍSICA CORRECTA, no un bug — NO volver a perseguirlo.** Invertir la polaridad
+    multiplica el campo entero por −1; con una sola fuente eso es una **fase global**, y el
+    visor 3D muestra **|p|**. Medido end-to-end por el camino real (`pressure_field_3d`):
+    campo complejo `p₂ == −p₁` **exacto**, magnitud con diferencia máxima **0.000e+00**. La
+    fase absoluta de una fuente sola no es observable, punto. El otro modo del selector
+    Campo (*Forma modal*) muestra φₙ, que ni siquiera depende de la fuente. **Con DOS
+    fuentes sí se ve**: invertir una da mediana −9.7 dB en el campo (nulos de hasta −36.8) y
+    +9.2 dB en la FRF (rango −12.8 a +19.6). Con una fuente sola, el único lugar donde
+    aparece es la columna `phase_deg` del CSV/TXT exportado de la FRF. Oráculo permanente
+    T12a-d en `bench_polarity.py`.
+  - **Nuevo:** `bench_polarity.py` (26/26).
+
+- **18 Ago 2026 (cont.) — AUDITORÍA de la simulación: 2 bugs de resultado + 1 relleno.**
+  El usuario pidió auditar qué tan exacta es la simulación y dónde el soft "miente o padea".
+  Se encontraron dos bugs que devolvían números MAL sin avisar. `bench_irregular_sampling.py`
+  **17/17**; regresión verde en los 20 benches corridos.
+  - **⚠️ CAUSA RAÍZ COMÚN, VALE COMO REGLA: `np.nan_to_num` sobre una evaluación del
+    locator convierte "no pude" en "vale cero", y cero NO es neutro** — en dB es −600 y
+    arruina cualquier promedio o dispersión. **Y el motivo de que nadie lo viera: TODOS los
+    benches usaban shoebox**, donde el bounding box ES el recinto y no se pierde un punto.
+    Al auditar, probar SIEMPRE con planta irregular (pentágono / hexágono con taper / L).
+  - **A1 (grave) — `FoM_espacial` y corregibilidad EQ falsos en toda sala no rectangular.**
+    `default_receiver_grid` arma la grilla desde el **bbox**, no desde la planta; en planta
+    irregular caen puntos afuera; `_modal_terms` los ponía en φ=0. Medido:
+    pentágono 2/25 afuera → **72.93 dB en vez de 5.49**; hexágono con taper 4/25 → **98.28 vs
+    3.33**; planta en L 4/25 → **97.64 vs 5.50**. Contaminaba el label de FoM de la FRF (T9),
+    el overlay rojo de C13/C21 (spread disparado → todo "no ecualizable") y el
+    `LocationContext` de T8. **Fix:** `mm.receivers_inside()` nuevo;
+    `default_receiver_grid(locator=, phis=)` descarta los de afuera y **densifica 2× para no
+    perder tamaño de muestra** (los 4 recintos quedan con 25 válidos); `_modal_terms` ahora
+    **lanza ValueError** en vez de rellenar; panel y `LocationContext` pasan el locator.
+    Shoebox: grilla idéntica bit a bit (A1c).
+    **Ironía: `repair_layout` ya reparaba semillas de FUENTES fuera del recinto; a los
+    RECEPTORES nunca se les hizo.**
+  - **A2 — A36 perdía área de pared en silencio.** Mismo patrón en
+    `compute_xi_per_mode_per_face`: los centroides no ubicados pesaban 0 en el α_eff del modo.
+    Medido en pentágono a npm=2.5: **18.8 % de los triángulos y TRES paredes perdiendo el
+    50 % de su área**. **Fix:** se integra solo sobre centroides válidos y se **re-escala por
+    la cobertura de área de cada grupo** (estimador correcto de la integral con muestreo
+    parcial). Mismo fix en la cuadratura fina de `absorption_patch`. Verificado que material
+    uniforme sigue reduciendo **EXACTO** a Sabine global (dif rel 4e-16) pese a los perdidos.
+  - **B1 — ERROR MÍO en la auditoría, CORREGIDO en el test visual (18 Ago).** Afirmé que SBIR
+    rellenaba las caras sin material con α=0.03. **Falso:** el `FaceMaterialMap` SIEMPRE devuelve
+    su `default` ("Alfombra fina"), así que `_group_to_material_dict` da un material a TODA cara y
+    la rama `alpha=0.03` de `_open_sbir` es código muerto. El usuario lo vio directo ("no puedo
+    dejar una cara sin material"). SBIR nunca padeó con α=0.03; usa el default, igual que RT60/
+    f_S. El "padeo" real del default lo resuelve el **gate de absorción** (que subsume B1). El
+    aviso que agregué en `_open_sbir` es inofensivo pero casi-inalcanzable. **Lección: leer el
+    call-path COMPLETO (incluido el default del mapa) antes de declarar un padeo.**
+  - **Nota de cuadratura (no arreglado, conocido):** A36 usa **1 punto por triángulo y hay 2
+    triángulos por cara** → el peso modal de una pared entera sale de 2 muestras. Con un nodo
+    modal cruzando esa pared está aliaseado. La cuadratura fina de parches ya lo mide (~25 %
+    de brecha en ξ).
+  - **PENDIENTE DE DISCUSIÓN (punto 4 del plan): ξ desde Sabine.** Toda la absorción cuelga
+    de α → RT60 **Sabine** → `ξₙ=1.1/(fₙ·T60)`. Sabine es fórmula de **campo difuso** aplicada
+    **debajo de Schroeder**, que es por definición donde el campo NO es difuso. No es bug (la
+    alternativa C-matrix se descartó en D5b con residual acotado ~2 dB) pero es la
+    aproximación más fuerte de la cadena y no está marcada en ninguna pantalla. El usuario
+    preguntó si hay fórmulas de ξ(f) desde α sin pasar por RT.
+  - **Nuevo:** `bench_irregular_sampling.py`.
+
+- **18 Ago 2026 (cont.) — AMORTIGUAMIENTO POR PERTURBACIÓN DE FRONTERA. Etapa 1 hecha.**
+  Discusión larga a partir del punto 4 de la auditoría ("ξ desde Sabine es campo difuso bajo
+  Schroeder"). El usuario preguntó si hay fórmulas de ξ(f) desde α sin pasar por RT. **Sí**, y
+  se validó a fondo antes de tocar el soft. `bench_perturbation_xi.py` **18/18**; regresión
+  verde en 12 benches.
+  - **La fórmula (perturbación de 1er orden de la frontera):** `δ_n = (c/2)·Σ_g β_g(f_n)·∮_g φ_n² dS`,
+    `ξ_n = δ_n/ω_n`, con `∮φ²dV = 1` (M-ortonormalización, confirmado `phi^T M phi = I`).
+    **NO pasa por RT60.** Respaldo en DOS textos canónicos (los dos ahora en `referencias/`):
+    **Morse & Ingard 9.4.14** (vía función de Green + variacional, "good to second order" —
+    es literalmente la derivación por identidad de Green) y **Kuttruff 3.34** (vía la ecuación
+    trascendental del recinto rectangular). Órdenes superiores: existen (Rayleigh-Schrödinger)
+    pero el 2º orden tiene denominador degenerado `(η_m²−K_N²)` → explota con modos casi
+    degenerados (TP7 es 3.91×3.96, caso patológico) y equivale a hacer el problema exacto
+    (matriz C, descartado D5b). El 1er orden es el punto dulce: deja φ reales y `eigsh` intacto.
+  - **α→β por INVERSIÓN DE PARIS, no α/4** (GOTCHA que casi meto mal): `α_normal≈4β` pero
+    `α_aleatorio≈8β`, y el catálogo es incidencia aleatoria (ISO 354). Usar α/4 daba ~2× de
+    más amortiguamiento. `beta_from_alpha_random` invierte Paris numéricamente (tabla+interp,
+    numpy puro). Reacción local + Z real = el supuesto más débil de la cadena (pega en
+    materiales con cámara de aire).
+  - **Validación 1 (vs matriz C exacta, QEP `sla.eig` de tamaño 2N):** la perturbación clava
+    el exacto a **media 0.05 % (α=0.10), 0.63 % (α=0.30), 4.2 % (α=0.60)**. Sabine (bien
+    alimentada con α_random) yerra el PROMEDIO +17/−6/−18/−48 %. Y el spread real entre modos
+    (que Sabine colapsa a un número) va de 30 a 49 Np/s a α=0.3.
+  - **Validación 2 (vs RT60 medido TP7):** el medido cae en **percentil 60-89** de la
+    distribución modal = del lado LENTO (axial), como predice la teoría para un decaimiento
+    agregado. Caveat honesto: no es validación de NIVEL (invertí Sabine para el α → circular);
+    prueba la FORMA. El nivel absoluto necesita Z medida (tubo de Kundt) = protocolo §6c.
+    OJO: `rir.load_rir(f)` devuelve `(fs, ir)` y `rir.rt60_per_band(ir, fs)` (el usuario lo
+    corrigió en el script).
+  - **Sabine ES el límite de campo difuso de la perturbación** (el caso oblicuo, "todas las
+    direcciones"): `δ_oblicuo = cβS/V` y `δ_Sabine = 42.92·α·S/V` con `α≈8β` → los dos dan
+    `cβS/V`. No son rivales; Sabine es un caso particular. Figura de tesis.
+  - **Oráculo del cubo:** con material uniforme, `∮φ²dS/∮φ²dV = 2(εₗ/Lx+εₘ/Ly+εₙ/Lz)` →
+    spread **8:10:12** axial:tangencial:oblicuo. El bench lo da **exacto** (8.0:10.0:12.0).
+    El axial rinde más (solo golpea 2 de 6 caras) = resultado clásico H&A fig 6.38, el que
+    A36 dejó DIFERIDO. Factor 1.6 entre axial y oblicuo con material uniforme.
+  - **CUADRATURA: la clave técnica.** La perturbación necesita la integral de superficie
+    ABSOLUTA; A36 usa el COCIENTE (invariante a escala) y por eso le alcanza 1 pt/triángulo.
+    El absoluto con 1 pt da **43 % de error** (medido, no mejora refinando la malla); con
+    subdivisión de triángulos (subdiv=2/3) baja a **0.4 %**. Por eso `perturbation_xi_per_mode`
+    subdivide (helper `_subdivide_tris_indexed`) + re-escala por cobertura (fix A2). Esto
+    corrige la sospecha vieja de A36: no era "sensible a la malla escalonada", era a la
+    CUADRATURA.
+  - **DECISIÓN DE ARQUITECTURA (el usuario preguntó por qué no reemplazar directo):** el
+    amortiguamiento NO es una hoja. El RT60 de Sabine es hoy la única fuente de verdad de
+    "cuánto absorbe la sala" y cuelgan de él ~5 consumidores (panel RT60, f_Schroeder, f_cross
+    `B_HP=2.2/RT60`, targets de Predicción, SBIR). La perturbación da ξ POR MODO, sin un RT60
+    único. Reemplazo directo = o rutear todos esos por el modelo nuevo (Etapa 2, toca
+    f_Schroeder/cruce que recién ordenamos) o app incoherente consigo misma (el bug que
+    matamos con la doble f_Schroeder). **Por eso reemplazo ESCALONADO, no selectable-para-
+    siempre:** Etapa 1 = motor selectable para FRF/campo/FoM; Etapa 2 = RT60 efectivo por banda
+    = 6.91/⟨δ_pert⟩ y reconectar los escalares; Etapa 3 = default. El destino ES reemplazo.
+  - **Etapa 1 IMPLEMENTADA:** `fm.perturbation_xi_per_mode` + `fm.beta_from_alpha_random`;
+    `AcousticPanel._damping_model` ("a36"|"perturbation", default a36); combo "Amortiguamiento:"
+    en el grupo Materiales; `_on_damping_model_changed` recalcula ξ; dispatch en
+    `_compute_xi_from_materials` (compone con muebles; con parches presentes cae a A36 y avisa
+    una vez — pendiente Etapa 1.b); `.room` `damping_model` aditivo sin bump (viejo → a36).
+    **La Etapa 2 (reconectar escalares) es un paso deliberado aparte, NO metido de contrabando.**
+  - **Etapa 1.b HECHA (compone con parches):** `absorption_patch.compute_xi_per_mode_with_patches`
+    ahora toma `model="a36"|"perturbation"`. La maquinaria de teselado + slots + cobertura se
+    comparte entera; solo cambia el final del loop por modo (α_eff→Sabine vs β→δ absoluto). La
+    teselación fina de los parches ES la cuadratura que la perturbación necesita → más natural
+    que el caso sin parches (no hace falta subdividir). Wiring: con parches + perturbación el
+    panel llama esta variante en vez de caer a A36. Verificado (T8): parche = material del
+    anfitrión → no-op bit a bit (dif 2e-8) vs perturbación sin parches; parche absorbente sube
+    el ξ; `model="a36"` default intacto.
+  - **HECHO:** test visual humano del combo → OK (confirmado por el usuario, 19 Ago).
+    Integración al MANUAL → HECHA (changelog v2.23 completo hasta la línea ~2443:
+    gate de absorción + polaridad + fixes de auditoría + perturbación 1+1.b). El commit
+    `e9254b5 v2.23` NO está atrasado; el working tree está limpio.
+- **20 Ago 2026 — Etapa 2a de la perturbación HECHA (RT60 efectivo por banda).**
+  Decisión de modelado tomada por el usuario: **T30 por integral de Schroeder**, NO
+  `6.91/⟨δ⟩`. Razón (medida en shoebox 5×4×3): la media de tasas queda ~9-12 % por
+  debajo del T30 real porque la pendiente de una suma de exponenciales no es la media
+  de las tasas; la cola la manda el modo menos amortiguado (axial). El T30 por banda
+  revela que la banda de 32 Hz suena ~40 % más que Sabine (Sab/T30=0.72) = el resultado
+  físico que la perturbación existe para mostrar. Alcance elegido: **solo post-solve
+  (2a), seleccionable, default Sabine**. `bench_rt60_effective.py` **17/17**.
+  - **Núcleo:** `modal_metrics.rt60_by_band_from_modal_decay(freqs, deltas, bands, weights)`
+    + `_t30_of_decay`. La EDC de una suma de exponenciales es **cerrada y exacta**
+    `EDC(t)=Σ (w_n/2δ_n) e^{-2δ_n t}` → se evalúa analíticamente (sin cuadratura ni
+    truncación; el mono-exp da T30=6.91/δ a precisión de máquina). Pesos w_n iguales
+    (position-independent, conservador). δ_n = ξ_n·2π f_n.
+  - **Blend:** perturbación T30 en las bandas con modos (< f_S), Sabine en las bandas
+    de arriba (régimen difuso, donde Sabine SÍ vale). El cruce es la frontera física.
+  - **Un solo lugar (análogo a `_schroeder_context`):** `AcousticPanel._effective_rt60_
+    by_band(V, groups, g2m) → (rt_dict, src)`. Con `_damping_model=="a36"` reduce EXACTO
+    a `_sabine_rt60` (bit a bit). Usa la cache viva `_xi_per_mode` (no recomputa).
+  - **Ruteo:** `_rt60_callable` (→ f_cross/B_HP) y `_refresh_materials_summary`
+    (→ label "RT60 medio", con nota "T30 perturbación (banda modal)") pasan por el
+    helper. `_on_damping_model_changed` y `_on_face_materials_applied` refrescan label +
+    cruce (y recomputan ξ ANTES del label, para que no muestre el ξ de la asignación
+    anterior). Diálogo "Ver RT60": botón nuevo "+ Perturbación (T30)" vía
+    `_perturbation_rt60_by_band` (toggle-independiente; `_compute_xi_from_materials`
+    ganó un param `model=`).
+  - **FUERA de 2a (confirmado en el mapeo):** f_S/`_schroeder_context` (PRE-solve,
+    chicken-egg con el auto-tuner) = Etapa 2b; prediction (Sabine-forward por candidato,
+    sin modos) = paso aparte; **SBIR NO es consumidor de RT60** (usa α → R=√(1-α)),
+    así que las notas viejas lo listaban mal.
+  - **Nuevo:** `bench_rt60_effective.py`. MANUAL: changelog v2.24.
+
+- **20 Ago 2026 — Etapa 2b HECHA (f_Schroeder de dos pasadas).** `bench_rt60_effective.py`
+  ahora **21/21** (T10-T12 nuevos); `bench_schroeder_autotuner` 27/27 (regresión OK).
+  - **El chicken-egg y su solución:** f_S se necesita PRE-solve (dimensionar malla) pero
+    los δₙ existen POST-solve. Dos pasadas: (Pass 1) pre-solve → estimador Sabine para el
+    tamaño de malla; (Pass 2) post-solve con perturbación → f_S del T30 por banda.
+  - **Implementación mínima (clave):** `_schroeder_context` ahora usa
+    `_effective_rt60_by_band` en vez de `_sabine_rt60` directo. Como el helper cae a Sabine
+    sin modos, el pre-solve queda Sabine SOLO (Pass 1 automático) y el post-solve con
+    perturbación usa el T30 (Pass 2). Un re-solve con la misma geometría aprovecha el xi
+    de la pasada anterior (refinamiento iterativo); `on_geometry_changed` resetea
+    modal_result+xi, así que nunca se usa xi stale. Devuelve `rt_src` nuevo.
+  - **Coherencia post-solve:** `_post_solve_schroeder_coherence()` (llamado tras recomputar
+    xi en el flujo de solve): recalcula f_S con perturbación, refresca `lbl_schroeder`, y si
+    f_S > f_max de la malla (dimensionada con Sabine) **avisa** cuánto subir npm y re-resolver.
+    NO re-malla solo, NO abre el gate. Los graves más largos del T30 → f_S sube (medido +1%
+    con material poco reflectante; más con hormigón).
+  - **Auto-tuner:** se beneficia gratis (llama `_schroeder_context`): en un re-solve usa el
+    f_S de perturbación para dimensionar. El primer solve sigue Sabine (no hay modos).
+  - **PENDIENTE:** test visual humano (2a label/curva/f_cross + 2b f_S post-solve + aviso);
+    Etapa 2c (predicción) y Etapa 3 (default); módulo de modelado de Z (Capa 0, ortogonal).
+
+- **20 Ago 2026 — Etapa 2c HECHA (predicción de ubicación con ξ por modo).**
+  `bench_predict_location.py` con test nuevo `location_perturbation_damping` (TODOS OK).
+  - **Hallazgo:** el path de ubicación (`predict_locations`/`evaluate_design`, modo
+    location/combined) YA resuelve el FEM del recinto real (mr con phis/locator), pero
+    `_build_location_context` armaba el damping como ξₙ=1.1/(fₙ·RT) UNIFORME (un solo RT
+    para todos los modos). El de geometría (genera muchos candidatos sin FEM completo)
+    NO se toca: sigue Sabine-forward por diseño.
+  - **Implementación (self-contained en prediction.py):** `_perturbation_damping_for_location`
+    computa ξ por modo desde `inputs.surface_alpha` (α por banda por zona piso/paredes/techo,
+    envuelto en `_BandAlphaMaterial` que da `.alpha(f)`) vía `fm.perturbation_xi_per_mode`.
+    `_build_location_context` ganó `damping_model` (default "sabine", NO regresivo): con
+    "perturbation" + alpha_mode=="materials" usa la perturbación; si no, cae al uniforme.
+    Threading: `predict_locations`/`predict_combined`/`predict_axis`/`evaluate_design`.
+  - **Wiring UI:** `PredictionPanel(get_damping_model=...)` + `_damping_model_now()`; main.py
+    lo cablea a `lambda: acoustic._damping_model`. El gate solo dispara con =="perturbation"
+    (así "a36" cae a uniforme sin mapear). Medido: δ sabine CV≈0 (uniforme), δ perturbación
+    CV=27% (por modo).
+  - **Escalonamiento:** 1+1.b, 2a, 2b, 2c HECHAS.
+
+- **20 Ago 2026 — Etapa 3 (perturbación = DEFAULT) + Opción C (gate) + Nº modos.**
+  Test visual humano de TODO el ciclo: PASÓ (6/6 pasos, confirmado por el usuario).
+  `bench_schroeder_autotuner` **33/33** (T16 Opción C + T17 auto-carga), `bench_perturbation_xi`
+  21/21, `bench_rt60_effective` 21/21.
+  - **Etapa 3:** `_damping_model` init = "perturbation"; combo reordenado (perturbación
+    índice 0 = default), tooltip actualizado. `.room` viejo SIN la clave → carga "a36"
+    (reproducibilidad); nuevo guarda su modelo real. main.py load/save comentado. Se
+    reescribió `bench_perturbation_xi` T7 (ya no asume default a36).
+  - **Opción C (gate de materiales, pedido del usuario, decisión suya):** los modos φₙ/fₙ
+    son de pared rígida → el solve NO exige absorción. `_has_absorption_choice()` nuevo
+    (α elegido o ≥1 material). Sin elección: (a) `_solve_fem` avisa UNA vez por sesión
+    (`_warned_no_absorption`) que la malla usa α=0.05 y f_S/RT60/FRF no se muestran;
+    (b) label RT60 y f_S en "— asigná absorción"; (c) `_ensure_absorption_choice` ahora
+    devuelve bool y al CANCELAR NO pone α=0.05 silencioso (queda sin elegir); (d) el gate
+    salta en Calcular f_Schroeder y Calcular FRF (con warning si se cancela). Se sacó el
+    gate del auto-tuner del solve (el fallback α=0.05 de `_schroeder_context` dimensiona
+    la malla, conservador, sin diálogo).
+  - **Nº modos (request 2, alternativa elegida por el usuario):** al Calcular f_Schroeder,
+    `sb_nmodes` se auto-carga con Weyl(f_S) clampeado a 500 (antes default 12 → curva de
+    perturbación con 1 sola banda, causa de la confusión del test visual T2). "Calcular
+    modos" NO fuerza el N (respeta lo puesto). Sin absorción → no hay f_S → warning.
+  - **Escalonamiento COMPLETO:** 1+1.b, 2a, 2b, 2c, 3 HECHAS. Único pendiente grande:
+    **módulo de modelado de Z (Capa 0, ortogonal)** — próximo tema tras `/clear`.
+  - Nota del test visual (no bug): la curva T30 de perturbación queda por encima de
+    Sabine/Eyring en la banda modal (RT modal > difuso bajo Schroeder) y casi plana con
+    material uniforme. El usuario reportó "~1 arriba"; se ofreció revisar si fuera un orden
+    de magnitud.
+  - **Nuevo:** `bench_perturbation_xi.py` (21/21). Referencias sumadas: Kuttruff, Morse & Ingard.
+  - **BUG del test visual, ARREGLADO + confirmado por el usuario:** editar una fuente (incl.
+    invertir polaridad o cambiar TRF) **no recomputaba el campo |p|** → quedaba viejo en
+    pantalla. Solo *mover* la fuente disparaba `schedule_field_update()`; `_edit_source`/
+    `_remove_source`/`_duplicate_source` no. Agregado a los tres. (El cómputo del campo SIEMPRE
+    usó la polaridad vía `_active_sources()`; era solo el refresh.) **Confirmado en GUI.**
+    Recordatorio de física que el usuario reconfirmó: con UNA fuente el campo |p| no cambia al
+    invertir (fase global, `|p|` invariante); hace falta un par para verlo.
+  - **NO son bugs (verificado en test visual):** (a) sala viva (hormigón) pide ~1346 modos y
+    npm 7.4 → correcto, es el caso "cubrir f_S es carísimo". (b) 500 modos + npm 7.4 tarda ~2 min
+    → costo real de `eigsh`, no cuelgue; 500 modos rara vez hacen falta (mirar la sugerencia de
+    Weyl). (c) FoM casi igual entre Sabine (7.99) y perturbación (7.95) → el **FoM espacial es
+    insensible al damping por diseño** (validado en `bench_eq_xi_sensitivity`, span 0.24 dB); el
+    efecto de la perturbación se ve en la FORMA de los picos de la FRF, no en el FoM.
 
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug

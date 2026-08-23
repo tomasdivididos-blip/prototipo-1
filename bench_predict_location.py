@@ -378,6 +378,64 @@ def test_predict_location_pentagon_all_seeds_outside():
                f"semillas crudas fuera={n_bad}/6, preds={len(preds)}")
 
 
+def test_location_perturbation_damping():
+    """Etapa 2c: el FEM de ubicacion usa xi POR MODO (perturbacion) en vez del
+    1.1/(f_n·RT) uniforme, cuando damping_model='perturbation' y hay materiales
+    por superficie. El default 'sabine' queda intacto (uniforme)."""
+    from geometry import make_room
+    v, t, _e, _n = make_room(width=5.0, length=4.0, height=3.0, n_walls=4)
+    # Materiales por superficie: piso absorbente, paredes/techo reflectantes.
+    af = {125: 0.20, 250: 0.30, 500: 0.40, 1000: 0.50, 2000: 0.55}
+    aw = {125: 0.03, 250: 0.04, 500: 0.05, 1000: 0.06, 2000: 0.07}
+    inp = pr.PredictInputs(
+        use="estudio", program="mixto", priority=0.5,
+        capacity=8, m2_per_person=1.5, rt60_target=0.5, v_per_person=9.0,
+        width_max=None, length_max=None, height_max=None,
+        parallel_walls="permitir", roof_shape="plano",
+        alpha_mode="materials", surface_alpha=(af, aw, aw))
+    cand = pr.fixed_room_from_design(_PARAMS, surface=(v, t))
+
+    ctx_s = pr._build_location_context(cand, inp, surface=(v, t),
+                                       damping_model="sabine")
+    ctx_p = pr._build_location_context(cand, inp, surface=(v, t),
+                                       damping_model="perturbation")
+    d_s = np.asarray(ctx_s.damping, float)
+    d_p = np.asarray(ctx_p.damping, float)
+    # Necesitamos las freqs de los modos para pasar de xi a delta.
+    fr_s = np.asarray(ctx_s.freqs, float) if hasattr(ctx_s, "freqs") else None
+    ok = True
+
+    # a) sabine: xi = 1.1/(f·RT) -> delta = xi·2π·f = 2π·1.1/RT CONSTANTE.
+    if fr_s is not None and d_s.size == fr_s.size:
+        delta_s = d_s * 2 * np.pi * fr_s
+        cv_s = float(delta_s.std() / max(delta_s.mean(), 1e-12))
+        ok &= _ok("sabine: delta uniforme (xi ∝ 1/f)", cv_s < 1e-6,
+                  f"CV(delta)={cv_s:.2e}")
+        # b) perturbacion: delta NO constante (amortiguamiento por modo).
+        delta_p = d_p * 2 * np.pi * fr_s
+        cv_p = float(delta_p.std() / max(delta_p.mean(), 1e-12))
+        ok &= _ok("perturbacion: delta por modo (no uniforme)", cv_p > 0.10,
+                  f"CV(delta)={cv_p:.0%}")
+    # c) las dos difieren de verdad en el vector de damping.
+    ok &= _ok("los dos modelos dan damping distinto",
+              d_s.shape == d_p.shape and not np.allclose(d_s, d_p),
+              f"maxdif={np.max(np.abs(d_s - d_p)):.4f}")
+
+    # d) sin materiales (alpha_mode!='materials') la perturbacion cae al uniforme.
+    inp2 = pr.PredictInputs(
+        use="estudio", program="mixto", priority=0.5,
+        capacity=8, m2_per_person=1.5, rt60_target=0.5, v_per_person=9.0,
+        width_max=None, length_max=None, height_max=None,
+        parallel_walls="permitir", roof_shape="plano",
+        alpha_mode="target")
+    import acoustic_analysis as _aa
+    mr = _aa.run_fem_modal(v, t, n_modes=40, n_per_meter=2.0)
+    xi_none = pr._perturbation_damping_for_location(mr, v, t, inp2)
+    ok &= _ok("sin materiales -> perturbacion devuelve None (cae a uniforme)",
+              xi_none is None)
+    return ok
+
+
 def main():
     print("bench_predict_location.py — Fase B de T8 (3 modos) + evaluate_design\n")
     tests = [
@@ -399,6 +457,7 @@ def main():
         ("predict_location_irregular_real_mesh", test_predict_location_irregular_real_mesh),
         ("predict_location_irregular_sources_inside", test_predict_location_irregular_sources_inside),
         ("predict_location_pentagon_all_seeds_outside", test_predict_location_pentagon_all_seeds_outside),
+        ("location_perturbation_damping", test_location_perturbation_damping),
     ]
     all_ok = True
     for name, fn in tests:

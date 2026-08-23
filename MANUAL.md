@@ -2398,4 +2398,93 @@ Los dos chequeos automáticos tampoco lo detectaban, y quedaron corregidos:
 
 ---
 
-*Manual actualizado al 13 de Agosto de 2026 — v2.22.*
+**Cambios v2.23** (19 de agosto 2026): **frecuencia de Schroeder coherente**, **polaridad de fuentes**, **amortiguamiento por perturbación de frontera** (modelo nuevo) y **fixes de una auditoría de la simulación**. Seis ejes.
+
+### A. La frecuencia de Schroeder dejó de contradecirse a sí misma
+
+Había **dos** cálculos de la frecuencia de Schroeder que no se hablaban: el que muestra el panel (a partir del RT60 real de los materiales) y el que usa el auto-tuner de malla por dentro, que estaba clavado en un `α=0.05` fijo. Para la misma sala, en la misma sesión, la app decía dos números distintos y podían diferir hasta el doble. Como `f_Schroeder ∝ α^(−1/2)`, el error iba para los dos lados: una sala tratada mallaba el doble de fino de lo necesario (8× nodos al pedo), y una sala viva mallaba **sin cubrir el régimen modal, en silencio**. Ahora los dos salen del mismo lugar.
+
+Y cuando **ninguna** cara tiene material asignado, aparece una ventana que pregunta de dónde sale la absorción (un coeficiente α uniforme, un preset de sala, o un material del catálogo para todas las caras), en vez de usar por lo bajo el material que quedaba por defecto. La elección se recuerda por la sesión y se muestra en un renglón bajo la frecuencia de Schroeder, que se actualiza cada vez que cambian los materiales.
+
+### B. Densidad de malla hasta 30 y cobertura de modos honesta
+
+El tope del control **Densidad voxel** subió de 10 a **30**. El límite físico no es "α = 0" (que da una malla infinita: sin absorción el tiempo de reverberación diverge) sino la superficie más reflectante del catálogo (α = 0.01), que en la sala más chica pide una densidad de ~28. El tope de 30 la cubre.
+
+Además, cuando el presupuesto de modos no alcanza para llegar a la frecuencia de Schroeder (típico en salas vivas, donde harían falta miles de modos), el auto-tuner lo dice: informa hasta qué frecuencia llega la cobertura **real** con los modos pedidos, en vez de mallar para una banda que no se va a calcular. La leyenda de modos por Weyl también dejó de aconsejar "refiná la malla" cuando el cuello de botella es la cantidad de modos, no la resolución.
+
+### C. Polaridad de fuentes (0° / 180°)
+
+El editor de fuente tiene un interruptor **Polaridad: Invertida (180°)**. Invertir una fuente multiplica su aporte por −1 (la da vuelta en contrafase). Es una propiedad del cableado, **independiente** de la curva de respuesta (FRD/TRF) cargada: invertir la polaridad ya **no borra** la medición, se componen. El estado se lee de vuelta al reabrir el editor y en la lista de fuentes (etiqueta `[180°]`), y se guarda en el `.room`.
+
+> Con **una sola** fuente, invertir la polaridad no cambia el mapa de presión, porque el visor muestra la magnitud |p| y dar vuelta el signo no la altera (es física, no una falla). El efecto se ve con **dos o más** fuentes, donde cambia la interferencia: un par en contrafase produce cancelaciones profundas. También aparece en la fase exportada de la FRF.
+
+### D. Amortiguamiento por perturbación de frontera (modelo nuevo, seleccionable)
+
+En el grupo **Materiales** hay un selector **Amortiguamiento** con dos modelos de cómo la absorción se convierte en el amortiguamiento ξ de cada modo:
+
+- **Sabine por modo (A36)** — el de siempre: parte del RT60 de Sabine ponderado por la forma modal. Con material uniforme da el mismo tiempo de reverberación para todos los modos.
+- **Perturbación de frontera** — deriva ξ directamente de la admitancia de la pared y la integral de superficie de cada modo, **sin pasar por el RT60**. Con material uniforme **no** da lo mismo para todos los modos: captura que un modo axial (que golpea pocas paredes) se apaga más lento que uno oblicuo (que las golpea todas), un efecto real que Sabine no puede ver.
+
+Es teoría de perturbaciones de primer orden sobre los modos de pared rígida (Morse & Ingard, *Theoretical Acoustics*, Ec. 9.4.14; Kuttruff, *Room Acoustics*, Ec. 3.34). Se validó contra el problema de impedancia exacto: coincide a mejor del 1 % hasta absorciones medias (α ≈ 0.3) y ~4 % en absorciones altas, mientras que Sabine se aparta hasta un ±18 % del promedio de los modos. Un resultado ordenador: **Sabine resulta ser el caso límite de campo difuso de la perturbación** (el modo oblicuo, "todas las direcciones"). El coeficiente de absorción del catálogo (incidencia aleatoria) se convierte a admitancia con la fórmula de Paris.
+
+El modelo por defecto sigue siendo Sabine (A36): la perturbación se activa a propósito y no cambia ningún resultado sin que se lo pida. Se guarda en el `.room`.
+
+### E. Auditoría de la simulación: dos números que estaban mal en salas no rectangulares
+
+- **Uniformidad espacial (FoM) falsa fuera de la caja.** La grilla de receptores con la que se calcula la figura de mérito de uniformidad salía de la caja envolvente de la sala, así que en una planta no rectangular (pentágono, hexágono afinado, planta en L) parte de los puntos caía **fuera** del recinto y entraba al promedio con presión cero, que en decibeles es un valor enorme por lo bajo. Resultado: la uniformidad espacial se disparaba a ~70–98 dB cuando el valor real era ~5 dB. Ahora esos puntos se descartan (y la grilla se densifica para no perder tamaño de muestra), y el cálculo avisa en vez de rellenar con ceros. En una caja rectangular no cambia nada.
+- **Absorción de paredes oblicuas subestimada.** Por el mismo motivo (puntos de la superficie que no caían en la malla escalonada), el amortiguamiento perdía área de las paredes inclinadas en silencio. Ahora se integra solo sobre la superficie efectivamente muestreada y se re-escala por su cobertura.
+
+### F. Correcciones menores
+
+El campo de presión **se actualiza al editar una fuente** (antes solo se recomputaba al moverla, así que cambiar la polaridad o la curva por el diálogo dejaba el mapa viejo en pantalla). El renglón que informa de dónde sale la absorción sigue los cambios de material en vez de quedar congelado.
+
+---
+
+**Cambios v2.24** (20 de agosto 2026): **RT60 efectivo por banda desde la perturbación** (Etapa 2a). Cuando el modelo de amortiguamiento es **Perturbación de frontera** y hay modos resueltos, el tiempo de reverberación de la **banda modal** (por debajo de la frecuencia de Schroeder) ya no sale de Sabine sino del **decaimiento real de los modos**, y con eso se alimentan los números escalares que dependían de él.
+
+### RT60 efectivo: T30 del decaimiento modal, no la media de las tasas
+
+Cada modo tiene su propio amortiguamiento ξₙ (por eso existe el modelo de perturbación). Para colapsar ese conjunto en un RT60 por banda no se promedian las tasas: un conjunto de modos con decaimientos distintos **no** decae como una sola exponencial. Se arma la curva de energía de la banda como la suma de las exponenciales de sus modos, se integra a la Schroeder y se le mide la pendiente **T30** (−5 a −35 dB), que es la definición de norma (ISO 3382) del tiempo de reverberación. La media de tasas 6.91/⟨δ⟩ queda ~10 % por debajo de ese T30, porque la cola del decaimiento la manda el modo **menos amortiguado** (el axial). Medido en una sala de 5×4×3 m, la banda de 32 Hz suena **~40 % más** de lo que dice Sabine: son los modos axiales bajos ringueando, un efecto que Sabine (plano en α) no puede mostrar.
+
+Por encima del modo más alto (régimen difuso) el RT60 lo sigue dando Sabine, que ahí sí es válido. El cruce entre ambos es justo la frontera física entre el régimen modal y el difuso.
+
+### Qué cambia en pantalla (solo con el modelo de perturbación activo)
+
+- **RT60 medio** (grupo Materiales): con perturbación agrega la nota *«T30 perturbación (banda modal)»* y refleja el decaimiento por modo. Con Sabine (por defecto) no cambia ni un dígito.
+- **Ver RT60 calculado**: botón nuevo **«+ Perturbación (T30, banda modal)»** que superpone la curva T30 para compararla contra Sabine/Eyring. Requiere modos resueltos.
+- **Cruce de solapamiento modal (f_cross)**: el ancho de media potencia B_HP = 2.2/RT60 usa el RT60 de la perturbación en la banda modal, así que f_cross refleja el amortiguamiento por modo.
+
+### Frecuencia de Schroeder de dos pasadas (Etapa 2b)
+
+La frecuencia de Schroeder tiene un problema de orden: se necesita **antes** de resolver los modos, para dimensionar la malla, pero el amortiguamiento por modo solo existe **después** de resolverlos. Se resuelve en dos pasadas:
+
+- **Antes de resolver (dimensionar la malla):** f_Schroeder se estima con Sabine. Es un estimador de tamaño de malla, no un resultado físico, así que Sabine alcanza.
+- **Después de resolver (con el modelo de perturbación):** f_Schroeder se recalcula con el T30 por banda. Como los graves suenan más largo que lo que dice Sabine, f_Schroeder sube. El programa refresca el valor y, si la malla quedó corta para cubrir esa banda nueva, **avisa** cuánto subir la densidad y volver a resolver (no re-malla solo). Una segunda resolución ya usa este f_Schroeder refinado.
+
+### Predicción de ubicación con amortiguamiento por modo (Etapa 2c)
+
+La predicción de **ubicación** (colocar las fuentes en un recinto fijo) resuelve el FEM del recinto real, así que ahí también hay modos. Con el modelo de perturbación activo y materiales por superficie asignados, el optimizador de ubicación usa el amortiguamiento **por modo** de la perturbación en lugar del ξ uniforme (un solo RT para todos los modos). Esto hace que las figuras de mérito con las que se rankean las ubicaciones vean el mismo amortiguamiento selectivo que la pestaña Acústica. Sin materiales por superficie (o con el modelo Sabine), sigue con el ξ uniforme de siempre.
+
+La predicción de **geometría** (que genera y compara muchas salas candidatas) sigue con Sabine: no tiene sentido resolver el FEM completo de cada candidato solo para el ranking de formas.
+
+### La perturbación es ahora el modelo por defecto (Etapa 3)
+
+Con la frecuencia de Schroeder, el cruce modal, el RT60 y la predicción de ubicación ya coherentes con el modelo elegido, la perturbación de frontera pasa a ser el **modelo por defecto** de una sesión nueva: es más exacta que Sabine por debajo de Schroeder (validada a mejor del 1 % contra el problema de impedancia exacto hasta α ≈ 0.3), que es el objetivo del programa. Sabine sigue disponible en el combo (es el límite de campo difuso de la perturbación).
+
+Compatibilidad hacia atrás: un archivo `.room` guardado antes de esta versión (sin el dato del modelo) se abre en **Sabine**, para conservar exactamente los números con los que se guardó. Un `.room` nuevo guarda su modelo real, así que reabrirlo lo restaura tal cual.
+
+### La absorción es un dato consciente, no un default silencioso (Opción C)
+
+Un número físico no debería salir de una absorción que no elegiste. Ahora:
+
+- **Calcular los modos NO exige absorción.** Las frecuencias y formas modales son de pared rígida, no dependen del material, así que se resuelven igual. Si no elegiste absorción, aparece un aviso: los modos son válidos, la malla se dimensiona con un α = 0.05 conservador, y la frecuencia de Schroeder, el RT60 y la FRF no se muestran hasta que asignes materiales o un α.
+- **Los números que dependen del material quedan en «— asigná absorción»** hasta que elijas: el RT60 medio y la frecuencia de Schroeder.
+- **Al pedir un número dependiente del material** (Calcular f_Schroeder, Calcular FRF) se abre el diálogo de absorción. Si lo cancelás, la absorción queda sin elegir (ya no se asume un α = 0.05 por lo bajo).
+
+### Nº de modos necesario para cubrir hasta f_Schroeder
+
+Al **Calcular f_Schroeder**, el campo «Nº modos» se **auto-carga** con la cantidad de modos necesaria para cubrir hasta esa frecuencia (densidad de Weyl), topeada en 500. Así la primera corrida ya llena todas las bandas por debajo de f_Schroeder (antes, con pocos modos, la curva de RT de la perturbación mostraba una sola banda). Si la sala pide más de 500 modos (salas muy vivas), lo deja en el tope y avisa que cubrir f_Schroeder por completo no es alcanzable ahí. Si todavía no elegiste absorción, no se puede calcular f_Schroeder y sale el aviso correspondiente.
+
+---
+
+*Manual actualizado al 20 de Agosto de 2026 — v2.24.*

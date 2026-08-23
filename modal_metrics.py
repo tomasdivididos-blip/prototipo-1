@@ -33,12 +33,37 @@ from sources import RHO0, C0
 # ---------------------------------------------------------------------------
 # Grilla de receptores por defecto (§8.5)
 # ---------------------------------------------------------------------------
+def receivers_inside(locator, phis: np.ndarray,
+                     receivers: np.ndarray) -> np.ndarray:
+    """Mascara (N_R,) True para los receptores que el locator SI puede evaluar.
+
+    Un punto fuera de la malla devuelve NaN. Si ese NaN se convierte en 0 (como
+    hacia `_modal_terms` hasta v2.23), el receptor entra al promedio con presion
+    nula = -600 dB: un outlier que hace explotar la dispersion espacial. Medido:
+    en un pentagono 2/25 puntos afuera llevaban `FoM_espacial` de 5.5 a 72.9 dB.
+    """
+    receivers = np.atleast_2d(np.asarray(receivers, dtype=float))
+    if receivers.size == 0:
+        return np.zeros(0, dtype=bool)
+    vals = locator.evaluate_many(phis[:, 0], receivers)
+    return np.isfinite(np.real(vals))
+
+
 def default_receiver_grid(nodes: np.ndarray, nx: int = 5, ny: int = 5,
                           z: float = 1.2, central_frac: float = 0.60,
-                          wall_margin: float = 0.5) -> np.ndarray:
+                          wall_margin: float = 0.5,
+                          locator=None, phis: np.ndarray = None) -> np.ndarray:
     """Grilla nx×ny a altura de oido sobre el `central_frac` central de la
     planta, excluyendo `wall_margin` de cada pared (evita el peor-caso de
-    esquina del paper). Devuelve (nx*ny, 3)."""
+    esquina del paper).
+
+    La grilla sale del **bounding box** de los nodos, asi que en una planta NO
+    rectangular (pentagono, L, hexagono con taper) parte de los puntos cae
+    FUERA del recinto. Pasando `locator` (+ `phis`) esos puntos se descartan, y
+    si se cae mucho por debajo de nx*ny se re-muestrea mas denso para conservar
+    un tamano de muestra util. Sin `locator` el comportamiento es el historico
+    (util para shoebox, donde no se pierde ningun punto).
+    """
     nodes = np.asarray(nodes, dtype=float)
     xmin, ymin, zmin = nodes.min(axis=0)
     xmax, ymax, zmax = nodes.max(axis=0)
@@ -55,10 +80,35 @@ def default_receiver_grid(nodes: np.ndarray, nx: int = 5, ny: int = 5,
     ax, bx = span(xmin, xmax)
     ay, by = span(ymin, ymax)
     zc = float(np.clip(z, zmin + 0.1, zmax - 0.1))
-    xs = np.linspace(ax, bx, nx)
-    ys = np.linspace(ay, by, ny)
-    X, Y = np.meshgrid(xs, ys, indexing="ij")
-    return np.column_stack([X.ravel(), Y.ravel(), np.full(X.size, zc)])
+
+    def build(mx, my):
+        xs = np.linspace(ax, bx, mx)
+        ys = np.linspace(ay, by, my)
+        X, Y = np.meshgrid(xs, ys, indexing="ij")
+        return np.column_stack([X.ravel(), Y.ravel(), np.full(X.size, zc)])
+
+    grid = build(nx, ny)
+    if locator is None or phis is None:
+        return grid
+
+    want = nx * ny
+    ok = receivers_inside(locator, phis, grid)
+    if ok.all():
+        return grid
+    # Se perdieron puntos: densificar y quedarse con `want` validos repartidos
+    # parejo (no los primeros, que sesgarian hacia una esquina de la planta).
+    dense = build(2 * nx, 2 * ny)
+    ok_d = receivers_inside(locator, phis, dense)
+    cand = dense[ok_d]
+    if len(cand) >= want:
+        idx = np.linspace(0, len(cand) - 1, want).astype(int)
+        return cand[idx]
+    # Ni densificando alcanza: devolver lo que haya (mejor pocos validos que
+    # muchos con ceros inventados). Si no queda ninguno, el centroide.
+    if len(cand) > 0:
+        return cand
+    keep = grid[ok]
+    return keep if len(keep) else nodes.mean(axis=0)[None, :]
 
 
 # ---------------------------------------------------------------------------
@@ -90,10 +140,23 @@ def _modal_terms(locator, freqs, phis, sources, receivers, freq_axis, damping,
           else np.asarray(damping, dtype=float)[:Nm])
 
     # phi en receptores (N_R, Nm) y en fuentes (Ns, Nm).
+    # Un receptor FUERA de la malla da NaN. Convertirlo a 0 (lo que se hacia
+    # hasta v2.23) lo mete al promedio con presion nula = -600 dB y arruina
+    # toda metrica espacial SIN avisar. Ahora falla fuerte: el caller tiene que
+    # filtrar con `receivers_inside` / `default_receiver_grid(locator=...)`.
     phi_r = np.zeros((N_R, Nm), dtype=float)
     for n in range(Nm):
         vals = locator.evaluate_many(phis[:, n], receivers)
-        phi_r[:, n] = np.nan_to_num(vals.real)
+        re = vals.real
+        if n == 0:
+            bad = ~np.isfinite(re)
+            if bad.any():
+                raise ValueError(
+                    f"{int(bad.sum())} de {N_R} receptores caen FUERA de la "
+                    f"malla (el bounding box no es el recinto). Filtralos con "
+                    f"modal_metrics.receivers_inside(...) o pedí la grilla con "
+                    f"default_receiver_grid(..., locator=..., phis=...).")
+        phi_r[:, n] = np.nan_to_num(re)
     src_pos = sources.positions()
     Ns = len(src_pos)
     phi_s = np.zeros((Ns, Nm), dtype=float)
@@ -525,6 +588,106 @@ def modal_density(freqs: np.ndarray, f_grid: np.ndarray,
     counts = np.array([np.count_nonzero((fr >= a) & (fr < b))
                        for a, b in zip(lo, hi)], dtype=float)
     return counts / np.maximum(width, 1e-9)
+
+
+# ---------------------------------------------------------------------------
+# RT60 efectivo por banda desde el amortiguamiento modal (Etapa 2a, v2.24)
+# ---------------------------------------------------------------------------
+# Bandas de octava estandar (mismas claves int que material_library.BANDS).
+_OCTAVE_CENTERS = (63, 125, 250, 500, 1000, 2000, 4000, 8000)
+
+
+def _t30_of_decay(deltas: np.ndarray,
+                  weights: np.ndarray,
+                  lo_db: float = -5.0,
+                  hi_db: float = -35.0,
+                  n_t: int = 4000) -> float:
+    """T30 (RT60) por integral de Schroeder del decay sintetico de una banda.
+
+        E(t) = sum_n w_n exp(-2 delta_n t)        (delta_n = tasa de AMPLITUD)
+        EDC(t) = INT_t^inf E dt'  (integral de Schroeder hacia atras)
+        RT60 = -60 / pendiente[dB/s] de 10 log10 EDC, ajustada entre lo_db y hi_db
+
+    Devuelve nan si la EDC no baja hasta hi_db dentro de la ventana temporal
+    (el llamador cae a 6.91/<delta> en ese caso).
+
+    La integral de Schroeder de una SUMA de exponenciales es cerrada y EXACTA:
+        EDC(t) = INT_t^inf sum_n w_n e^{-2 d_n t'} dt' = sum_n (w_n/2 d_n) e^{-2 d_n t}
+    -> se evalua analiticamente (sin cuadratura ni truncacion; el mono-exp da
+    T30 = 6.91/delta a precision de maquina).
+    """
+    d = np.asarray(deltas, dtype=float)
+    w = np.asarray(weights, dtype=float)
+    d_min = float(d.min())
+    if d_min <= 0:
+        return float("nan")
+    # t_end pasa holgadamente de -35 dB para el modo mas lento (aqui ~-52 dB).
+    t_end = 6.0 / d_min
+    t = np.linspace(0.0, t_end, int(n_t))
+    coef = w / (2.0 * d)                          # w_n / (2 d_n)
+    edc = (coef[:, None] * np.exp(-2.0 * d[:, None] * t[None, :])).sum(axis=0)
+    edc = edc / max(float(edc[0]), 1e-300)       # 0 dB en t=0
+    L = 10.0 * np.log10(np.maximum(edc, 1e-30))
+    i0 = int(np.argmax(L <= lo_db))
+    i1 = int(np.argmax(L <= hi_db))
+    if i1 <= i0:
+        return float("nan")
+    slope = float(np.polyfit(t[i0:i1], L[i0:i1], 1)[0])   # dB/s
+    if slope >= 0:
+        return float("nan")
+    return -60.0 / slope
+
+
+def rt60_by_band_from_modal_decay(freqs: np.ndarray,
+                                  deltas: np.ndarray,
+                                  bands=None,
+                                  weights: Optional[np.ndarray] = None) -> dict:
+    """RT60 por banda desde los decaimientos modales delta_n [Np/s] (Etapa 2a).
+
+    Es la definicion de norma (ISO 3382, pendiente de la curva de decaimiento)
+    aplicada al decay SINTETICO del modelo de perturbacion de frontera: cada
+    banda arma su energia como la SUMA de las exponenciales de sus modos y se le
+    mide el T30 (ver `_t30_of_decay`).
+
+    Por que NO 6.91/<delta>: la pendiente de una suma de exponenciales no es la
+    media de las tasas. La cola del decaimiento la domina el modo MENOS
+    amortiguado (axial), asi que la pendiente real es mas chata (RT mas largo).
+    Sesgo medido ~9-12% (shoebox 5x4x3, alpha 0.1-0.3); el T30 revela que la
+    banda de 32 Hz suena ~40% mas que lo que dice Sabine. Solo cuando la banda
+    tiene un unico modo el T30 coincide con 6.91/delta (decay mono-exponencial).
+
+    Pesos w_n: por defecto iguales (misma energia inicial por modo) -> RT
+    independiente de posicion y conservador (lo manda el modo lento). Pasar
+    w_n = |a_n(receptor)|^2 daria un RT resuelto en posicion.
+
+    delta_n = xi_n * 2*pi*f_n (tasa de amplitud). Devuelve {banda_centro(int):
+    RT60} solo para las bandas con >=1 modo con delta>0. Bandas por encima del
+    modo mas alto (regimen difuso) las resuelve Sabine en el llamador.
+    """
+    freqs = np.asarray(freqs, dtype=float)
+    deltas = np.asarray(deltas, dtype=float)
+    if freqs.size == 0 or deltas.size != freqs.size:
+        return {}
+    if bands is None:
+        bands = _OCTAVE_CENTERS
+    if weights is None:
+        weights = np.ones_like(freqs)
+    else:
+        weights = np.asarray(weights, dtype=float)
+
+    out: dict = {}
+    root2 = np.sqrt(2.0)
+    for fc in bands:
+        lo, hi = fc / root2, fc * root2
+        m = (freqs >= lo) & (freqs < hi) & (deltas > 0)
+        if not np.any(m):
+            continue
+        d, w = deltas[m], weights[m]
+        rt = _t30_of_decay(d, w)
+        if not np.isfinite(rt) or rt <= 0:
+            rt = 6.91 / float(np.average(d, weights=w))   # fallback mono-exp
+        out[int(fc)] = float(rt)
+    return out
 
 
 def modal_overlap_crossover(freqs: np.ndarray,

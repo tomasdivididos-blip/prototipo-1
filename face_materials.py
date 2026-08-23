@@ -508,11 +508,28 @@ def compute_xi_per_mode_per_face(
         return None
 
     # J_g(n) = sum_{tri in g} area_tri * |phi_n(centroide_tri)|^2
+    #
+    # Los centroides que el locator NO ubica dan NaN. Convertirlos a 0 (lo que
+    # se hacia hasta v2.23) los hacia pesar CERO en el alpha_eff del modo, en
+    # silencio: con paredes oblicuas la superficie de render (lisa) no coincide
+    # con la malla voxel (escalonada) y se perdia area de verdad — medido en un
+    # pentagono a npm=2.5: 18.8 % de los triangulos, y TRES paredes perdiendo
+    # el 50 % de su area. Ahora se integra solo sobre los centroides validos y
+    # se RE-ESCALA por la cobertura de area de cada grupo, que es el estimador
+    # correcto de la integral cuando se muestrea una fraccion de la superficie.
+    valid = np.isfinite(np.real(locator.evaluate_many(phis[:, 0], cen)))
+    area_tot_g = np.zeros(Ng, dtype=float)     # area real de cada grupo
+    area_ok_g = np.zeros(Ng, dtype=float)      # area efectivamente muestreada
+    np.add.at(area_tot_g, gid, area_v)
+    np.add.at(area_ok_g, gid[valid], area_v[valid])
+    scale = np.where(area_ok_g > 0, area_tot_g / np.maximum(area_ok_g, 1e-12), 0.0)
+
     J = np.zeros((Nm, Ng), dtype=float)
     for n in range(Nm):
-        vals = locator.evaluate_many(phis[:, n], cen)        # complejo (Nt_valid,)
-        p2 = np.nan_to_num(np.real(vals)) ** 2 * area_v
+        vals = locator.evaluate_many(phis[:, n], cen)        # complejo (Nt,)
+        p2 = np.where(valid, np.nan_to_num(np.real(vals)) ** 2, 0.0) * area_v
         np.add.at(J[n], gid, p2)
+        J[n] *= scale                    # extrapola a la superficie completa
 
     xi = np.empty(Nm, dtype=float)
     for n in range(Nm):
@@ -531,6 +548,164 @@ def compute_xi_per_mode_per_face(
         alpha_eff = max(alpha_eff, 1e-6)
         T60 = 0.161 * V / (S_total * alpha_eff)
         xi[n] = 1.1 / max(fn * T60, 1e-9)
+    return xi
+
+
+# ---------------------------------------------------------------------------
+# Amortiguamiento por PERTURBACION DE FRONTERA de 1er orden (v2.23)
+#
+# Morse & Ingard, Theoretical Acoustics (1968), Ec. 9.4.14 (via funcion de
+# Green + variacional; "good to second order"). Kuttruff, Room Acoustics,
+# Ec. 3.34 (via la ecuacion trascendental del recinto rectangular). Las dos
+# dan lo mismo. Validado numericamente contra el problema de autovalores
+# complejos exacto (matriz C de impedancia): <1% hasta alpha~0.3, ~4% a 0.6.
+#
+# A DIFERENCIA de A36 (Sabine por modo): NO pasa por RT60. Usa la admitancia
+# beta de la pared y la integral de superficie ABSOLUTA de la forma modal:
+#
+#     delta_n = (c/2) * sum_g beta_g(f_n) * INT_g phi_n^2 dS      [Np/s]
+#     xi_n    = delta_n / omega_n
+#
+# con INT phi^2 dV = 1 (modos M-ortonormalizados, phi^T M phi = I). Con
+# material UNIFORME NO reduce a Sabine: da el spread axial/tangencial/oblicuo
+# (8:10:12 en un cubo) que Sabine no puede ver. Ese es el punto.
+# ---------------------------------------------------------------------------
+
+def _alpha_random_of_beta(beta: np.ndarray) -> np.ndarray:
+    """alpha de incidencia ALEATORIA para una pared de admitancia real beta
+    (reaccion local), por la formula de Paris:
+
+        alpha_rand(beta) = INT_0^{pi/2} alpha(theta) sin(2 theta) d theta
+        alpha(theta) = 1 - |(cos theta - beta)/(cos theta + beta)|^2
+
+    El peso sin(2 theta) = 2 sin cos junta el elemento de angulo solido
+    (sin theta) con la proyeccion de Lambert (cos theta) del campo difuso.
+    Integral por trapecios (numpy puro, sin scipy)."""
+    beta = np.atleast_1d(np.asarray(beta, dtype=float))
+    th = np.linspace(0.0, np.pi / 2.0, 2001)
+    ct = np.cos(th)[None, :]                          # (1, Nth)
+    b = beta[:, None]                                 # (Nb, 1)
+    R = (ct - b) / (ct + b)
+    integrand = (1.0 - R ** 2) * np.sin(2.0 * th)[None, :]
+    return np.trapz(integrand, th, axis=1)            # (Nb,)
+
+
+# Tabla de inversion de Paris, precomputada una vez. alpha_rand(beta) es
+# monotona creciente en beta sobre (0, 1] (beta=1 = pared adaptada, alpha=1),
+# asi que se invierte con np.interp.
+_PARIS_BETA_GRID = np.geomspace(1e-4, 1.0, 600)
+_PARIS_ALPHA_GRID = _alpha_random_of_beta(_PARIS_BETA_GRID)
+
+
+def beta_from_alpha_random(alpha) -> np.ndarray:
+    """Invierte Paris: alpha de catalogo (incidencia aleatoria) -> admitancia
+    especifica beta de la pared. Vectorizado. Clampa alpha al rango [alpha_min,
+    ~1] de la tabla. OJO: asume REACCION LOCAL (Z sin dependencia angular) y Z
+    REAL -> es el supuesto mas debil de la cadena; para materiales con camara
+    de aire (reaccion extendida) es aproximado."""
+    a = np.clip(np.asarray(alpha, dtype=float),
+                _PARIS_ALPHA_GRID[0], _PARIS_ALPHA_GRID[-1])
+    return np.interp(a, _PARIS_ALPHA_GRID, _PARIS_BETA_GRID)
+
+
+def _subdivide_tris_indexed(P: np.ndarray, gid: np.ndarray, levels: int):
+    """Subdivide cada triangulo en 4 (midpoint) `levels` veces, arrastrando el
+    indice de grupo. Devuelve (P_fino (Nt',3,3), gid_fino (Nt',)).
+
+    Necesario porque la perturbacion pide la integral de superficie ABSOLUTA:
+    con 1 punto por triangulo (como A36) el error es ~43% (medido); con subdiv
+    da <1%. El error de A36 se cancelaba porque usa el COCIENTE de integrales."""
+    for _ in range(int(levels)):
+        m01 = 0.5 * (P[:, 0] + P[:, 1])
+        m12 = 0.5 * (P[:, 1] + P[:, 2])
+        m20 = 0.5 * (P[:, 2] + P[:, 0])
+        P = np.concatenate([
+            np.stack([P[:, 0], m01, m20], axis=1),
+            np.stack([m01, P[:, 1], m12], axis=1),
+            np.stack([m20, m12, P[:, 2]], axis=1),
+            np.stack([m01, m12, m20], axis=1)], axis=0)
+        gid = np.tile(gid, 4)
+    return P, gid
+
+
+def perturbation_xi_per_mode(
+    freqs: np.ndarray,
+    phis: np.ndarray,
+    locator,
+    verts: np.ndarray,
+    tris: np.ndarray,
+    groups: List[FaceGroup],
+    group_to_material: Dict[str, "object"],
+    V: float,
+    default_alpha: float = 0.03,
+    subdiv: int = 2,
+    c: float = 343.0,
+) -> Optional[np.ndarray]:
+    """xi_n por perturbacion de frontera de 1er orden (ver cabecera de seccion).
+
+    Firma paralela a `compute_xi_per_mode_per_face` (A36) para que el panel
+    pueda despachar a una u otra sin cambiar el resto del cableado (muebles,
+    parches, materiales por cara se pasan igual, ya componen en `groups`/`g2m`).
+
+    Devuelve xi (Nm,) o None si no hay caras/datos.
+    """
+    if phis is None or len(groups) == 0 or locator is None:
+        return None
+    freqs = np.asarray(freqs, dtype=float)
+    Nm = int(phis.shape[1])
+    if Nm == 0 or freqs.size < Nm or V <= 0:
+        return None
+
+    tris = np.asarray(tris, dtype=int)
+    Nt = len(tris)
+    if Nt == 0:
+        return None
+    Ng = len(groups)
+
+    # triangulo -> grupo
+    tri_group = np.full(Nt, -1, dtype=int)
+    for gi, g in enumerate(groups):
+        tri_group[np.asarray(g.face_indices, dtype=int)] = gi
+    keep = tri_group >= 0
+    if not np.any(keep):
+        return None
+
+    # Cuadratura fina (geometria, independiente del modo -> se arma una vez).
+    P0 = verts[tris[keep]]                                # (Nt_keep, 3, 3)
+    P, gid = _subdivide_tris_indexed(P0, tri_group[keep], subdiv)
+    cen = P.mean(axis=1)                                  # (Nq, 3)
+    area = 0.5 * np.linalg.norm(
+        np.cross(P[:, 1] - P[:, 0], P[:, 2] - P[:, 0]), axis=1)
+
+    # Cobertura por grupo (mismo criterio que A36/A2): los puntos que caen fuera
+    # de la malla escalonada se descartan y se re-escala por area muestreada.
+    valid = np.isfinite(np.real(locator.evaluate_many(phis[:, 0], cen)))
+    area_tot_g = np.bincount(gid, weights=area, minlength=Ng)
+    area_ok_g = np.bincount(gid[valid], weights=area[valid], minlength=Ng)
+    cover = np.where(area_ok_g > 0,
+                     area_tot_g / np.maximum(area_ok_g, 1e-12), 0.0)
+
+    # alpha -> beta por grupo y por banda del catalogo. Se cachea por (grupo,
+    # frecuencia unica) para no reinvertir Paris en cada modo.
+    xi = np.empty(Nm, dtype=float)
+    beta_cache: Dict[tuple, np.ndarray] = {}
+    for n in range(Nm):
+        fn = float(freqs[n])
+        vals = locator.evaluate_many(phis[:, n], cen)
+        w = np.where(valid, np.nan_to_num(np.real(vals)) ** 2, 0.0) * area
+        # INT_g phi^2 dS  (phi M-normalizada -> INT phi^2 dV = 1)
+        Sg = np.bincount(gid, weights=w, minlength=Ng) * cover
+        key = round(fn, 3)
+        beta_g = beta_cache.get(key)
+        if beta_g is None:
+            alpha_g = np.array(
+                [_alpha_for(g, group_to_material, fn, default_alpha)
+                 for g in groups], dtype=float)
+            beta_g = beta_from_alpha_random(alpha_g)
+            beta_cache[key] = beta_g
+        delta = 0.5 * c * float((beta_g * Sg).sum())     # Np/s
+        omega_n = 2.0 * np.pi * fn
+        xi[n] = delta / max(omega_n, 1e-9)
     return xi
 
 

@@ -357,7 +357,7 @@ class PredictionPanel(QWidget):
     applyMaterialsRequested = pyqtSignal(object)  # (floor_name, walls_name, ceiling_name)
 
     def __init__(self, get_design_params=None, get_sources=None,
-                 get_surface=None, parent=None):
+                 get_surface=None, get_damping_model=None, parent=None):
         """get_design_params: callable que devuelve los params del ControlPanel
         actuales (lo que el usuario haya diseñado en la pestaña Geometría).
         Si es None, el botón 'Evaluar mi diseño actual' queda deshabilitado.
@@ -376,6 +376,10 @@ class PredictionPanel(QWidget):
         self._get_design_params = get_design_params
         self._get_sources = get_sources
         self._get_surface = get_surface
+        # Etapa 2c: modelo de amortiguamiento de la Acustica ("a36"|"perturbation").
+        # Con "perturbation" y materiales por superficie, el FEM de ubicacion usa
+        # xi POR MODO en vez del 1.1/(f_n·RT) uniforme. None -> "sabine" (default).
+        self._get_damping_model = get_damping_model
         # Eleccion de como ponderar una forma irregular: None | "aabb" | "none".
         self._shape_choice = None
         # Eleccion de absorcion de superficies (gate de materiales). None hasta
@@ -924,6 +928,18 @@ class PredictionPanel(QWidget):
         self._update_abs_label()
         return True
 
+    def _damping_model_now(self) -> str:
+        """Modelo de amortiguamiento a usar en el FEM de ubicacion (Etapa 2c).
+        Lee el toggle de la Acustica via callback; "perturbation" activa el xi
+        POR MODO (si hay materiales por superficie). Cualquier otra cosa -> el
+        xi uniforme de siempre (no regresivo)."""
+        if self._get_damping_model is None:
+            return "sabine"
+        try:
+            return self._get_damping_model() or "sabine"
+        except Exception:
+            return "sabine"
+
     def _on_predict(self):
         # Gate de materiales: si no eligio absorcion, avisar y ofrecer opciones.
         if self._abs_choice is None:
@@ -970,7 +986,8 @@ class PredictionPanel(QWidget):
         try:
             preds = pr.predict_axis(inputs, mode=mode, fixed_candidate=fixed,
                                     weights=weights, progress=_prog,
-                                    surface=surface)
+                                    surface=surface,
+                                    damping_model=self._damping_model_now())
         except Exception as e:
             prog.close()
             QMessageBox.critical(
@@ -1137,7 +1154,8 @@ class PredictionPanel(QWidget):
             pred = pr.evaluate_design(params, inputs, mode=mode,
                                       sources=sources, weights=weights,
                                       surface=surface, shape_mode=shape_mode,
-                                      progress=_prog)
+                                      progress=_prog,
+                                      damping_model=self._damping_model_now())
         except Exception as e:
             prog.close()
             self._eval_timer.fail("error")

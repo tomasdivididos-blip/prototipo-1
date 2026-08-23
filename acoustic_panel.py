@@ -31,7 +31,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QListWidget, QListWidgetItem, QDoubleSpinBox, QSpinBox,
     QComboBox, QCheckBox, QSlider, QFileDialog, QMessageBox, QDialog,
     QDialogButtonBox, QLineEdit, QProgressBar, QSizePolicy, QFrame,
-    QScrollArea, QMenu,
+    QScrollArea, QMenu, QRadioButton, QButtonGroup,
 )
 
 from sources import OmniSource, SourceArray, RHO0, C0
@@ -52,6 +52,7 @@ except ImportError:
 from pathlib import Path
 from material_library import (MaterialLibrary, compute_sabine_rt60,
                                compute_xi_per_mode, classify_surface_areas)
+import material_library as ml
 import face_materials as fm
 
 
@@ -160,6 +161,28 @@ class SourceEditDialog(QDialog):
         self._update_q_label()
         self.sb_sens.valueChanged.connect(self._update_q_label)
 
+        # --- Polaridad (v2.23) ----------------------------------------------
+        # Campo propio de la fuente, ORTOGONAL a la curva Q(f): la polaridad es
+        # del cableado y se compone con la respuesta medida en vez de pisarla.
+        # Antes vivia adentro del atajo manual de Q(f) y aplicarla borraba el
+        # FRD/TRF cargado. Un solo bit -> se lee de vuelta y va al .room.
+        pol0 = int(getattr(source, "polarity", 1) or 1) if source else 1
+        self.chk_polarity = QCheckBox("Invertida (180°)")
+        self.chk_polarity.setChecked(pol0 < 0)
+        self.chk_polarity.setToolTip(
+            "Polaridad del cableado: 0° = normal, 180° = invertida (×−1).\n"
+            "Se compone con la curva Q(f): invertir NO borra un FRD/TRF cargado.\n"
+            "Afecta FRF, campo 3D, SBIR y el optimizador de ubicación."
+        )
+        self.lbl_polarity = QLabel()
+        self.lbl_polarity.setStyleSheet("color: #94e2d5; font-size: 9pt;")
+        pol_row = QHBoxLayout()
+        pol_row.addWidget(self.chk_polarity)
+        pol_row.addWidget(self.lbl_polarity, 1)
+        layout.addRow("Polaridad:", pol_row)
+        self.chk_polarity.toggled.connect(self._update_polarity_label)
+        self._update_polarity_label()
+
         # --- Respuesta en frecuencia Q(f) (Fase 2 — plan_fuentes) -----------
         # La curva es una ganancia compleja g(f) relativa al Q baseline
         # (opcion 1). "Sin curva" = Q constante (comportamiento historico).
@@ -204,8 +227,11 @@ class SourceEditDialog(QDialog):
         self.sb_delay.setDecimals(2)
         self.sb_delay.setSingleStep(0.1)
         mrow.addWidget(self.sb_delay)
-        self.chk_invert = QCheckBox("Invertir polaridad")
-        mrow.addWidget(self.chk_invert)
+        # La polaridad SALIO de acá (v2.23): era parte de la curva g(f), asi
+        # que aplicarla borraba el FRD/TRF cargado y no se podia leer de vuelta.
+        # Ahora es un toggle propio arriba (campo `polarity` de la fuente) que
+        # se COMPONE con la curva. Delay y fase se quedan: esos si son cosas
+        # de dominio frecuencial y tiene sentido que vivan en la curva.
         mrow.addWidget(QLabel("Fase (°):"))
         self.sb_phase = QDoubleSpinBox()
         self.sb_phase.setRange(-180.0, 180.0)
@@ -298,6 +324,12 @@ class SourceEditDialog(QDialog):
         self.lbl_q.setText(f"|Q| = {abs(q):.3e} m³/s  "
                            f"(monopolo @ {self._F_REF:.0f} Hz, 1 W)")
 
+    def _update_polarity_label(self):
+        inv = self.chk_polarity.isChecked()
+        self.lbl_polarity.setText(
+            "Q × (−1) — en contrafase con una fuente normal" if inv
+            else "0° (normal)")
+
     # ------------------------------------------------------------------
     # Respuesta en frecuencia Q(f) (Fase 2)
     # ------------------------------------------------------------------
@@ -373,23 +405,25 @@ class SourceEditDialog(QDialog):
         self._refresh_resp_ui()
 
     def _apply_manual(self):
-        """Atajo sin archivo: g(f) = ±e^{-i2πfτ} (delay + polaridad)."""
+        """Atajo sin archivo: g(f) = e^{i·φ₀}·e^{-i2πfτ} (delay + offset de fase).
+
+        La POLARIDAD ya no entra acá (v2.23): es un campo propio de la fuente y
+        se compone aparte, asi que este atajo no la pisa ni la duplica.
+        """
         from sources import SourceResponse
         tau = self.sb_delay.value() / 1000.0
-        invert = self.chk_invert.isChecked()
         phi0 = np.radians(self.sb_phase.value())     # offset de fase constante (T5)
-        if tau <= 0.0 and not invert and abs(self.sb_phase.value()) < 1e-9:
+        if tau <= 0.0 and abs(self.sb_phase.value()) < 1e-9:
             QMessageBox.information(self, "Q(f)",
-                "Poné un delay > 0 ms, una fase ≠ 0, o tildá invertir polaridad.")
+                "Poné un delay > 0 ms o una fase ≠ 0.\n"
+                "(La polaridad es el toggle 0°/180° de arriba.)")
             return
         f = np.linspace(1.0, 1000.0, 1500)
         gain_db = np.zeros_like(f)
-        phase = -2.0 * np.pi * f * tau + (np.pi if invert else 0.0) + phi0
+        phase = -2.0 * np.pi * f * tau + phi0
         parts = []
         if tau > 0.0:
             parts.append(f"delay {self.sb_delay.value():.2f} ms")
-        if invert:
-            parts.append("polaridad −")
         if abs(self.sb_phase.value()) > 1e-9:
             parts.append(f"fase {self.sb_phase.value():.0f}°")
         self._frd_raw = None    # el atajo manual reemplaza cualquier FRD
@@ -398,10 +432,11 @@ class SourceEditDialog(QDialog):
         self._refresh_resp_ui()
 
     def _clear_resp(self):
+        """Quita la curva g(f). NO toca la polaridad: es del cableado, no de
+        la respuesta medida, y borrar una no tiene por qué borrar la otra."""
         self._response = None
         self._frd_raw = None
         self.sb_delay.setValue(0.0)
-        self.chk_invert.setChecked(False)
         self.sb_phase.setValue(0.0)
         self._refresh_resp_ui()
 
@@ -525,6 +560,7 @@ class SourceEditDialog(QDialog):
             baffle_size=(self.sb_bw.value(), self.sb_bh.value(), self.sb_bd.value()),
             pitch=self.sb_pitch.value(),
             mounted=self._mounted,
+            polarity=(-1 if self.chk_polarity.isChecked() else 1),
         )
         src.response = self._response    # Fase 2: preservar la curva Q(f)
         return src
@@ -1558,6 +1594,12 @@ class RTComparisonDialog(QDialog):
         self.btn_add_curve.setObjectName("PrimaryButton")
         self.btn_add_curve.clicked.connect(self._on_add_curve_clicked)
         fa.addRow(self.btn_add_curve)
+        # Etapa 2a: RT60 T30 de la perturbacion de frontera (solo banda modal).
+        # No es una fila de RT_METHODS (no sale de fn(V,groups,g2m) sino del
+        # decay de los modos), por eso boton aparte. Requiere modos resueltos.
+        self.btn_add_pert = QPushButton("+ Perturbación (T30, banda modal)")
+        self.btn_add_pert.clicked.connect(self._on_add_perturbation_clicked)
+        fa.addRow(self.btn_add_pert)
         right.addWidget(grp_add)
 
         # Acciones globales
@@ -1618,6 +1660,44 @@ class RTComparisonDialog(QDialog):
         method = self.combo_method.currentData()
         metric = self.combo_metric.currentText()
         self._add_curve(method, metric)
+
+    def _on_add_perturbation_clicked(self):
+        """Superpone el RT60 T30 de la perturbacion de frontera (banda modal)."""
+        rt = None
+        try:
+            rt = self._panel._perturbation_rt60_by_band()
+        except Exception as e:
+            QMessageBox.warning(self, "Error",
+                                f"No se pudo calcular la perturbación:\n{e}")
+            return
+        if not rt:
+            QMessageBox.information(
+                self, "Perturbación",
+                "No hay RT60 de perturbación para mostrar.\n\n"
+                "Resolvé los modos primero (la perturbación necesita las formas "
+                "modales; solo cubre la banda modal, por debajo de f_Schroeder).")
+            return
+        bands = sorted(rt.keys())
+        vals = [rt[b] for b in bands]
+        base = "Perturbación T30"
+        idx = self._counter.get(base, 0) + 1
+        self._counter[base] = idx
+        label = base if idx == 1 else f"{base} #{idx}"
+        color = "#f38ba8"                      # rojo-rosado, distinto de Sabine
+        line, = self._ax.plot(
+            bands, vals, "-", color=color, marker="D", markersize=6,
+            linewidth=1.8, label=label)
+        curve = {"label": label, "method": "perturbation", "metric": "T60",
+                 "bands": bands, "values": vals, "color": color,
+                 "visible": True, "line2d": line}
+        self._curves.append(curve)
+        item = QListWidgetItem(label)
+        item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+        item.setCheckState(Qt.Checked)
+        item.setForeground(QColor(color))
+        item.setData(Qt.UserRole, curve)
+        self.list_curves.addItem(item)
+        self._refresh_axes_meta()
 
     def _add_curve(self, method: str, metric: str):
         try:
@@ -1953,6 +2033,126 @@ class CompareDialog(QDialog):
                 fh.write(",".join(f"{x:.6g}" for x in row) + "\n")
 
 
+class AbsorptionChoiceDialog(QDialog):
+    """Gate de absorcion: que usar cuando NINGUNA cara tiene material asignado.
+
+    Existe porque f_Schroeder depende de la absorcion (f_S ∝ α^-1/2) y sin
+    asignaciones el `FaceMaterialMap` cae a su `default` alfabetico, que el
+    usuario nunca eligio. Antes eso pasaba en silencio y ademas el auto-tuner
+    de malla usaba un α=0.05 fijo, incoherente con el numero que el panel
+    mostraba en pantalla.
+
+    Tres caminos (los tres dejan el modelo en un estado explicito):
+      - **alpha**: coeficiente uniforme, sin tocar el mapa de materiales.
+      - **preset**: uno de los 5 `MATERIAL_PRESETS` -> asigna piso/paredes/techo.
+      - **uniform**: un material del catalogo para TODAS las caras.
+
+    Los dos ultimos ASIGNAN de verdad (via `apply_zone_materials`), asi que
+    tras elegirlos el gate no vuelve a aparecer y todo lo que cuelga de los
+    materiales (ξ por modo, RT60, SBIR) queda coherente con f_S.
+    """
+
+    def __init__(self, mat_names, parent=None, default_alpha: float = 0.05):
+        super().__init__(parent)
+        self.setWindowTitle("Absorción del recinto")
+        self.setMinimumWidth(520)
+        lay = QVBoxLayout(self)
+
+        info = QLabel(
+            "Ninguna cara tiene material asignado.\n\n"
+            "La frecuencia de Schroeder y la densidad de malla dependen de la "
+            "absorción: f_S ∝ α^(−1/2), así que una sala viva necesita una malla "
+            "mucho más fina que una tratada. Elegí de dónde sale la absorción.\n\n"
+            "La elección se recuerda por esta sesión."
+        )
+        info.setWordWrap(True)
+        lay.addWidget(info)
+
+        self._grp = QButtonGroup(self)
+
+        # --- (a) coeficiente uniforme ---
+        self.rb_alpha = QRadioButton("Coeficiente α uniforme")
+        self.rb_alpha.setChecked(True)
+        self._grp.addButton(self.rb_alpha)
+        lay.addWidget(self.rb_alpha)
+        row_a = QHBoxLayout()
+        row_a.addSpacing(24)
+        row_a.addWidget(QLabel("α ="))
+        self.sb_alpha = QDoubleSpinBox()
+        self.sb_alpha.setRange(0.01, 1.0)
+        self.sb_alpha.setDecimals(3)
+        self.sb_alpha.setSingleStep(0.01)
+        self.sb_alpha.setValue(float(default_alpha))
+        self.sb_alpha.setToolTip(
+            "0.01 = superficie totalmente reflectante (piso del catálogo).\n"
+            "0.05 = sala viva sin tratar.  0.20 = alfombrada.  0.40+ = tratada.\n"
+            "Ojo: valores bajos disparan f_S y con él el costo del FEM."
+        )
+        row_a.addWidget(self.sb_alpha)
+        self.lbl_alpha_hint = QLabel("")
+        self.lbl_alpha_hint.setStyleSheet("color: #94e2d5; font-size: 9pt;")
+        row_a.addWidget(self.lbl_alpha_hint)
+        row_a.addStretch(1)
+        lay.addLayout(row_a)
+
+        # --- (b) preset por zona ---
+        self.rb_preset = QRadioButton("Preset de sala (asigna piso / paredes / techo)")
+        self._grp.addButton(self.rb_preset)
+        lay.addWidget(self.rb_preset)
+        row_b = QHBoxLayout()
+        row_b.addSpacing(24)
+        self.cb_preset = QComboBox()
+        self.cb_preset.addItems(ml.preset_names())
+        row_b.addWidget(self.cb_preset, 1)
+        lay.addLayout(row_b)
+
+        # --- (c) un material para todas ---
+        self.rb_uniform = QRadioButton("Un material del catálogo para todas las caras")
+        self._grp.addButton(self.rb_uniform)
+        lay.addWidget(self.rb_uniform)
+        row_c = QHBoxLayout()
+        row_c.addSpacing(24)
+        self.cb_material = QComboBox()
+        self.cb_material.addItems(list(mat_names))
+        row_c.addWidget(self.cb_material, 1)
+        lay.addLayout(row_c)
+
+        note = QLabel(
+            "Los dos últimos asignan materiales de verdad: después vas a poder "
+            "retocarlos cara por cara en «Materiales…»."
+        )
+        note.setWordWrap(True)
+        note.setStyleSheet("color: #94e2d5; font-size: 9pt;")
+        lay.addWidget(note)
+
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb.accepted.connect(self.accept)
+        bb.rejected.connect(self.reject)
+        lay.addWidget(bb)
+
+        self.sb_alpha.valueChanged.connect(self._update_hint)
+        self._update_hint()
+
+    def _update_hint(self):
+        a = float(self.sb_alpha.value())
+        if a <= 0.015:
+            self.lbl_alpha_hint.setText("(totalmente reflectante — malla muy cara)")
+        elif a <= 0.06:
+            self.lbl_alpha_hint.setText("(sala viva sin tratar)")
+        elif a <= 0.25:
+            self.lbl_alpha_hint.setText("(alfombrada / algo tratada)")
+        else:
+            self.lbl_alpha_hint.setText("(tratada)")
+
+    def choice(self) -> tuple:
+        """('alpha', valor) | ('preset', nombre) | ('uniform', material)."""
+        if self.rb_preset.isChecked():
+            return ("preset", self.cb_preset.currentText())
+        if self.rb_uniform.isChecked():
+            return ("uniform", self.cb_material.currentText())
+        return ("alpha", float(self.sb_alpha.value()))
+
+
 # ---------------------------------------------------------------------------
 # Panel principal
 # ---------------------------------------------------------------------------
@@ -2002,6 +2202,18 @@ class AcousticPanel(QWidget):
         self.receiver = self._compute_default_receiver()
         self.modal_result = None       # aa.ModalSolution
         self._xi_per_mode = None
+        # Modelo de amortiguamiento modal (v2.23, Etapa 1 del reemplazo):
+        #   "perturbation" -> perturbacion de frontera de 1er orden (Morse&Ingard
+        #                     9.4.14 / Kuttruff 3.34). Captura el spread axial/
+        #                     oblicuo que Sabine no ve. DEFAULT desde v2.24 (Etapa
+        #                     3): mas exacto que Sabine bajo Schroeder, validado
+        #                     <1% vs impedancia exacta hasta alpha≈0.3. Toda la
+        #                     app (f_S, cruce, RT60, prediccion de ubicacion) ya
+        #                     habla el modelo elegido, asi que el default es coherente.
+        #   "a36"          -> Sabine por modo. Alterna; es el limite de campo difuso
+        #                     de la perturbacion (caso oblicuo). Los .room viejos
+        #                     sin la clave cargan como "a36" (reproducibilidad).
+        self._damping_model = "perturbation"
         self._slice_heatmap_dialog = None   # SliceHeatmapDialog (no-modal)
 
         # Timer debounce: actualiza el campo 300 ms despues del ultimo movimiento
@@ -2223,6 +2435,19 @@ class AcousticPanel(QWidget):
         # historico (la absorcion la fija solo el material por cara / A36).
         self._patches = []                # List[absorption_patch.AbsorptionPatch]
 
+        # --- Gate de absorcion para f_Schroeder (v2.23) ---
+        # El FaceMaterialMap SIEMPRE devuelve un material (su `default`), asi
+        # que "no asignaste nada" no se detecta por RT=None: se detecta contando
+        # asignaciones EXPLICITAS. Sin ellas, f_S salia del default alfabetico
+        # ("Alfombra fina", α=0.20) sin que el usuario lo eligiera nunca.
+        # Ahora se le pregunta UNA vez por sesion y se recuerda la respuesta.
+        self._abs_choice_alpha = None     # float si eligio "α fijo"; None si no
+        self._abs_choice_asked = False    # ya se pregunto en esta sesion
+        self._abs_choice_txt = ""         # descripcion legible de la eleccion
+        # Opcion C (v2.24): resolver modos NO exige absorcion (los modos son de
+        # pared rigida). Se avisa UNA vez por sesion si se resuelve sin elegirla.
+        self._warned_no_absorption = False
+
         self.btn_open_materials = QPushButton("Materiales…")
         self.btn_open_materials.setObjectName("PrimaryButton")
         self.btn_open_materials.setToolTip(
@@ -2263,6 +2488,27 @@ class AcousticPanel(QWidget):
         btn_reload_mat.clicked.connect(self._reload_materials)
         fmat.addRow(btn_rt60_plot)
         fmat.addRow(btn_reload_mat)
+
+        # Modelo de amortiguamiento modal. Perturbación = perturbación de frontera
+        # de 1er orden (Morse&Ingard 9.4.14): capta el spread axial/oblicuo que
+        # Sabine no ve. DEFAULT desde v2.24 (Etapa 3), por eso va primero (índice 0).
+        # A36 = Sabine por modo, alterna (el límite de campo difuso de la perturbación).
+        self.combo_damping = QComboBox()
+        self.combo_damping.addItem("Perturbación de frontera", "perturbation")
+        self.combo_damping.addItem("Sabine por modo (A36)", "a36")
+        self.combo_damping.setToolTip(
+            "Cómo se convierte la absorción en amortiguamiento modal ξ.\n"
+            "• Perturbación (DEFAULT): usa la admitancia de la pared y la integral\n"
+            "  de superficie de cada modo (sin pasar por RT60). Da un ξ distinto\n"
+            "  para axiales/oblicuos aun con material uniforme; validado <1 %\n"
+            "  contra el problema de impedancia exacto hasta α≈0.3. Más exacto que\n"
+            "  Sabine bajo Schroeder.\n"
+            "• Sabine (A36): RT60 de Sabine ponderado por la forma modal. Con\n"
+            "  material uniforme da el mismo RT para todos los modos; es el límite\n"
+            "  de campo difuso de la perturbación (caso oblicuo).\n"
+            "Cambiar el modelo recalcula ξ si ya hay modos resueltos.")
+        self.combo_damping.currentIndexChanged.connect(self._on_damping_model_changed)
+        fmat.addRow("Amortiguamiento:", self.combo_damping)
         layout.addWidget(grp_mat)
 
         # --- Frecuencia de Schroeder (v2.16: movida arriba, entre Materiales
@@ -2287,6 +2533,15 @@ class AcousticPanel(QWidget):
         )
         ffs.addRow(self.lbl_fcross)
 
+        # Eleccion de absorcion recordada por sesion (gate v2.23). Solo se
+        # muestra cuando hay una eleccion guardada: si asignaste materiales
+        # por cara, el gate no aparece y este label queda oculto.
+        self.lbl_abs_choice = QLabel("")
+        self.lbl_abs_choice.setStyleSheet("color: #f9e2af; font-size: 9pt;")
+        self.lbl_abs_choice.setWordWrap(True)
+        self.lbl_abs_choice.setVisible(False)
+        ffs.addRow(self.lbl_abs_choice)
+
         self.btn_schroeder = QPushButton("Calcular f_Schroeder")
         self.btn_schroeder.clicked.connect(self.compute_and_show_schroeder)
         ffs.addRow(self.btn_schroeder)
@@ -2296,7 +2551,14 @@ class AcousticPanel(QWidget):
         grp_fem = QGroupBox("FEM modal")
         ff = QFormLayout(grp_fem)
         self.sb_nmodes = QSpinBox(); self.sb_nmodes.setRange(2, 500); self.sb_nmodes.setValue(12)
-        self.sb_density = QDoubleSpinBox(); self.sb_density.setRange(0.5, 10.0); self.sb_density.setValue(2.5); self.sb_density.setSingleStep(0.25); self.sb_density.setDecimals(2)
+        # Tope 30 (era 10): el peor caso REAL es la sala mas viva del catalogo
+        # (alpha=0.01, "Superficie totalmente reflectante") en el recinto mas
+        # chico. alpha=0 NO es cota: RT=0.161V/(alpha·S) diverge -> f_S y npm
+        # infinitos. Con alpha=0.01, npm = 6·f_S/c da ~28.7 en un booth de 2 m
+        # y baja con el tamano (npm ∝ S^-1/2), asi que 30 cubre todo el rango
+        # fisico representable. El tope viejo de 10 clipeaba en silencio desde
+        # alpha≈0.02 (hormigon) para arriba.
+        self.sb_density = QDoubleSpinBox(); self.sb_density.setRange(0.5, 30.0); self.sb_density.setValue(2.5); self.sb_density.setSingleStep(0.25); self.sb_density.setDecimals(2)
         self.sb_htarget = QDoubleSpinBox(); self.sb_htarget.setRange(0.05, 5.0); self.sb_htarget.setValue(0.40); self.sb_htarget.setSingleStep(0.05); self.sb_htarget.setDecimals(2); self.sb_htarget.setSuffix(" m")
         self.sb_htarget.setToolTip("Tamaño característico de tetraedro para gmsh.\n"
                                     "Más chico = más preciso, más lento.")
@@ -2318,7 +2580,9 @@ class AcousticPanel(QWidget):
             "Elementos por metro del mallado voxel.\n"
             "Mas alto = malla mas fina, mayor precision, mayor tiempo de calculo.\n"
             "Regla: npm = 6 · f_max_deseado / 343  (ppw=6 puntos por longitud de onda).\n"
-            "Para cubrir hasta f_Schroeder, usá el botón 'Aplicar npm sugerido' debajo."
+            "Para cubrir hasta f_Schroeder, usá el botón 'Aplicar npm sugerido' debajo.\n"
+            "Rango 0.5-30: el tope cubre la sala más viva del catálogo (α=0.01) en\n"
+            "el recinto más chico. Ojo: el costo va como npm³."
         )
         ff.addRow("Densidad voxel (1/m):", self.sb_density)
 
@@ -2607,9 +2871,15 @@ class AcousticPanel(QWidget):
         absQ = abs(s.Q)
         ph = math.degrees(np.angle(s.Q))
         active = bool(getattr(s, "active", True))
+        # El ∠ sale de s.Q CRUDO, que no lleva la polaridad (vive en
+        # effective_Q). Sin este tag, una fuente invertida se veria igual que
+        # una normal en la lista — el mismo problema de readback que motivo
+        # sacar la polaridad de la curva.
+        inv = int(getattr(s, "polarity", 1) or 1) < 0
         return (f"[{i}] {s.label}  @ ({s.position[0]:.2f}, "
                 f"{s.position[1]:.2f}, {s.position[2]:.2f})   "
                 f"|Q|={absQ:.3g}  ∠={ph:+.1f}°"
+                + ("   [180°]" if inv else "")
                 + ("" if active else "   [MUTE]"))
 
     def _refresh_sources_list(self):
@@ -2697,6 +2967,10 @@ class AcousticPanel(QWidget):
         if dlg.exec_() == QDialog.Accepted:
             self.sources.sources[i] = dlg.get_source()
             self._refresh_sources_list()
+            # El campo |p| depende de la fuente (posición, Q(f), POLARIDAD): al
+            # editar hay que recomputarlo, igual que al moverla. Sin esto, el
+            # campo mostrado quedaba viejo tras invertir polaridad/cambiar TRF.
+            self.schedule_field_update()
             self._log(f"Fuente {i} editada.")
 
     def _remove_source(self):
@@ -2705,6 +2979,7 @@ class AcousticPanel(QWidget):
             return
         del self.sources.sources[i]
         self._refresh_sources_list()
+        self.schedule_field_update()      # el campo |p| cambió (una fuente menos)
         self._log(f"Fuente {i} eliminada.")
 
     def _duplicate_source(self):
@@ -2712,13 +2987,24 @@ class AcousticPanel(QWidget):
         if i < 0:
             return
         s = self.sources[i]
+        # La copia tiene que salir IGUAL al original. Se copian todos los campos
+        # a mano (no hay `replace` porque `response` se adjunta aparte); antes se
+        # perdian bafle/pitch/mounted/active al duplicar — mismo tipo de bug que
+        # el del drag arreglado en v2.13.
         new = OmniSource(position=s.position, Q=s.Q,
                           label=f"{s.label}_dup",
                           sensitivity_dB=s.sensitivity_dB,
-                          power_W=s.power_W, f_ref=s.f_ref)
+                          power_W=s.power_W, f_ref=s.f_ref,
+                          orientation=getattr(s, "orientation", None),
+                          baffle_size=getattr(s, "baffle_size", (0.30, 0.50, 0.40)),
+                          pitch=getattr(s, "pitch", 0.0),
+                          mounted=getattr(s, "mounted", False),
+                          active=getattr(s, "active", True),
+                          polarity=getattr(s, "polarity", 1))
         new.response = s.response       # Fase 2: la copia conserva la curva Q(f)
         self.sources.add(new)
         self._refresh_sources_list()
+        self.schedule_field_update()      # el campo |p| cambió (una fuente más)
         self._log("Fuente duplicada.")
 
     # -----------------------------------------------------------------------
@@ -3453,6 +3739,21 @@ class AcousticPanel(QWidget):
             self._fem_timer.fail("sin geometría")
             return
 
+        # Opción C (v2.24): resolver modos NO exige absorción (φₙ/fₙ son de pared
+        # rígida). Pero si no se eligió, se avisa UNA vez: la malla se dimensiona
+        # con α=0.05 conservador y f_S/RT60/FRF no se muestran hasta elegirla.
+        if not self._has_absorption_choice() and not self._warned_no_absorption:
+            self._warned_no_absorption = True
+            QMessageBox.warning(
+                self, "Absorción sin elegir",
+                "Vas a resolver los modos sin haber elegido la absorción.\n\n"
+                "Los modos (frecuencias y formas) son válidos: no dependen del "
+                "material, son de pared rígida.\n\n"
+                "Pero la malla se dimensiona con un α=0.05 conservador (sala "
+                "viva), y la frecuencia de Schroeder, el RT60 y la FRF NO se "
+                "van a mostrar hasta que asignes materiales o un α (botón "
+                "«Materiales…» o «Calcular f_Schroeder»).")
+
         # Aviso de validez para fuentes y receptor.
         try:
             self._validate_inside(verts, tris)
@@ -3483,9 +3784,38 @@ class AcousticPanel(QWidget):
         auto_used = None    # AutoDensityResult si se uso, None si manual
         if override == "auto":
             try:
-                V = aa.compute_mesh_volume(verts, tris)
-                S = aa.compute_mesh_surface_area(verts, tris)
-                f_target = aa.schroeder_frequency(V, S, alpha=0.05)
+                # v2.23: f_S sale del MISMO lugar que el label del panel (RT de
+                # materiales, punto fijo), no de un α=0.05 fijo. El α fijo hacia
+                # que la app se contradijera consigo misma y erraba en los dos
+                # sentidos: sala tratada -> malla 2x mas fina de lo necesario
+                # (8x nodos al pedo); sala viva -> malla que NO cubre el regimen
+                # modal, en silencio (f_S ∝ α^-1/2).
+                # Opción C (v2.24): el solve NO abre el gate. Sin absorción,
+                # `_schroeder_context` usa el fallback α=0.05 para DIMENSIONAR la
+                # malla (heurística conservadora, ya avisada arriba); f_S no se
+                # muestra hasta elegir la absorción.
+                ctx = self._schroeder_context()
+                if ctx is None:
+                    raise RuntimeError("sin geometría válida para el auto-tuner")
+                V, S = ctx["V"], ctx["S"]
+                f_schroeder = ctx["fs"]
+
+                # El presupuesto de modos, no la malla, es el techo real. Weyl
+                # dice cuantos modos hay debajo de f_S; si son mas de los que se
+                # van a pedir, la suma modal se trunca antes de f_S y mallar
+                # para f_S es gastar nodos en una banda que no se va a calcular.
+                # Se malla para la banda que los modos SI cubren, y se dice.
+                n_budget = int(self.sb_nmodes.value())
+                n_weyl = self._weyl_modal_count(f_schroeder, V, S)
+                f_target = f_schroeder
+                trunc_txt = ""
+                if n_weyl > n_budget:
+                    f_target = self._weyl_freq_for_count(n_budget, V, S)
+                    trunc_txt = (
+                        f" · cobertura modal REAL hasta ~{f_target:.0f} Hz: "
+                        f"cubrir f_S pediría ~{n_weyl} modos y pediste {n_budget}"
+                    )
+
                 # Si choose_engine forzara voxel por T-junctions (techo curvo
                 # parametrico), restringimos al auto-tuner para que la densidad
                 # recomendada sea coherente con voxel (no h_target inutil).
@@ -3501,9 +3831,15 @@ class AcousticPanel(QWidget):
                     prefer_engine=forced_engine,
                 )
                 self._log(
-                    f"Auto-tuner: V={V:.1f} m³, f_Schroeder={f_target:.0f} Hz, "
-                    f"cobertura completa -> {auto_used.message}"
+                    f"Auto-tuner: V={V:.1f} m³, f_Schroeder={f_schroeder:.0f} Hz "
+                    f"({ctx['src_txt']}){trunc_txt} -> {auto_used.message}"
                 )
+                if trunc_txt:
+                    self._log(
+                        f"   Para llegar a f_S={f_schroeder:.0f} Hz habría que "
+                        f"pedir ~{n_weyl} modos (tope del spinbox: "
+                        f"{self.sb_nmodes.maximum()})."
+                    )
 
                 # Aplicar densidades auto-tuneadas a los spinboxes (visible al usuario)
                 npm_used = auto_used.n_per_meter
@@ -3611,6 +3947,10 @@ class AcousticPanel(QWidget):
             )
         self._refresh_modes_combo()
         self._xi_per_mode = self._compute_xi_from_materials()
+        # Etapa 2b (Pass 2): con la perturbacion activa, ahora que hay modos el
+        # f_S se recalcula con el T30 por banda y se avisa si la malla (sizeada
+        # con el estimador Sabine) quedo corta.
+        self._post_solve_schroeder_coherence()
         self._update_slice()
         prog.close()
 
@@ -3982,16 +4322,31 @@ class AcousticPanel(QWidget):
         freq = np.linspace(f_lo, f_hi, 2000)
         g2m = self._group_to_material_dict(groups)
         walls = []
+        n_default = 0
+        area_default = 0.0
         for g in groups:
             mat = g2m.get(g.signature)
             if mat is not None:
                 alpha = np.array([mat.alpha(float(ff)) for ff in freq])
             else:
                 alpha = np.full(freq.shape, 0.03)   # default rigido
+                n_default += 1
+                area_default += float(getattr(g, "area", 0.0) or 0.0)
             walls.append(sbir.Wall(
                 point=g.centroid, normal=g.normal, label=g.label,
                 R=sbir.reflection_from_alpha(alpha),
             ))
+        # El default alpha=0.03 se dibuja con la misma autoridad visual que un
+        # material real: una pared casi perfectamente reflectante que el usuario
+        # nunca eligio. Se avisa en vez de rellenar en silencio.
+        if n_default:
+            area_tot = sum(float(getattr(g, "area", 0.0) or 0.0) for g in groups)
+            frac = 100.0 * area_default / max(area_tot, 1e-9)
+            self._log(
+                f"SBIR: {n_default}/{len(groups)} superficies SIN material "
+                f"({frac:.0f} % del área) → α=0.03 supuesto (casi rígido). "
+                f"Las reflexiones de esas caras salen más fuertes de lo real; "
+                f"asignales material en «Materiales…» para un SBIR fiel.")
 
         # SBIR-mueble (Fase C): la cara superior de cada mueble (tope del
         # escritorio, respaldo del sofa) rebota con rolloff de panel FINITO
@@ -4030,6 +4385,15 @@ class AcousticPanel(QWidget):
             verts, tris = self.get_surface()
         except Exception as e:
             QMessageBox.critical(self, "Sin geometría", str(e))
+            return
+        # Opción C (v2.24): la FRF depende del amortiguamiento -> exige absorción.
+        # Abre el gate; si queda sin elegir, avisa y no computa desde un default.
+        if not self._ensure_absorption_choice():
+            QMessageBox.warning(
+                self, "Absorción sin elegir",
+                "La FRF depende de la absorción (amortiguamiento de cada modo).\n\n"
+                "Asigná materiales (botón «Materiales…») o un α uniforme antes de "
+                "calcular la respuesta en frecuencia.")
             return
         damping = self._xi_per_mode if self._xi_per_mode is not None else 0.03
         try:
@@ -4084,7 +4448,14 @@ class AcousticPanel(QWidget):
             mask = fa <= f_max
             if np.count_nonzero(mask) >= 10:
                 fa_valid = fa[mask]
-                receivers = mm.default_receiver_grid(self.modal_result.nodes)
+                # locator+phis: descarta los puntos de la grilla que caen fuera
+                # del recinto (el bbox no es la planta). Sin esto, en cualquier
+                # sala no rectangular los puntos de afuera entraban con presion
+                # 0 y el FoM espacial salia ~90 dB en vez de ~5.
+                receivers = mm.default_receiver_grid(
+                    self.modal_result.nodes,
+                    locator=self.modal_result.locator,
+                    phis=self.modal_result.phis)
                 # H_real (= compute_forced_response) + H_env para corregibilidad EQ.
                 H, H_env = mm.forced_response_with_envelope(
                     self.modal_result.locator,
@@ -4311,53 +4682,269 @@ class AcousticPanel(QWidget):
         n_surf = (np.pi / 4.0) * S * (f ** 2) / (c ** 2) if S > 0 else 0.0
         return int(round(n_vol + n_surf))
 
-    def compute_and_show_schroeder(self):
-        """Calcula y muestra la frecuencia de Schroeder del recinto actual."""
+    @classmethod
+    def _weyl_freq_for_count(cls, n: int, V: float, S: float,
+                             c: float = 343.0) -> float:
+        """Inversa de `_weyl_modal_count`: hasta que frecuencia llegan `n` modos.
+
+        N(f) es monotona creciente, asi que basta biseccion. Sirve para decir
+        la verdad cuando el presupuesto de modos NO alcanza a cubrir f_S: la
+        malla puede ser valida hasta f_S, pero la suma modal se trunca antes.
+        """
+        if n <= 0 or V <= 0:
+            return 0.0
+        lo, hi = 0.0, 20.0
+        while cls._weyl_modal_count(hi, V, S, c) < n and hi < 20000.0:
+            hi *= 2.0
+        for _ in range(60):
+            mid = 0.5 * (lo + hi)
+            if cls._weyl_modal_count(mid, V, S, c) < n:
+                lo = mid
+            else:
+                hi = mid
+        return 0.5 * (lo + hi)
+
+    def _n_assigned_groups(self, groups) -> int:
+        """Grupos con material asignado EXPLICITAMENTE (no por el default del
+        mapa). Es el test correcto para "no asignaste nada": `_face_mat_map.get`
+        nunca devuelve vacio porque cae a su `default`."""
+        asig = self._face_mat_map.to_dict()
+        return sum(1 for g in groups if asig.get(g.signature))
+
+    def _has_absorption_choice(self) -> bool:
+        """True si el usuario ya definió la absorción: α uniforme elegido en el
+        gate, o al menos un material asignado. Opción C (v2.24): los números que
+        dependen del material (f_S, RT60, FRF, ξ) no se muestran hasta que esto
+        sea True; los modos φₙ/fₙ NO lo necesitan (son de pared rígida)."""
+        if self._abs_choice_alpha is not None:
+            return True
+        try:
+            groups, _v, _t = self._get_face_groups()
+            return bool(groups) and self._n_assigned_groups(groups) > 0
+        except Exception:
+            return False
+
+    def _ensure_absorption_choice(self) -> bool:
+        """Abre el gate de absorción si todavía no se eligió, y devuelve True si
+        al final HAY una elección (α o materiales), False si no.
+
+        Opción C (v2.24): cancelar el gate ya NO pone un α=0.05 silencioso; deja
+        la absorción SIN elegir (los números dependientes de material quedan en
+        "— asigná absorción") y no vuelve a preguntar solo en la sesión.
+        """
+        if self._has_absorption_choice():
+            return True
+        if self._abs_choice_asked:
+            return False                # ya se preguntó y se dejó sin elegir
+        try:
+            groups, _v, _t = self._get_face_groups()
+        except Exception:
+            return False
+        if not groups:
+            return False
+
+        self._abs_choice_asked = True   # se pregunta UNA vez, pase lo que pase
+
+        # Headless: un dialogo modal bajo QT_QPA_PLATFORM=offscreen segfaultea
+        # (gotcha conocido del proyecto, ver notas §13 entrada 16 Jun). Los
+        # benches tienen que poder correr el camino completo sin GUI, asi que
+        # ahi se resuelve con el fallback historico en vez de preguntar.
+        try:
+            from PyQt5.QtWidgets import QApplication as _QApp
+            _app = _QApp.instance()
+            if _app is not None and _app.platformName() == "offscreen":
+                self._abs_choice_alpha = 0.05
+                self._abs_choice_txt = "α=0.05 fijo (headless: sin gate)"
+                return True
+        except Exception:
+            pass
+
+        try:
+            dlg = AbsorptionChoiceDialog(self._mat_lib.names, self)
+            if dlg.exec_() != QDialog.Accepted:
+                # Opción C: cancelar deja SIN elegir (no α=0.05 silencioso).
+                self._log("Absorción: gate cancelado → sin elegir "
+                          "(f_S/RT60/FRF quedan en «— asigná absorción»).")
+                self._refresh_abs_choice_label()
+                return False
+            kind, value = dlg.choice()
+        except Exception as e:
+            self._log(f"Absorción: no se pudo abrir el gate ({e}).")
+            return False
+
+        if kind == "alpha":
+            self._abs_choice_alpha = float(value)
+            self._abs_choice_txt = f"α={value:.3f} uniforme (sin materiales asignados)"
+            self._log(f"Absorción: α={value:.3f} uniforme para f_Schroeder y malla.")
+        elif kind == "preset":
+            mf, mw, mc = ml.preset_surface_materials(self._mat_lib, value)
+            if self.apply_zone_materials(mf.name, mw.name, mc.name):
+                self._abs_choice_txt = f"preset «{value}»"
+                self._log(f"Absorción: preset «{value}» aplicado "
+                          f"(piso {mf.name} · paredes {mw.name} · techo {mc.name}).")
+            else:
+                self._abs_choice_alpha = 0.05
+                self._abs_choice_txt = "α=0.05 fijo (el preset no pudo aplicarse)"
+        else:                            # uniform
+            if self.apply_zone_materials(value, value, value):
+                self._abs_choice_txt = f"«{value}» en todas las caras"
+                self._log(f"Absorción: «{value}» asignado a todas las caras.")
+            else:
+                self._abs_choice_alpha = 0.05
+                self._abs_choice_txt = "α=0.05 fijo (no se pudo asignar)"
+        self._refresh_abs_choice_label()
+        return True
+
+    def _refresh_abs_choice_label(self) -> None:
+        """Reescribe el label de absorcion DERIVANDOLO del estado actual.
+
+        No guarda un texto congelado: si guardara, decir "Absorción del 1% en
+        todas las caras" seguiria en pantalla despues de que el usuario cambie
+        los materiales a mano, mintiendo sobre de donde sale el f_S que se
+        acaba de mostrar.
+
+        El orden de prioridad tiene que ser EL MISMO que el de
+        `_schroeder_context` (materiales asignados > α elegido), porque este
+        label existe justamente para decir cual de los dos se uso.
+        """
+        if not hasattr(self, "lbl_abs_choice"):
+            return
+        txt = ""
+        try:
+            groups, _v, _t = self._get_face_groups()
+        except Exception:
+            groups = []
+        n_asig = self._n_assigned_groups(groups) if groups else 0
+
+        if n_asig > 0:
+            asig = self._face_mat_map.to_dict()
+            names = []
+            for g in groups:
+                nm = asig.get(g.signature)
+                if nm and nm not in names:
+                    names.append(nm)
+            if len(names) == 1:
+                donde = ("en todas las caras" if n_asig == len(groups)
+                         else f"en {n_asig} cara" + ("s" if n_asig != 1 else ""))
+                txt = f"«{names[0]}» {donde}"
+            elif len(names) <= 3:
+                txt = f"{' · '.join(names)}  ({n_asig}/{len(groups)} grupos)"
+            else:
+                txt = (f"{len(names)} materiales por cara "
+                       f"({n_asig}/{len(groups)} grupos)")
+            if n_asig < len(groups):
+                txt += f" · {len(groups) - n_asig} sin asignar"
+        elif self._abs_choice_alpha is not None:
+            txt = self._abs_choice_txt or f"α={self._abs_choice_alpha:.3f} uniforme"
+
+        # Los parches restan area a su cara anfitriona y aportan su propio α:
+        # tambien mueven el RT, asi que corresponde nombrarlos.
+        if txt and self._patches:
+            txt += f" · {len(self._patches)} parche(s)"
+
+        self.lbl_abs_choice.setText(f"Absorción: {txt}" if txt else "")
+        self.lbl_abs_choice.setVisible(bool(txt))
+
+    def _schroeder_context(self) -> Optional[dict]:
+        """f_Schroeder + contexto, en UN solo lugar (v2.23).
+
+        Antes esto vivia duplicado: el label del panel resolvia el punto fijo
+        con el RT de los materiales (v2.16) y el auto-tuner de malla usaba
+        `schroeder_frequency(V, S, alpha=0.05)` fijo. Los dos numeros diferian
+        hasta 2x y la app se contradecia a si misma en el mismo log.
+
+        Devuelve dict con fs, V, S, src_txt, n_asig, n_groups, rt_src — o None
+        si no hay geometria util.
+
+        Etapa 2b (dos pasadas): el RT del punto fijo sale de
+        `_effective_rt60_by_band`, NO de Sabine directo. Pre-solve (sin modos)
+        eso cae a Sabine -> el auto-tuner dimensiona la malla con el estimador
+        Sabine (Pass 1, no hay delta_n todavia = chicken-egg). Post-solve, con
+        el modelo de perturbacion activo, usa el T30 por banda -> f_S refleja el
+        amortiguamiento por modo (Pass 2). Un re-solve con la misma geometria
+        aprovecha el xi de la pasada anterior (refinamiento iterativo); un
+        cambio de geometria resetea modal_result -> vuelve a Sabine.
+        """
         try:
             import acoustic_analysis as aa_mod
             verts, tris = self.get_surface()
             V = aa_mod.compute_mesh_volume(verts, tris)
             S = aa_mod.compute_mesh_surface_area(verts, tris)
-            # v2.16: el RT sale de los MATERIALES asignados (o del default del
-            # mapa), no de un α=0.05 fijo. Como el RT es por banda, se resuelve
-            # el punto fijo f_S = 2000·sqrt(RT(f_S)/V): la transicion modal->
-            # estadistica ocurre donde el solapamiento con el RT LOCAL en esa
-            # frecuencia llega a M≈3, no con el RT de una banda arbitraria.
-            # np.interp clampea fuera de banda (RT(f<125)=RT(125)).
-            fs = None
-            rt_used = None
-            src_txt = ""
-            try:
-                groups, _gv, _gt = self._get_face_groups()
-                if groups and V > 0:
-                    g2m = self._group_to_material_dict(groups)
-                    rt = self._sabine_rt60(V, groups, g2m)
-                    if rt:
-                        bands = np.array(sorted(rt), dtype=float)
-                        rts = np.array([rt[b] for b in sorted(rt)], dtype=float)
-                        fs = 2000.0 * np.sqrt(max(float(rts[0]), 1e-3) / V)
-                        for _ in range(12):
-                            rt_used = float(np.interp(fs, bands, rts))
-                            fs_new = 2000.0 * np.sqrt(max(rt_used, 1e-3) / V)
-                            if abs(fs_new - fs) < 0.5:
-                                fs = fs_new
-                                break
+        except Exception:
+            return None
+        if V <= 0:
+            return None
+
+        fs = None
+        src_txt = ""
+        rt_src = "sabine"
+        n_asig = 0
+        n_groups = 0
+        try:
+            groups, _gv, _gt = self._get_face_groups()
+            n_groups = len(groups) if groups else 0
+            n_asig = self._n_assigned_groups(groups) if groups else 0
+            # Solo se usa el RT por materiales si hay asignaciones EXPLICITAS.
+            # Sin ellas el mapa caeria a su default alfabetico, que el usuario
+            # nunca eligio -> lo resuelve el gate (`_ensure_absorption_choice`).
+            if groups and n_asig > 0:
+                g2m = self._group_to_material_dict(groups)
+                rt, rt_src = self._effective_rt60_by_band(V, groups, g2m)
+                if rt:
+                    bands = np.array(sorted(rt), dtype=float)
+                    rts = np.array([rt[b] for b in sorted(rt)], dtype=float)
+                    fs = 2000.0 * np.sqrt(max(float(rts[0]), 1e-3) / V)
+                    rt_used = float(rts[0])
+                    for _ in range(12):
+                        rt_used = float(np.interp(fs, bands, rts))
+                        fs_new = 2000.0 * np.sqrt(max(rt_used, 1e-3) / V)
+                        if abs(fs_new - fs) < 0.5:
                             fs = fs_new
-                        asig = self._face_mat_map.to_dict()
-                        n_asig = sum(1 for g in groups
-                                     if asig.get(g.signature))
-                        det = (f"{n_asig}/{len(groups)} grupos asignados"
-                               if n_asig else
-                               f"sin asignar: default "
-                               f"'{self._face_mat_map.default}'")
-                        src_txt = (f"RT de materiales: RT(f_S)={rt_used:.2f} s "
-                                   f"({det})")
-            except Exception:
-                fs = None
-            if fs is None or not np.isfinite(fs) or fs <= 0:
-                alpha = 0.05  # fallback: paredes rigidas tipicas
-                fs = aa_mod.schroeder_frequency(V, S, alpha=alpha)
-                src_txt = f"α={alpha} fijo (fallback: sin materiales)"
+                            break
+                        fs = fs_new
+                    modelo = ("perturbación T30" if rt_src == "perturbacion+sabine"
+                              else "RT de materiales")
+                    src_txt = (f"{modelo}: RT(f_S)={rt_used:.2f} s "
+                               f"({n_asig}/{n_groups} grupos asignados)")
+        except Exception:
+            fs = None
+
+        if fs is None or not np.isfinite(fs) or fs <= 0:
+            alpha = (self._abs_choice_alpha
+                     if self._abs_choice_alpha is not None else 0.05)
+            fs = aa_mod.schroeder_frequency(V, S, alpha=alpha)
+            rt_src = "sabine"
+            src_txt = (f"α={alpha:.3f} uniforme"
+                       if self._abs_choice_alpha is not None else
+                       f"α={alpha} fijo (fallback: sin materiales)")
+        return {"fs": float(fs), "V": float(V), "S": float(S),
+                "src_txt": src_txt, "rt_src": rt_src,
+                "n_asig": n_asig, "n_groups": n_groups}
+
+    def compute_and_show_schroeder(self):
+        """Calcula y muestra la frecuencia de Schroeder del recinto actual."""
+        try:
+            # Opción C (v2.24): f_S depende de la absorción -> exige elegirla. Si
+            # queda sin elegir, avisa y no muestra un f_S de un default silencioso.
+            if not self._ensure_absorption_choice():
+                if hasattr(self, "lbl_schroeder"):
+                    self.lbl_schroeder.setText("f_Schroeder: — (asigná absorción)")
+                QMessageBox.warning(
+                    self, "Absorción sin elegir",
+                    "La frecuencia de Schroeder depende de la absorción de la "
+                    "sala (RT60).\n\nAsigná materiales (botón «Materiales…») o un "
+                    "α uniforme y volvé a calcularla.\n\nCon eso también se "
+                    "auto-carga el número de modos necesario para cubrir hasta "
+                    "f_Schroeder.")
+                return None
+            ctx = self._schroeder_context()
+            if ctx is None:
+                self._log("Schroeder: no hay geometría válida.")
+                return None
+            fs, V, S, src_txt = ctx["fs"], ctx["V"], ctx["S"], ctx["src_txt"]
+            # El label se lee justo acá (el usuario acaba de pedir f_S), asi que
+            # se re-deriva aunque el cambio de material haya entrado por otra via.
+            self._refresh_abs_choice_label()
             self._log(
                 f"Frecuencia de Schroeder: {fs:.0f} Hz  "
                 f"(V={V:.1f} m³, S={S:.1f} m², {src_txt}). "
@@ -4390,24 +4977,72 @@ class AcousticPanel(QWidget):
             if hasattr(self, 'lbl_modes_weyl'):
                 n_weyl = self._weyl_modal_count(fs, V, S)
                 cap = self.sb_nmodes.maximum()
+                # Request 2 (v2.24): auto-cargar Nº modos con el número necesario
+                # para cubrir hasta f_S (Weyl, clampeado al tope). Aparece directo
+                # en el spinbox; el usuario puede bajarlo si quiere menos.
+                n_set = int(min(max(n_weyl, 2), cap)) if n_weyl > 0 else None
+                if n_set is not None and n_set != self.sb_nmodes.value():
+                    self.sb_nmodes.blockSignals(True)
+                    self.sb_nmodes.setValue(n_set)
+                    self.sb_nmodes.blockSignals(False)
                 if n_weyl == 0:
                     self.lbl_modes_weyl.setText(
                         "≈ ? modos hasta f_Schroeder (V o f inválidos)")
                 elif n_weyl > cap:
+                    # Refinar la malla NO agrega modos: el techo acá es el
+                    # presupuesto de modos, no la resolución espacial.
+                    f_cap = self._weyl_freq_for_count(cap, V, S)
                     self.lbl_modes_weyl.setText(
-                        f"≈ {n_weyl} modos hasta f_S (Weyl) · "
-                        f"cap actual del spinbox: {cap}. "
-                        f"Considerá refinar la malla o aceptar cobertura parcial.")
+                        f"≈ {n_weyl} modos hasta f_S (Weyl) · Nº modos puesto en el "
+                        f"tope {cap} → llegás hasta ~{f_cap:.0f} Hz. "
+                        f"Cubrir f_S entero no es alcanzable en esta sala.")
                 else:
                     self.lbl_modes_weyl.setText(
-                        f"≈ {n_weyl} modos hasta f_S (Weyl) · "
-                        f"si querés cobertura completa, pedí ese N")
+                        f"≈ {n_weyl} modos hasta f_S (Weyl) · Nº modos auto-cargado "
+                        f"en {n_set} para cobertura completa")
             # Si ya hay modos, mostrar tambien el cruce numerico (2c §9) al lado.
             self._update_modal_crossover()
             return fs
         except Exception as e:
             self._log(f"Error Schroeder: {e}")
             return None
+
+    def _post_solve_schroeder_coherence(self):
+        """Etapa 2b (Pass 2): tras resolver con el modelo de perturbacion, el f_S
+        se recalcula con el T30 por banda (mas largo en graves -> f_S mas alto
+        que el estimador Sabine con el que se dimensiono la malla). Refresca el
+        label y avisa si la malla quedo corta (sub-cubre la banda modal). NO
+        re-malla solo: el usuario decide (subir npm y re-resolver). No abre el
+        gate (post-solve la absorcion ya esta resuelta) ni propaga excepciones."""
+        if self._damping_model != "perturbation" or self.modal_result is None:
+            return
+        try:
+            ctx = self._schroeder_context()
+        except Exception:
+            return
+        # Solo si el f_S salio de verdad de la perturbacion (no del fallback).
+        if ctx is None or ctx.get("rt_src") != "perturbacion+sabine":
+            return
+        fs = ctx["fs"]
+        if hasattr(self, "lbl_schroeder"):
+            self.lbl_schroeder.setText(f"f_Schroeder ≈ {fs:.0f} Hz")
+        try:
+            f_max = self._validity_freq(self.modal_result.mesh_info["h_max"])
+        except Exception:
+            return
+        self._log(
+            f"Schroeder (perturbación, post-solve): f_S={fs:.0f} Hz "
+            f"({ctx['src_txt']})."
+        )
+        if fs > f_max * 1.02:
+            npm_sug = 6.0 * fs / 343.0
+            self._log(
+                f"⚠ La malla se dimensionó con el estimador Sabine y es válida "
+                f"hasta ~{f_max:.0f} Hz, pero con el T30 por modo f_S sube a "
+                f"{fs:.0f} Hz: la banda [{f_max:.0f}, {fs:.0f}] Hz queda "
+                f"sub-cubierta. Para cerrarla, subí npm a ~{npm_sug:.1f} y "
+                f"volvé a resolver (la 2ª pasada ya usa este f_S)."
+            )
 
     # -----------------------------------------------------------------------
     # Heatmap matplotlib del plano de corte
@@ -4649,6 +5284,7 @@ class AcousticPanel(QWidget):
         """Adopta la lista de parches editada y recomputa xi/RT."""
         self._patches = list(patches or [])
         self._refresh_patches_summary()
+        self._refresh_abs_choice_label()   # los parches tambien mueven el RT
         if self.modal_result is not None:
             self._xi_per_mode = self._compute_xi_from_materials()
         self._update_modal_crossover()
@@ -4864,14 +5500,41 @@ class AcousticPanel(QWidget):
                 d[i] = self._mat_lib[names.index(nm)]
         return d
 
-    def _on_face_materials_applied(self):
-        """Refresca el resumen y recomputa xi tras editar materiales."""
-        self._refresh_materials_summary()
-        # El material de un parche pudo cambiar desde la tabla -> recolorear overlay.
-        self._refresh_patch_overlay()
-        # Recalcular xi si los modos ya estaban resueltos
+    def _on_damping_model_changed(self):
+        """Cambió el modelo de amortiguamiento (Sabine A36 <-> perturbación).
+
+        Recalcula ξ si ya hay modos y refresca lo que cuelga de él (FRF/FoM se
+        recomputan al reabrir; acá se rehace el ξ vivo). El cruce modal usa el
+        RT de Sabine, así que NO cambia con esto (eso es la Etapa 2: rutear los
+        consumidores escalares por el modelo elegido)."""
+        self._damping_model = (self.combo_damping.currentData()
+                               if hasattr(self, "combo_damping") else "a36")
+        self._warned_pert_patches = False
         if self.modal_result is not None:
             self._xi_per_mode = self._compute_xi_from_materials()
+            nice = ("perturbación de frontera"
+                    if self._damping_model == "perturbation" else "Sabine (A36)")
+            self._log(f"Amortiguamiento: modelo → {nice}. ξ recalculado; "
+                      f"recalculá la FRF para ver el efecto.")
+            # Etapa 2a: el RT60 efectivo (label + f_cross) depende del modelo;
+            # refrescar para que el cambio se vea sin re-tocar los materiales.
+            self._refresh_materials_summary()
+            self._update_modal_crossover()
+
+    def _on_face_materials_applied(self):
+        """Refresca el resumen y recomputa xi tras editar materiales."""
+        # Recalcular xi PRIMERO si los modos ya estaban resueltos: el label RT60
+        # medio (Etapa 2a) lo lee para el T30 de la perturbacion; si se refresca
+        # antes, el label muestra el xi de la asignacion anterior (un refresh de
+        # atraso).
+        if self.modal_result is not None:
+            self._xi_per_mode = self._compute_xi_from_materials()
+        self._refresh_materials_summary()
+        # De donde sale la absorcion pudo cambiar (el usuario reasigno caras):
+        # el label tiene que seguirlo o queda mintiendo sobre el f_S mostrado.
+        self._refresh_abs_choice_label()
+        # El material de un parche pudo cambiar desde la tabla -> recolorear overlay.
+        self._refresh_patch_overlay()
         # El RT60 cambio -> B_HP cambia -> refrescar el cruce modal numerico.
         self._update_modal_crossover()
         # B27: aviso de colocacion de absorbente para control modal LF (poroso
@@ -4940,10 +5603,15 @@ class AcousticPanel(QWidget):
             self.lbl_mat_summary.setText(
                 f"{n_total} grupos · {n_assigned} con material   ({zones_txt} m²)"
             )
-            # RT60 medio
+            # Opción C (v2.24): sin absorción elegida, el RT60 no se muestra
+            # (no salir de un default silencioso).
+            if not self._has_absorption_choice():
+                self.lbl_rt60.setText("RT60 medio: — (asigná absorción)")
+                return
+            # RT60 medio (Etapa 2a: efectivo por modelo de amortiguamiento).
             V = aa.compute_mesh_volume(verts, tris)
             g2m = self._group_to_material_dict(groups)
-            rt = self._sabine_rt60(V, groups, g2m)
+            rt, rt_src = self._effective_rt60_by_band(V, groups, g2m)
             rt_avg = float(np.mean(list(rt.values()))) if rt else 0.0
             rt500 = rt.get(500, 0.0)
             # D5: Bass Ratio (calidez por reverberacion). Solo si hay materiales
@@ -4958,9 +5626,11 @@ class AcousticPanel(QWidget):
                 else:
                     cal = "boomy"
                 br_txt = f"   ·   BR: {br:.2f} ({cal})"
+            src_txt = ("   ·   T30 perturbación (banda modal)"
+                       if rt_src == "perturbacion+sabine" else "")
             self.lbl_rt60.setText(
                 f"RT60 medio: {rt_avg:.2f} s   ·   @500 Hz: {rt500:.2f} s"
-                f"{br_txt}   (V={V:.1f} m³)"
+                f"{br_txt}   (V={V:.1f} m³){src_txt}"
             )
         except Exception as e:
             self.lbl_mat_summary.setText(f"(error: {e})")
@@ -4978,15 +5648,20 @@ class AcousticPanel(QWidget):
                 g2m[g.signature] = self._mat_lib[names.index(name)]
         return g2m
 
-    def _compute_xi_from_materials(self):
+    def _compute_xi_from_materials(self, model=None):
         """Calcula xi_n por modo usando el mapeo POR CARA (FaceMaterialMap).
 
         Si no hay asignaciones (mapa vacio), todos los grupos contribuyen con
         alpha=0.03 (default rigido conservador) — el resultado es equivalente
         a una sala de hormigon sin tratar.
+
+        `model` fuerza el modelo de amortiguamiento ("a36"|"perturbation"); por
+        defecto usa `self._damping_model`. Sirve para pedir el xi de perturbacion
+        sin tocar el toggle (comparacion en el diagrama Ver-RT60).
         """
         if self.modal_result is None:
             return None
+        model = model or self._damping_model
         try:
             groups, verts, tris = self._get_face_groups()
             V = aa.compute_mesh_volume(verts, tris)
@@ -5011,6 +5686,25 @@ class AcousticPanel(QWidget):
                 ci = getattr(self.modal_result, "carve_info", None)
                 if ci is not None:
                     V = max(V - float(ci.get("V_removed_mesh", 0.0)), 1e-9)
+            # Modelo PERTURBACION (Etapa 1 + 1.b): xi por perturbacion de
+            # frontera, sin pasar por RT60. Compone con muebles (ya en groups/
+            # g2m) Y con parches (mismo teselado fino, Etapa 1.b).
+            if model == "perturbation":
+                if self._patches:
+                    import absorption_patch as ap
+                    xi = ap.compute_xi_per_mode_with_patches(
+                        self.modal_result.freqs, self.modal_result.phis,
+                        self.modal_result.locator, verts, tris, groups, g2m,
+                        self._patches, self._patch_to_material_dict(), V,
+                        model="perturbation")
+                    if xi is not None:
+                        return xi
+                else:
+                    xi = fm.perturbation_xi_per_mode(
+                        self.modal_result.freqs, self.modal_result.phis,
+                        self.modal_result.locator, verts, tris, groups, g2m, V)
+                    if xi is not None:
+                        return xi
             # Parches sub-cara (v8): si hay al menos uno, la absorcion se integra
             # con cuadratura FINA (A36 refinado). Baseline sin parches queda en
             # A36 crudo -> los .room sin parches no cambian ni un digito.
@@ -5047,16 +5741,95 @@ class AcousticPanel(QWidget):
                 V, groups, g2m, self._patches, self._patch_to_material_dict())
         return fm.compute_sabine_rt60_per_face(V, groups, g2m)
 
+    def _effective_rt60_by_band(self, V, groups, g2m):
+        """RT60 por banda EFECTIVO segun el modelo de amortiguamiento (Etapa 2a).
+
+        UN solo lugar para los consumidores ESCALARES post-solve (label RT60
+        medio, f_cross, diagrama Ver-RT60), analogo a como `_schroeder_context`
+        unifico el f_S. El f_S/auto-tuner queda FUERA (corre pre-solve, sin
+        modos = chicken-egg; es la Etapa 2b).
+
+          - Sabine (default): el {banda: RT60} de Sabine por cara (patch-aware).
+            Reduce EXACTO al camino previo -> los .room con modelo Sabine no
+            cambian ni un digito.
+          - Perturbacion: T30 por banda del decay modal (`rt60_by_band_from_
+            modal_decay`) en la banda MODAL (< f_S), y Sabine en las bandas por
+            encima del modo mas alto (regimen difuso, donde Sabine SI vale). El
+            cruce entre ambos regimenes es justo la frontera fisica.
+
+        Sin modos resueltos (o sin xi) cae a Sabine entero. Usa la cache viva
+        `self._xi_per_mode` (no recomputa la perturbacion).
+
+        Devuelve (rt_dict {banda(int): RT60}, src) con src en
+        {"sabine", "perturbacion+sabine"}.
+        """
+        sab = self._sabine_rt60(V, groups, g2m)
+        if (self._damping_model != "perturbation"
+                or self.modal_result is None):
+            return sab, "sabine"
+        xi = self._xi_per_mode
+        if xi is None:
+            return sab, "sabine"
+        try:
+            import modal_metrics as mm
+            f = np.asarray(self.modal_result.freqs, dtype=float)
+            xi = np.asarray(xi, dtype=float)
+            if xi.size != f.size:
+                return sab, "sabine"
+            delta = xi * 2.0 * np.pi * f          # tasa de amplitud [Np/s]
+            pert = mm.rt60_by_band_from_modal_decay(f, delta)
+        except Exception as e:
+            self._log(f"RT60 efectivo (perturbación): {e} -> Sabine")
+            return sab, "sabine"
+        if not pert:
+            return sab, "sabine"
+        # Blend: perturbacion donde hay modos, Sabine en el resto de las bandas.
+        out = dict(sab)
+        out.update(pert)
+        return out, "perturbacion+sabine"
+
+    def _perturbation_rt60_by_band(self):
+        """RT60 T30 por banda de la PERTURBACION, INDEPENDIENTE del toggle de
+        modelo (para superponerlo como comparacion en el diagrama Ver-RT60).
+
+        Devuelve {banda(int): RT60} o None si no hay modos. Reusa la cache si el
+        modelo activo ya es perturbacion; si no, pide el xi de perturbacion sin
+        cambiar el estado (via `_compute_xi_from_materials(model=...)`).
+        """
+        if self.modal_result is None:
+            return None
+        if self._damping_model == "perturbation" and self._xi_per_mode is not None:
+            xi = self._xi_per_mode
+        else:
+            xi = self._compute_xi_from_materials(model="perturbation")
+        if xi is None:
+            return None
+        try:
+            import modal_metrics as mm
+            f = np.asarray(self.modal_result.freqs, dtype=float)
+            xi = np.asarray(xi, dtype=float)
+            if xi.size != f.size:
+                return None
+            delta = xi * 2.0 * np.pi * f
+            return mm.rt60_by_band_from_modal_decay(f, delta) or None
+        except Exception:
+            return None
+
     def _rt60_callable(self):
-        """Devuelve un callable f->RT60 [s] (log-interp de la Sabine por cara),
-        o None si no hay geometria/RT. Para el cruce modal numerico (2c §9)."""
+        """Devuelve un callable f->RT60 [s] (log-interp del RT por banda), o None
+        si no hay geometria/RT. Para el cruce modal numerico (2c §9).
+
+        Etapa 2a: con el modelo de perturbacion activo y modos resueltos, el RT
+        de la banda modal sale del decay T30 (no de Sabine) -> el B_HP=2.2/RT60
+        y por lo tanto f_cross reflejan el amortiguamiento por modo. Con Sabine
+        (default) es la log-interp de la Sabine por cara de siempre."""
         try:
             groups, verts, tris = self._get_face_groups()
             if not groups:
                 return None
             V = aa.compute_mesh_volume(verts, tris)
             g2m = self._group_to_material_dict(groups)
-            rt = self._sabine_rt60(V, groups, g2m)   # {banda: RT60}
+            rt, _src = self._effective_rt60_by_band(V, groups, g2m)  # {banda: RT60}
             if not rt:
                 return None
             bands = np.array(sorted(rt.keys()), dtype=float)
