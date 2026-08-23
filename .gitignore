@@ -33,3 +33,10 @@ referencias/*.epub
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# --- Entregables/asets pesados fuera del repo (quedan en disco local) ---
+# Sacados del tracking el 23 Ago 2026: no son codigo del simulador.
+ENTREGA_TP11/
+PRESENTACION_TP11/
+figuras para texto/
+juego/

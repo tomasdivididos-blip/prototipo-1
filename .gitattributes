@@ -1,0 +1,6 @@
+# Los launchers de macOS DEBEN quedar con saltos LF: bash falla con CRLF.
+# (memoria mac-distribution). El packer ya normaliza al armar el zip; esto
+# cubre el caso de un Mac que clona el repo y corre `bash run.command` directo.
+run.command text eol=lf
+*.command   text eol=lf
+*.sh        text eol=lf

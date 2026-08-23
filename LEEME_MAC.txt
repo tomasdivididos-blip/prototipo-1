@@ -1,0 +1,52 @@
+PROTOTIPO 1 - Version para macOS (corre desde codigo fuente)
+============================================================
+
+Esta carpeta NO trae un .app de doble clic: el programa se construyo en
+Windows y los binarios de Mac hay que generarlos EN una Mac. En cambio,
+corre directo desde el codigo Python (la app es 100% Python).
+
+
+REQUISITO UNICO: tener Python 3 instalado
+-----------------------------------------
+Si no lo tenes, descarga "Python 3.12" desde:
+    https://www.python.org/downloads/macos/
+e instalalo (Siguiente, Siguiente, listo). Una sola vez.
+
+
+COMO ABRIR EL PROGRAMA
+----------------------
+1) Descomprimi este .zip (doble clic) en una carpeta, por ejemplo el Escritorio.
+2) Abri la aplicacion "Terminal"
+   (Aplicaciones > Utilidades > Terminal).
+3) En la ventana de Terminal escribi la palabra:   bash
+   y despues UN ESPACIO.
+4) Arrastra el archivo "run.command" (de esta carpeta) a la ventana de
+   Terminal: la ruta se va a pegar sola.
+5) Presiona Enter.
+
+La PRIMERA vez tarda unos minutos (instala las librerias en una carpeta
+local llamada .venv_mac, sin tocar el resto del sistema).
+Las siguientes veces abre en pocos segundos (repetis los pasos 2 a 5).
+
+
+NOTAS
+-----
+- Audio: en Mac usa "afplay" (viene de fabrica). No hay que instalar nada.
+- Gatekeeper: el metodo "bash run.command" de arriba evita el bloqueo de
+  "desarrollador no identificado" (no necesita permisos especiales). Por eso
+  NO se usa doble clic sobre run.command.
+- Graficos 3D: la app usa OpenGL. Funciona en Mac aunque Apple lo marque
+  como tecnologia heredada.
+- Si algo falla durante la instalacion o el arranque, copia y envia el texto
+  que aparece en la ventana de Terminal: con eso se diagnostica.
+
+
+ARCHIVOS DE LA CARPETA
+----------------------
+- run.command       -> lanzador (lo de arriba).
+- main.py + *.py     -> codigo del programa.
+- materials/         -> base de materiales acusticos (19 archivos).
+- requirements.txt   -> lista de librerias (las instala run.command solo).
+- ejemplo.room       -> sala de ejemplo para abrir (menu Abrir).
+- MANUAL.pdf         -> manual de usuario.
+- verify_setup.py    -> diagnostico opcional de la instalacion.
