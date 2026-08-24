@@ -154,9 +154,60 @@ def t7_physicality():
               f"min={a.min():.3f} max={a.max():.3f}")
 
 
+def t8_jca():
+    print("T8 - JCA (Johnson-Champoux-Allard, Etapa 1b)")
+    # Material fibroso: phi~1, alpha_inf~1; Lambda desde sigma (relacion clasica
+    # Lambda ~ sqrt(8*alpha_inf*eta/(sigma*phi))), Lambda' ~ 2*Lambda.
+    phi, ainf, sigma = 0.98, 1.0, 20000.0
+    Lam = np.sqrt(8.0 * ainf * imp.ETA / (sigma * phi))
+    Lamp = 2.0 * Lam
+    f = np.geomspace(30.0, 500.0, 40)
+
+    # (a) convencion: Im(k_c) del mismo signo que Miki (e^{-iwt} -> Im(k)<0)
+    fc = np.array([100.0, 300.0])
+    _, kc_j = imp.jca_zc_kc(fc, phi, ainf, sigma, Lam, Lamp)
+    _, kc_m = imp.miki_zc_kc(fc, sigma)
+    check("T8a JCA: Im(k_c) mismo signo que Miki (convencion e^{-iwt})",
+          bool(np.all(np.sign(kc_j.imag) == np.sign(kc_m.imag))),
+          f"Im k_c JCA={kc_j.imag.round(3)}, Miki={kc_m.imag.round(3)}")
+
+    # (b) fibroso: JCA ~ Miki en beta compleja (mismo orden, Re y -Im positivos)
+    zc_j, _ = imp.jca_zc_kc(fc, phi, ainf, sigma, Lam, Lamp)
+    zc_m, _ = imp.miki_zc_kc(fc, sigma)
+    rel = np.abs(zc_j - zc_m) / np.abs(zc_m)
+    check("T8b JCA fibroso ~ Miki en Z_c (mismo orden)",
+          bool(np.all(rel < 0.4)), f"rel |Zc| = {rel.round(3)}")
+
+    # (c) alpha fisica en toda la banda, con y sin camara
+    a1 = imp.porous_jca(phi, ainf, sigma, Lam, Lamp, 0.05).alpha_random(f)
+    a2 = imp.porous_jca(phi, ainf, sigma, Lam, Lamp, 0.05,
+                        air_gap=0.10).alpha_random(f)
+    check("T8c JCA: alpha in [0,1] (poroso 50mm)",
+          bool(np.all(a1 >= -1e-9) and np.all(a1 <= 1.0 + 1e-9)),
+          f"min={a1.min():.3f} max={a1.max():.3f}")
+    check("T8d JCA: alpha in [0,1] (poroso 50mm + camara 100mm)",
+          bool(np.all(a2 >= -1e-9) and np.all(a2 <= 1.0 + 1e-9)),
+          f"min={a2.min():.3f} max={a2.max():.3f}")
+
+    # (e) fibroso: alpha_random JCA cercana a Miki (mismo material)
+    aj = imp.porous_jca(phi, ainf, sigma, Lam, Lamp, 0.05).alpha_random(f)
+    am = imp.porous(sigma, 0.05, "miki").alpha_random(f)
+    dmax = float(np.abs(aj - am).max())
+    check("T8e JCA(fibroso) ~ Miki en alpha_random (dif < 0.15)",
+          dmax < 0.15, f"max |dalpha| = {dmax:.3f}")
+
+    # (f) camara de aire baja la absorcion a graves tambien en JCA
+    a_lo_no = imp.porous_jca(phi, ainf, sigma, Lam, Lamp, 0.03).alpha_random(
+        np.array([125.0]))[0]
+    a_lo_gap = imp.porous_jca(phi, ainf, sigma, Lam, Lamp, 0.03,
+                              air_gap=0.10).alpha_random(np.array([125.0]))[0]
+    check("T8f JCA: camara sube absorcion en graves",
+          a_lo_gap > a_lo_no, f"con {a_lo_gap:.3f} > sin {a_lo_no:.3f}")
+
+
 if __name__ == "__main__":
     print("=" * 64)
-    print(" bench_impedance.py - Etapa 1a de Capa 0")
+    print(" bench_impedance.py - Etapa 1a+1b de Capa 0")
     print("=" * 64)
     t1_rigid()
     t2_resistive_bridge()
@@ -165,6 +216,7 @@ if __name__ == "__main__":
     t5_db_vs_miki()
     t6_measured_interp()
     t7_physicality()
+    t8_jca()
     print("=" * 64)
     print(f" RESULTADO: {N_OK} OK, {N_FAIL} FAIL")
     print("=" * 64)

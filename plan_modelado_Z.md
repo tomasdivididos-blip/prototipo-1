@@ -108,8 +108,11 @@ reproducibilidad, estilo Etapa 3 de la perturbación).
   porous (Delany-Bazley + Miki) + cámara de aire + TMM + measured_Zf. β compleja
   local. `bench_impedance.py` 22/22 (rígido→β=0; resistivo→reproduce Paris bit a bit;
   poroso+cámara→pico λ/4 exacto; α(f) sana; DB no físico en graves, Miki sí).
-- **Etapa 1b — JCA:** `porous_jca` (fluido equivalente). Bench: JCA reduce a límites
-  conocidos; contra figuras de Allard&Atalla; alta σ → Miki.
+- **Etapa 1b [HECHA] — JCA:** `jca_zc_kc` + `porous_jca` (fluido equivalente, 5
+  params: φ, α∞, σ, Λ, Λ'; Cox Ec 5.15/5.16 = Johnson et al./Allard-Champoux).
+  Convención i-física = -j-ingeniería (por eso NO se conjuga). `bench_impedance.py`
+  T8 (28/28 total): convención coherente con Miki (Im k_c<0); fibroso ≈ Miki (Z_c
+  <12%, α_random dif <0.073); físico α∈[0,1]; cámara sube graves.
 - **Etapa 1c [HECHA] — perturbación compleja:** `perturbation_xi_shift_per_mode`
   (β compleja → Re=amortiguamiento ξ, Im=corrimiento de fₙ). Cuadratura de superficie
   factorizada en `_modal_surface_integrals` (fuente única). Convención: solver
