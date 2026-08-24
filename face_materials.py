@@ -44,6 +44,11 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+# NumPy 2.0 renombro np.trapz -> np.trapezoid (y elimino trapz). Este alias hace
+# que el codigo corra igual en numpy 1.x (Anaconda del dev) y 2.x (instalacion
+# fresca del paquete Mac). Ver el error de arranque en macOS (np.trapz removido).
+_trapz = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
+
 
 # ---------------------------------------------------------------------------
 # Dataclass de grupo de caras
@@ -587,7 +592,7 @@ def _alpha_random_of_beta(beta: np.ndarray) -> np.ndarray:
     b = beta[:, None]                                 # (Nb, 1)
     R = (ct - b) / (ct + b)
     integrand = (1.0 - R ** 2) * np.sin(2.0 * th)[None, :]
-    return np.trapz(integrand, th, axis=1)            # (Nb,)
+    return _trapz(integrand, th, axis=1)              # (Nb,)
 
 
 # Tabla de inversion de Paris, precomputada una vez. alpha_rand(beta) es
@@ -655,7 +660,40 @@ def perturbation_xi_per_mode(
     Nm = int(phis.shape[1])
     if Nm == 0 or freqs.size < Nm or V <= 0:
         return None
+    Sg_all = _modal_surface_integrals(phis, locator, verts, tris, groups, subdiv)
+    if Sg_all is None:
+        return None
 
+    # alpha -> beta por grupo y por banda del catalogo. Se cachea por frecuencia
+    # unica para no reinvertir Paris en cada modo.
+    xi = np.empty(Nm, dtype=float)
+    beta_cache: Dict[tuple, np.ndarray] = {}
+    for n in range(Nm):
+        fn = float(freqs[n])
+        key = round(fn, 3)
+        beta_g = beta_cache.get(key)
+        if beta_g is None:
+            alpha_g = np.array(
+                [_alpha_for(g, group_to_material, fn, default_alpha)
+                 for g in groups], dtype=float)
+            beta_g = beta_from_alpha_random(alpha_g)
+            beta_cache[key] = beta_g
+        delta = 0.5 * c * float((beta_g * Sg_all[n]).sum())   # Np/s
+        xi[n] = delta / max(2.0 * np.pi * fn, 1e-9)
+    return xi
+
+
+def _modal_surface_integrals(phis, locator, verts, tris, groups, subdiv):
+    """INT_g phi_n^2 dS por modo y por grupo -> (Nm, Ng), con re-escala por
+    cobertura de area (fix A2: los centroides fuera de la malla escalonada se
+    descartan y se re-escala por el area muestreada). Es geometria + forma modal:
+    NO depende de la frecuencia. Fuente unica de verdad de la cuadratura de
+    superficie que comparten la perturbacion real y la compleja."""
+    if phis is None or len(groups) == 0 or locator is None:
+        return None
+    Nm = int(phis.shape[1])
+    if Nm == 0:
+        return None
     tris = np.asarray(tris, dtype=int)
     Nt = len(tris)
     if Nt == 0:
@@ -685,28 +723,178 @@ def perturbation_xi_per_mode(
     cover = np.where(area_ok_g > 0,
                      area_tot_g / np.maximum(area_ok_g, 1e-12), 0.0)
 
-    # alpha -> beta por grupo y por banda del catalogo. Se cachea por (grupo,
-    # frecuencia unica) para no reinvertir Paris en cada modo.
-    xi = np.empty(Nm, dtype=float)
-    beta_cache: Dict[tuple, np.ndarray] = {}
+    Sg_all = np.empty((Nm, Ng), dtype=float)
     for n in range(Nm):
-        fn = float(freqs[n])
         vals = locator.evaluate_many(phis[:, n], cen)
         w = np.where(valid, np.nan_to_num(np.real(vals)) ** 2, 0.0) * area
         # INT_g phi^2 dS  (phi M-normalizada -> INT phi^2 dV = 1)
-        Sg = np.bincount(gid, weights=w, minlength=Ng) * cover
+        Sg_all[n] = np.bincount(gid, weights=w, minlength=Ng) * cover
+    return Sg_all
+
+
+def perturbation_xi_shift_per_mode(
+    freqs, phis, locator, verts, tris, groups, group_to_material, V,
+    default_alpha=0.03, subdiv=2, c=343.0, beta_provider=None,
+):
+    """Perturbacion de frontera con admitancia beta COMPLEJA. Devuelve
+    (xi, f_new):
+
+        delta_c(n) = (c/2) sum_g beta_g S_{n,g}          (complejo)
+        xi[n]    = Re(delta_c) / omega_n                 (amortiguamiento)
+        f_new[n] = f_n - Im(delta_c) / (2 pi)            (corrimiento por reactancia)
+
+    Deriva de la expansion de 1er orden del QEP complejo
+    (c^2 K + i c beta C w - M w^2 = 0): w ~ omega_n + (i c/2) beta S_n, de donde
+    Im(w) = (c/2) Re(beta) S_n (amortiguamiento) y Re(w) = omega_n - (c/2) Im(beta)
+    S_n (corrimiento). Validado <few% vs el QEP exacto en bench_perturbation_complex.py.
+
+    CONVENCION: el solver modal / QEP usa e^{+i w t} (Re(beta)>0 -> perdida).
+    impedance.py usa e^{-i w t} (Delany-Bazley) -> al conectar, pasar conj(beta_imp).
+
+    Si beta_provider is None: usa alpha->beta REAL (Im=0) -> reduce EXACTO a
+    perturbation_xi_per_mode y f_new == freqs (puente de no-regresion).
+    beta_provider(groups, fn) -> array compleja (Ng,)."""
+    if phis is None or len(groups) == 0 or locator is None:
+        return None
+    freqs = np.asarray(freqs, dtype=float)
+    Nm = int(phis.shape[1])
+    if Nm == 0 or freqs.size < Nm or V <= 0:
+        return None
+    Sg_all = _modal_surface_integrals(phis, locator, verts, tris, groups, subdiv)
+    if Sg_all is None:
+        return None
+
+    xi = np.empty(Nm, dtype=float)
+    f_new = np.empty(Nm, dtype=float)
+    cache: Dict[tuple, np.ndarray] = {}
+    for n in range(Nm):
+        fn = float(freqs[n])
         key = round(fn, 3)
-        beta_g = beta_cache.get(key)
+        beta_g = cache.get(key)
         if beta_g is None:
-            alpha_g = np.array(
-                [_alpha_for(g, group_to_material, fn, default_alpha)
-                 for g in groups], dtype=float)
-            beta_g = beta_from_alpha_random(alpha_g)
-            beta_cache[key] = beta_g
-        delta = 0.5 * c * float((beta_g * Sg).sum())     # Np/s
-        omega_n = 2.0 * np.pi * fn
-        xi[n] = delta / max(omega_n, 1e-9)
-    return xi
+            if beta_provider is None:
+                alpha_g = np.array(
+                    [_alpha_for(g, group_to_material, fn, default_alpha)
+                     for g in groups], dtype=float)
+                beta_g = beta_from_alpha_random(alpha_g).astype(complex)
+            else:
+                beta_g = np.asarray(beta_provider(groups, fn), dtype=complex)
+            cache[key] = beta_g
+        cdelta = 0.5 * c * complex((beta_g * Sg_all[n]).sum())
+        xi[n] = cdelta.real / max(2.0 * np.pi * fn, 1e-9)
+        f_new[n] = fn - cdelta.imag / (2.0 * np.pi)
+    return xi, f_new
+
+
+def _modal_incidence_angles(freqs, phis, locator, verts, tris, groups,
+                            subdiv=3, c=343.0):
+    """Angulo de incidencia theta_{n,g} (rad) por modo n y grupo (pared) g,
+    estimado del campo modal DISCRETO. Etapa 2 (reaccion extendida).
+
+    Para el modo n, |k| = 2 pi f_n / c. El numero de onda TANGENCIAL en la pared
+    g se estima con el cociente de Rayleigh de la energia de Dirichlet de
+    superficie:
+        k_t^2(g) = INT_g |grad_s phi_n|^2 dS / INT_g phi_n^2 dS
+    y cos(theta) = sqrt(1 - k_t^2/|k|^2). EXACTO para un shoebox (recupera
+    arccos(|k_normal|/|k|) del modo (l,m,n)); aproximado en geometria irregular
+    (derivacion propia, sin cita, se valida numericamente).
+
+    Se subdivide cada triangulo (subdiv) y se ajusta el gradiente en el plano de
+    la interpolacion lineal por sub-triangulo (3 valores de phi por sub-cara), asi
+    se captura la variacion espacial de phi a lo largo de una pared grande.
+
+    Devuelve theta (Nm, Ng) en rad, clampeado a [0, 88 deg] (evita la
+    singularidad rasante del TMM), o None."""
+    if phis is None or len(groups) == 0 or locator is None:
+        return None
+    Nm = int(phis.shape[1])
+    if Nm == 0:
+        return None
+    tris = np.asarray(tris, dtype=int)
+    Ng = len(groups)
+    tri_group = np.full(len(tris), -1, dtype=int)
+    for gi, g in enumerate(groups):
+        tri_group[np.asarray(g.face_indices, dtype=int)] = gi
+    keep = tri_group >= 0
+    if not np.any(keep):
+        return None
+
+    P, gid = _subdivide_tris_indexed(verts[tris[keep]], tri_group[keep], subdiv)
+    e1, e2 = P[:, 1] - P[:, 0], P[:, 2] - P[:, 0]
+    Nvec = np.cross(e1, e2)
+    area = 0.5 * np.linalg.norm(Nvec, axis=1)
+    nhat = Nvec / np.maximum(np.linalg.norm(Nvec, axis=1, keepdims=True), 1e-30)
+    Mmat = np.stack([e1, e2, nhat], axis=1)          # (Nq, 3, 3), filas e1,e2,n
+    cen = P.mean(axis=1)
+    pts = P.reshape(-1, 3)                            # (Nq*3, 3) sub-vertices
+
+    cos2_min = np.cos(np.radians(88.0)) ** 2
+    theta = np.empty((Nm, Ng), dtype=float)
+    for n in range(Nm):
+        vv = np.real(locator.evaluate_many(phis[:, n], pts)).reshape(-1, 3)
+        vc = np.real(locator.evaluate_many(phis[:, n], cen))
+        good = np.isfinite(vv).all(axis=1) & np.isfinite(vc)
+        rhs = np.stack([vv[:, 1] - vv[:, 0], vv[:, 2] - vv[:, 0],
+                        np.zeros(len(vv))], axis=1)
+        rhs = np.nan_to_num(rhs)
+        # rhs como pila de COLUMNAS (Nq,3,1): en numpy 2.0 solve(A(Nq,3,3),
+        # b(Nq,3)) ya no trata b como pila de vectores (cambio de semantica);
+        # (Nq,3,1) es inequivoco y funciona en numpy 1.x y 2.x.
+        grad = np.linalg.solve(Mmat, rhs[:, :, None])[:, :, 0]  # (Nq,3) grad plano
+        grad2 = np.sum(grad * grad, axis=1)
+        w = np.where(good, 1.0, 0.0) * area
+        num = np.bincount(gid, weights=grad2 * w, minlength=Ng)
+        den = np.bincount(gid, weights=np.nan_to_num(vc ** 2) * w, minlength=Ng)
+        kt2 = num / np.maximum(den, 1e-30)
+        k2 = (2.0 * np.pi * float(freqs[n]) / c) ** 2
+        cos2 = np.clip(1.0 - kt2 / max(k2, 1e-30), cos2_min, 1.0)
+        theta[n] = np.arccos(np.sqrt(cos2))
+    return theta
+
+
+def perturbation_xi_shift_extended(
+    freqs, phis, locator, verts, tris, groups, surf_by_group, V,
+    default_surf=None, subdiv=2, c=343.0,
+):
+    """Perturbacion de frontera con REACCION EXTENDIDA (Etapa 2). Cada grupo g
+    tiene una `SurfaceImpedance` en surf_by_group[g.signature] (o `default_surf`
+    si falta). La admitancia se evalua en el angulo del modo:
+        beta_{n,g} = conj( rho0*c / Z_g(f_n, theta_{n,g}) )
+    con theta_{n,g} estimado por `_modal_incidence_angles`. El conj pasa de la
+    convencion e^{-iwt} de impedance.py a la e^{+iwt} del solver.
+
+    Devuelve (xi, f_new) igual que perturbation_xi_shift_per_mode. Reusa la misma
+    cuadratura de superficie y la misma descomposicion Re/Im (amortiguamiento/
+    corrimiento). Con superficies de reaccion LOCAL (Z indep. de theta) coincide
+    con la version por incidencia normal."""
+    if phis is None or len(groups) == 0 or locator is None:
+        return None
+    freqs = np.asarray(freqs, dtype=float)
+    Nm = int(phis.shape[1])
+    if Nm == 0 or freqs.size < Nm or V <= 0:
+        return None
+    Sg_all = _modal_surface_integrals(phis, locator, verts, tris, groups, subdiv)
+    ang = _modal_incidence_angles(freqs, phis, locator, verts, tris, groups,
+                                  subdiv=max(subdiv, 2), c=c)
+    if Sg_all is None or ang is None:
+        return None
+    Z0 = 1.21 * c                                     # rho0*c (sources.RHO0=1.21)
+    xi = np.empty(Nm, dtype=float)
+    f_new = np.empty(Nm, dtype=float)
+    for n in range(Nm):
+        fn = float(freqs[n])
+        beta_g = np.empty(len(groups), dtype=complex)
+        for gi, g in enumerate(groups):
+            surf = surf_by_group.get(g.signature, default_surf)
+            if surf is None:
+                beta_g[gi] = 0.0                       # rigido
+            else:
+                Zg = complex(surf.Z(fn, float(ang[n, gi]))[0])
+                beta_g[gi] = np.conj(Z0 / Zg)          # e^{-iwt} -> e^{+iwt}
+        cdelta = 0.5 * c * complex((beta_g * Sg_all[n]).sum())
+        xi[n] = cdelta.real / max(2.0 * np.pi * fn, 1e-9)
+        f_new[n] = fn - cdelta.imag / (2.0 * np.pi)
+    return xi, f_new
 
 
 # Categorias de la libreria de materiales (material_library / carpeta materials/).

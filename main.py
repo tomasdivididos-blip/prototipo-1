@@ -18,6 +18,25 @@ from pathlib import Path
 
 os.environ["PYQTGRAPH_QT_LIB"] = "PyQt5"
 
+# Fix macOS/venv: Qt puede no encontrar su plugin de plataforma ("cocoa" en Mac,
+# "windows" en Win) cuando corre desde fuente en un venv de PyQt5 -> la ruta de
+# plugins queda vacia y aborta ("Could not find the Qt platform plugin ... in ''",
+# Abort trap 6 / codigo 134). Se deriva la ruta de la instalacion de PyQt5 y se
+# setea ANTES de importar QtWidgets. El .exe de Windows (PyInstaller) no lo
+# necesita, pero setear no molesta.
+try:
+    import PyQt5 as _pyqt5
+    _qt_base = os.path.dirname(_pyqt5.__file__)
+    for _sub in ("Qt5", "Qt"):
+        _plugins = os.path.join(_qt_base, _sub, "plugins")
+        if os.path.isdir(os.path.join(_plugins, "platforms")):
+            os.environ.setdefault("QT_QPA_PLATFORM_PLUGIN_PATH",
+                                  os.path.join(_plugins, "platforms"))
+            os.environ.setdefault("QT_PLUGIN_PATH", _plugins)
+            break
+except Exception:
+    pass
+
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import (
