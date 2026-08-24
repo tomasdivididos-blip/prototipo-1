@@ -61,7 +61,7 @@ class AxisIndicator(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setStyleSheet(
-            f"QFrame {{ background: {self._COL_BG}; border-radius: 5px; }}"
+            f"QFrame {{ background-color: {self._COL_BG}; border-radius: 5px; }}"
         )
         self.setFixedHeight(self._BOX_PX + 12)
         layout = QHBoxLayout(self)
@@ -87,15 +87,19 @@ class AxisIndicator(QFrame):
         self._active: str | None = None
 
     def _style_inactive(self):
-        return (f"QLabel {{ background: {self._COL_BOX}; "
+        # OJO: el ultimo segmento NO es f-string, asi que su llave de cierre va
+        # SIMPLE ("}"). Antes decia "}}" (dos llaves) mientras la apertura era
+        # "{{" (f-string -> una llave) -> QSS desbalanceado. El Qt viejo lo
+        # toleraba; el 5.15.19 de macOS lo rechaza ("Could not parse stylesheet").
+        return (f"QLabel {{ background-color: {self._COL_BOX}; "
                 f"color: {self._COL_TEXT}; font-weight: 700; "
-                "border-radius: 3px; font-family: monospace; }}")
+                "border-radius: 3px; }")
 
     def _style_active(self, axis: str):
         bg = self._COL_BOX_ACTIVE.get(axis, self._COL_BOX)
-        return (f"QLabel {{ background: {bg}; "
+        return (f"QLabel {{ background-color: {bg}; "
                 f"color: {self._COL_TEXT_ACTIVE}; font-weight: 700; "
-                "border-radius: 3px; font-family: monospace; }}")
+                "border-radius: 3px; }")
 
     def set_active(self, axis: str | None):
         """axis: 'x' | 'y' | 'z' | None."""
@@ -212,7 +216,10 @@ class IsoViewer(gl.GLViewWidget):
         self._n_walls = None
         self._view_mode = "aristas"
         self.show_labels = False
-        self._label_font = QFont("Segoe UI", 8)
+        # Fuente por defecto del sistema (evita el warning "missing font family
+        # 'Segoe UI'" en macOS; en Windows el default sigue siendo Segoe UI).
+        self._label_font = QFont()
+        self._label_font.setPointSize(8)
         self._label_font.setBold(True)
 
         # --- Rotacion con eje fijo (Ctrl+Shift+Alt+X/Y/Z o click en el overlay) ---
