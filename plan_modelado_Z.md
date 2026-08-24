@@ -97,8 +97,8 @@ Consumidor: `face_materials.perturbation_xi_per_mode` cambia la línea 704 por p
 devuelve además el corrimiento Δfₙ (nuevo, opcional).
 
 Material → construcción: campo opcional `construction` en el JSON del material y/o un
-diálogo "Construcción de pared" (Etapa 3). Sin construcción → cae a α→β (default,
-reproducibilidad, estilo Etapa 3 de la perturbación).
+diálogo "Construcción de pared" (Etapa 5, wiring). Sin construcción → cae a α→β
+(default, reproducibilidad, estilo Etapa 3 de la perturbación de frontera).
 
 ---
 
@@ -127,9 +127,25 @@ reproducibilidad, estilo Etapa 3 de la perturbación).
   aprox. en irregular = derivación propia) + `perturbation_xi_shift_extended`.
   `bench_extended_reaction.py` 7/7 (θ estimado vs analítico: mediana 2.4°, media 6.3°;
   puente local bit a bit; extendida ≠ normal en ξ un 47%).
-- **Etapa 3 — resonantes + UI:** perforado/membrana/Helmholtz + diálogo construcción
-  + carga de mediciones + `.room` (aditivo). Default sigue α→β hasta que el usuario
-  asigna construcción.
+- **Etapa 3 — resonantes (física, aislada):** facings sobre cavidad vía el TMM ya
+  existente (solo falta la impedancia del facing): panel perforado (Helmholtz
+  distribuido, f₀=(c/2π)√(ε/(t_ef·D))), microperforado (Maa 1998), membrana/panel
+  (mass-spring, f₀=60/√(m·d)), Helmholtz. Ref: Cox & D'Antonio cap. 6-7; Fuchs; Maa
+  1998. Bench: resonancia en f₀ analítico, pico de α ahí, α∈[0,1], y el CORRIMIENTO
+  de fₙ CAMBIA DE SIGNO al cruzar la resonancia (reactancia masa↔resorte).
+- **Etapa 4 — auditoría integral de Capa 0 (verificación, antes de conectar):**
+  (1) suite unificada `bench_capa0_all.py`; (2) geometría IRREGULAR (pentágono/L/
+  hexágono con taper) sobre `_modal_incidence_angles` y `perturbation_xi_shift_*`
+  (lección A1/A2: cazar nan_to_num→0 y pérdida de cobertura); (3) pasividad Re(β)≥0
+  y α∈[0,1] en toda banda/ángulo; (4) rango de validez declarado y respetado por
+  modelo; (5) convención end-to-end (cámara λ/4: signo y magnitud del corrimiento
+  físicos); (6) convergencia de ξ y θ al refinar malla; (7) auditoría de call-path
+  (padding silencioso / ramas muertas).
+- **Etapa 5 — wiring a la app (integración, SEPARADA):** diálogo "construcción de
+  pared" + asignar construcciones a materiales/caras + el panel llama la perturbación
+  compleja/extendida y muestra corrimiento de fₙ y amortiguamiento en la FRF + carga
+  de mediciones Z(f) y Z(f,θ) + persistencia en `.room` (aditivo). Default sigue α→β
+  hasta que el usuario asigna construcción.
 
 ---
 
