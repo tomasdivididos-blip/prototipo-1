@@ -163,24 +163,35 @@ def _jca_zk(phi, alpha_inf, sigma, Lambda, Lambda_p) -> Callable:
     return lambda f: jca_zc_kc(f, phi, alpha_inf, sigma, Lambda, Lambda_p)
 
 
-def _surface_Z_tmm(layers: List, f) -> np.ndarray:
+def _surface_Z_tmm(layers: List, f, theta: float = 0.0) -> np.ndarray:
     """Impedancia de superficie Z_s(f) de una pila con backing RIGIDO, por la
     recursion de Cox Ec 5.25 (incidencia normal).
 
     `layers`: lista de (zk_func, thickness) ordenada de la SUPERFICIE (arriba)
     hacia el BACKING (abajo). Se procesa de abajo hacia arriba: la capa mas
-    profunda ve el backing rigido (z0 = inf) -> Z = -i Z_c cot(k_c d); cada capa
+    profunda ve el backing rigido (z0 = inf) -> Z = -i z_n cot(k_z d); cada capa
     superior usa la Z de la de abajo como su backing.
+
+    INCIDENCIA OBLICUA (theta, rad): el numero de onda de traza k_t = k0 sin(theta)
+    se conserva en todas las capas (Snell). En cada capa la componente NORMAL es
+    k_z = sqrt(k_c^2 - k_t^2) y la impedancia normal-equivalente es z_n = z_c*k_c/k_z.
+    A theta=0 reduce a k_z=k_c, z_n=z_c (incidencia normal). Deriva de la matriz de
+    transferencia por capa [[cos(k_z d), i z_n sin(k_z d)],[i sin/z_n, cos]] con
+    backing rigido -> Z_s = T11/T21 (Allard & Atalla, cap. TMM; Cox Ec 5.24-5.25).
     """
     f = _as_f(f)
+    k0 = 2.0 * np.pi * f / C0
+    kt = k0 * np.sin(theta)                          # traza, conservada (Snell)
     z = None
     for zk, d in reversed(layers):
         zc, kc = zk(f)
-        cot = np.cos(kc * d) / np.sin(kc * d)
+        kz = np.sqrt(kc ** 2 - kt ** 2)             # componente normal en la capa
+        zn = zc * kc / kz                           # impedancia normal-equivalente
+        C, S = np.cos(kz * d), np.sin(kz * d)
         if z is None:
-            z = -1j * zc * cot                      # backing rigido (z_prev=inf)
+            z = -1j * zn * C / S                     # backing rigido: -i z_n cot(k_z d)
         else:
-            z = (-1j * z * zc * cot + zc ** 2) / (z - 1j * zc * cot)
+            z = (z * C + 1j * zn * S) / (C + 1j * z * S / zn)
     return z
 
 
@@ -188,9 +199,14 @@ def _surface_Z_tmm(layers: List, f) -> np.ndarray:
 # SurfaceImpedance: objeto que entrega Z(f), beta(f), alpha(f,theta), alpha_random
 # ---------------------------------------------------------------------------
 class SurfaceImpedance:
-    """Impedancia de superficie de una construccion. En Etapa 1a todo es de
-    reaccion LOCAL: Z depende solo de f; el angulo entra solo en el coeficiente
-    de reflexion R(theta). La reaccion extendida (Z(f,theta)) es Etapa 2."""
+    """Impedancia de superficie de una construccion.
+
+    `is_locally_reacting=True`: Z depende solo de f; el angulo entra solo en el
+    coeficiente de reflexion R(theta) (rigid, resistive, measured_Zf).
+    `is_locally_reacting=False`: reaccion EXTENDIDA, Z = Z(f,theta) (porous/
+    multilayer/jca via TMM oblicuo, o measured_Zft). Etapa 2.
+
+    zfunc(f, theta) -> Z compleja. Todos los metodos aceptan theta (rad, 0=normal)."""
 
     def __init__(self, zfunc: Callable, is_locally_reacting: bool = True,
                  label: str = ""):
@@ -198,20 +214,20 @@ class SurfaceImpedance:
         self.is_locally_reacting = is_locally_reacting
         self.label = label
 
-    def Z(self, f) -> np.ndarray:
-        """Impedancia de superficie compleja [Pa*s/m]."""
-        return self._z(_as_f(f))
+    def Z(self, f, theta: float = 0.0) -> np.ndarray:
+        """Impedancia de superficie compleja [Pa*s/m] a incidencia theta."""
+        return self._z(_as_f(f), float(theta))
 
-    def beta(self, f) -> np.ndarray:
+    def beta(self, f, theta: float = 0.0) -> np.ndarray:
         """Admitancia especifica compleja beta = rho0*c / Z_s (adimensional).
-        Es la que consume la perturbacion de frontera."""
-        return Z0 / self.Z(f)
+        Es la que consume la perturbacion de frontera (evaluada en (f_n, theta_n)
+        si la superficie es de reaccion extendida)."""
+        return Z0 / self.Z(f, theta)
 
     def reflection(self, f, theta: float = 0.0) -> np.ndarray:
-        """R(theta) = (Z_s cos(theta) - rho0 c) / (Z_s cos(theta) + rho0 c).
-        Superficie de reaccion local."""
+        """R(theta) = (Z_s(theta) cos(theta) - rho0 c) / (Z_s(theta) cos + rho0 c)."""
         ct = np.cos(theta)
-        Zs = self.Z(f)
+        Zs = self.Z(f, theta)
         return (Zs * ct - Z0) / (Zs * ct + Z0)
 
     def alpha(self, f, theta: float = 0.0) -> np.ndarray:
@@ -221,14 +237,24 @@ class SurfaceImpedance:
     def alpha_random(self, f) -> np.ndarray:
         """Absorcion de incidencia ALEATORIA (Paris, ISO 354):
             alpha_st = INT_0^{pi/2} alpha(theta) sin(2 theta) d theta.
-        Se compara contra el alpha del catalogo para validar el modelo."""
+        Reaccion local: Z se evalua una vez (independiente de theta). Reaccion
+        extendida: Z se recomputa por angulo."""
         f = _as_f(f)
-        th = np.linspace(0.0, np.pi / 2.0, 2001)
-        Zs = self.Z(f)[:, None]                       # (Nf, 1)
-        ct = np.cos(th)[None, :]                       # (1, Nth)
-        R = (Zs * ct - Z0) / (Zs * ct + Z0)
-        integ = (1.0 - np.abs(R) ** 2) * np.sin(2.0 * th)[None, :]
-        return np.trapz(integ, th, axis=1)             # (Nf,)
+        if self.is_locally_reacting:
+            th = np.linspace(0.0, np.pi / 2.0, 2001)
+            Zs = self.Z(f)[:, None]                     # (Nf, 1)
+            ct = np.cos(th)[None, :]                     # (1, Nth)
+            R = (Zs * ct - Z0) / (Zs * ct + Z0)
+            integ = (1.0 - np.abs(R) ** 2) * np.sin(2.0 * th)[None, :]
+            return np.trapz(integ, th, axis=1)
+        # Reaccion extendida: Z(f,theta) por angulo -> bucle en theta. Se excluye
+        # theta=pi/2 (rasante): una capa de aire tiene k_z=sqrt(k0^2-k_t^2)->0 ahi
+        # (singularidad TMM) y el peso sin(2theta) ya tiende a 0.
+        th = np.linspace(0.0, np.pi / 2.0 * (1.0 - 1e-4), 361)
+        integ = np.empty((f.size, th.size))
+        for k, t in enumerate(th):
+            integ[:, k] = self.alpha(f, float(t)) * np.sin(2.0 * t)
+        return np.trapz(integ, th, axis=1)
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +263,7 @@ class SurfaceImpedance:
 def rigid() -> SurfaceImpedance:
     """Pared rigida: Z -> infinito, beta -> 0 (solo el aire disipa)."""
     return SurfaceImpedance(
-        lambda f: np.full(_as_f(f).shape, 1e12, dtype=complex),
+        lambda f, theta=0.0: np.full(_as_f(f).shape, 1e12, dtype=complex),
         label="rigido")
 
 
@@ -246,7 +272,8 @@ def resistive(beta_real: float) -> SurfaceImpedance:
     el modelo actual (Paris): resistive(beta).alpha_random == la alpha_random de
     Paris para esa beta."""
     return SurfaceImpedance(
-        lambda f: np.full(_as_f(f).shape, Z0 / float(beta_real), dtype=complex),
+        lambda f, theta=0.0: np.full(_as_f(f).shape, Z0 / float(beta_real),
+                                     dtype=complex),
         label=f"resistivo beta={beta_real:.3g}")
 
 
@@ -261,7 +288,9 @@ def porous(sigma: float, thickness: float, model: str = "miki",
     lbl = f"poroso {model} sigma={sigma:.0f} d={thickness*1e3:.0f}mm"
     if air_gap > 0:
         lbl += f" +aire {air_gap*1e3:.0f}mm"
-    return SurfaceImpedance(lambda f: _surface_Z_tmm(layers, f), label=lbl)
+    return SurfaceImpedance(
+        lambda f, theta=0.0: _surface_Z_tmm(layers, f, theta),
+        is_locally_reacting=False, label=lbl)
 
 
 def porous_jca(phi: float, alpha_inf: float, sigma: float, Lambda: float,
@@ -277,7 +306,9 @@ def porous_jca(phi: float, alpha_inf: float, sigma: float, Lambda: float,
            f"d={thickness*1e3:.0f}mm")
     if air_gap > 0:
         lbl += f" +aire {air_gap*1e3:.0f}mm"
-    return SurfaceImpedance(lambda f: _surface_Z_tmm(layers, f), label=lbl)
+    return SurfaceImpedance(
+        lambda f, theta=0.0: _surface_Z_tmm(layers, f, theta),
+        is_locally_reacting=False, label=lbl)
 
 
 def multilayer(specs: List[Dict]) -> SurfaceImpedance:
@@ -302,8 +333,9 @@ def multilayer(specs: List[Dict]) -> SurfaceImpedance:
             layers.append((_air_zk, t))
         else:
             raise ValueError(f"tipo de capa desconocido: {s['type']!r}")
-    return SurfaceImpedance(lambda f: _surface_Z_tmm(layers, f),
-                            label=f"multicapa ({len(specs)})")
+    return SurfaceImpedance(
+        lambda f, theta=0.0: _surface_Z_tmm(layers, f, theta),
+        is_locally_reacting=False, label=f"multicapa ({len(specs)})")
 
 
 def measured_Zf(freqs, Z) -> SurfaceImpedance:
@@ -314,10 +346,43 @@ def measured_Zf(freqs, Z) -> SurfaceImpedance:
     order = np.argsort(fq)
     fq, Zc = fq[order], Zc[order]
 
-    def zfunc(f):
+    def zfunc(f, theta=0.0):
         f = _as_f(f)
         re = np.interp(f, fq, Zc.real)
         im = np.interp(f, fq, Zc.imag)
         return re + 1j * im
 
-    return SurfaceImpedance(zfunc, label="Z medida (f)")
+    return SurfaceImpedance(zfunc, is_locally_reacting=True, label="Z medida (f)")
+
+
+def measured_Zft(freqs, thetas, Z) -> SurfaceImpedance:
+    """Z(f, theta) medida = REACCION EXTENDIDA. `freqs` (Nf,), `thetas` en RAD
+    (Nt,), `Z` (Nf, Nt) compleja. Interpola bilinealmente en (f, theta) parte
+    real e imaginaria; extrapola con el borde. Es el patron-oro para superficies
+    de reaccion extendida (mediciones de impedancia resueltas en angulo)."""
+    fq = np.asarray(freqs, dtype=float)
+    tq = np.asarray(thetas, dtype=float)
+    Zc = np.asarray(Z, dtype=complex)
+    if Zc.shape != (fq.size, tq.size):
+        raise ValueError(f"Z debe ser (Nf,Nt)={fq.size,tq.size}, es {Zc.shape}")
+    of = np.argsort(fq); ot = np.argsort(tq)
+    fq, tq, Zc = fq[of], tq[ot], Zc[np.ix_(of, ot)]
+
+    def _bilinear(f, theta):
+        f = _as_f(f)
+        # indices e interpolacion en f (por columna) y luego en theta
+        fi = np.interp(f, fq, np.arange(fq.size))          # posicion fraccional
+        f0 = np.clip(np.floor(fi).astype(int), 0, fq.size - 1)
+        f1 = np.clip(f0 + 1, 0, fq.size - 1)
+        wf = (fi - f0)[:, None]
+        t = float(np.clip(theta, tq[0], tq[-1]))
+        ti = float(np.interp(t, tq, np.arange(tq.size)))
+        t0 = int(np.clip(np.floor(ti), 0, tq.size - 1))
+        t1 = int(np.clip(t0 + 1, 0, tq.size - 1))
+        wt = ti - t0
+        # 4 esquinas (Nf, 2) -> mezcla
+        col0 = Zc[:, t0] * (1 - wt) + Zc[:, t1] * wt        # (Nf_data,)
+        return col0[f0] * (1 - wf[:, 0]) + col0[f1] * wf[:, 0]
+
+    return SurfaceImpedance(lambda f, theta=0.0: _bilinear(f, theta),
+                            is_locally_reacting=False, label="Z medida (f,theta)")

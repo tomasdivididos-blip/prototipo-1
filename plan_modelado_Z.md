@@ -119,8 +119,14 @@ reproducibilidad, estilo Etapa 3 de la perturbación).
   e^{+iωt}, impedance.py e^{-iωt} → conj(β) al conectar. `bench_perturbation_complex.py`
   11/11 (puente real bit a bit; vs QEP complejo exacto <3% con matching por autovector;
   corrimiento reactivo +5..+11 Hz validado).
-- **Etapa 2 — reacción extendida:** `measured_Zft` + ángulo por modo (exacto shoebox,
-  aprox. irregular, marcado en pantalla). Bench: oráculo shoebox.
+- **Etapa 2 [HECHA] — reacción extendida:** (2a) TMM oblicuo (Snell, k_z=√(k_c²−k_t²),
+  z_n=z_c·k_c/k_z) → `SurfaceImpedance.Z(f,θ)`; `measured_Zft` (Z(f,θ) bilineal);
+  `is_locally_reacting` por constructor. `bench_impedance.py` 36/36. (2b)
+  `_modal_incidence_angles` (θ por modo por pared = arccos√(1−k_t²/|k|²), k_t² del
+  cociente de Rayleigh de la energía de Dirichlet de superficie; exacto en shoebox,
+  aprox. en irregular = derivación propia) + `perturbation_xi_shift_extended`.
+  `bench_extended_reaction.py` 7/7 (θ estimado vs analítico: mediana 2.4°, media 6.3°;
+  puente local bit a bit; extendida ≠ normal en ξ un 47%).
 - **Etapa 3 — resonantes + UI:** perforado/membrana/Helmholtz + diálogo construcción
   + carga de mediciones + `.room` (aditivo). Default sigue α→β hasta que el usuario
   asigna construcción.

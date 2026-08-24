@@ -205,9 +205,59 @@ def t8_jca():
           a_lo_gap > a_lo_no, f"con {a_lo_gap:.3f} > sin {a_lo_no:.3f}")
 
 
+def t9_oblique():
+    print("T9 - incidencia oblicua (reaccion extendida, Etapa 2)")
+    f = np.array([100.0, 300.0])
+    sig, t = 20000.0, 0.05
+    # (a) capa unica a theta=0 == forma cerrada -i z_c cot(k_c d) (bridge normal)
+    s = imp.porous(sig, t, "miki")
+    zc, kc = imp.miki_zc_kc(f, sig)
+    z_ref = -1j * zc * np.cos(kc * t) / np.sin(kc * t)
+    check("T9a Z(f,0) == forma cerrada de capa unica (bridge normal)",
+          np.allclose(s.Z(f, 0.0), z_ref, rtol=1e-9),
+          f"max dif {np.max(np.abs(s.Z(f, 0.0) - z_ref)):.2e}")
+    # (b) flags de reaccion
+    check("T9b porous es reaccion EXTENDIDA",
+          s.is_locally_reacting is False, "")
+    check("T9c rigid/resistive/measured_Zf son LOCALES",
+          imp.rigid().is_locally_reacting and imp.resistive(0.1).is_locally_reacting
+          and imp.measured_Zf([100, 200], [400 + 0j, 400 + 0j]).is_locally_reacting,
+          "")
+    # (d) Z varia con el angulo (la reaccion extendida hace algo)
+    sg = imp.porous(sig, t, "miki", air_gap=0.10)
+    z0, z45 = sg.Z(200.0, 0.0)[0], sg.Z(200.0, np.pi / 4)[0]
+    check("T9d Z(f,theta) depende del angulo (poroso+camara)",
+          abs(z45 - z0) / abs(z0) > 0.05, f"|dZ/Z|={abs(z45-z0)/abs(z0):.3f}")
+    # (e) alpha(theta) fisica en varios angulos
+    ok = all(bool(0 <= sg.alpha(f, th)[0] <= 1 and 0 <= sg.alpha(f, th)[1] <= 1)
+             for th in (0.0, np.pi / 6, np.pi / 3))
+    check("T9e alpha(theta) in [0,1] a 0, 30, 60 grados", ok, "")
+
+
+def t10_measured_zft():
+    print("T10 - measured_Zft (Z(f,theta) medida, reaccion extendida)")
+    fq = np.array([50.0, 200.0, 500.0])
+    tq = np.array([0.0, np.pi / 4, np.pi / 2 * 0.9])
+    # Z sintetica que depende de f (fila) y theta (columna)
+    Zg = np.array([[(300 - 100j) + 20 * i - 30j * j for j in range(3)]
+                   for i in range(3)], dtype=complex)
+    s = imp.measured_Zft(fq, tq, Zg)
+    check("T10a is_locally_reacting False", s.is_locally_reacting is False, "")
+    # exacto en un nodo (f, theta)
+    got = s.Z(fq[1], tq[2])[0]
+    check("T10b Z(nodo) == dato medido", abs(got - Zg[1, 2]) < 1e-9,
+          f"{got:.1f} vs {Zg[1,2]:.1f}")
+    # interior: entre los 4 vecinos en (f,theta)
+    zi = s.Z(125.0, np.pi / 8)[0]
+    lo = min(Zg[0, 0].real, Zg[1, 1].real)
+    hi = max(Zg[0, 0].real, Zg[1, 1].real)
+    check("T10c interior bilineal entre vecinos", lo - 1 <= zi.real <= hi + 1,
+          f"Re={zi.real:.1f} en [{lo:.0f},{hi:.0f}]")
+
+
 if __name__ == "__main__":
     print("=" * 64)
-    print(" bench_impedance.py - Etapa 1a+1b de Capa 0")
+    print(" bench_impedance.py - Capa 0 Etapas 1a+1b+2a")
     print("=" * 64)
     t1_rigid()
     t2_resistive_bridge()
@@ -217,6 +267,8 @@ if __name__ == "__main__":
     t6_measured_interp()
     t7_physicality()
     t8_jca()
+    t9_oblique()
+    t10_measured_zft()
     print("=" * 64)
     print(f" RESULTADO: {N_OK} OK, {N_FAIL} FAIL")
     print("=" * 64)

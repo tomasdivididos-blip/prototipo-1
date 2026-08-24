@@ -781,6 +781,114 @@ def perturbation_xi_shift_per_mode(
     return xi, f_new
 
 
+def _modal_incidence_angles(freqs, phis, locator, verts, tris, groups,
+                            subdiv=3, c=343.0):
+    """Angulo de incidencia theta_{n,g} (rad) por modo n y grupo (pared) g,
+    estimado del campo modal DISCRETO. Etapa 2 (reaccion extendida).
+
+    Para el modo n, |k| = 2 pi f_n / c. El numero de onda TANGENCIAL en la pared
+    g se estima con el cociente de Rayleigh de la energia de Dirichlet de
+    superficie:
+        k_t^2(g) = INT_g |grad_s phi_n|^2 dS / INT_g phi_n^2 dS
+    y cos(theta) = sqrt(1 - k_t^2/|k|^2). EXACTO para un shoebox (recupera
+    arccos(|k_normal|/|k|) del modo (l,m,n)); aproximado en geometria irregular
+    (derivacion propia, sin cita, se valida numericamente).
+
+    Se subdivide cada triangulo (subdiv) y se ajusta el gradiente en el plano de
+    la interpolacion lineal por sub-triangulo (3 valores de phi por sub-cara), asi
+    se captura la variacion espacial de phi a lo largo de una pared grande.
+
+    Devuelve theta (Nm, Ng) en rad, clampeado a [0, 88 deg] (evita la
+    singularidad rasante del TMM), o None."""
+    if phis is None or len(groups) == 0 or locator is None:
+        return None
+    Nm = int(phis.shape[1])
+    if Nm == 0:
+        return None
+    tris = np.asarray(tris, dtype=int)
+    Ng = len(groups)
+    tri_group = np.full(len(tris), -1, dtype=int)
+    for gi, g in enumerate(groups):
+        tri_group[np.asarray(g.face_indices, dtype=int)] = gi
+    keep = tri_group >= 0
+    if not np.any(keep):
+        return None
+
+    P, gid = _subdivide_tris_indexed(verts[tris[keep]], tri_group[keep], subdiv)
+    e1, e2 = P[:, 1] - P[:, 0], P[:, 2] - P[:, 0]
+    Nvec = np.cross(e1, e2)
+    area = 0.5 * np.linalg.norm(Nvec, axis=1)
+    nhat = Nvec / np.maximum(np.linalg.norm(Nvec, axis=1, keepdims=True), 1e-30)
+    Mmat = np.stack([e1, e2, nhat], axis=1)          # (Nq, 3, 3), filas e1,e2,n
+    cen = P.mean(axis=1)
+    pts = P.reshape(-1, 3)                            # (Nq*3, 3) sub-vertices
+
+    cos2_min = np.cos(np.radians(88.0)) ** 2
+    theta = np.empty((Nm, Ng), dtype=float)
+    for n in range(Nm):
+        vv = np.real(locator.evaluate_many(phis[:, n], pts)).reshape(-1, 3)
+        vc = np.real(locator.evaluate_many(phis[:, n], cen))
+        good = np.isfinite(vv).all(axis=1) & np.isfinite(vc)
+        rhs = np.stack([vv[:, 1] - vv[:, 0], vv[:, 2] - vv[:, 0],
+                        np.zeros(len(vv))], axis=1)
+        rhs = np.nan_to_num(rhs)
+        grad = np.linalg.solve(Mmat, rhs)            # (Nq, 3) grad en el plano
+        grad2 = np.sum(grad * grad, axis=1)
+        w = np.where(good, 1.0, 0.0) * area
+        num = np.bincount(gid, weights=grad2 * w, minlength=Ng)
+        den = np.bincount(gid, weights=np.nan_to_num(vc ** 2) * w, minlength=Ng)
+        kt2 = num / np.maximum(den, 1e-30)
+        k2 = (2.0 * np.pi * float(freqs[n]) / c) ** 2
+        cos2 = np.clip(1.0 - kt2 / max(k2, 1e-30), cos2_min, 1.0)
+        theta[n] = np.arccos(np.sqrt(cos2))
+    return theta
+
+
+def perturbation_xi_shift_extended(
+    freqs, phis, locator, verts, tris, groups, surf_by_group, V,
+    default_surf=None, subdiv=2, c=343.0,
+):
+    """Perturbacion de frontera con REACCION EXTENDIDA (Etapa 2). Cada grupo g
+    tiene una `SurfaceImpedance` en surf_by_group[g.signature] (o `default_surf`
+    si falta). La admitancia se evalua en el angulo del modo:
+        beta_{n,g} = conj( rho0*c / Z_g(f_n, theta_{n,g}) )
+    con theta_{n,g} estimado por `_modal_incidence_angles`. El conj pasa de la
+    convencion e^{-iwt} de impedance.py a la e^{+iwt} del solver.
+
+    Devuelve (xi, f_new) igual que perturbation_xi_shift_per_mode. Reusa la misma
+    cuadratura de superficie y la misma descomposicion Re/Im (amortiguamiento/
+    corrimiento). Con superficies de reaccion LOCAL (Z indep. de theta) coincide
+    con la version por incidencia normal."""
+    if phis is None or len(groups) == 0 or locator is None:
+        return None
+    freqs = np.asarray(freqs, dtype=float)
+    Nm = int(phis.shape[1])
+    if Nm == 0 or freqs.size < Nm or V <= 0:
+        return None
+    Sg_all = _modal_surface_integrals(phis, locator, verts, tris, groups, subdiv)
+    ang = _modal_incidence_angles(freqs, phis, locator, verts, tris, groups,
+                                  subdiv=max(subdiv, 2), c=c)
+    if Sg_all is None or ang is None:
+        return None
+    Z0 = 1.21 * c                                     # rho0*c (sources.RHO0=1.21)
+    xi = np.empty(Nm, dtype=float)
+    f_new = np.empty(Nm, dtype=float)
+    for n in range(Nm):
+        fn = float(freqs[n])
+        beta_g = np.empty(len(groups), dtype=complex)
+        for gi, g in enumerate(groups):
+            surf = surf_by_group.get(g.signature, default_surf)
+            if surf is None:
+                beta_g[gi] = 0.0                       # rigido
+            else:
+                Zg = complex(surf.Z(fn, float(ang[n, gi]))[0])
+                beta_g[gi] = np.conj(Z0 / Zg)          # e^{-iwt} -> e^{+iwt}
+        cdelta = 0.5 * c * complex((beta_g * Sg_all[n]).sum())
+        xi[n] = cdelta.real / max(2.0 * np.pi * fn, 1e-9)
+        f_new[n] = fn - cdelta.imag / (2.0 * np.pi)
+    return xi, f_new
+
+
 # Categorias de la libreria de materiales (material_library / carpeta materials/).
 # Porosos/fibrosos operan sobre la VELOCIDAD de particula; perforados/membrana
 # sobre la PRESION. Ver criterio B27 de criterios_room_geom_fuente.md.
