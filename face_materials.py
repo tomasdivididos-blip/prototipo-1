@@ -44,6 +44,11 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+# NumPy 2.0 renombro np.trapz -> np.trapezoid (y elimino trapz). Este alias hace
+# que el codigo corra igual en numpy 1.x (Anaconda del dev) y 2.x (instalacion
+# fresca del paquete Mac). Ver el error de arranque en macOS (np.trapz removido).
+_trapz = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
+
 
 # ---------------------------------------------------------------------------
 # Dataclass de grupo de caras
@@ -587,7 +592,7 @@ def _alpha_random_of_beta(beta: np.ndarray) -> np.ndarray:
     b = beta[:, None]                                 # (Nb, 1)
     R = (ct - b) / (ct + b)
     integrand = (1.0 - R ** 2) * np.sin(2.0 * th)[None, :]
-    return np.trapz(integrand, th, axis=1)            # (Nb,)
+    return _trapz(integrand, th, axis=1)              # (Nb,)
 
 
 # Tabla de inversion de Paris, precomputada una vez. alpha_rand(beta) es
@@ -832,7 +837,10 @@ def _modal_incidence_angles(freqs, phis, locator, verts, tris, groups,
         rhs = np.stack([vv[:, 1] - vv[:, 0], vv[:, 2] - vv[:, 0],
                         np.zeros(len(vv))], axis=1)
         rhs = np.nan_to_num(rhs)
-        grad = np.linalg.solve(Mmat, rhs)            # (Nq, 3) grad en el plano
+        # rhs como pila de COLUMNAS (Nq,3,1): en numpy 2.0 solve(A(Nq,3,3),
+        # b(Nq,3)) ya no trata b como pila de vectores (cambio de semantica);
+        # (Nq,3,1) es inequivoco y funciona en numpy 1.x y 2.x.
+        grad = np.linalg.solve(Mmat, rhs[:, :, None])[:, :, 0]  # (Nq,3) grad plano
         grad2 = np.sum(grad * grad, axis=1)
         w = np.where(good, 1.0, 0.0) * area
         num = np.bincount(gid, weights=grad2 * w, minlength=Ng)

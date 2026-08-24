@@ -36,6 +36,9 @@ from __future__ import annotations
 from typing import Callable, List, Dict
 import numpy as np
 
+# NumPy 2.0 renombro np.trapz -> np.trapezoid. Alias compatible con numpy 1.x y 2.x.
+_trapz = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
+
 # Constantes fisicas (coherentes con sources.py).
 RHO0 = 1.21          # densidad del aire [kg/m^3]
 C0 = 343.0           # velocidad del sonido [m/s]
@@ -246,7 +249,7 @@ class SurfaceImpedance:
             ct = np.cos(th)[None, :]                     # (1, Nth)
             R = (Zs * ct - Z0) / (Zs * ct + Z0)
             integ = (1.0 - np.abs(R) ** 2) * np.sin(2.0 * th)[None, :]
-            return np.trapz(integ, th, axis=1)
+            return _trapz(integ, th, axis=1)
         # Reaccion extendida: Z(f,theta) por angulo -> bucle en theta. Se excluye
         # theta=pi/2 (rasante): una capa de aire tiene k_z=sqrt(k0^2-k_t^2)->0 ahi
         # (singularidad TMM) y el peso sin(2theta) ya tiende a 0.
@@ -254,7 +257,7 @@ class SurfaceImpedance:
         integ = np.empty((f.size, th.size))
         for k, t in enumerate(th):
             integ[:, k] = self.alpha(f, float(t)) * np.sin(2.0 * t)
-        return np.trapz(integ, th, axis=1)
+        return _trapz(integ, th, axis=1)
 
 
 # ---------------------------------------------------------------------------
