@@ -7,6 +7,8 @@ Atajos:
   Ctrl+Shift+S    guardar como
   Ctrl+O          abrir
   0               vista isometrica (reset camara)
+  1               modo Rotar on/off (arrastrar con izquierdo orbita/rota;
+                  para mouse sin rueda, p.ej. Magic Mouse). Esc tambien sale.
 
 Stack: PyQt5 (Qt en C++) + pyqtgraph / PyOpenGL (OpenGL en C/C++) + NumPy.
 """
@@ -890,11 +892,27 @@ class MainWindow(QMainWindow):
                             lambda: self._toggle_locked_axis("z"))
         # Enter -> calcular campo acustico
         self._add_shortcut("Return", self._acoustic_compute_enter)
+        # Modo Rotar (mouse sin rueda / Magic Mouse): "1" alterna, Esc sale.
+        self._add_shortcut("1", self._toggle_rotate_mode)
+        self._add_shortcut("Escape", self._exit_rotate_mode)
 
     def _add_shortcut(self, seq: str, slot):
         sc = QShortcut(QKeySequence(seq), self)
         sc.setContext(Qt.ApplicationShortcut)
         sc.activated.connect(slot)
+
+    def _toggle_rotate_mode(self):
+        """Alterna el modo Rotar del visor. Guard: si se esta escribiendo en un
+        campo (QLineEdit/spinbox), no robar el '1'."""
+        from PyQt5.QtWidgets import QLineEdit, QAbstractSpinBox
+        w = QApplication.focusWidget()
+        if isinstance(w, (QLineEdit, QAbstractSpinBox)):
+            return
+        self.viewer.toggle_rotate_mode()
+
+    def _exit_rotate_mode(self):
+        if getattr(self.viewer, "_rotate_mode", False):
+            self.viewer.set_rotate_mode(False)
 
     def _acoustic_compute_enter(self):
         """Enter -> dispatch segun la pestaña activa:

@@ -18,7 +18,7 @@ import numpy as np
 import pyqtgraph.opengl as gl
 from PyQt5.QtCore import Qt, QRectF, pyqtSignal
 from PyQt5.QtGui import QColor, QPainter, QFont, QPen, QVector4D, QMatrix4x4
-from PyQt5.QtWidgets import QFrame, QLabel, QHBoxLayout
+from PyQt5.QtWidgets import QFrame, QLabel, QHBoxLayout, QPushButton
 
 
 # ---------------------------------------------------------------------------
@@ -235,6 +235,39 @@ class IsoViewer(gl.GLViewWidget):
         self._inclining_wall = None
         self._incline_press_y = None
         self.WALL_DRAG_DEG_PER_PX = 0.25
+
+        # --- Modo Rotar (para mouse sin boton central, p.ej. Magic Mouse) ---
+        # Con el modo activo, ARRASTRAR con el boton IZQUIERDO orbita la vista (si
+        # el cursor esta sobre espacio vacio) o rota el objeto bajo el cursor
+        # (fuente/mueble), reusando la misma maquinaria que Alt+Ctrl+Left. Es la
+        # alternativa a la rueda/boton central, que el Magic Mouse no tiene.
+        self._rotate_mode = False
+        self._rotate_view_drag = False
+        self._rotate_btn = QPushButton("↻  Rotar", self)   # esquina sup-izq
+        self._rotate_btn.setCheckable(True)
+        self._rotate_btn.setCursor(Qt.PointingHandCursor)
+        self._rotate_btn.setToolTip(
+            "Modo Rotar (para mouse sin rueda, p.ej. Magic Mouse).\n"
+            "Activado: arrastrar con el boton IZQUIERDO orbita la vista, o rota\n"
+            "la fuente/mueble que este bajo el cursor.\n"
+            "Salir: este boton, la tecla 1, o Esc.")
+        self._rotate_btn.setStyleSheet(
+            "QPushButton { background-color: #45475a; color: #cdd6f4;"
+            " border: none; border-radius: 5px; padding: 5px 12px;"
+            " font-weight: 700; }"
+            "QPushButton:hover { background-color: #585b70; }"
+            "QPushButton:checked { background-color: #f38ba8; color: #11111b; }")
+        self._rotate_btn.clicked.connect(self.set_rotate_mode)
+        self._rotate_btn.adjustSize()
+        self._rotate_banner = QLabel(
+            "●  MODO ROTAR — arrastra con el boton izquierdo"
+            " · Esc / tecla 1 para salir", self)
+        self._rotate_banner.setStyleSheet(
+            "QLabel { background-color: #f38ba8; color: #11111b;"
+            " border-radius: 5px; padding: 5px 12px; font-weight: 700; }")
+        self._rotate_banner.adjustSize()
+        self._rotate_banner.hide()
+        self._reposition_rotate_widgets()
 
     # ---------- Camara ----------
     def reset_camera(self):
@@ -658,13 +691,16 @@ class IsoViewer(gl.GLViewWidget):
         left = (ev.button() == Qt.LeftButton)
         # Gestos de orientacion del bafle: Alt+Ctrl+Left = rotar (azimut, horiz.);
         # +Shift = inclinar (pitch, vert.). Mover fuente = Shift+Left SIN Alt.
-        is_orient = left and alt and ctrl
+        # En MODO ROTAR, el izquierdo pelado (sin Shift) tambien orienta/orbita
+        # (asi el Magic Mouse rota sin boton central ni Alt+Ctrl).
+        is_orient = left and ((alt and ctrl) or (self._rotate_mode and not shift))
         is_shift_left = left and shift and not alt
         if not is_shift_left:
             self._dragging_source_idx = -1
             self._dragging_furn_idx = -1
         self._orient_source_idx = -1     # se re-setea abajo si es gesto de orientacion
         self._orient_furn_idx = -1
+        self._rotate_view_drag = False
 
         # Modo colocacion de plano de corte
         if self._slice_placement:
@@ -731,6 +767,9 @@ class IsoViewer(gl.GLViewWidget):
                     self._orient_furn_axis = (
                         self._gizmo_pick_axis(ev.x(), ev.y(), fidx) or "yaw")
                     self._update_gizmo(fidx, hot=self._orient_furn_axis)
+                elif self._rotate_mode:
+                    # Nada bajo el cursor: en modo Rotar, orbitar la vista.
+                    self._rotate_view_drag = True
             return
 
         # Ctrl + Click derecho -> colocar fuente acustica a 1 m del piso
@@ -799,6 +838,18 @@ class IsoViewer(gl.GLViewWidget):
                 if d != 0.0:
                     self.furnitureRotateRequested.emit(self._orient_furn_idx, d)
             self._update_gizmo(self._orient_furn_idx, hot=self._orient_furn_axis)
+            return
+
+        # MODO ROTAR: arrastre con izquierdo sobre espacio vacio -> orbitar la
+        # vista (reemplaza al boton central que el Magic Mouse no tiene). Respeta
+        # el eje fijo y el modificador Shift (azimut puro), igual que el central.
+        if self._rotate_view_drag and (btns & Qt.LeftButton):
+            if self._locked_axis is not None:
+                self._rotate_around_locked_axis(-diff.x() * 0.5)
+            elif ev.modifiers() & Qt.ShiftModifier:
+                self.orbit(-diff.x(), 0)
+            else:
+                self.orbit(-diff.x(), diff.y())
             return
 
         # Hover del gizmo: con Alt+Ctrl apretado y SIN boton, mostrar los anillos
@@ -888,6 +939,8 @@ class IsoViewer(gl.GLViewWidget):
             self.pan(diff.x(), diff.y(), 0, relative="view-upright")
 
     def mouseReleaseEvent(self, ev):
+        if ev.button() == Qt.LeftButton:
+            self._rotate_view_drag = False    # fin de la orbita del modo Rotar
         if ev.button() == Qt.LeftButton and self._orient_source_idx >= 0:
             self._orient_source_idx = -1   # soltar -> detiene el gesto de orientacion
             return
@@ -1363,6 +1416,37 @@ class IsoViewer(gl.GLViewWidget):
         super().resizeEvent(ev)
         # Reposicionar el indicador en cada cambio de tamano.
         self._reposition_axis_indicator()
+        self._reposition_rotate_widgets()
+
+    # ---------- Modo Rotar ----------
+    def _reposition_rotate_widgets(self):
+        if not hasattr(self, "_rotate_btn"):
+            return
+        self._rotate_btn.move(10, 10)                 # esquina superior izquierda
+        self._rotate_btn.raise_()
+        bw = self._rotate_banner.width()
+        self._rotate_banner.move(max(10, (self.width() - bw) // 2), 10)  # arriba, centrado
+        self._rotate_banner.raise_()
+
+    def set_rotate_mode(self, on: bool):
+        """Activa/desactiva el modo Rotar. Con el modo activo, arrastrar con el
+        boton izquierdo orbita la vista (espacio vacio) o rota el objeto bajo el
+        cursor (fuente/mueble)."""
+        on = bool(on)
+        self._rotate_mode = on
+        if not on:
+            self._rotate_view_drag = False
+            self._orient_source_idx = -1
+            self._orient_furn_idx = -1
+            self.hide_rotation_gizmo()
+        if self._rotate_btn.isChecked() != on:
+            self._rotate_btn.setChecked(on)
+        self._rotate_banner.setVisible(on)
+        self.setCursor(Qt.OpenHandCursor if on else Qt.ArrowCursor)
+        self._reposition_rotate_widgets()
+
+    def toggle_rotate_mode(self):
+        self.set_rotate_mode(not self._rotate_mode)
 
     def _reposition_axis_indicator(self):
         if not hasattr(self, "axis_indicator"):
