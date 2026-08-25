@@ -2487,4 +2487,20 @@ Al **Calcular f_Schroeder**, el campo «Nº modos» se **auto-carga** con la can
 
 ---
 
-*Manual actualizado al 20 de Agosto de 2026 — v2.24.*
+**Cambios v2.25** (25 de agosto 2026): **modo Rotar** (para mouse sin rueda), **delay y fase de fuentes que se aplican solos y se recuerdan**, y **arreglos de arranque al correr desde código en macOS**. Tres ejes.
+
+### Modo Rotar: girar la vista y los objetos sin botón central
+
+Pensado para mouses sin rueda ni botón central (por ejemplo el Magic Mouse de Mac), que no podían orbitar la vista. Arriba a la izquierda del visor 3D hay un botón **«↻ Rotar»**; se activa con el botón o con la tecla **1** (y se sale con el botón, la tecla **1** o **Esc**). Con el modo activo, **arrastrar con el botón izquierdo** orbita la vista si el cursor está sobre espacio vacío, o rota la fuente/mueble que esté debajo del cursor. Un cartel «MODO ROTAR» avisa que está activo. El zoom sigue siendo con el scroll (dos dedos en el trackpad/Magic Mouse). La tecla **1** no interfiere con la escritura: si estás editando un campo numérico, escribe el 1 normalmente.
+
+### Delay y fase de fuentes: se aplican al Aceptar y se recuerdan
+
+Antes había que apretar un botón «Aplicar» para que el delay y la fase de una fuente tomaran efecto, y al reabrir la fuente los valores aparecían en cero aunque los hubieras cargado. Ahora el **delay** y la **fase** son propiedades de la fuente (como la polaridad): se aplican solos al dar **Aceptar** (ya no hay botón «Aplicar»), al reabrir la fuente **muestran el valor que le pusiste**, se guardan en el `.room`, y el preview de fase se actualiza en vivo mientras editás. Internamente se **componen** con la respuesta medida (FRD) y la polaridad en vez de pisarlas. Con delay 0 y fase 0 el comportamiento es idéntico al de siempre. Compatibilidad hacia atrás: un `.room` viejo abre con delay y fase en cero.
+
+### Arranque al correr desde código en macOS
+
+El paquete «correr desde fuente» de Mac instala las librerías frescas, y las versiones nuevas de NumPy y Qt destaparon tres cortes de arranque que ya están resueltos: la incompatibilidad con **NumPy 2** (funciones renombradas), la **ruta del plugin de plataforma de Qt** (que impedía abrir la ventana en Mac), y unos **avisos de consola** al calcular (una hoja de estilo mal formada que el Qt nuevo rechazaba, más una fuente inexistente en Mac). Nada de esto afecta al `.exe` de Windows, que empaqueta sus propias librerías.
+
+---
+
+*Manual actualizado al 25 de Agosto de 2026 — v2.25.*

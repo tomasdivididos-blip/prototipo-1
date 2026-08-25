@@ -2333,6 +2333,86 @@ bien.
     insensible al damping por diseño** (validado en `bench_eq_xi_sensitivity`, span 0.24 dB); el
     efecto de la perturbación se ve en la FORMA de los picos de la FRF, no en el FoM.
 
+- **24-25 Ago 2026 — CAPA 0 (modelado de impedancia Z): Etapas 1 y 2 HECHAS y validadas.**
+  Rama `dist-exe`, todo mergeado a `main` (PRs #12-15). El tema que seguía a la
+  perturbación de frontera ([[damping-perturbation]]). Es FÍSICA AISLADA: **NO está
+  conectada a la app todavía** (`main.py` no importa `impedance.py`; el panel sigue
+  usando la perturbación real α→β). Plan completo en `plan_modelado_Z.md`.
+  - **Objetivo (pedido del usuario):** reemplazar el eslabón más débil (la inversión de
+    Paris α→β real + reacción local de `face_materials.beta_from_alpha_random`) por una
+    β(f[,θ]) COMPLEJA de un modelo de construcción o de una medición propia. β compleja →
+    Re(β)=amortiguamiento, Im(β)=CORRIMIENTO de fₙ por reactancia de pared (lo que la pared
+    rígida no ve).
+  - **Etapa 1a — `impedance.py` (numpy puro, D0):** clase `SurfaceImpedance` con Z(f[,θ]),
+    beta, alpha(f,θ), alpha_random (Paris). Constructores: rigid/resistive/porous (Delany-
+    Bazley + Miki)/multilayer (TMM Cox Ec 5.24-5.25)/measured_Zf. `bench_impedance.py`.
+    Constantes DB confirmadas (Aygun + Bruneau Ec 6.133/6.134); Miki cross-validado.
+  - **Etapa 1b — JCA:** `jca_zc_kc` + `porous_jca` (Cox Ec 5.15/5.16 = Johnson-Champoux-
+    Allard, 5 params). GOTCHA de convención: Cox escribe e^{+jωt} pero j_ingeniería = -i_física,
+    por eso la forma NATIVA de Cox coincide con db/miki (NO se conjuga). bench 28/28.
+  - **Etapa 1c — perturbación compleja:** `face_materials.perturbation_xi_shift_per_mode`
+    (β compleja → (ξ, f_new)). Cuadratura factorizada en `_modal_surface_integrals`
+    (compartida con la real, intacta). `bench_perturbation_complex.py` 11/11 (vs QEP complejo
+    exacto <3%, MATCHING POR AUTOVECTOR — no por frecuencia, que cruza modos casi-degenerados).
+  - **Etapa 2 — reacción extendida:** (2a) TMM oblicuo (Snell, k_z=√(k_c²−k_t²), z_n=z_c·k_c/k_z)
+    → Z(f,θ); `measured_Zft` (Z(f,θ) medida); `is_locally_reacting` por constructor.
+    bench_impedance 36/36. (2b) `_modal_incidence_angles` (θ por modo/pared = arccos√(1−k_t²/|k|²),
+    k_t² del cociente de Rayleigh de la energía de Dirichlet de superficie; EXACTO en shoebox,
+    aprox. en irregular = DERIVACIÓN PROPIA sin cita) + `perturbation_xi_shift_extended`.
+    `bench_extended_reaction.py` 7/7 (θ vs analítico: mediana 2.4°).
+  - **GOTCHA de convención (clave):** solver/QEP usa e^{+iωt} (Re(β)>0 = pérdida); impedance.py
+    usa e^{-iωt} (Delany-Bazley). Al conectar β de impedance.py a la perturbación → **conj(β)**.
+  - **Bibliografía (toda en `referencias/`):** Allard & Atalla (núcleo, ESCANEADO → leer como
+    imagen), Bruneau & Potel, Bies & Hansen (σ), Fuchs (resonantes), Cox & D'Antonio (TMM+JCA,
+    con texto), Aygun, Radičević. Ver [[z-impedance-modeling]] y [[tesis-bibliografia]].
+  - **Plan REESTRUCTURADO (pedido del usuario):** Etapa 3 = RESONANTES (perforado/MPP Maa/
+    membrana/Helmholtz vía el TMM ya existente, física aislada); Etapa 4 = AUDITORÍA integral
+    de Capa 0 (geometría irregular contra bugs tipo A1/A2, pasividad, rango de validez,
+    convención end-to-end, convergencia); Etapa 5 = WIRING a la app (UI construcción de pared +
+    panel llama la perturbación + `.room`), SEPARADA. **Próximo tema tras `/clear`: Etapa 3
+    (resonantes).** Orden de la auditoría (¿antes o después de resonantes?) quedó abierto.
+
+- **24-25 Ago 2026 — DISTRIBUCIÓN A MAC: cadena de 3 fallos de arranque + refactor de fuente.**
+  El profesor (Alejandro Bidondo) corre el `Prototipo1_Mac.zip` (desde fuente, numpy FRESCO).
+  Se destrabaron de a uno porque cada uno tapaba al siguiente; NINGUNO aparece en la Anaconda
+  del dev (numpy<2, Qt viejo). **REGLA: validar el paquete Mac en un venv con PyQt5-Qt5 5.15.19
+  + numpy>=2 antes de mandar** (el venv quedó en el scratchpad de la sesión). Ver [[mac-distribution]].
+  - **(1) NumPy 2.x:** `np.trapz` ELIMINADO (→ `np.trapezoid`); alias `_trapz = np.trapezoid if
+    hasattr(np,'trapezoid') else np.trapz` en face_materials.py + impedance.py. Y `np.linalg.solve`
+    cambió la semántica del RHS batcheado → pasar `b[:,:,None]` en `_modal_incidence_angles`.
+  - **(2) Qt macOS:** plugin "cocoa" no se resolvía en el venv → `QT_QPA_PLATFORM_PLUGIN_PATH`
+    seteado en main.py (derivado de `PyQt5/Qt5/plugins`), ANTES de importar QtWidgets.
+  - **(3) Consola al calcular FEM (warnings, NO fatal):** el QSS de `_ClickableAxisLabel` tenía
+    `}}` (dos llaves) en un segmento NO-f-string mientras la apertura `{{` era f-string → QSS
+    desbalanceado que el Qt 5.15.19 rechaza (el viejo lo toleraba). Fix: `}`. Otros stylesheets
+    con `}}` del repo están balanceados (revisados). + fuente 'Segoe UI' inexistente en Mac →
+    `style.py` elige fuente nativa por plataforma (Helvetica Neue en Mac).
+
+- **24-25 Ago 2026 — MODO ROTAR (para mouse sin rueda, p.ej. Magic Mouse).** El Magic Mouse no
+  tiene botón central confiable, y la vista se orbitaba SOLO con él. Toggle en `IsoViewer`: botón
+  overlay "↻ Rotar" (esquina sup-izq, rosa al activarse) + tecla **1** (con guard: no dispara si
+  hay QLineEdit/spinbox con foco) + Esc. Con el modo activo, arrastrar con IZQUIERDO orbita la
+  vista (espacio vacío) o rota la fuente/mueble bajo el cursor (reusa `is_orient` = Alt+Ctrl+Left,
+  sin duplicar). `is_orient` ahora dispara también en `_rotate_mode` (default False → gestos
+  intactos). Test visual del usuario OK. Sin regresión: smoke shift_drag/undo/furniture 38/38.
+
+- **24-25 Ago 2026 — DELAY/FASE de fuente: fix + refactor a CAMPOS (como la polaridad).**
+  Bug del profe: poner delay/fase no tomaba. Causa: solo se horneaban en la curva `_response`
+  al tocar el botón "Aplicar"; si daba OK sin apretarlo, se ignoraba. Primero un fix rápido
+  (auto-aplicar al Aceptar), después el REFACTOR completo (pedido del usuario, análogo a la
+  polaridad de v2.23): **`OmniSource.delay_s` / `phase_deg` son campos**, compuestos en
+  `effective_Q_spectrum` como `g(f)·exp(-i2πf·delay_s + i·phase)` (en el path de ESPECTRO porque
+  el delay depende de f; la polaridad va en `effective_Q()` escalar). delay=0,fase=0 → reduce
+  EXACTO al histórico. El diálogo carga los campos en los spinboxes (RE-LEÍBLES al reabrir,
+  antes imposible), preview en vivo, se sacó el botón "Aplicar"/`_apply_manual`/`accept`.
+  `.room` aditivo (delay_s/phase_deg, `.get(...,0)`); duplicar + `location_opt.to_source_array`
+  llevan los campos. Sin regresión: bench_polarity 26/26, bench_source_response (+oráculo nuevo),
+  location_opt, trf 20/20, frd, sbir, smoke undo/furniture.
+
+- **v2.25 (25 Ago 2026):** batch que junta modo Rotar + delay/fase campos + fixes macOS
+  (numpy2/Qt/consola). MANUAL changelog v2.25. Capa 0 NO va al MANUAL (no está wired). El
+  `pack_mac_distribution.py` lee la versión del último `**Cambios v2.NN**` → los zips salen v2.25.
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.
