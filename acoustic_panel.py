@@ -404,32 +404,72 @@ class SourceEditDialog(QDialog):
             q_base=self._q_base(), f_ref=self._F_REF, name=name)
         self._refresh_resp_ui()
 
-    def _apply_manual(self):
-        """Atajo sin archivo: g(f) = e^{i·φ₀}·e^{-i2πfτ} (delay + offset de fase).
+    def _apply_manual(self, notify=True):
+        """Delay + offset de fase manual: g(f) = e^{i·φ₀}·e^{-i2πfτ}.
 
-        La POLARIDAD ya no entra acá (v2.23): es un campo propio de la fuente y
-        se compone aparte, asi que este atajo no la pisa ni la duplica.
+        Se COMPONE sobre la curva base (el FRD/TRF cargado en esta sesion, si hay;
+        si no, una curva plana) en vez de pisarla, y es IDEMPOTENTE: siempre
+        reconstruye desde la base + los spinboxes, asi aplicar dos veces da lo
+        mismo (no acumula) y se puede auto-aplicar al Aceptar sin duplicar.
+
+        La POLARIDAD no entra acá (v2.23): es un campo propio de la fuente.
+        `notify=False` silencia el aviso "poné delay/fase" (para el auto-aplicar).
         """
         from sources import SourceResponse
         tau = self.sb_delay.value() / 1000.0
         phi0 = np.radians(self.sb_phase.value())     # offset de fase constante (T5)
-        if tau <= 0.0 and abs(self.sb_phase.value()) < 1e-9:
-            QMessageBox.information(self, "Q(f)",
-                "Poné un delay > 0 ms o una fase ≠ 0.\n"
-                "(La polaridad es el toggle 0°/180° de arriba.)")
+        has_manual = (tau > 0.0 or abs(self.sb_phase.value()) > 1e-9)
+
+        # Curva base: el FRD/TRF de esta sesion re-horneado (si se cargo), o None.
+        base = None
+        if self._frd_raw is not None:
+            freq, spl, phase_rad, name = self._frd_raw
+            base = SourceResponse.from_frd(
+                freq, spl, phase_rad, anchor=self.combo_anchor.currentData(),
+                q_base=self._q_base(), f_ref=self._F_REF, name=name)
+
+        if not has_manual:
+            # Sin delay/fase: la respuesta es la base (FRD) o nada.
+            if base is not None:
+                self._response = base
+            elif notify:
+                QMessageBox.information(self, "Q(f)",
+                    "Poné un delay > 0 ms o una fase ≠ 0.\n"
+                    "(La polaridad es el toggle 0°/180° de arriba.)")
+            self._refresh_resp_ui()
             return
-        f = np.linspace(1.0, 1000.0, 1500)
-        gain_db = np.zeros_like(f)
-        phase = -2.0 * np.pi * f * tau + phi0
+
         parts = []
         if tau > 0.0:
             parts.append(f"delay {self.sb_delay.value():.2f} ms")
         if abs(self.sb_phase.value()) > 1e-9:
             parts.append(f"fase {self.sb_phase.value():.0f}°")
-        self._frd_raw = None    # el atajo manual reemplaza cualquier FRD
-        self._response = SourceResponse(f, gain_db, phase,
-                                        name=" + ".join(parts) or "manual")
+        manual_name = " + ".join(parts)
+
+        if base is not None:
+            # Componer: sumar la fase del delay/offset SOBRE la curva del FRD.
+            f = base.freq_pts
+            extra = -2.0 * np.pi * f * tau + phi0
+            self._response = SourceResponse(
+                f, base.gain_db, base.phase_rad + extra,
+                name=f"{base.name} + {manual_name}", anchor=base.anchor)
+        else:
+            f = np.linspace(1.0, 1000.0, 1500)
+            self._response = SourceResponse(
+                f, np.zeros_like(f), -2.0 * np.pi * f * tau + phi0,
+                name=manual_name)
         self._refresh_resp_ui()
+
+    def accept(self):
+        """Al Aceptar, AUTO-APLICAR el delay/fase pendiente en los spinboxes.
+
+        Antes solo se aplicaban con el boton "Aplicar"; si el usuario ponia el
+        valor y daba OK, no tomaba (get_source guardaba el _response viejo). Como
+        _apply_manual es idempotente, re-aplicar aca no duplica aunque ya se
+        hubiera tocado "Aplicar"."""
+        if self.sb_delay.value() > 0.0 or abs(self.sb_phase.value()) > 1e-9:
+            self._apply_manual(notify=False)
+        super().accept()
 
     def _clear_resp(self):
         """Quita la curva g(f). NO toca la polaridad: es del cableado, no de
