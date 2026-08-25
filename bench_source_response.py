@@ -135,6 +135,26 @@ def main():
     # El modo mas bajo debe estar mas atenuado que el mas alto.
     assert atten_db[0] < atten_db[-1], "[FALLA] highpass no atenua mas a baja f"
 
+    # ------------------------------------------------------------------------
+    # 8. v2.25: delay/fase como CAMPOS de la fuente (no horneados en la curva).
+    #    Se componen en effective_Q_spectrum; delay=0,fase=0 -> historico exacto.
+    # ------------------------------------------------------------------------
+    fa8 = np.array([50.0, 100.0, 200.0])
+    s_base = OmniSource((1, 1, 1), sensitivity_dB=90.0)
+    q_hist = s_base.effective_Q_spectrum(fa8)
+    s_zero = OmniSource((1, 1, 1), sensitivity_dB=90.0, delay_s=0.0, phase_deg=0.0)
+    assert np.array_equal(q_hist, s_zero.effective_Q_spectrum(fa8)), \
+        "[FALLA] delay/fase = 0 no reduce EXACTO al historico"
+    tau = 0.003
+    s_d = OmniSource((1, 1, 1), sensitivity_dB=90.0, delay_s=tau, polarity=-1)
+    fac = s_d.effective_Q_spectrum(fa8) / (q_hist * -1.0)     # aisla el factor
+    assert np.allclose(np.abs(fac), 1.0), "[FALLA] el delay cambio la magnitud"
+    assert np.allclose(np.angle(fac * np.exp(1j * 2 * np.pi * fa8 * tau)), 0.0,
+                       atol=1e-9), "[FALLA] delay no da fase lineal -2pi f tau"
+    print(f"\n  Delay/fase como campos: delay=0 identico al historico; "
+          f"delay {tau*1e3:.0f} ms = fase lineal, |factor|=1, compone con "
+          f"polaridad  OK")
+
     print("\n  TODOS LOS ORACULOS OK.")
 
 

@@ -1086,6 +1086,10 @@ class MainWindow(QMainWindow):
                 # v2.23: polaridad del cableado (+1 / -1). Aditivo, sin bump de
                 # version: un .room viejo carga con +1 = comportamiento previo.
                 "polarity": int(getattr(s, "polarity", 1) or 1),
+                # v2.25: delay y offset de fase como campos (antes se horneaban en
+                # la curva). Aditivo, sin bump: un .room viejo carga con 0.
+                "delay_s": float(getattr(s, "delay_s", 0.0) or 0.0),
+                "phase_deg": float(getattr(s, "phase_deg", 0.0) or 0.0),
             })
         # v4: asignacion de materiales por grupo de caras (estilo EASE).
         # Se guarda el mapeo {signature: material_name}. La firma es estable
@@ -1298,6 +1302,8 @@ class MainWindow(QMainWindow):
             kwargs["mounted"] = bool(s.get("mounted", False))
             kwargs["active"] = bool(s.get("active", True))
             kwargs["polarity"] = int(s.get("polarity", 1) or 1)
+            kwargs["delay_s"] = float(s.get("delay_s", 0.0) or 0.0)   # v2.25
+            kwargs["phase_deg"] = float(s.get("phase_deg", 0.0) or 0.0)
             src = OmniSource(**kwargs)
             # v5: reconstruir la curva de respuesta Q(f) si el .room la trae.
             resp = s.get("response")

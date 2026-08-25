@@ -278,6 +278,14 @@ class OmniSource:
     # destruia el FRD cargado y no se podia leer de vuelta en la UI).
     # polarity=+1 reduce EXACTO al comportamiento historico.
     polarity:       int   = 1
+    # v2.25: delay y offset de fase como CAMPOS propios (antes se horneaban en la
+    # curva `response`, lo que impedia releerlos al reabrir la fuente y pisaba el
+    # FRD cargado). Se componen en effective_Q_spectrum (convencion e^{+iωt}):
+    # g(f) *= exp(-i·2πf·delay_s + i·phase). delay_s=0 y phase_deg=0 reducen
+    # EXACTO al comportamiento historico. Analogo a la polaridad, pero como el
+    # delay depende de f, entra en el path de espectro y no en effective_Q().
+    delay_s:        float = 0.0
+    phase_deg:      float = 0.0
 
     def __post_init__(self):
         x, y, z = self.position
@@ -294,6 +302,8 @@ class OmniSource:
         self.mounted = bool(self.mounted)
         self.active = bool(self.active)
         self.polarity = -1 if int(self.polarity) < 0 else 1
+        self.delay_s = float(self.delay_s)
+        self.phase_deg = float(self.phase_deg)
 
     def effective_Q(self) -> complex:
         """Q efectivo (escalar): recalculado desde sensibilidad si corresponde.
@@ -323,8 +333,16 @@ class OmniSource:
         fa = np.atleast_1d(np.asarray(freq_axis, dtype=float))
         q0 = self.effective_Q()
         if self.response is None:
-            return np.full(fa.shape, q0, dtype=complex)
-        return q0 * self.response.gain_spectrum(fa)
+            q = np.full(fa.shape, q0, dtype=complex)
+        else:
+            q = q0 * self.response.gain_spectrum(fa)
+        # Delay + offset de fase (campos propios). Se COMPONEN sobre la curva y la
+        # polaridad (convencion e^{+iωt}: retardo tau -> fase -2πfτ). Con delay_s=0
+        # y phase_deg=0 el factor es 1 -> reduce EXACTO al comportamiento historico.
+        if self.delay_s != 0.0 or self.phase_deg != 0.0:
+            q = q * np.exp(-1j * 2.0 * np.pi * fa * self.delay_s
+                           + 1j * np.radians(self.phase_deg))
+        return q
 
     # ----- consultas ---------------------------------------------------------
     def is_inside(self, dims: Sequence[float], tol: float = 0.0) -> bool:

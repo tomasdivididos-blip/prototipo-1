@@ -190,6 +190,11 @@ class SourceEditDialog(QDialog):
                           if (source is not None and getattr(source, "response", None))
                           else None)
         self._frd_raw = None    # (freq, spl_db, phase_rad, name) si se cargo aca
+        # v2.25: delay/fase como CAMPOS de la fuente (re-leibles al reabrir).
+        self._delay0_ms = (float(getattr(source, "delay_s", 0.0) or 0.0) * 1000.0
+                           if source is not None else 0.0)
+        self._phase0_deg = (float(getattr(source, "phase_deg", 0.0) or 0.0)
+                            if source is not None else 0.0)
 
         grp_resp = QGroupBox("Respuesta en frecuencia  Q(f)   (opcional)")
         gl = QVBoxLayout(grp_resp)
@@ -226,21 +231,24 @@ class SourceEditDialog(QDialog):
         self.sb_delay.setRange(0.0, 100.0)
         self.sb_delay.setDecimals(2)
         self.sb_delay.setSingleStep(0.1)
+        self.sb_delay.setValue(self._delay0_ms)
         mrow.addWidget(self.sb_delay)
-        # La polaridad SALIO de acá (v2.23): era parte de la curva g(f), asi
-        # que aplicarla borraba el FRD/TRF cargado y no se podia leer de vuelta.
-        # Ahora es un toggle propio arriba (campo `polarity` de la fuente) que
-        # se COMPONE con la curva. Delay y fase se quedan: esos si son cosas
-        # de dominio frecuencial y tiene sentido que vivan en la curva.
+        # v2.25: delay y fase son CAMPOS propios de la fuente (como la polaridad),
+        # NO se hornean en la curva g(f). Se componen al calcular
+        # (OmniSource.effective_Q_spectrum) y se guardan/leen como numeros, asi
+        # que al reabrir la fuente el valor sigue ahi y NO pisan un FRD cargado.
+        # Se aplican SOLOS al Aceptar (ya no hay boton "Aplicar").
         mrow.addWidget(QLabel("Fase (°):"))
         self.sb_phase = QDoubleSpinBox()
         self.sb_phase.setRange(-180.0, 180.0)
         self.sb_phase.setDecimals(0)
         self.sb_phase.setSingleStep(15.0)
+        self.sb_phase.setValue(self._phase0_deg)
         mrow.addWidget(self.sb_phase)
-        btn_manual = QPushButton("Aplicar")
-        btn_manual.clicked.connect(self._apply_manual)
-        mrow.addWidget(btn_manual)
+        # Preview en vivo: al cambiar delay/fase se redibuja (se componen sobre
+        # la curva/plana para mostrar la fase total).
+        self.sb_delay.valueChanged.connect(self._draw_resp_preview)
+        self.sb_phase.valueChanged.connect(self._draw_resp_preview)
         gl.addLayout(mrow)
 
         # Preview compacto (magnitud + fase), best-effort.
@@ -404,72 +412,10 @@ class SourceEditDialog(QDialog):
             q_base=self._q_base(), f_ref=self._F_REF, name=name)
         self._refresh_resp_ui()
 
-    def _apply_manual(self, notify=True):
-        """Delay + offset de fase manual: g(f) = e^{i·φ₀}·e^{-i2πfτ}.
-
-        Se COMPONE sobre la curva base (el FRD/TRF cargado en esta sesion, si hay;
-        si no, una curva plana) en vez de pisarla, y es IDEMPOTENTE: siempre
-        reconstruye desde la base + los spinboxes, asi aplicar dos veces da lo
-        mismo (no acumula) y se puede auto-aplicar al Aceptar sin duplicar.
-
-        La POLARIDAD no entra acá (v2.23): es un campo propio de la fuente.
-        `notify=False` silencia el aviso "poné delay/fase" (para el auto-aplicar).
-        """
-        from sources import SourceResponse
-        tau = self.sb_delay.value() / 1000.0
-        phi0 = np.radians(self.sb_phase.value())     # offset de fase constante (T5)
-        has_manual = (tau > 0.0 or abs(self.sb_phase.value()) > 1e-9)
-
-        # Curva base: el FRD/TRF de esta sesion re-horneado (si se cargo), o None.
-        base = None
-        if self._frd_raw is not None:
-            freq, spl, phase_rad, name = self._frd_raw
-            base = SourceResponse.from_frd(
-                freq, spl, phase_rad, anchor=self.combo_anchor.currentData(),
-                q_base=self._q_base(), f_ref=self._F_REF, name=name)
-
-        if not has_manual:
-            # Sin delay/fase: la respuesta es la base (FRD) o nada.
-            if base is not None:
-                self._response = base
-            elif notify:
-                QMessageBox.information(self, "Q(f)",
-                    "Poné un delay > 0 ms o una fase ≠ 0.\n"
-                    "(La polaridad es el toggle 0°/180° de arriba.)")
-            self._refresh_resp_ui()
-            return
-
-        parts = []
-        if tau > 0.0:
-            parts.append(f"delay {self.sb_delay.value():.2f} ms")
-        if abs(self.sb_phase.value()) > 1e-9:
-            parts.append(f"fase {self.sb_phase.value():.0f}°")
-        manual_name = " + ".join(parts)
-
-        if base is not None:
-            # Componer: sumar la fase del delay/offset SOBRE la curva del FRD.
-            f = base.freq_pts
-            extra = -2.0 * np.pi * f * tau + phi0
-            self._response = SourceResponse(
-                f, base.gain_db, base.phase_rad + extra,
-                name=f"{base.name} + {manual_name}", anchor=base.anchor)
-        else:
-            f = np.linspace(1.0, 1000.0, 1500)
-            self._response = SourceResponse(
-                f, np.zeros_like(f), -2.0 * np.pi * f * tau + phi0,
-                name=manual_name)
-        self._refresh_resp_ui()
-
-    def accept(self):
-        """Al Aceptar, AUTO-APLICAR el delay/fase pendiente en los spinboxes.
-
-        Antes solo se aplicaban con el boton "Aplicar"; si el usuario ponia el
-        valor y daba OK, no tomaba (get_source guardaba el _response viejo). Como
-        _apply_manual es idempotente, re-aplicar aca no duplica aunque ya se
-        hubiera tocado "Aplicar"."""
-        if self.sb_delay.value() > 0.0 or abs(self.sb_phase.value()) > 1e-9:
-            self._apply_manual(notify=False)
-        super().accept()
+    # v2.25: delay/fase dejaron de hornearse en la curva (eran _apply_manual +
+    # boton "Aplicar" + override de accept). Ahora son campos de la fuente
+    # (self.sb_delay / self.sb_phase -> src.delay_s / src.phase_deg en get_source)
+    # que se componen al calcular. El preview los muestra en vivo (_draw_resp_preview).
 
     def _clear_resp(self):
         """Quita la curva g(f). NO toca la polaridad: es del cableado, no de
@@ -511,28 +457,36 @@ class SourceEditDialog(QDialog):
             for ax in (self._resp_ax_m, self._resp_ax_p):
                 ax.set_xscale('linear')
                 ax.clear()
+            # Delay/fase (campos) se COMPONEN sobre la curva/plana para el preview
+            # (convencion e^{+iωt}: retardo tau -> fase -2πfτ). |factor|=1 -> la
+            # magnitud no cambia; la fase muestra la recta del delay + el offset.
+            tau = self.sb_delay.value() / 1000.0
+            phi0 = np.radians(self.sb_phase.value())
+            has_dp = (tau > 0.0 or abs(self.sb_phase.value()) > 1e-9)
             if self._response is not None:
                 fmin, fmax, _ = self._response.coverage()
                 fa = np.linspace(max(fmin, 1.0), fmax, 400)
                 g = self._response.gain_spectrum(fa)
-                self._resp_ax_m.semilogx(
-                    fa, 20 * np.log10(np.maximum(np.abs(g), 1e-9)),
-                    color='#1f6fbf', lw=1.4)
-                self._resp_ax_p.semilogx(
-                    fa, np.degrees(np.angle(g)), color='#e07000', lw=1.4)
             else:
-                # Sin curva cargada: dibujar la default explícita (g≡1 =
-                # Q constante), para que el preview nunca quede vacío.
-                fa = np.geomspace(20.0, 500.0, 50)
-                z = np.zeros_like(fa)
-                self._resp_ax_m.semilogx(fa, z, color='#888888',
-                                         lw=1.2, ls='--')
-                self._resp_ax_p.semilogx(fa, z, color='#888888',
-                                         lw=1.2, ls='--')
+                fa = np.geomspace(20.0, 500.0, 200)
+                g = np.ones_like(fa, dtype=complex)
+            g = g * np.exp(-1j * 2.0 * np.pi * fa * tau + 1j * phi0)
+            solid = (self._response is not None) or has_dp
+            col_m = '#1f6fbf' if solid else '#888888'
+            col_p = '#e07000' if solid else '#888888'
+            ls = '-' if solid else '--'
+            self._resp_ax_m.semilogx(
+                fa, 20 * np.log10(np.maximum(np.abs(g), 1e-9)),
+                color=col_m, lw=1.4, ls=ls)
+            self._resp_ax_p.semilogx(fa, np.degrees(np.angle(g)),
+                                     color=col_p, lw=1.4, ls=ls)
+            if self._response is None:
                 self._resp_ax_m.set_ylim(-12, 12)
                 self._resp_ax_p.set_ylim(-180, 180)
-                self._resp_ax_m.set_title("default: plana (Q constante)",
-                                          fontsize=7, color='#666666')
+                self._resp_ax_m.set_title(
+                    "delay / fase (magnitud plana)" if has_dp
+                    else "default: plana (Q constante)",
+                    fontsize=7, color='#666666')
             self._resp_ax_m.set_ylabel("g [dB]", fontsize=7)
             self._resp_ax_p.set_ylabel("fase [°]", fontsize=7)
             self._resp_ax_p.set_xlabel("Hz", fontsize=7)
@@ -601,6 +555,8 @@ class SourceEditDialog(QDialog):
             pitch=self.sb_pitch.value(),
             mounted=self._mounted,
             polarity=(-1 if self.chk_polarity.isChecked() else 1),
+            delay_s=self.sb_delay.value() / 1000.0,     # v2.25: campos propios
+            phase_deg=self.sb_phase.value(),
         )
         src.response = self._response    # Fase 2: preservar la curva Q(f)
         return src
@@ -3040,7 +2996,9 @@ class AcousticPanel(QWidget):
                           pitch=getattr(s, "pitch", 0.0),
                           mounted=getattr(s, "mounted", False),
                           active=getattr(s, "active", True),
-                          polarity=getattr(s, "polarity", 1))
+                          polarity=getattr(s, "polarity", 1),
+                          delay_s=getattr(s, "delay_s", 0.0),      # v2.25
+                          phase_deg=getattr(s, "phase_deg", 0.0))
         new.response = s.response       # Fase 2: la copia conserva la curva Q(f)
         self.sources.add(new)
         self._refresh_sources_list()
