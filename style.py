@@ -1,8 +1,16 @@
 """Hoja de estilo QSS — paleta inspirada en Catppuccin Mocha."""
 
+import sys as _sys
+
+# Fuente de UI segun plataforma: en macOS 'Segoe UI'/'Inter' no existen y Qt
+# gasta ~300 ms poblando alias + avisa "missing font family". Se usa una fuente
+# nativa de cada SO para evitarlo (Windows sigue con Segoe UI).
+_UI_FONT = ("'Helvetica Neue', 'Arial', sans-serif" if _sys.platform == "darwin"
+            else "'Segoe UI', 'Inter', sans-serif")
+
 DARK_QSS = """
 * {
-    font-family: 'Segoe UI', 'Inter', sans-serif;
+    font-family: __UI_FONT__;
     font-size: 10pt;
     color: #cdd6f4;
 }
@@ -209,3 +217,5 @@ QComboBox QAbstractItemView {
     outline: 0;
 }
 """
+
+DARK_QSS = DARK_QSS.replace("__UI_FONT__", _UI_FONT)
