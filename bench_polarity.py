@@ -120,11 +120,13 @@ check("T10b y SIN curva (la polaridad ya no se hornea en g(f))",
 check("T10c el resultado numérico sigue siendo la cancelación",
       np.allclose(sa.amplitudes_spectrum(fa).sum(axis=1), 0.0, atol=1e-30))
 
-# Con delay sí tiene que haber curva (eso no cambió).
+# v2.25: el delay ahora es un CAMPO (delay_s), no una curva.
 lay_d = SourceLayout(positions=np.array([[1.0, 1.0, 1.0]]),
                      delays_s=np.array([0.002]))
-check("T10d el delay sigue viviendo en la curva",
-      lay_d.to_source_array()[0].response is not None)
+_sd = lay_d.to_source_array()[0]
+check("T10d el delay vive en el campo delay_s (no en la curva)",
+      abs(_sd.delay_s - 0.002) < 1e-12 and _sd.response is None,
+      f"delay_s={_sd.delay_s}, response={_sd.response}")
 
 # ---------------------------------------------------------------------------
 print("\nT11  el toggle del diálogo (readback + no pisa la curva)")
@@ -153,11 +155,10 @@ check("T11c la curva sobrevive al toggle",
 
 d4 = SourceEditDialog(source=s_inv)
 d4.sb_delay.setValue(2.0)
-d4._apply_manual()
-o4 = d4.get_source()
-check("T11d el atajo manual (delay) ya no pisa la polaridad",
-      o4.polarity == -1 and o4.response is not None,
-      f"resp={o4.response.name!r}")
+o4 = d4.get_source()      # v2.25: el delay va al campo, sin boton "Aplicar"
+check("T11d el delay va al campo delay_s, no pisa la polaridad ni crea curva",
+      o4.polarity == -1 and abs(o4.delay_s - 0.002) < 1e-12 and o4.response is None,
+      f"delay_s={o4.delay_s}, pol={o4.polarity}, resp={o4.response}")
 
 d5 = SourceEditDialog(source=s_frd)
 d5._clear_resp()

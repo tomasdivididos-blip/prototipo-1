@@ -105,23 +105,23 @@ class SourceLayout:
         return self.positions.shape[0]
 
     def to_source_array(self) -> SourceArray:
-        """Construye la SourceArray (delay -> response, polaridad -> campo).
+        """Construye la SourceArray. Delay -> campo `delay_s`, polaridad -> campo
+        `polarity` (ninguno de los dos se hornea en la curva g(f)).
 
-        v2.23: la polaridad va al campo `OmniSource.polarity`, NO horneada en
-        la curva g(f). El resultado numerico es identico (effective_Q ya aplica
-        el +-1), pero asi las fuentes que el usuario aplica desde una card de
-        Ubicacion llegan a Acustica con el toggle de polaridad reflejando su
-        estado real, en vez de con la fase pi escondida adentro de la curva.
+        v2.23 saco la polaridad de la curva; v2.25 hace lo mismo con el delay. El
+        resultado numerico es identico (effective_Q_spectrum ya compone el factor
+        e^{-i2πfτ} del campo), pero asi las fuentes que el usuario aplica desde una
+        card de Ubicacion llegan a Acustica con el delay y la polaridad legibles
+        como numeros, en vez de escondidos dentro de la curva.
         """
         arr = SourceArray()
         for i in range(self.n_sources):
-            # inverted=False aca a proposito: la polaridad ya no entra al g(f).
-            resp = _delay_polarity_response(float(self.delays_s[i]), False)
             arr.add(OmniSource(
                 tuple(self.positions[i]), Q=1.0 + 0.0j,
                 label=f"{self.label or 'L'}{i+1}",
-                response=resp, baffle_size=self.baffle,
+                baffle_size=self.baffle,
                 polarity=(-1 if bool(self.inverted[i]) else 1),
+                delay_s=float(self.delays_s[i]),
             ))
         return arr
 
