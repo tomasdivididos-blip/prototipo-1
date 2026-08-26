@@ -2413,6 +2413,50 @@ bien.
   (numpy2/Qt/consola). MANUAL changelog v2.25. Capa 0 NO va al MANUAL (no está wired). El
   `pack_mac_distribution.py` lee la versión del último `**Cambios v2.NN**` → los zips salen v2.25.
 
+- **25-26 Ago 2026 — Capa 0 Etapas 3/4/5a + pedidos del profesor (SBIR modal + RT CSV).**
+  Rama `dist-exe`. Dos frentes.
+  **(A) Capa 0 (modelado de Z), avance grande (headless, plan en `plan_modelado_Z.md`):**
+  - *Etapa 3 (resonantes):* `impedance.py` + `maa_zface` (panel (micro)perforado, Maa 1998
+    Ec 2-4, constante de perforado x=(d/2)√(ωρ₀/η)) y `membrane_zface` (masa-resorte,
+    Z=ρ₀c·damping+iωm). Convención atada a la cámara de aire del módulo (resorte Im(Z)<0,
+    masa Im(Z)>0). Constructores `perforated`/`microperforated`/`membrane`/`helmholtz` =
+    facing EN SERIE (`_facing_surface`) sobre backing TMM (`_facing_backing`). `bench_resonant_facings.py`
+    21/21: pico de α EN el cero de reactancia (la fórmula lumped f₀=(c/2π)√(ε/(t_ef·D)) es su
+    límite k₀D→0, se aparta ~15% con cavidad de cm), membrana f₀=60/√(mD) exacto, Maa r↑ al
+    achicar d, **corrimiento de fₙ cambia de signo al cruzar la resonancia**.
+  - *Etapa 4 (auditoría integral):* `bench_capa0_audit.py` 33/33 + suite `bench_capa0_all.py`
+    (5 etapas en procesos aislados, 117/117). Geometría irregular (pentágono/hexágono+taper/
+    caja+twist) sin NaN, θ∈[0,88°], cobertura completa; pasividad Re(Z)≥0 y α∈[0,1] en 11
+    modelos × banda × ángulos; validez por modelo (DB no físico α<0 a X<0.01, NO Re(Zc)<0);
+    convención end-to-end (ley sign(f_new−fₙ)=−sign(Im Z), ambos signos al cruzar λ/4);
+    convergencia (θ con la malla, ξ con la cuadratura/subdiv); call-path (rígido→0, default,
+    measured extrapola, grupos vacíos→None).
+  - *Etapa 5a (wiring headless a la física):* decisiones del usuario = el corrimiento PROPAGA
+    a la física (FRF/campo/FoM usan f_new; forma modal rígida) y la construcción se ancla A LA
+    CARA (mapa `_construction_map` paralelo al FaceMaterialMap). `impedance.build_surface(spec)`+
+    `spec_label` ((de)serialización JSON). Panel: `_construction_surf_by_group` (construcción→
+    Surface; cara sin construcción→`_material_surface`=resistiva de α(f)=puente exacto α→β),
+    `_effective_modal_freqs`, `_freq_shift_per_mode`, rama nueva en `_compute_xi_from_materials`
+    (→`perturbation_xi_shift_extended`). `aa.run_fem_frf(modal_freqs=...)` (param aditivo).
+    `.room` **v9** (`wall_constructions`, aditivo). `bench_capa0_wiring.py` 9/9 (reproducibilidad
+    FRF(None)==FRF(freqs) bit a bit, construcción MUEVE la FRF). **Capa 0 NO va al MANUAL: 5b
+    (diálogo UI) y 5c (mediciones, EN PAUSA: el usuario no tiene Z medida) sin hacer.**
+  **(B) Pedidos del profesor (user-facing, MANUAL v2.26):**
+  - *SBIR con transferencia modal (toggle):* decisión = HÍBRIDO con crossfade en f_Schroeder.
+    `sbir.modal_sbir_crossfade(freq, sbir_db, modal_db, f_s)` (peso lineal en log2(f), ±0.5 oct).
+    `_open_sbir` computa la FRF modal en el receptor, la normaliza al directo de campo libre
+    (20log10(|H|/|p_dir|), 0 dB=anecoico) y toma f_S de `_schroeder_context()`. `SBIRDialog`
+    refactorizado (`_rebuild_plot()` + checkbox); CSV con columnas modal/híbrido. `bench_sbir.py`
+    +test_modal_crossfade, `bench_sbir_modal.py` 6/6.
+  - *RT60 "sumar curva copia la vieja":* NO era bug de cálculo (verificado headless: recomputa
+    bien, A=10.3s B=3.4s). La ventana se limpia adrede. Solución = guardar/cargar curvas a
+    **archivos CSV** (`QFileDialog`; primera versión con lista interna+.room tenía bug: al cargar
+    solo aparecía la 1ª). `RTComparisonDialog`: `_save_selected_curve` (CSV con cabecera
+    nombre/metodo/metrica + tabla), `_load_saved_curve` (`getOpenFileNames` MÚLTIPLE, punteadas
+    "★") + `_parse_rt_csv`. NO usa `.room`.
+  Test visual humano: **Bloque A (SBIR modal) = perfecto; Bloque B (RT CSV) = todo verde** (tras
+  pasar de lista interna a CSV). Memoria: [[profesor-sbir-rt60]], [[z-impedance-modeling]].
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.

@@ -57,7 +57,7 @@ from prediction_panel import PredictionPanel
 
 
 FILE_FORMAT = "prototipo1.room"
-FILE_VERSION = 8  # v8: absorption_patches (parches sub-cara); v7: furniture; v6: wall_profiles; v5: response Q(f); v4: face_materials
+FILE_VERSION = 9  # v9: wall_constructions (Capa 0: Z de pared por cara). Las curvas de RT se guardan como CSV aparte, no en el .room. v8: absorption_patches; v7: furniture; v6: wall_profiles; v5: response Q(f); v4: face_materials
 FILE_FILTER = "Recinto Prototipo 1 (*.room *.json)"
 DEFAULT_DIR = str(Path.home() / "Desktop")
 UNDO_LIMIT = 10   # cantidad de acciones reversibles (ctrl+z / ctrl+y)
@@ -1134,6 +1134,11 @@ class MainWindow(QMainWindow):
             # el estado REAL. Default de sesion nueva = "perturbation" (Etapa 3),
             # pero un .room viejo SIN la clave carga como "a36" (reproducibilidad).
             "damping_model": getattr(ap, "_damping_model", "perturbation"),
+            # v9 (Capa 0, Etapa 5): construccion de pared por cara {signature: spec}.
+            # El spec reconstruye una impedance.SurfaceImpedance (beta compleja ->
+            # amortiguamiento + corrimiento de f_n). Aditivo: un .room < v9 sin la
+            # clave -> mapa vacio -> alpha->beta de siempre (reproducibilidad).
+            "wall_constructions": dict(getattr(ap, "_construction_map", {}) or {}),
         }
 
     def _serialize_external_geometry(self):
@@ -1341,6 +1346,17 @@ class MainWindow(QMainWindow):
                 ap._refresh_patches_summary()
         except Exception:
             ap._patches = []
+
+        # v9 (Capa 0, Etapa 5): construccion de pared por cara. .room < v9 sin la
+        # clave -> mapa vacio -> alpha->beta de siempre (reproducibilidad).
+        try:
+            wc = ac.get("wall_constructions") or {}
+            ap._construction_map = ({str(k): v for k, v in wc.items()}
+                                    if isinstance(wc, dict) else {})
+            if hasattr(ap, "_refresh_materials_summary"):
+                ap._refresh_materials_summary()
+        except Exception:
+            ap._construction_map = {}
 
         # v2.23: modelo de amortiguamiento. Sin la clave (.room pre-v2.24) -> "a36"
         # a proposito: el archivo se guardo bajo Sabine, se preserva su numero.

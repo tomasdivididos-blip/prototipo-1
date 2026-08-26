@@ -54,6 +54,7 @@ from material_library import (MaterialLibrary, compute_sabine_rt60,
                                compute_xi_per_mode, classify_surface_areas)
 import material_library as ml
 import face_materials as fm
+import impedance as imp
 
 
 # ---------------------------------------------------------------------------
@@ -1089,79 +1090,52 @@ class SBIRDialog(QDialog):
     _COLORS = ['#2a9d8f', '#e76f51', '#8a5cd1', '#577590', '#bc6c25', '#386641']
 
     def __init__(self, result, f_lo: float = 20.0, f_hi: float = 500.0,
-                 parent=None):
+                 parent=None, modal_db=None, f_schroeder=None):
         super().__init__(parent)
         self.setWindowTitle("SBIR — interferencia fuente-frontera")
         self.resize(980, 600)
         self._fig = None
         self._res = result
         self._flo, self._fhi = float(f_lo), float(f_hi)
+        # Transferencia modal de la sala (FEM) normalizada a dB re directo, y f_S
+        # para el hibrido. modal_db=None -> el toggle no aparece (sin modos).
+        self._modal_db = (np.asarray(modal_db, dtype=float)
+                          if modal_db is not None else None)
+        self._f_s = float(f_schroeder) if f_schroeder else None
+        self._chk_modal = None
         v = QVBoxLayout(self)
 
         if not _HAS_MPL:
             v.addWidget(QLabel("matplotlib no disponible. pip install matplotlib"))
             return
 
-        res = result
-        f = res.freq_axis
-        self._fig, ax = plt.subplots(figsize=(9.5, 4.4), dpi=96)
+        self._fig, self._ax = plt.subplots(figsize=(9.5, 4.4), dpi=96)
         self._fig.patch.set_facecolor('#f0f0f0')
-        ax.set_facecolor('#ffffff')
-
-        multi = len(res.per_source) > 1
-        for i, src in enumerate(res.per_source):
-            ax.plot(f, src.sbir_db, linewidth=1.3,
-                    alpha=0.65 if multi else 1.0,
-                    color=self._COLORS[i % len(self._COLORS)],
-                    label=src.label)
-        if multi:
-            ax.plot(f, res.total_sbir_db, color='#1f6fbf', linewidth=2.4,
-                    label='Total (suma)')
-
-        # Linea de referencia 0 dB (anecoico).
-        ax.axhline(0.0, color='#888888', linewidth=0.8, linestyle='--',
-                   alpha=0.6)
-
-        # Marcadores de notch teorico c/(4d) por pared (dedup por frecuencia).
-        seen = set()
-        for n in res.first_notches(self._flo, self._fhi):
-            key = round(n.f_notch, 1)
-            if key in seen:
-                continue
-            seen.add(key)
-            ax.axvline(x=n.f_notch, color='#e07000', linestyle=':',
-                       linewidth=1.1, alpha=0.7,
-                       label='Notch c/(4d)' if len(seen) == 1 else '_nolegend_')
-
-        ax.set_xlabel('Frecuencia (Hz)', fontsize=10)
-        ax.set_ylabel('SBIR (dB re directo)', fontsize=10)
-        ax.set_title('SBIR — directo + reflexiones de 1er orden',
-                     fontweight='bold', fontsize=11, pad=8)
-
-        # Grilla 1/3 octava (ISO 266), eje log, look tipo REW — igual que FRF.
-        from matplotlib.ticker import FixedLocator, NullLocator, FuncFormatter
-        from plot_utils import third_octave_edges
-        edges = third_octave_edges(float(f[0]), float(f[-1]))
-        if len(edges) >= 2:
-            ax.set_xscale('log')
-            ax.set_xlim(float(f[0]), float(f[-1]))
-            ax.xaxis.set_major_locator(FixedLocator(edges))
-            ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.0f}"))
-            ax.xaxis.set_minor_locator(NullLocator())
-        ax.grid(True, which='major', axis='x', linestyle='-',
-                linewidth=0.7, alpha=0.3, color='#bbbbbb')
-        ax.grid(True, which='major', axis='y', linestyle='-',
-                linewidth=0.7, alpha=0.6, color='#cccccc')
-        ax.legend(fontsize=9, framealpha=0.85, loc='best')
-        ax.tick_params(labelsize=9)
-        self._fig.tight_layout(pad=1.2)
-
-        canvas = FigureCanvas(self._fig)
-        toolbar = NavigationToolbar(canvas, self)
+        self._ax.set_facecolor('#ffffff')
+        self._canvas = FigureCanvas(self._fig)
+        toolbar = NavigationToolbar(self._canvas, self)
         v.addWidget(toolbar)
-        v.addWidget(canvas, 1)
 
-        # --- Lectura: realce/atenuacion + distancias fuente-pared ---
+        # Toggle: incluir la transferencia modal de la sala (hibrido en f_S).
+        if self._modal_db is not None:
+            from PyQt5.QtWidgets import QCheckBox
+            self._chk_modal = QCheckBox(
+                "Incluir transferencia modal de la sala (híbrido en f_Schroeder)")
+            self._chk_modal.setChecked(True)
+            self._chk_modal.setToolTip(
+                "SBIR solo = directo + imágenes de 1er orden (campo libre).\n"
+                "Con transferencia modal: superpone la respuesta modal FEM de la\n"
+                "sala (misma referencia 0 dB = anecoico) y una curva TOTAL híbrida\n"
+                "que usa la modal por debajo de f_Schroeder (donde es exacta) y las\n"
+                "imágenes por encima (peine especular).")
+            self._chk_modal.stateChanged.connect(lambda _s: self._rebuild_plot())
+            v.addWidget(self._chk_modal)
+
+        v.addWidget(self._canvas, 1)
+        self._rebuild_plot()
+
+        # --- Lectura: realce/atenuacion + distancias fuente-pared (estatico) ---
+        res = self._res
         f_pk, realce, f_dip, aten = res.band_extremes(self._flo, self._fhi)
         info = QLabel(
             f"Realce máx: {realce:+.1f} dB @ {f_pk:.0f} Hz     ·     "
@@ -1197,6 +1171,77 @@ class SBIRDialog(QDialog):
         btns.button(QDialogButtonBox.Close).clicked.connect(self.accept)
         v.addWidget(btns)
 
+    def _rebuild_plot(self):
+        """Dibuja (o redibuja) las curvas segun el toggle de transferencia modal."""
+        import sbir
+        ax = self._ax
+        ax.clear()
+        res = self._res
+        f = res.freq_axis
+        multi = len(res.per_source) > 1
+        for i, src in enumerate(res.per_source):
+            ax.plot(f, src.sbir_db, linewidth=1.3,
+                    alpha=0.65 if multi else 1.0,
+                    color=self._COLORS[i % len(self._COLORS)],
+                    label=src.label)
+        total_lbl = 'SBIR total (imágenes)' if multi else 'SBIR (imágenes)'
+        if multi:
+            ax.plot(f, res.total_sbir_db, color='#1f6fbf', linewidth=2.4,
+                    label=total_lbl)
+
+        show_modal = (self._chk_modal is not None and self._chk_modal.isChecked()
+                      and self._modal_db is not None)
+        if show_modal:
+            ax.plot(f, self._modal_db, color='#8a5cd1', linewidth=1.6,
+                    linestyle='--', label='Transferencia modal (sala)')
+            if self._f_s:
+                total_hybrid = sbir.modal_sbir_crossfade(
+                    f, res.total_sbir_db, self._modal_db, self._f_s)
+                ax.plot(f, total_hybrid, color='#c1121f', linewidth=2.6,
+                        label='Total híbrido (modal + imágenes)')
+                ax.axvline(self._f_s, color='#444444', linestyle='-.',
+                           linewidth=1.0, alpha=0.7,
+                           label=f'f_Schroeder ≈ {self._f_s:.0f} Hz')
+
+        # Linea de referencia 0 dB (anecoico).
+        ax.axhline(0.0, color='#888888', linewidth=0.8, linestyle='--',
+                   alpha=0.6)
+
+        # Marcadores de notch teorico c/(4d) por pared (dedup por frecuencia).
+        seen = set()
+        for n in res.first_notches(self._flo, self._fhi):
+            key = round(n.f_notch, 1)
+            if key in seen:
+                continue
+            seen.add(key)
+            ax.axvline(x=n.f_notch, color='#e07000', linestyle=':',
+                       linewidth=1.1, alpha=0.7,
+                       label='Notch c/(4d)' if len(seen) == 1 else '_nolegend_')
+
+        ax.set_xlabel('Frecuencia (Hz)', fontsize=10)
+        ax.set_ylabel('Nivel (dB re directo)', fontsize=10)
+        ax.set_title('SBIR — directo + reflexiones de 1er orden',
+                     fontweight='bold', fontsize=11, pad=8)
+
+        # Grilla 1/3 octava (ISO 266), eje log, look tipo REW — igual que FRF.
+        from matplotlib.ticker import FixedLocator, NullLocator, FuncFormatter
+        from plot_utils import third_octave_edges
+        edges = third_octave_edges(float(f[0]), float(f[-1]))
+        if len(edges) >= 2:
+            ax.set_xscale('log')
+            ax.set_xlim(float(f[0]), float(f[-1]))
+            ax.xaxis.set_major_locator(FixedLocator(edges))
+            ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.0f}"))
+            ax.xaxis.set_minor_locator(NullLocator())
+        ax.grid(True, which='major', axis='x', linestyle='-',
+                linewidth=0.7, alpha=0.3, color='#bbbbbb')
+        ax.grid(True, which='major', axis='y', linestyle='-',
+                linewidth=0.7, alpha=0.6, color='#cccccc')
+        ax.legend(fontsize=9, framealpha=0.85, loc='best')
+        ax.tick_params(labelsize=9)
+        self._fig.tight_layout(pad=1.2)
+        self._canvas.draw_idle()
+
     def _export(self, fmt: str):
         from PyQt5.QtWidgets import QFileDialog
         path, _ = QFileDialog.getSaveFileName(
@@ -1211,11 +1256,27 @@ class SBIRDialog(QDialog):
             header = ['freq_hz'] + [f"sbir_db_{s.label}" for s in res.per_source]
             if len(res.per_source) > 1:
                 header.append('sbir_db_total')
+            # Columnas del hibrido si el toggle esta activo y hay modos.
+            show_modal = (self._chk_modal is not None
+                          and self._chk_modal.isChecked()
+                          and self._modal_db is not None)
+            hybrid = None
+            if show_modal:
+                header.append('modal_db')
+                if self._f_s:
+                    import sbir as _sbir
+                    hybrid = _sbir.modal_sbir_crossfade(
+                        f, res.total_sbir_db, self._modal_db, self._f_s)
+                    header.append('total_hibrido_db')
             rows = []
             for i in range(len(f)):
                 row = [float(f[i])] + [float(s.sbir_db[i]) for s in res.per_source]
                 if len(res.per_source) > 1:
                     row.append(float(res.total_sbir_db[i]))
+                if show_modal:
+                    row.append(float(self._modal_db[i]))
+                    if hybrid is not None:
+                        row.append(float(hybrid[i]))
                 rows.append(tuple(row))
             _write_tabular(path, header, rows, fmt)
         elif self._fig:
@@ -1598,6 +1659,26 @@ class RTComparisonDialog(QDialog):
         fa.addRow(self.btn_add_pert)
         right.addWidget(grp_add)
 
+        # Guardar / cargar curvas: la ventana se limpia al cerrar (comodo para
+        # trabajar rapido), pero el usuario puede GUARDAR una curva a un archivo
+        # CSV (legible), cambiar materiales, reabrir y CARGAR el/los CSV anteriores
+        # para comparar. Cada curva es un archivo -> se pueden cargar varias.
+        grp_sl = QGroupBox("Guardar / cargar curvas (CSV)")
+        gsl = QVBoxLayout(grp_sl)
+        self.btn_save_curve = QPushButton("💾 Guardar curva seleccionada…")
+        self.btn_save_curve.setToolTip(
+            "Guarda la curva seleccionada en un archivo CSV (elegís carpeta y\n"
+            "nombre) para leerla fácil y compararla luego con otra configuración.")
+        self.btn_save_curve.clicked.connect(self._save_selected_curve)
+        gsl.addWidget(self.btn_save_curve)
+        self.btn_load_curve = QPushButton("📂 Cargar curva(s) desde CSV…")
+        self.btn_load_curve.setToolTip(
+            "Cargá uno o varios CSV guardados antes; se superponen (punteadas)\n"
+            "para comparar con la configuración actual.")
+        self.btn_load_curve.clicked.connect(self._load_saved_curve)
+        gsl.addWidget(self.btn_load_curve)
+        right.addWidget(grp_sl)
+
         # Acciones globales
         grp_glob = QGroupBox("Acciones")
         gg = QVBoxLayout(grp_glob)
@@ -1739,6 +1820,129 @@ class RTComparisonDialog(QDialog):
         self.list_curves.addItem(item)
         # Refrescar plot
         self._refresh_axes_meta()
+
+    # ------------------------------------------------------------------
+    # Guardar / cargar curvas (comparar configuraciones de material)
+    # ------------------------------------------------------------------
+    def _save_selected_curve(self):
+        """Guarda la curva seleccionada en un archivo CSV (el usuario elige carpeta
+        y nombre) para leerla facil y compararla luego con otra configuracion."""
+        from PyQt5.QtWidgets import QFileDialog
+        row = self.list_curves.currentRow()
+        if row < 0:
+            QMessageBox.information(
+                self, "Guardar curva",
+                "Seleccioná primero una curva de la lista «Curvas activas».")
+            return
+        curve = self.list_curves.item(row).data(Qt.UserRole)
+        if curve is None:
+            return
+        # nombre de archivo sugerido a partir de la etiqueta de la curva
+        rt_avg = float(np.mean(curve["values"])) if curve["values"] else 0.0
+        safe = "".join(c if (c.isalnum() or c in " -_") else "_"
+                       for c in curve["label"]).strip() or "rt"
+        default_path = f"{safe}_RT{rt_avg:.2f}s.csv"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Guardar curva de RT como CSV", default_path,
+            "CSV (*.csv);;Todos (*.*)")
+        if not path:
+            return
+        if not path.lower().endswith(".csv"):
+            path += ".csv"
+        name = curve["label"]
+        method = str(curve.get("method", "sabine"))
+        metric = str(curve.get("metric", "T60"))
+        try:
+            with open(path, "w", encoding="utf-8", newline="") as fh:
+                fh.write("# Prototipo 1 - curva de tiempo de reverberacion\n")
+                fh.write(f"nombre,{name}\n")
+                fh.write(f"metodo,{method}\n")
+                fh.write(f"metrica,{metric}\n")
+                fh.write("banda_hz,rt_s\n")
+                for b, v in zip(curve["bands"], curve["values"]):
+                    fh.write(f"{float(b):.0f},{float(v):.4f}\n")
+        except Exception as e:
+            QMessageBox.warning(self, "Error al guardar", str(e))
+            return
+        self._panel._log(f"RT: curva guardada en {path}")
+        QMessageBox.information(
+            self, "Curva guardada",
+            f"Guardada en:\n{path}\n\nCambiá materiales, reabrí esta ventana y "
+            f"usá «Cargar curva guardada…» para comparar.")
+
+    def _load_saved_curve(self):
+        """Carga una o varias curvas de RT desde archivos CSV (las que guardaste
+        antes) y las superpone para comparar con la configuracion actual."""
+        from PyQt5.QtWidgets import QFileDialog
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "Cargar curva(s) de RT desde CSV", "",
+            "CSV (*.csv);;Todos (*.*)")
+        if not paths:
+            return
+        n_ok = 0
+        for path in paths:
+            try:
+                name, method, metric, bands, vals = self._parse_rt_csv(path)
+            except Exception as e:
+                QMessageBox.warning(self, "Error al cargar",
+                                    f"{path}:\n{e}")
+                continue
+            if not bands:
+                continue
+            label = f"★ {name}"
+            color = "#6b7280"                     # gris, no compite con las vivas
+            line, = self._ax.plot(
+                bands, vals, "--", color=color, marker="s", markersize=6,
+                linewidth=1.8, label=label)
+            curve = {"label": label, "method": method, "metric": metric,
+                     "bands": bands, "values": vals, "color": color,
+                     "visible": True, "line2d": line}
+            self._curves.append(curve)
+            item = QListWidgetItem(label)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked)
+            item.setForeground(QColor(color))
+            item.setData(Qt.UserRole, curve)
+            self.list_curves.addItem(item)
+            n_ok += 1
+        if n_ok:
+            self._refresh_axes_meta()
+            self._panel._log(f"RT: {n_ok} curva(s) cargada(s) desde CSV.")
+
+    @staticmethod
+    def _parse_rt_csv(path):
+        """Lee un CSV de curva de RT (formato de _save_selected_curve). Devuelve
+        (nombre, metodo, metrica, bands, values). Tolerante: ignora comentarios (#)
+        y lineas vacias; el nombre cae al stem del archivo si falta."""
+        import os
+        name = os.path.splitext(os.path.basename(path))[0]
+        method, metric = "saved", "T60"
+        bands, vals = [], []
+        in_data = False
+        with open(path, "r", encoding="utf-8") as fh:
+            for raw in fh:
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                parts = [p.strip() for p in line.split(",")]
+                key = parts[0].lower()
+                if key == "nombre" and len(parts) > 1:
+                    name = parts[1] or name
+                elif key == "metodo" and len(parts) > 1:
+                    method = parts[1] or method
+                elif key in ("metrica", "métrica") and len(parts) > 1:
+                    metric = parts[1] or metric
+                elif key in ("banda_hz", "banda", "freq_hz", "hz"):
+                    in_data = True                # cabecera de la tabla
+                else:
+                    # fila de datos: dos numeros (banda, rt)
+                    try:
+                        b = float(parts[0]); v = float(parts[1])
+                    except (ValueError, IndexError):
+                        continue
+                    bands.append(b); vals.append(v)
+                    in_data = True
+        return name, method, metric, bands, vals
 
     def _on_curve_toggled(self, item: QListWidgetItem):
         curve = item.data(Qt.UserRole)
@@ -2198,6 +2402,11 @@ class AcousticPanel(QWidget):
         self.receiver = self._compute_default_receiver()
         self.modal_result = None       # aa.ModalSolution
         self._xi_per_mode = None
+        # Capa 0 (Etapa 5): corrimiento de f_n por reactancia de pared (Im(beta)).
+        # None = sin construcciones -> la dinamica usa las f_n rigidas (historico).
+        # Array (Nm,) = f_n corridas que usan FRF/campo/FoM (la FORMA modal sigue
+        # rigida, perturbacion de 1er orden). Lo puebla _compute_xi_from_materials.
+        self._freq_shift_per_mode = None
         # Modelo de amortiguamiento modal (v2.23, Etapa 1 del reemplazo):
         #   "perturbation" -> perturbacion de frontera de 1er orden (Morse&Ingard
         #                     9.4.14 / Kuttruff 3.34). Captura el spread axial/
@@ -2430,6 +2639,12 @@ class AcousticPanel(QWidget):
         # Parches de absorcion sub-cara (.room v8). Vacio = comportamiento
         # historico (la absorcion la fija solo el material por cara / A36).
         self._patches = []                # List[absorption_patch.AbsorptionPatch]
+        # Capa 0 (Etapa 5): construccion de pared por cara. {signature: spec dict}
+        # (spec = impedance.build_surface). Paralelo al FaceMaterialMap: la
+        # construccion da beta COMPLEJA (amortiguamiento por Re + corrimiento de
+        # f_n por Im); el material sigue dando alpha para bandas > f_S (difuso).
+        # Vacio = comportamiento historico (alpha->beta real, sin corrimiento).
+        self._construction_map = {}       # Dict[str signature, dict spec]
 
         # --- Gate de absorcion para f_Schroeder (v2.23) ---
         # El FaceMaterialMap SIEMPRE devuelve un material (su `default`), asi
@@ -4367,7 +4582,37 @@ class AcousticPanel(QWidget):
         furn_str = f", {n_furn} mueble(s)" if n_furn else ""
         self._log(f"SBIR: {len(act)} fuente(s) activa(s), {len(walls)} superficies "
                   f"({n_assigned} con material){furn_str}, receptor {self.receiver}.")
-        dlg = SBIRDialog(res, f_lo=f_lo, f_hi=f_hi, parent=self)
+
+        # Transferencia MODAL de la sala (FEM) en el MISMO receptor y banda, para
+        # el hibrido modal+SBIR (pedido del profesor: ver el efecto de la sala
+        # ademas del comb de imagenes). Se normaliza al DIRECTO de campo libre
+        # (misma referencia 0 dB = anecoico que el SBIR). Solo si hay modos.
+        modal_db = None
+        f_s = None
+        if self.modal_result is not None and len(self.modal_result.freqs) > 0:
+            try:
+                if self._xi_per_mode is None:
+                    self._xi_per_mode = self._compute_xi_from_materials()
+                damping = (self._xi_per_mode
+                           if self._xi_per_mode is not None else 0.03)
+                frf = aa.run_fem_frf(
+                    self.modal_result, act, self.receiver,
+                    f_min=f_lo, f_max=f_hi, n_freqs=len(freq), damping=damping,
+                    modal_freqs=self._effective_modal_freqs())
+                p_dir = np.abs(res.total_p_direct)
+                modal_db = 20.0 * np.log10(
+                    np.maximum(np.abs(frf.H), 1e-30) / np.maximum(p_dir, 1e-30))
+                ctx = self._schroeder_context()
+                f_s = float(ctx["fs"]) if ctx else None
+                self._log(
+                    f"SBIR: transferencia modal disponible (hibrido en "
+                    f"f_S={f_s:.0f} Hz)." if f_s else
+                    "SBIR: transferencia modal disponible.")
+            except Exception as e:
+                self._log(f"SBIR: sin transferencia modal ({e}).")
+                modal_db = None
+        dlg = SBIRDialog(res, f_lo=f_lo, f_hi=f_hi, parent=self,
+                         modal_db=modal_db, f_schroeder=f_s)
         dlg.exec_()
 
     # -----------------------------------------------------------------------
@@ -4423,6 +4668,8 @@ class AcousticPanel(QWidget):
                 f_max=self.sb_frf_fmax.value(),
                 n_freqs=self.sb_frf_n.value(),
                 damping=damping,
+                # Capa 0 (Etapa 5): resonancias corridas por reactancia de pared.
+                modal_freqs=self._effective_modal_freqs(),
             )
         except Exception as e:
             QMessageBox.critical(self, "Error FRF", str(e))
@@ -4457,7 +4704,7 @@ class AcousticPanel(QWidget):
                 # H_real (= compute_forced_response) + H_env para corregibilidad EQ.
                 H, H_env = mm.forced_response_with_envelope(
                     self.modal_result.locator,
-                    self.modal_result.freqs, self.modal_result.phis,
+                    self._effective_modal_freqs(), self.modal_result.phis,
                     act, receivers, fa_valid, damping=damping)
                 fom = mm.response_figures_of_merit(H, fa_valid)
                 fom_band = (float(fa_valid[0]), float(fa_valid[-1]),
@@ -4492,7 +4739,8 @@ class AcousticPanel(QWidget):
 
         dlg = FRFDialog(
             result,
-            modal_freqs=self.modal_result.freqs if self.modal_result else None,
+            modal_freqs=(self._effective_modal_freqs()
+                         if self.modal_result else None),
             parent=self,
             fom=fom, fom_band=fom_band, eqc=eqc, eqc_band=eqc_band,
         )
@@ -5646,6 +5894,51 @@ class AcousticPanel(QWidget):
                 g2m[g.signature] = self._mat_lib[names.index(name)]
         return g2m
 
+    @staticmethod
+    def _material_surface(mat):
+        """SurfaceImpedance con beta REAL = beta_from_alpha_random(alpha_mat(f)).
+        Puente exacto con el modelo alpha->beta para las caras SIN construccion
+        (mismo numero que la perturbacion real; conj(beta) es no-op por ser real)."""
+        def zf(f, theta=0.0):
+            f = np.atleast_1d(np.asarray(f, dtype=float))
+            a = np.array([float(mat.alpha(float(ff))) for ff in f])
+            beta = fm.beta_from_alpha_random(a)
+            return imp.Z0 / np.maximum(beta, 1e-12)
+        return imp.SurfaceImpedance(zf, is_locally_reacting=True,
+                                    label=getattr(mat, "name", "material"))
+
+    def _construction_surf_by_group(self, groups, g2m):
+        """Superficie de Capa 0 por grupo para la perturbacion EXTENDIDA (compleja):
+          - grupo con construccion asignada -> SurfaceImpedance de su spec.
+          - grupo con material pero sin construccion -> resistiva del alpha(f) del
+            material (beta real, sin corrimiento) = camino alpha->beta de siempre.
+        Devuelve {signature: SurfaceImpedance}. Los grupos sin nada quedan afuera
+        (default_surf=None en la perturbacion -> rigido)."""
+        surf = {}
+        for g in groups:
+            spec = self._construction_map.get(g.signature)
+            if spec:
+                try:
+                    surf[g.signature] = imp.build_surface(spec)
+                    continue
+                except Exception as e:
+                    self._log(f"Construccion invalida ({g.signature[:8]}): {e}")
+            mat = g2m.get(g.signature)
+            if mat is not None:
+                surf[g.signature] = self._material_surface(mat)
+        return surf
+
+    def _effective_modal_freqs(self):
+        """Frecuencias de RESONANCIA para la dinamica (FRF/campo/FoM): las corridas
+        por Capa 0 (Im(beta)) si hay construcciones, si no las rigidas. La FORMA
+        modal no cambia (perturbacion de 1er orden, D3)."""
+        if self.modal_result is None:
+            return None
+        fs = self._freq_shift_per_mode
+        if fs is not None and len(fs) == len(self.modal_result.freqs):
+            return np.asarray(fs, dtype=float)
+        return self.modal_result.freqs
+
     def _compute_xi_from_materials(self, model=None):
         """Calcula xi_n por modo usando el mapeo POR CARA (FaceMaterialMap).
 
@@ -5660,6 +5953,9 @@ class AcousticPanel(QWidget):
         if self.modal_result is None:
             return None
         model = model or self._damping_model
+        # Sin construcciones la dinamica usa las f_n rigidas: se limpia el cache de
+        # corrimiento salvo que el camino de Capa 0 lo pueble abajo.
+        self._freq_shift_per_mode = None
         try:
             groups, verts, tris = self._get_face_groups()
             V = aa.compute_mesh_volume(verts, tris)
@@ -5684,6 +5980,28 @@ class AcousticPanel(QWidget):
                 ci = getattr(self.modal_result, "carve_info", None)
                 if ci is not None:
                     V = max(V - float(ci.get("V_removed_mesh", 0.0)), 1e-9)
+            # Capa 0 (Etapa 5): si hay CONSTRUCCIONES de pared asignadas, la
+            # perturbacion es COMPLEJA y EXTENDIDA (beta(f,theta) de impedance.py):
+            # amortiguamiento por Re + corrimiento de f_n por Im, con el angulo por
+            # modo. Las caras sin construccion caen a su material (beta real) via
+            # _material_surface -> ese subconjunto reduce EXACTO al alpha->beta de
+            # siempre. Devuelve tambien f_new (corrimiento), cacheado para la
+            # dinamica. Compatible con muebles (ya en groups/g2m); la composicion
+            # con parches sub-cara queda para 5c (por ahora, construcciones tienen
+            # prioridad y se ignoran los parches con aviso).
+            if model == "perturbation" and self._construction_map:
+                if self._patches:
+                    self._log("Aviso: construcciones de pared activas -> los parches "
+                              "de absorcion se omiten en este calculo (composicion en 5c).")
+                surf_by = self._construction_surf_by_group(groups, g2m)
+                res = fm.perturbation_xi_shift_extended(
+                    self.modal_result.freqs, self.modal_result.phis,
+                    self.modal_result.locator, verts, tris, groups, surf_by, V,
+                    default_surf=None, subdiv=2)
+                if res is not None:
+                    xi, f_new = res
+                    self._freq_shift_per_mode = np.asarray(f_new, dtype=float)
+                    return xi
             # Modelo PERTURBACION (Etapa 1 + 1.b): xi por perturbacion de
             # frontera, sin pasar por RT60. Compone con muebles (ya en groups/
             # g2m) Y con parches (mismo teselado fino, Etapa 1.b).

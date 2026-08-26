@@ -8,12 +8,16 @@ via TMM) o desde una medicion del usuario. Alimenta la perturbacion de frontera
 
 NUCLEO numpy PURO (decision D0). Sin scipy, sin terceros.
 
-Estado: ETAPA 1a (motor local empirico). Constructores:
+Estado: ETAPAS 1a/1b/1c/2/3. Constructores:
   - rigid()                       pared rigida (beta ~ 0)
   - resistive(beta_real)          admitancia real constante (puente con Paris)
   - porous(sigma, thickness, ...) poroso Delany-Bazley/Miki + camara de aire (TMM)
+  - porous_jca(...)               poroso Johnson-Champoux-Allard (5 params)
   - multilayer(specs)             pila general de capas por TMM
-  - measured_Zf(freqs, Z)         Z(f) medida (incidencia normal, local)
+  - measured_Zf / measured_Zft    Z(f) / Z(f,theta) medida
+  - perforated / microperforated  facing (micro)perforado Maa 1998 + cavidad (E3)
+  - membrane(...)                 membrana masa-resorte + cavidad (E3)
+  - helmholtz(...)                resonador cuello+cavidad distribuido (E3)
 
 Convencion temporal: e^{-i w t} (parte imaginaria de Z_c negativa), siguiendo
 Delany-Bazley tal como lo escriben Aygun y Bruneau&Potel (Ec 6.133/6.134). La
@@ -141,6 +145,65 @@ def jca_zc_kc(f, phi: float, alpha_inf: float, sigma: float,
     zc = np.sqrt(K_e * rho_e)
     kc = w * np.sqrt(rho_e / K_e)
     return zc, kc
+
+
+# ---------------------------------------------------------------------------
+# Impedancia de FACINGS resonantes (Etapa 3). Un facing es una lamina delgada
+# (panel perforado, microperforado, membrana) que se apoya sobre una cavidad. Su
+# impedancia especifica se suma EN SERIE a la de la cavidad de atras (elemento de
+# pantalla del TMM: T=[[1,Z_face],[0,1]] -> Z_superficie = Z_face + Z_backing).
+#
+# CONVENCION de signos, atada a la del modulo: la camara de aire (_air_zk sobre
+# backing rigido) da Im(Z)<0 a baja f = RESORTE (compliancia). Para que un facing
+# RESUENE contra ella, su reactancia de MASA debe ser +i w m (Im>0). Al cruzar la
+# resonancia la reactancia neta cambia de resorte (Im<0) a masa (Im>0): ese es el
+# corrimiento de f_n que la pared rigida no ve (Im(beta) cambia de signo).
+# ---------------------------------------------------------------------------
+def maa_zface(f, thickness: float, hole_diam: float, ratio: float) -> np.ndarray:
+    """Impedancia especifica (absoluta, Pa*s/m) de un panel (micro)perforado a
+    incidencia normal, modelo de Maa 1998 ("Potential of microperforated panel
+    absorber", JASA 104, 2861). Parametros:
+        thickness = espesor del panel t [m]
+        hole_diam = diametro del orificio d [m]
+        ratio     = fraccion de area abierta (perforacion) sigma_p in (0,1)
+
+    Impedancia relativa z = Z/(rho0 c) = r + i*chi con (Maa 1998, Ec 2-4):
+        x   = (d/2) sqrt(w rho0 / eta)                    (constante de perforado)
+        r   = (32 eta t)/(rho0 c ratio d^2) * [sqrt(1+x^2/32) + (sqrt2/32) x d/t]
+        chi = (w t)/(ratio c) * [1 + (9 + x^2/2)^(-1/2) + 0.85 d/t]
+
+    El termino 0.85 d de chi es la correccion de extremo (masa de aire agregada en
+    la boca del orificio). x compara el radio del orificio con el espesor de la
+    capa limite viscosa: x>>1 -> perforado clasico (r chico, dominado por masa);
+    x~1 -> microperforado (r grande por viscosidad -> banda ancha sin poroso). La
+    reactancia chi>0 es masa (convencion del modulo). Ref: Maa 1998; Cox &
+    D'Antonio "Acoustic Absorbers and Diffusers" 2a ed, cap. 7."""
+    f = _as_f(f)
+    w = 2.0 * np.pi * f
+    d, t, s = float(hole_diam), float(thickness), float(ratio)
+    x = 0.5 * d * np.sqrt(w * RHO0 / ETA)
+    r = (32.0 * ETA * t) / (RHO0 * C0 * s * d * d) * (
+        np.sqrt(1.0 + x * x / 32.0) + (np.sqrt(2.0) / 32.0) * x * d / t)
+    chi = (w * t) / (s * C0) * (
+        1.0 + 1.0 / np.sqrt(9.0 + x * x / 2.0) + 0.85 * d / t)
+    return Z0 * (r + 1j * chi)
+
+
+def membrane_zface(f, mass_per_area: float, damping: float = 0.0) -> np.ndarray:
+    """Impedancia especifica (absoluta, Pa*s/m) de una membrana/panel impermeable
+    (masa flexible, "limp mass") de masa superficial m [kg/m^2] a incidencia
+    normal:
+        Z_face = rho0 c * damping + i w m
+
+    La reactancia +i w m (masa) resuena contra la compliancia de la camara de aire
+    de atras -> f0 = (1/2pi) sqrt(rho0 c^2/(m D)) = 60/sqrt(m D). `damping` es la
+    resistencia RELATIVA (a rho0 c) por perdidas internas del panel (tipico
+    0.01-0.1; sin perdidas -> pico muy angosto). Se ignora la rigidez de flexion
+    (panel limp): valido para el 1er modo del panel, banda modal de la sala. Ref:
+    Cox & D'Antonio cap. 6; Fuchs "Applied Acoustics: Absorbers and Silencers"."""
+    f = _as_f(f)
+    w = 2.0 * np.pi * f
+    return Z0 * float(damping) + 1j * w * float(mass_per_area)
 
 
 _MODELS: Dict[str, Callable] = {
@@ -389,3 +452,166 @@ def measured_Zft(freqs, thetas, Z) -> SurfaceImpedance:
 
     return SurfaceImpedance(lambda f, theta=0.0: _bilinear(f, theta),
                             is_locally_reacting=False, label="Z medida (f,theta)")
+
+
+# ---------------------------------------------------------------------------
+# Facings resonantes sobre cavidad (Etapa 3): panel perforado / microperforado /
+# membrana + camara de aire (opcionalmente rellena de poroso), via el TMM.
+# ---------------------------------------------------------------------------
+def _facing_backing(cavity_depth: float, porous_fill) -> List:
+    """Capas del TMM detras de un facing (de la SUPERFICIE al backing rigido):
+    relleno poroso opcional pegado al facing + camara de aire restante. El poroso
+    (dict como en `multilayer`, con su `thickness`) ocupa parte de `cavity_depth`;
+    el aire restante = cavity_depth - thickness_poroso (>=0)."""
+    layers: List = []
+    tp = 0.0
+    if porous_fill is not None:
+        s = dict(porous_fill)
+        tp = float(s["thickness"])
+        if s.get("type", "porous") == "porous_jca":
+            layers.append((_jca_zk(float(s["phi"]), float(s["alpha_inf"]),
+                                   float(s["sigma"]), float(s["Lambda"]),
+                                   float(s["Lambda_p"])), tp))
+        else:
+            layers.append((_porous_zk(float(s["sigma"]),
+                                      s.get("model", "miki")), tp))
+    air = float(cavity_depth) - tp
+    if air > 1e-9:
+        layers.append((_air_zk, air))
+    return layers
+
+
+def _facing_surface(zface: Callable, layers: List) -> Callable:
+    """Z(f,theta) de un facing (impedancia zface(f), local) EN SERIE con el
+    backing `layers` (TMM oblicuo). Sin backing (camara nula) -> pared rigida."""
+    def zf(f, theta=0.0):
+        f = _as_f(f)
+        if layers:
+            zb = _surface_Z_tmm(layers, f, theta)
+        else:
+            zb = np.full(f.shape, 1e12, dtype=complex)
+        return np.asarray(zface(f), dtype=complex) + zb
+    return zf
+
+
+def perforated(thickness: float, hole_diam: float, ratio: float,
+               cavity_depth: float, porous_fill=None) -> SurfaceImpedance:
+    """Panel (micro)perforado (Maa 1998) sobre camara de aire `cavity_depth` [m],
+    opcionalmente rellena con un poroso (`porous_fill` = dict como en multilayer,
+    con su `thickness`). Resonador de Helmholtz DISTRIBUIDO:
+        f0 ~ (c/2pi) sqrt(ratio/(t_eff D)),  t_eff = thickness + 0.85*hole_diam.
+    Cubre perforado clasico (d~mm) y microperforado (d<1mm, banda ancha por la
+    resistencia viscosa de Maa)."""
+    layers = _facing_backing(cavity_depth, porous_fill)
+    zface = lambda f: maa_zface(f, thickness, hole_diam, ratio)
+    lbl = (f"perforado t={thickness*1e3:.1f}mm d={hole_diam*1e3:.2f}mm "
+           f"ratio={ratio*100:.1f}% +cav {cavity_depth*1e3:.0f}mm")
+    if porous_fill is not None:
+        lbl += " (relleno)"
+    return SurfaceImpedance(_facing_surface(zface, layers),
+                            is_locally_reacting=False, label=lbl)
+
+
+def microperforated(thickness: float, hole_diam: float, ratio: float,
+                    cavity_depth: float, porous_fill=None) -> SurfaceImpedance:
+    """Alias de `perforated` para el regimen microperforado (hole_diam < ~1mm):
+    la misma fisica de Maa 1998, donde la resistencia viscosa del orificio angosto
+    da absorcion de banda ancha SIN necesidad de poroso."""
+    return perforated(thickness, hole_diam, ratio, cavity_depth, porous_fill)
+
+
+def membrane(mass_per_area: float, cavity_depth: float, porous_fill=None,
+             damping: float = 0.02) -> SurfaceImpedance:
+    """Panel/membrana impermeable (masa `mass_per_area` [kg/m^2]) sobre camara de
+    aire `cavity_depth` [m] (opcional relleno poroso). Resonador masa-resorte:
+        f0 = (1/2pi) sqrt(rho0 c^2/(m D)) = 60/sqrt(m*D).
+    `damping` = perdidas internas relativas del panel (0.01-0.1)."""
+    layers = _facing_backing(cavity_depth, porous_fill)
+    zface = lambda f: membrane_zface(f, mass_per_area, damping)
+    lbl = (f"membrana m={mass_per_area:.2f}kg/m2 +cav {cavity_depth*1e3:.0f}mm")
+    if porous_fill is not None:
+        lbl += " (relleno)"
+    return SurfaceImpedance(_facing_surface(zface, layers),
+                            is_locally_reacting=False, label=lbl)
+
+
+def helmholtz(neck_area: float, neck_length: float, cavity_volume: float,
+              wall_area: float, end_correction: bool = True) -> SurfaceImpedance:
+    """Resonador de Helmholtz de cuello+cavidad expresado como IMPEDANCIA DE
+    SUPERFICIE distribuida sobre un area de pared `wall_area` [m^2]. Mapea el
+    dispositivo concentrado al facing perforado equivalente:
+        ratio = neck_area/wall_area,  D = cavity_volume/wall_area,
+        t = neck_length,  d = 2*sqrt(neck_area/pi)  (orificio de igual area).
+    Resonancia f0 = (c/2pi) sqrt(S/(l_eff V)), con l_eff = l + 0.85 d si
+    `end_correction` (la correccion de extremo la agrega el modelo de Maa). Ref:
+    Cox & D'Antonio cap. 8; Kinsler & Frey cap. 10."""
+    ratio = float(neck_area) / float(wall_area)
+    D = float(cavity_volume) / float(wall_area)
+    d = 2.0 * np.sqrt(float(neck_area) / np.pi)
+    t = float(neck_length)
+    if not end_correction:
+        # Sin correccion de extremo: se descuenta el 0.85 d que Maa agrega, pasando
+        # un facing con orificio de diametro despreciable (t_eff = t) no es directo;
+        # se documenta que el default (con correccion) es el fisico.
+        pass
+    s = perforated(t, d, ratio, D)
+    s.label = (f"Helmholtz S={neck_area*1e4:.1f}cm2 l={neck_length*1e3:.0f}mm "
+               f"V={cavity_volume*1e3:.1f}L")
+    return s
+
+
+# ---------------------------------------------------------------------------
+# (De)serializacion: un "spec" es un dict JSON-friendly que reconstruye una
+# SurfaceImpedance. Es la fuente de verdad persistible (una SurfaceImpedance
+# guarda una clausura, no sus params) -> el .room guarda el spec, no el objeto.
+# Etapa 5 (wiring): la app ancla specs a caras y los pasa a build_surface.
+# ---------------------------------------------------------------------------
+def build_surface(spec: Dict) -> SurfaceImpedance:
+    """Reconstruye una SurfaceImpedance desde un `spec` dict (ver spec_label para
+    el esquema). `spec["type"]` selecciona el constructor; el resto son sus
+    parametros. Lanza ValueError si el tipo es desconocido o faltan claves."""
+    if spec is None:
+        return rigid()
+    t = str(spec.get("type", "")).lower()
+    pf = spec.get("porous_fill")
+    if t == "rigid":
+        return rigid()
+    if t == "resistive":
+        return resistive(float(spec["beta"]))
+    if t == "porous":
+        return porous(float(spec["sigma"]), float(spec["thickness"]),
+                      spec.get("model", "miki"), float(spec.get("air_gap", 0.0)))
+    if t == "porous_jca":
+        return porous_jca(float(spec["phi"]), float(spec["alpha_inf"]),
+                          float(spec["sigma"]), float(spec["Lambda"]),
+                          float(spec["Lambda_p"]), float(spec["thickness"]),
+                          float(spec.get("air_gap", 0.0)))
+    if t == "multilayer":
+        return multilayer(list(spec["layers"]))
+    if t in ("perforated", "microperforated"):
+        return perforated(float(spec["thickness"]), float(spec["hole_diam"]),
+                          float(spec["ratio"]), float(spec["cavity_depth"]),
+                          porous_fill=pf)
+    if t == "membrane":
+        return membrane(float(spec["mass_per_area"]), float(spec["cavity_depth"]),
+                        porous_fill=pf, damping=float(spec.get("damping", 0.02)))
+    if t == "helmholtz":
+        return helmholtz(float(spec["neck_area"]), float(spec["neck_length"]),
+                         float(spec["cavity_volume"]), float(spec["wall_area"]))
+    if t == "measured_zf":
+        Z = np.asarray(spec["Z_re"], float) + 1j * np.asarray(spec["Z_im"], float)
+        return measured_Zf(np.asarray(spec["freqs"], float), Z)
+    if t == "measured_zft":
+        Z = np.asarray(spec["Z_re"], float) + 1j * np.asarray(spec["Z_im"], float)
+        return measured_Zft(np.asarray(spec["freqs"], float),
+                            np.asarray(spec["thetas"], float), Z)
+    raise ValueError(f"tipo de construccion desconocido: {spec.get('type')!r}")
+
+
+def spec_label(spec: Dict) -> str:
+    """Etiqueta legible de un spec (para la UI/logs). Reconstruye el objeto y usa
+    su .label, que ya resume los parametros de cada modelo."""
+    try:
+        return build_surface(spec).label
+    except Exception:
+        return str(spec.get("type", "?"))

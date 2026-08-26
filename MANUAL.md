@@ -2503,4 +2503,16 @@ El paquete «correr desde fuente» de Mac instala las librerías frescas, y las 
 
 ---
 
-*Manual actualizado al 25 de Agosto de 2026 — v2.25.*
+**Cambios v2.26** (26 de agosto 2026): **SBIR con la transferencia modal de la sala** y **guardar/cargar curvas de RT en CSV**. Dos ejes.
+
+### SBIR con la transferencia modal de la sala
+
+El SBIR clásico mira solo la interferencia entre el sonido directo del parlante y sus reflexiones de primer orden, tratando cada camino como campo libre; no ve los modos de la sala. La ventana de SBIR ahora tiene una casilla **«Incluir transferencia modal de la sala (híbrido en f_Schroeder)»** que agrega el efecto del recinto. Con la casilla activa se dibujan, sobre la misma referencia (0 dB = anecoico), tres curvas: el **SBIR** de imágenes de siempre, la **transferencia modal** de la sala (la respuesta modal FEM entre parlante y receptor, con sus resonancias), y una curva **Total híbrido** que combina las dos en su régimen de validez: usa la respuesta modal por **debajo de la frecuencia de Schroeder** (donde la solución modal es exacta y ya contiene las reflexiones de esas frecuencias) y el peine de imágenes por **encima** (donde la densidad modal es alta y el FEM truncado deja de ser confiable), con un cruce suave alrededor de f_Schroeder marcada con una línea vertical. Requiere tener los modos resueltos (si no, la casilla no aparece). El export a CSV incluye las columnas de la curva modal y de la híbrida.
+
+### Guardar y cargar curvas de RT para comparar configuraciones
+
+La ventana **«Ver RT60 calculado»** se limpia al cerrarla (cómodo para trabajar rápido), y ahora tiene un grupo **«Guardar / cargar curvas (CSV)»** para comparar tratamientos sin perder el trabajo. Con **«💾 Guardar curva seleccionada…»** elegís una curva de la lista (Sabine, Eyring o Perturbación; T60 o T30) y la guardás en un archivo **CSV** eligiendo carpeta y nombre; el archivo es legible (se abre en Excel o cualquier editor) y guarda el método, la métrica y la tabla banda-por-banda. Después cambiás los revestimientos, reabrís la ventana, y con **«📂 Cargar curva(s) desde CSV…»** traés uno o varios de esos CSV, que se superponen punteados para comparar contra la configuración actual. Como cada curva es su propio archivo, podés acumular todas las variantes que quieras.
+
+---
+
+*Manual actualizado al 26 de Agosto de 2026 — v2.26.*
