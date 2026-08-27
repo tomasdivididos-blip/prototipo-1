@@ -2457,6 +2457,37 @@ bien.
   Test visual humano: **Bloque A (SBIR modal) = perfecto; Bloque B (RT CSV) = todo verde** (tras
   pasar de lista interna a CSV). Memoria: [[profesor-sbir-rt60]], [[z-impedance-modeling]].
 
+- **26 Ago 2026 — Capa 0 Etapa 5b: GUI de construcciones + impedancia en CUALQUIER
+  superficie (MANUAL v2.27).** Rama `dist-exe`. Primera vez que la Capa 0 es visible
+  para el usuario. Decisiones del usuario: ventana aparte (no columna en la tabla de
+  materiales) + tipos = resonantes (perforado/MPP/membrana) + poroso con cámara.
+  - `ConstructionEditorDialog`: combo de tipo → grupos de parámetros (mm/%/kg·m⁻²/
+    Pa·s·m⁻²) show/hide + preview en vivo de α_random(f) 20-500 Hz + hint de f₀.
+    Poroso con modelo Miki/DB/JCA (los 5 params de JCA aparecen condicionalmente).
+    `_current_spec()` → spec de `impedance.build_surface`.
+  - `WallConstructionsDialog`: lista UNIFICADA de superficies (paredes + parches ⬒ +
+    muebles ▣), selección múltiple, "Nueva y asignar…"/"Editar"/"Quitar". Edita COPIA
+    del mapa, el panel la adopta al Aceptar.
+  - **Pedido clave del usuario ("es el punto de la implementación"): impedancia en
+    TODA superficie, no solo paredes.** El `_construction_map` es unificado (claves =
+    firma de grupo / `patch.key` 16-hex / `__furniture_i__`, formatos distintos → sin
+    colisión). Núcleo nuevo `absorption_patch.compute_xi_shift_with_impedance`:
+    perturbación COMPLEJA sobre el teselado fino de parches, cada slot = una
+    SurfaceImpedance (construcción o material α→β), devuelve ξ Y f_new; muebles entran
+    como grupos augmentados, parches como sub-slots. Incidencia NORMAL (local) en este
+    camino unificado (trade-off: perdió el ángulo-por-modo de 5a a cambio de soportar
+    parches+muebles; para perforados/membrana la reacción local es lo estándar).
+    Panel: `_construction_surfaces` (surf_by_group + surf_by_patch), reemplaza el
+    `perturbation_xi_shift_extended` solo-paredes de 5a (que IGNORABA parches).
+  - Botón "Construcciones de pared…" (bajo Parches) + `_open_constructions_dialog`/
+    `_on_constructions_applied` (recomputa ξ, avisa si el modelo no es perturbación) +
+    `_refresh_constructions_summary`; load de `.room` refresca el resumen.
+  - `bench_capa0_wiring` 13/13 (W6 puente unificado==α→β <2% por cuadratura, W7 parche
+    con construcción → corrimiento 3.28 Hz). Suite `bench_capa0_all` **121/121**.
+    Smoke test humano: TODO OK. Memoria [[z-impedance-modeling]].
+  - FALTA: Etapa 5c (mostrar Δfₙ/ξ explícito en FRF/Ver-RT60 + carga de mediciones
+    Z(f)/Z(f,θ), EN PAUSA sin mediciones).
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.

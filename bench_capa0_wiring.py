@@ -195,6 +195,45 @@ check("W5b hay corrimiento (menor que todo-construccion, mayor que 0)",
       f"max |df| mezcla {np.max(np.abs(f_mx-freqs)):.2f} vs todo-con {np.max(dshift):.2f} Hz")
 
 
+print("\nW6  camino unificado (impedancia por slot) = puente material == alpha->beta")
+import absorption_patch as apx
+mat2 = _UniformMat(0.20)
+g2m2 = {g.signature: mat2 for g in gr}
+xi_ref2 = fm.perturbation_xi_per_mode(freqs, phis, loc, vr, tr, gr, g2m2, Vr)
+surf_g = {g.signature: material_surface(mat2) for g in gr}
+res6 = apx.compute_xi_shift_with_impedance(
+    freqs, phis, loc, vr, tr, gr, surf_g, [], {}, Vr)
+xi6, f6 = res6
+check("W6a xi(unificado, material) == alpha->beta (<2%, dif de cuadratura)",
+      np.max(np.abs(xi6 / np.maximum(xi_ref2, 1e-12) - 1)) < 0.02,
+      f"max rel {np.max(np.abs(xi6/np.maximum(xi_ref2,1e-12)-1)):.3e}")
+check("W6b sin construccion el corrimiento ~ 0",
+      np.allclose(f6, freqs, atol=0.2),
+      f"max |df| {np.max(np.abs(f6-freqs)):.3f} Hz")
+
+
+print("\nW7  construccion en un PARCHE se rutea (corrimiento donde esta el parche)")
+# parche que cubre buena parte de una pared
+gwall = next(g for g in gr if abs(g.normal[2]) < 0.5)     # una pared vertical
+p = apx.make_patch(gwall, -10.0, -10.0, 10.0, 10.0, material_name="", label="test")
+con_p = imp.build_surface({"type": "perforated", "thickness": 2e-3,
+                           "hole_diam": 1.5e-3, "ratio": 0.02, "cavity_depth": 0.12})
+surf_g0 = {g.signature: material_surface(mat2) for g in gr}
+# (a) parche con MATERIAL (beta real) -> sin corrimiento
+xi_pm, f_pm = apx.compute_xi_shift_with_impedance(
+    freqs, phis, loc, vr, tr, gr, surf_g0, [p],
+    {p.key: material_surface(mat2)}, Vr)
+# (b) parche con CONSTRUCCION -> corrimiento
+xi_pc, f_pc = apx.compute_xi_shift_with_impedance(
+    freqs, phis, loc, vr, tr, gr, surf_g0, [p], {p.key: con_p}, Vr)
+check("W7a parche con material: corrimiento ~ 0",
+      np.allclose(f_pm, freqs, atol=0.2),
+      f"max |df| {np.max(np.abs(f_pm-freqs)):.3f} Hz")
+check("W7b parche con construccion: corrimiento observable",
+      np.max(np.abs(f_pc - freqs)) > 0.1,
+      f"max |df| {np.max(np.abs(f_pc-freqs)):.2f} Hz")
+
+
 print()
 print("=" * 64)
 print(f" RESULTADO: {len(_PASS)} OK, {len(_FAIL)} FAIL")

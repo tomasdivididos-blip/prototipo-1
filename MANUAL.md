@@ -2515,4 +2515,23 @@ La ventana **«Ver RT60 calculado»** se limpia al cerrarla (cómodo para trabaj
 
 ---
 
-*Manual actualizado al 26 de Agosto de 2026 — v2.26.*
+**Cambios v2.27** (26 de agosto 2026): **construcciones de pared** (impedancia por superficie). Un eje.
+
+### Construcciones de pared: modelar la impedancia de cada superficie
+
+Hasta ahora la absorción de una superficie se resumía en su coeficiente α (medido con incidencia aleatoria, ISO 354). Eso alcanza para el tiempo de reverberación, pero en la banda modal (por debajo de la frecuencia de Schroeder) una pared real hace dos cosas que el α solo no captura: **amortigua** cada modo según cuánto absorbe en esa frecuencia, y **corre la frecuencia** del modo según la reactancia de la construcción (una cámara de aire, la masa de un panel, el resorte de un resonador). Una pared perfectamente rígida no corre nada; una construcción resonante sí, y ese corrimiento es audible.
+
+El botón **«Construcciones de pared…»** (en el grupo de Materiales) abre una ventana donde asignás una **construcción** a una o varias superficies: **paredes, parches (⬒) y muebles (▣)**, todo en la misma lista. Con **«Nueva construcción y asignar…»** se abre un editor con cuatro tipos:
+
+- **Panel perforado**: una placa con orificios sobre una cámara de aire (resonador de Helmholtz distribuido). Parámetros: espesor de la placa, diámetro del orificio, porcentaje de perforación y profundidad de la cámara.
+- **Microperforado (MPP)**: lo mismo con orificios de menos de 1 mm, que dan absorción de banda ancha sin material poroso (modelo de Maa).
+- **Membrana / panel**: una placa impermeable que vibra sobre una cámara (resonador masa-resorte), típico para graves. Parámetros: masa por metro cuadrado, profundidad de la cámara y pérdidas internas.
+- **Poroso + cámara**: un material poroso (lana, espuma) sobre una cámara de aire opcional, con los modelos Miki, Delany-Bazley o JCA.
+
+Mientras editás, el panel de la derecha muestra en vivo la curva de **absorción** de esa construcción y su **frecuencia de resonancia**, así ves de una qué controla. Al aceptar, la superficie queda con esa construcción (en azul en la lista) y el cálculo de los modos usa su impedancia: el amortiguamiento por banda **más** el corrimiento de las frecuencias modales, que se ve reflejado en la respuesta en frecuencia. Las superficies sin construcción siguen usando el α de su material como siempre, así que un proyecto que no toca esto no cambia en nada.
+
+Las construcciones **solo actúan con el modelo de amortiguamiento «Perturbación de frontera»** (el que deriva el amortiguamiento de la admitancia de la pared); con Sabine se avisa. Se guardan en el archivo `.room`. Nota: en esta versión la impedancia se evalúa a incidencia normal (pared de reacción local), que es el supuesto habitual para paneles perforados y membranas.
+
+---
+
+*Manual actualizado al 26 de Agosto de 2026 — v2.27.*

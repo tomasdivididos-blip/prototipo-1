@@ -2354,6 +2354,361 @@ class AbsorptionChoiceDialog(QDialog):
 
 
 # ---------------------------------------------------------------------------
+# Capa 0 (Etapa 5b): editor de "construccion de pared" y asignacion por cara
+# ---------------------------------------------------------------------------
+class ConstructionEditorDialog(QDialog):
+    """Editor de una construccion de pared (Capa 0): tipo + parametros -> spec de
+    impedance.build_surface, con preview de alpha(f) y la resonancia. Devuelve el
+    spec en self.spec (o None si se cancela)."""
+
+    _TYPES = [
+        ("Panel perforado", "perforated"),
+        ("Microperforado (MPP)", "perforated"),
+        ("Membrana / panel", "membrane"),
+        ("Poroso + cámara", "porous"),
+    ]
+
+    def __init__(self, spec=None, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Construcción de pared")
+        self.resize(720, 460)
+        self.spec = None
+        root = QHBoxLayout(self)
+
+        # --- Columna izquierda: controles ---
+        left = QVBoxLayout()
+        root.addLayout(left, 0)
+        self.combo_type = QComboBox()
+        for label, _t in self._TYPES:
+            self.combo_type.addItem(label)
+        frm = QFormLayout()
+        frm.addRow("Tipo:", self.combo_type)
+        left.addLayout(frm)
+
+        def _spin(lo, hi, val, dec=2, step=1.0, suf=""):
+            s = QDoubleSpinBox(); s.setRange(lo, hi); s.setDecimals(dec)
+            s.setSingleStep(step); s.setValue(val)
+            if suf:
+                s.setSuffix(" " + suf)
+            return s
+
+        # Perforado / MPP (mm, %, mm)
+        self.grp_perf = QGroupBox("Panel perforado (Maa 1998)")
+        fp = QFormLayout(self.grp_perf)
+        self.p_t = _spin(0.1, 50.0, 2.0, 2, 0.1, "mm")
+        self.p_d = _spin(0.05, 20.0, 1.5, 2, 0.05, "mm")
+        self.p_ratio = _spin(0.1, 50.0, 2.0, 2, 0.1, "%")
+        self.p_D = _spin(1.0, 1000.0, 100.0, 0, 5.0, "mm")
+        fp.addRow("Espesor t:", self.p_t)
+        fp.addRow("Diámetro orificio d:", self.p_d)
+        fp.addRow("Perforación:", self.p_ratio)
+        fp.addRow("Cámara de aire D:", self.p_D)
+        left.addWidget(self.grp_perf)
+
+        # Membrana
+        self.grp_memb = QGroupBox("Membrana / panel (masa-resorte)")
+        fm2 = QFormLayout(self.grp_memb)
+        self.m_mass = _spin(0.2, 50.0, 3.0, 2, 0.1, "kg/m²")
+        self.m_D = _spin(1.0, 1000.0, 80.0, 0, 5.0, "mm")
+        self.m_damp = _spin(0.0, 0.5, 0.02, 3, 0.01, "")
+        fm2.addRow("Masa superficial m:", self.m_mass)
+        fm2.addRow("Cámara de aire D:", self.m_D)
+        fm2.addRow("Pérdidas (rel.):", self.m_damp)
+        left.addWidget(self.grp_memb)
+
+        # Poroso + camara
+        self.grp_por = QGroupBox("Poroso + cámara")
+        fpo = QFormLayout(self.grp_por)
+        self.po_model = QComboBox()
+        self.po_model.addItems(["Miki", "Delany-Bazley", "JCA (5 parám.)"])
+        self.po_sigma = _spin(1000.0, 200000.0, 15000.0, 0, 1000.0, "Pa·s/m²")
+        self.po_th = _spin(5.0, 500.0, 50.0, 0, 5.0, "mm")
+        self.po_gap = _spin(0.0, 1000.0, 100.0, 0, 5.0, "mm")
+        fpo.addRow("Modelo:", self.po_model)
+        fpo.addRow("Resistividad σ:", self.po_sigma)
+        fpo.addRow("Espesor poroso:", self.po_th)
+        fpo.addRow("Cámara de aire detrás:", self.po_gap)
+        # JCA extra
+        self.po_phi = _spin(0.1, 1.0, 0.98, 2, 0.01, "")
+        self.po_ainf = _spin(1.0, 5.0, 1.0, 2, 0.05, "")
+        self.po_lam = _spin(1.0, 1000.0, 60.0, 0, 5.0, "µm")
+        self.po_lamp = _spin(1.0, 2000.0, 120.0, 0, 5.0, "µm")
+        self.row_phi = self.po_phi; self.row_ainf = self.po_ainf
+        fpo.addRow("Porosidad φ:", self.po_phi)
+        fpo.addRow("Tortuosidad α∞:", self.po_ainf)
+        fpo.addRow("Long. viscosa Λ:", self.po_lam)
+        fpo.addRow("Long. térmica Λ':", self.po_lamp)
+        self._jca_widgets = [self.po_phi, self.po_ainf, self.po_lam, self.po_lamp]
+        left.addWidget(self.grp_por)
+        left.addStretch(1)
+
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb.accepted.connect(self._on_accept)
+        bb.rejected.connect(self.reject)
+        left.addWidget(bb)
+
+        # --- Columna derecha: preview ---
+        right = QVBoxLayout()
+        root.addLayout(right, 1)
+        self.lbl_reso = QLabel("—")
+        self.lbl_reso.setWordWrap(True)
+        self.lbl_reso.setStyleSheet("color:#333; font-size:9pt; font-weight:600;")
+        right.addWidget(self.lbl_reso)
+        if _HAS_MPL:
+            self._fig, self._ax = plt.subplots(figsize=(4.6, 3.4), dpi=96)
+            self._canvas = FigureCanvas(self._fig)
+            right.addWidget(self._canvas, 1)
+        else:
+            right.addWidget(QLabel("matplotlib no disponible."))
+            self._canvas = None
+
+        # Señales -> preview
+        for w in (self.combo_type, self.po_model):
+            w.currentIndexChanged.connect(self._sync)
+        for w in (self.p_t, self.p_d, self.p_ratio, self.p_D, self.m_mass,
+                  self.m_D, self.m_damp, self.po_sigma, self.po_th, self.po_gap,
+                  self.po_phi, self.po_ainf, self.po_lam, self.po_lamp):
+            w.valueChanged.connect(self._update_preview)
+
+        if spec:
+            self._load_spec(spec)
+        self._sync()
+
+    # ------------------------------------------------------------------
+    def _kind(self):
+        idx = self.combo_type.currentIndex()
+        return self._TYPES[idx][0]
+
+    def _sync(self):
+        """Muestra el grupo de parametros del tipo elegido + JCA condicional."""
+        kind = self._kind()
+        self.grp_perf.setVisible(kind in ("Panel perforado", "Microperforado (MPP)"))
+        self.grp_memb.setVisible(kind == "Membrana / panel")
+        self.grp_por.setVisible(kind == "Poroso + cámara")
+        is_jca = self.po_model.currentText().startswith("JCA")
+        for w in self._jca_widgets:
+            w.setVisible(is_jca)
+        # microperforado: preset de orificio chico la primera vez
+        self._update_preview()
+
+    def _current_spec(self):
+        kind = self._kind()
+        if kind in ("Panel perforado", "Microperforado (MPP)"):
+            return {"type": "perforated",
+                    "thickness": self.p_t.value() * 1e-3,
+                    "hole_diam": self.p_d.value() * 1e-3,
+                    "ratio": self.p_ratio.value() / 100.0,
+                    "cavity_depth": self.p_D.value() * 1e-3}
+        if kind == "Membrana / panel":
+            return {"type": "membrane",
+                    "mass_per_area": self.m_mass.value(),
+                    "cavity_depth": self.m_D.value() * 1e-3,
+                    "damping": self.m_damp.value()}
+        # Poroso
+        model_txt = self.po_model.currentText()
+        gap = self.po_gap.value() * 1e-3
+        if model_txt.startswith("JCA"):
+            return {"type": "porous_jca",
+                    "phi": self.po_phi.value(),
+                    "alpha_inf": self.po_ainf.value(),
+                    "sigma": self.po_sigma.value(),
+                    "Lambda": self.po_lam.value() * 1e-6,
+                    "Lambda_p": self.po_lamp.value() * 1e-6,
+                    "thickness": self.po_th.value() * 1e-3,
+                    "air_gap": gap}
+        model = "db" if model_txt.startswith("Delany") else "miki"
+        return {"type": "porous", "sigma": self.po_sigma.value(),
+                "thickness": self.po_th.value() * 1e-3,
+                "air_gap": gap, "model": model}
+
+    def _resonance_hint(self, spec):
+        c = 343.0
+        t = spec.get("type")
+        if t == "perforated":
+            t_eff = spec["thickness"] + 0.85 * spec["hole_diam"]
+            f0 = (c / (2 * np.pi)) * np.sqrt(spec["ratio"] / (t_eff * spec["cavity_depth"]))
+            return f"Resonancia (Helmholtz distribuida) ≈ {f0:.0f} Hz"
+        if t == "membrane":
+            f0 = 60.0 / np.sqrt(max(spec["mass_per_area"] * spec["cavity_depth"], 1e-9))
+            return f"Resonancia masa-resorte f₀ ≈ {f0:.0f} Hz"
+        gap = spec.get("air_gap", 0.0)
+        if gap and gap > 0:
+            return f"Cámara de aire: pico λ/4 ≈ {c/(4*gap):.0f} Hz"
+        return "Poroso sin cámara: absorción de banda ancha (sin resonancia)"
+
+    def _update_preview(self):
+        if self._canvas is None:
+            return
+        try:
+            spec = self._current_spec()
+            surf = imp.build_surface(spec)
+            fg = np.geomspace(20.0, 500.0, 160)
+            a = surf.alpha_random(fg)
+            self.lbl_reso.setText(self._resonance_hint(spec))
+        except Exception as e:
+            self.lbl_reso.setText(f"Parámetros inválidos: {e}")
+            return
+        ax = self._ax
+        ax.clear()
+        ax.plot(fg, a, color="#1f6fbf", linewidth=1.8)
+        ax.set_xscale("log")
+        ax.set_xlim(20, 500)
+        ax.set_ylim(0, 1.02)
+        ax.set_xlabel("Frecuencia (Hz)", fontsize=9)
+        ax.set_ylabel("α (incidencia aleatoria)", fontsize=9)
+        ax.grid(True, which="both", linestyle="-", linewidth=0.5, alpha=0.3)
+        ax.tick_params(labelsize=8)
+        self._fig.tight_layout(pad=0.8)
+        self._canvas.draw_idle()
+
+    def _load_spec(self, spec):
+        """Carga un spec existente a los controles (para editar)."""
+        t = spec.get("type")
+        if t == "perforated":
+            self.combo_type.setCurrentIndex(0)
+            self.p_t.setValue(spec["thickness"] * 1e3)
+            self.p_d.setValue(spec["hole_diam"] * 1e3)
+            self.p_ratio.setValue(spec["ratio"] * 100.0)
+            self.p_D.setValue(spec["cavity_depth"] * 1e3)
+        elif t == "membrane":
+            self.combo_type.setCurrentIndex(2)
+            self.m_mass.setValue(spec["mass_per_area"])
+            self.m_D.setValue(spec["cavity_depth"] * 1e3)
+            self.m_damp.setValue(spec.get("damping", 0.02))
+        elif t in ("porous", "porous_jca"):
+            self.combo_type.setCurrentIndex(3)
+            self.po_sigma.setValue(spec.get("sigma", 15000.0))
+            self.po_th.setValue(spec.get("thickness", 0.05) * 1e3)
+            self.po_gap.setValue(spec.get("air_gap", 0.0) * 1e3)
+            if t == "porous_jca":
+                self.po_model.setCurrentIndex(2)
+                self.po_phi.setValue(spec.get("phi", 0.98))
+                self.po_ainf.setValue(spec.get("alpha_inf", 1.0))
+                self.po_lam.setValue(spec.get("Lambda", 6e-5) * 1e6)
+                self.po_lamp.setValue(spec.get("Lambda_p", 1.2e-4) * 1e6)
+            else:
+                self.po_model.setCurrentIndex(
+                    1 if spec.get("model") == "db" else 0)
+
+    def _on_accept(self):
+        try:
+            spec = self._current_spec()
+            imp.build_surface(spec)          # valida
+        except Exception as e:
+            QMessageBox.warning(self, "Construcción inválida", str(e))
+            return
+        # microperforado: marcar el subtipo para la etiqueta
+        if self._kind() == "Microperforado (MPP)":
+            spec["_label"] = "microperforado"
+        self.spec = spec
+        self.accept()
+
+
+class WallConstructionsDialog(QDialog):
+    """Asigna construcciones de Capa 0 a CUALQUIER superficie (caras, parches y
+    muebles). Edita una COPIA del mapa; el panel la adopta al Aceptar. Cada
+    superficie puede tener una construccion (o ninguna -> cae a su material,
+    alpha->beta real). Devuelve self.result_map (clave: firma de grupo, patch.key
+    o __furniture_i__)."""
+
+    def __init__(self, groups, construction_map, parent=None,
+                 patches=None, furniture=None):
+        super().__init__(parent)
+        self.setWindowTitle("Construcciones (paredes, parches y muebles)")
+        self.resize(700, 540)
+        self.result_map = dict(construction_map or {})
+        # Entradas unificadas: (clave, etiqueta, tipo, area).
+        self._entries = []
+        for g in groups:
+            self._entries.append((g.signature, g.label, "pared", g.area))
+        for p in (patches or []):
+            lbl = getattr(p, "label", "") or "parche"
+            self._entries.append((p.key, f"⬒ {lbl}", "parche", getattr(p, "area", 0.0)))
+        for i, fu in enumerate(furniture or []):
+            lbl = getattr(fu, "label", "") or f"mueble {i+1}"
+            self._entries.append((f"__furniture_{i}__", f"▣ {lbl}", "mueble", None))
+        root = QVBoxLayout(self)
+
+        help_lbl = QLabel(
+            "Asigná una construcción (panel perforado, membrana, poroso con "
+            "cámara) a una o varias superficies: paredes, parches (⬒) o muebles "
+            "(▣). Da la impedancia en la banda modal (amortiguamiento + "
+            "corrimiento de fₙ); las superficies sin construcción usan el α del "
+            "material como hasta ahora.")
+        help_lbl.setWordWrap(True)
+        help_lbl.setStyleSheet("color:#cdd6f4; font-size:9pt;")
+        root.addWidget(help_lbl)
+
+        self.list_faces = QListWidget()
+        self.list_faces.setSelectionMode(QListWidget.ExtendedSelection)
+        root.addWidget(self.list_faces, 1)
+        self._refresh_list()
+
+        row = QHBoxLayout()
+        self.btn_new = QPushButton("Nueva construcción y asignar…")
+        self.btn_new.setToolTip("Abre el editor; al aceptar, asigna esa "
+                                "construcción a las caras seleccionadas.")
+        self.btn_new.clicked.connect(self._new_and_assign)
+        row.addWidget(self.btn_new)
+        self.btn_edit = QPushButton("Editar la de la cara…")
+        self.btn_edit.clicked.connect(self._edit_selected)
+        row.addWidget(self.btn_edit)
+        self.btn_clear = QPushButton("Quitar de seleccionadas")
+        self.btn_clear.clicked.connect(self._clear_selected)
+        row.addWidget(self.btn_clear)
+        root.addLayout(row)
+
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb.accepted.connect(self.accept)
+        bb.rejected.connect(self.reject)
+        root.addWidget(bb)
+
+    def _refresh_list(self):
+        self.list_faces.clear()
+        for key, label, kind, area in self._entries:
+            spec = self.result_map.get(key)
+            tag = imp.spec_label(spec) if spec else "— (usa el material)"
+            area_txt = f"{area:.1f} m²   " if area is not None else ""
+            it = QListWidgetItem(f"{label}   ·   {area_txt}→   {tag}")
+            it.setData(Qt.UserRole, key)
+            if spec:
+                it.setForeground(QColor("#89b4fa"))
+            self.list_faces.addItem(it)
+
+    def _selected_sigs(self):
+        return [it.data(Qt.UserRole) for it in self.list_faces.selectedItems()]
+
+    def _new_and_assign(self):
+        sigs = self._selected_sigs()
+        if not sigs:
+            QMessageBox.information(self, "Sin selección",
+                                    "Seleccioná primero una o varias caras.")
+            return
+        dlg = ConstructionEditorDialog(parent=self)
+        if dlg.exec_() and dlg.spec:
+            for s in sigs:
+                self.result_map[s] = dict(dlg.spec)
+            self._refresh_list()
+
+    def _edit_selected(self):
+        sigs = self._selected_sigs()
+        if len(sigs) != 1:
+            QMessageBox.information(self, "Editar",
+                                    "Seleccioná exactamente una cara para editar.")
+            return
+        spec = self.result_map.get(sigs[0])
+        dlg = ConstructionEditorDialog(spec=spec, parent=self)
+        if dlg.exec_() and dlg.spec:
+            self.result_map[sigs[0]] = dict(dlg.spec)
+            self._refresh_list()
+
+    def _clear_selected(self):
+        for s in self._selected_sigs():
+            self.result_map.pop(s, None)
+        self._refresh_list()
+
+
+# ---------------------------------------------------------------------------
 # Panel principal
 # ---------------------------------------------------------------------------
 class AcousticPanel(QWidget):
@@ -2692,6 +3047,21 @@ class AcousticPanel(QWidget):
         self.lbl_patch_summary.setStyleSheet("color: #94a3b8; font-size: 9pt;")
         self.lbl_patch_summary.setWordWrap(True)
         fmat.addRow(self.lbl_patch_summary)
+
+        # Capa 0 (Etapa 5b): construccion de pared por cara (impedancia Z).
+        self.btn_open_constructions = QPushButton("Construcciones de pared…")
+        self.btn_open_constructions.setToolTip(
+            "Asigna una construcción (panel perforado, membrana, poroso con\n"
+            "cámara) a caras. Da la impedancia de pared en la banda modal:\n"
+            "amortiguamiento por banda MÁS el corrimiento de las frecuencias\n"
+            "modales por la reactancia (efecto que la pared rígida no ve).\n"
+            "Las caras sin construcción siguen usando el α del material.")
+        self.btn_open_constructions.clicked.connect(self._open_constructions_dialog)
+        fmat.addRow(self.btn_open_constructions)
+        self.lbl_constr_summary = QLabel("Sin construcciones")
+        self.lbl_constr_summary.setStyleSheet("color: #94a3b8; font-size: 9pt;")
+        self.lbl_constr_summary.setWordWrap(True)
+        fmat.addRow(self.lbl_constr_summary)
 
         btn_rt60_plot  = QPushButton("Ver RT60 calculado")
         btn_reload_mat = QPushButton("Recargar materiales")
@@ -5535,6 +5905,45 @@ class AcousticPanel(QWidget):
             self._xi_per_mode = self._compute_xi_from_materials()
         self._update_modal_crossover()
 
+    # ------------------------------------------------------------------
+    # Construcciones de pared (Capa 0, Etapa 5b)
+    # ------------------------------------------------------------------
+    def _open_constructions_dialog(self):
+        """Abre el asignador de construcciones de pared (impedancia Z por cara)."""
+        try:
+            groups, _v, _t = self._get_face_groups()
+        except Exception as e:
+            self._log(f"Error agrupando caras: {e}")
+            return
+        if not groups:
+            self._log("No hay caras para asignar construcciones.")
+            return
+        dlg = WallConstructionsDialog(
+            groups, self._construction_map, parent=self,
+            patches=self._patches, furniture=getattr(self, "furniture", None))
+        if dlg.exec_():
+            self._on_constructions_applied(dlg.result_map)
+
+    def _on_constructions_applied(self, cmap):
+        """Adopta el mapa de construcciones y recomputa xi (y el corrimiento)."""
+        self._construction_map = dict(cmap or {})
+        self._refresh_constructions_summary()
+        if self._construction_map and self._damping_model != "perturbation":
+            self._log("Aviso: las construcciones de pared solo actúan con el "
+                      "modelo de amortiguamiento «Perturbación de frontera».")
+        if self.modal_result is not None:
+            self._xi_per_mode = self._compute_xi_from_materials()
+        self._update_modal_crossover()
+
+    def _refresh_constructions_summary(self):
+        n = len(self._construction_map)
+        if n == 0:
+            self.lbl_constr_summary.setText("Sin construcciones")
+        else:
+            self.lbl_constr_summary.setText(
+                f"{n} cara(s) con construcción de pared (impedancia Z; "
+                f"amortiguamiento + corrimiento de fₙ)")
+
     def _patches_blocked_by_furniture(self):
         """Etiquetas de los muebles que tapan algún parche (AABB del prisma del
         parche vs AABB del mueble). Lista vacía = ninguno.
@@ -5907,26 +6316,40 @@ class AcousticPanel(QWidget):
         return imp.SurfaceImpedance(zf, is_locally_reacting=True,
                                     label=getattr(mat, "name", "material"))
 
-    def _construction_surf_by_group(self, groups, g2m):
-        """Superficie de Capa 0 por grupo para la perturbacion EXTENDIDA (compleja):
-          - grupo con construccion asignada -> SurfaceImpedance de su spec.
-          - grupo con material pero sin construccion -> resistiva del alpha(f) del
-            material (beta real, sin corrimiento) = camino alpha->beta de siempre.
-        Devuelve {signature: SurfaceImpedance}. Los grupos sin nada quedan afuera
-        (default_surf=None en la perturbacion -> rigido)."""
-        surf = {}
+    def _construction_surfaces(self, groups, g2m):
+        """Superficies de Capa 0 por GRUPO y por PARCHE para la perturbacion
+        compleja unificada. Para cada superficie (cara, parche o mueble):
+          - con construccion asignada (en _construction_map) -> SurfaceImpedance.
+          - sin construccion pero con material -> resistiva del alpha(f) (beta
+            real, sin corrimiento) = camino alpha->beta de siempre.
+        Claves: firma de grupo (paredes + muebles __furniture_i__) y patch.key.
+        Devuelve (surf_by_group, surf_by_patch)."""
+        surf_g = {}
         for g in groups:
             spec = self._construction_map.get(g.signature)
             if spec:
                 try:
-                    surf[g.signature] = imp.build_surface(spec)
+                    surf_g[g.signature] = imp.build_surface(spec)
                     continue
                 except Exception as e:
                     self._log(f"Construccion invalida ({g.signature[:8]}): {e}")
             mat = g2m.get(g.signature)
             if mat is not None:
-                surf[g.signature] = self._material_surface(mat)
-        return surf
+                surf_g[g.signature] = self._material_surface(mat)
+        surf_p = {}
+        p2m = self._patch_to_material_dict() if self._patches else {}
+        for p in (self._patches or []):
+            spec = self._construction_map.get(p.key)
+            if spec:
+                try:
+                    surf_p[p.key] = imp.build_surface(spec)
+                    continue
+                except Exception as e:
+                    self._log(f"Construccion de parche invalida: {e}")
+            mat = p2m.get(p.key)
+            if mat is not None:
+                surf_p[p.key] = self._material_surface(mat)
+        return surf_g, surf_p
 
     def _effective_modal_freqs(self):
         """Frecuencias de RESONANCIA para la dinamica (FRF/campo/FoM): las corridas
@@ -5980,24 +6403,21 @@ class AcousticPanel(QWidget):
                 ci = getattr(self.modal_result, "carve_info", None)
                 if ci is not None:
                     V = max(V - float(ci.get("V_removed_mesh", 0.0)), 1e-9)
-            # Capa 0 (Etapa 5): si hay CONSTRUCCIONES de pared asignadas, la
-            # perturbacion es COMPLEJA y EXTENDIDA (beta(f,theta) de impedance.py):
-            # amortiguamiento por Re + corrimiento de f_n por Im, con el angulo por
-            # modo. Las caras sin construccion caen a su material (beta real) via
-            # _material_surface -> ese subconjunto reduce EXACTO al alpha->beta de
-            # siempre. Devuelve tambien f_new (corrimiento), cacheado para la
-            # dinamica. Compatible con muebles (ya en groups/g2m); la composicion
-            # con parches sub-cara queda para 5c (por ahora, construcciones tienen
-            # prioridad y se ignoran los parches con aviso).
+            # Capa 0 (Etapa 5): si hay CONSTRUCCIONES asignadas (a caras, parches
+            # o muebles), la perturbacion es COMPLEJA: amortiguamiento por Re(beta)
+            # MAS el corrimiento de f_n por Im(beta). Camino UNIFICADO con el
+            # teselado fino de los parches (compute_xi_shift_with_impedance): cada
+            # superficie (cara / parche / mueble) usa su construccion, o cae a su
+            # material (beta real, sin corrimiento) = alpha->beta de siempre. Los
+            # muebles ya estan en `groups` (augment); los parches entran como
+            # sub-slots. Incidencia normal (reaccion local) en este camino.
             if model == "perturbation" and self._construction_map:
-                if self._patches:
-                    self._log("Aviso: construcciones de pared activas -> los parches "
-                              "de absorcion se omiten en este calculo (composicion en 5c).")
-                surf_by = self._construction_surf_by_group(groups, g2m)
-                res = fm.perturbation_xi_shift_extended(
+                import absorption_patch as ap
+                surf_g, surf_p = self._construction_surfaces(groups, g2m)
+                res = ap.compute_xi_shift_with_impedance(
                     self.modal_result.freqs, self.modal_result.phis,
-                    self.modal_result.locator, verts, tris, groups, surf_by, V,
-                    default_surf=None, subdiv=2)
+                    self.modal_result.locator, verts, tris, groups, surf_g,
+                    self._patches, surf_p, V, default_surf=None)
                 if res is not None:
                     xi, f_new = res
                     self._freq_shift_per_mode = np.asarray(f_new, dtype=float)

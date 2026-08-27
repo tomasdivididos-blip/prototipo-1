@@ -1355,6 +1355,8 @@ class MainWindow(QMainWindow):
                                     if isinstance(wc, dict) else {})
             if hasattr(ap, "_refresh_materials_summary"):
                 ap._refresh_materials_summary()
+            if hasattr(ap, "_refresh_constructions_summary"):
+                ap._refresh_constructions_summary()
         except Exception:
             ap._construction_map = {}
 

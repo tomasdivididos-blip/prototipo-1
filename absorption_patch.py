@@ -743,3 +743,110 @@ def compute_xi_per_mode_with_patches(
             T60 = 0.161 * V / (S_total * alpha_eff)
             xi[n] = 1.1 / max(fn * T60, 1e-9)
     return xi
+
+
+def compute_xi_shift_with_impedance(
+    freqs: np.ndarray,
+    phis: np.ndarray,
+    locator,
+    verts: np.ndarray,
+    tris: np.ndarray,
+    groups: List,
+    surf_by_group: Dict[str, "object"],     # signature -> SurfaceImpedance
+    patches: List[AbsorptionPatch],
+    surf_by_patch: Dict[str, "object"],      # patch.key -> SurfaceImpedance
+    V: float,
+    default_surf=None,
+    h_target: float = 0.2,
+    kmax: int = 8,
+    c: float = 343.0,
+) -> Optional[tuple]:
+    """Perturbacion de frontera COMPLEJA (Capa 0, Etapa 5c) sobre la MISMA
+    maquinaria de teselado fino que los parches: cada superficie (cara, parche o
+    mueble) tiene una `SurfaceImpedance`, y se computa el amortiguamiento MAS el
+    corrimiento de las frecuencias modales en una sola pasada.
+
+        delta_c(n) = (c/2) sum_slot beta_slot(f_n) Ws        (complejo)
+        xi[n]     = Re(delta_c)/omega_n                       (amortiguamiento)
+        f_new[n]  = f_n - Im(delta_c)/(2 pi)                  (corrimiento reactivo)
+
+    con beta_slot = conj(rho0*c / Z_slot(f_n)) [convencion e^{-iwt} de impedance.py
+    -> e^{+iwt} del solver]. Incidencia NORMAL (reaccion local) en este camino
+    unificado; la reaccion extendida por angulo (perturbation_xi_shift_extended)
+    queda para el caso de solo-paredes. Devuelve (xi, f_new) o None.
+
+    - `surf_by_group`: signature de FaceGroup (incluye muebles __furniture_i__) ->
+      SurfaceImpedance. Cara sin entrada -> `default_surf` (o rigido).
+    - `surf_by_patch`: patch.key -> SurfaceImpedance del parche.
+    """
+    if phis is None or not groups or locator is None:
+        return None
+    freqs = np.asarray(freqs, dtype=float)
+    Nm = int(phis.shape[1])
+    if Nm == 0 or freqs.size < Nm or V <= 0:
+        return None
+    Z0 = 1.21 * c
+
+    by_face: Dict[str, List[AbsorptionPatch]] = defaultdict(list)
+    for p in patches or []:
+        by_face[p.face_signature].append(p)
+
+    slot_surf: List[object] = []
+    slot_of: Dict[int, int] = {}
+
+    def _slot_for(surf) -> int:
+        key = id(surf) if surf is not None else 0
+        if key not in slot_of:
+            slot_of[key] = len(slot_surf)
+            slot_surf.append(surf)
+        return slot_of[key]
+
+    pts_all, area_all, slot_all = [], [], []
+    for g in groups:
+        pts, ars = tessellate_group(verts, tris, g, h_target, kmax)
+        if len(pts) == 0:
+            continue
+        host_surf = surf_by_group.get(g.signature, default_surf)
+        slots = np.full(len(pts), _slot_for(host_surf), dtype=int)
+        pg = by_face.get(g.signature, [])
+        if pg:
+            u = pts[:, pg[0].u_axis]
+            v = pts[:, pg[0].v_axis]
+            for p in pg:
+                inside = p.contains(u, v)
+                if np.any(inside):
+                    ps = surf_by_patch.get(p.key, host_surf)
+                    slots[inside] = _slot_for(ps)
+        pts_all.append(pts); area_all.append(ars); slot_all.append(slots)
+
+    if not pts_all:
+        return None
+    PTS = np.vstack(pts_all)
+    AREA = np.concatenate(area_all)
+    SLOT = np.concatenate(slot_all)
+    n_slots = len(slot_surf)
+
+    VALID = np.isfinite(np.real(locator.evaluate_many(phis[:, 0], PTS)))
+    area_tot_s = np.bincount(SLOT, weights=AREA, minlength=n_slots)
+    area_ok_s = np.bincount(SLOT[VALID], weights=AREA[VALID], minlength=n_slots)
+    cover_s = np.where(area_ok_s > 0,
+                       area_tot_s / np.maximum(area_ok_s, 1e-12), 0.0)
+
+    xi = np.empty(Nm, dtype=float)
+    f_new = np.empty(Nm, dtype=float)
+    for n in range(Nm):
+        fn = float(freqs[n])
+        vals = locator.evaluate_many(phis[:, n], PTS)
+        w = np.where(VALID, np.nan_to_num(np.real(vals)) ** 2, 0.0) * AREA
+        Ws = np.bincount(SLOT, weights=w, minlength=n_slots) * cover_s
+        beta_s = np.empty(n_slots, dtype=complex)
+        for s in range(n_slots):
+            surf = slot_surf[s]
+            if surf is None:
+                beta_s[s] = 0.0
+            else:
+                beta_s[s] = np.conj(Z0 / complex(surf.Z(fn)[0]))
+        cdelta = 0.5 * c * complex((beta_s * Ws).sum())
+        xi[n] = cdelta.real / max(2.0 * np.pi * fn, 1e-9)
+        f_new[n] = fn - cdelta.imag / (2.0 * np.pi)
+    return xi, f_new
