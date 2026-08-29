@@ -2534,4 +2534,33 @@ Las construcciones **solo actúan con el modelo de amortiguamiento «Perturbaci�
 
 ---
 
-*Manual actualizado al 26 de Agosto de 2026 — v2.27.*
+**Cambios v2.28** (27 de agosto 2026): **Capa 0 a la vista (Δfₙ y ξₙ por modo)**, **un acabado por superficie** (material o construcción, no los dos), **crear material propio por tercios de octava**, y **el npm que escribís se respeta**. Cuatro ejes.
+
+### Cada modo, con su frecuencia corrida y su amortiguamiento a la vista
+
+Cuando una construcción de pared corre las frecuencias modales (sección anterior), ese corrimiento ya se veía en la respuesta en frecuencia, pero no como número. Ahora es explícito. En el grupo de **Modos** (pestaña Acústica):
+
+- Debajo del selector de modo hay una **línea de lectura** del modo elegido: su frecuencia rígida, la frecuencia efectiva a la que resuena de verdad (corrida por la construcción), el corrimiento **Δfₙ** entre ambas, el amortiguamiento modal **ξₙ** y el **RT60 de ese modo aislado**. Sin construcciones, Δfₙ = 0 (la pared no aporta reactancia, solo absorbe).
+- El propio **selector de modo** anota el corrimiento al lado de cada entrada cuando lo hay (por ejemplo `2: f = 75.70 Hz (Δ-1.30)`), así se ve de un vistazo qué modos se movieron y cuánto.
+- El botón **«Ver modos (Δfₙ, ξₙ)…»** abre una tabla con **todos** los modos: n, frecuencia rígida, frecuencia efectiva, Δfₙ, ξₙ y RT60ₙ. La tabla se exporta a **CSV, TXT o PNG** para llevarla a un informe.
+
+La frecuencia efectiva es la que usan la respuesta en frecuencia, el mapa de campo (slice y heatmap 2D, alineados en esta versión) y las figuras de mérito; la *forma* del modo no cambia (es una perturbación de primer orden). El RT60 del modo aislado sale de su amortiguamiento: RT60ₙ = 6.908/(ξₙ·2π·f). Sentido físico del corrimiento: por debajo de la resonancia de la construcción actúa como rigidez (resorte) y la frecuencia **sube**; por encima actúa como masa y **baja**; en la resonancia cruza por cero. Nada de esto altera el cálculo: es la Capa 0 (el modelado de impedancia) hecha visible.
+
+### Un acabado acústico por superficie
+
+Cada superficie (cara, parche o mueble) tiene **un solo** acabado: o el α de un material de catálogo, o una construcción de pared (impedancia Z). Antes se podían cargar los dos sobre la misma superficie y el programa calculaba con una definición pisando a la otra sin avisar. Ahora:
+
+- Si una superficie tiene una construcción, en «Materiales…» aparece **«→ definido por construcción»** (bloqueada): su impedancia reemplaza al α. Para volver a un material, se quita la construcción en «Construcciones de pared…».
+- Si dibujás un parche con material sobre una cara que tiene construcción (o al revés), el programa **avisa** y te deja elegir: que el parche **herede** la construcción de la cara, o que **mantenga** su material (override local explícito).
+
+### Crear un material propio sin escribir JSON
+
+En «Materiales…», el botón **«Crear material…»** abre un formulario con una casilla de absorción **por tercio de octava** (50–5000 Hz): completás las bandas que mediste, le ponés **nombre** y **notas**, y **Guardás**. Queda en la biblioteca (materials/) y disponible en Acústica y Predicción. Las bandas que dejes vacías se interpolan; el modelo usa tu resolución de tercios tal cual la cargaste (no la colapsa a octava), así una medición propia se respeta con su detalle.
+
+### El npm que escribís se respeta
+
+Con el motor de malla en «Automático», el auto-tuner sugiere una densidad de voxel (npm) que cubre hasta la frecuencia de Schroeder. Antes, al calcular los modos, ese valor **pisaba** el que hubieras escrito a mano. Ahora tu npm es un **piso**: si pedís **más** densidad que la recomendada (malla más fina, más válida en frecuencia, p. ej. para dar validez a más modos), se respeta; el auto-tuner solo lo **sube** cuando tu valor no alcanza a cubrir f_Schroeder.
+
+---
+
+*Manual actualizado al 27 de Agosto de 2026 — v2.28.*

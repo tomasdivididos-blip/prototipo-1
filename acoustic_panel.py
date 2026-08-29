@@ -2233,6 +2233,143 @@ class CompareDialog(QDialog):
                 fh.write(",".join(f"{x:.6g}" for x in row) + "\n")
 
 
+class ModeTableDialog(QDialog):
+    """Tabla por modo (Capa 0, Etapa 5c): expone EXPLICITAMENTE el corrimiento
+    de frecuencia Delta f_n = f_efectiva - f_rigida (por Im(beta) de las
+    construcciones) y el amortiguamiento modal xi_n que la app ya usa en la
+    dinamica (FRF/campo/FoM), mas el RT60_n de decaimiento del modo aislado.
+
+    `data` (dict) lo arma AcousticPanel._collect_mode_table:
+      n, f_rig, f_eff, dfreq, xi (np.ndarray, largo = nro de modos)  siempre;
+      model (str legible), constructions (bool), max_abs_shift (float).
+    xi puede venir None si no se pudo calcular el amortiguamiento.
+    """
+
+    COLS = ["Modo n", "fₙ rígida [Hz]", "f efectiva [Hz]",
+            "Δfₙ [Hz]", "ξₙ", "RT60ₙ [s]"]
+
+    def __init__(self, data: dict, parent=None):
+        super().__init__(parent)
+        from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
+        self.setWindowTitle("Modos: corrimiento Δfₙ y amortiguamiento ξₙ")
+        self.resize(720, 560)
+        self._data = data
+        v = QVBoxLayout(self)
+
+        n_modes = len(data["f_rig"])
+        cap0 = ("<b>Capa 0 activa</b>: hay construcciones asignadas → el "
+                "corrimiento Δfₙ sale de Im(β)." if data["constructions"]
+                else "Sin construcciones asignadas → Δfₙ = 0 (la pared no "
+                "aporta reactancia; solo amortiguamiento).")
+        note = QLabel(
+            f"<b>{n_modes} modos</b> · modelo de amortiguamiento: "
+            f"<b>{data['model']}</b>.<br>{cap0}<br>"
+            f"f efectiva = frecuencia de resonancia que usa la dinámica "
+            f"(FRF/campo/FoM); la <i>forma</i> modal no cambia (perturbación "
+            f"de 1er orden). RT60ₙ = 6.908/(ξₙ·2π·f) del modo aislado.")
+        note.setWordWrap(True)
+        note.setStyleSheet("color: #94a3b8; font-size: 9pt;")
+        v.addWidget(note)
+
+        if data["constructions"]:
+            v.addWidget(self._shift_summary_label(data))
+
+        rows = self._rows()
+        self.table = QTableWidget(len(rows), len(self.COLS))
+        self.table.setHorizontalHeaderLabels(self.COLS)
+        self.table.verticalHeader().setVisible(False)
+        for r, row in enumerate(rows):
+            for c, txt in enumerate(row):
+                it = QTableWidgetItem(txt)
+                it.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                if c == 3 and txt not in ("0.00", "—"):
+                    fnt = it.font(); fnt.setBold(True); it.setFont(fnt)
+                self.table.setItem(r, c, it)
+        hdr = self.table.horizontalHeader()
+        for c in range(len(self.COLS)):
+            hdr.setSectionResizeMode(c, QHeaderView.Stretch)
+        v.addWidget(self.table, 1)
+
+        row = QHBoxLayout()
+        for fmt in ("csv", "txt", "png"):
+            b = QPushButton(f"Exportar {fmt.upper()}")
+            b.setMinimumWidth(130)
+            b.clicked.connect(lambda _=False, f=fmt: self._export(f))
+            row.addWidget(b)
+        row.addStretch()
+        v.addLayout(row)
+
+        bb = QDialogButtonBox(QDialogButtonBox.Close)
+        bb.rejected.connect(self.reject)
+        bb.button(QDialogButtonBox.Close).clicked.connect(self.accept)
+        v.addWidget(bb)
+
+    def _shift_summary_label(self, data):
+        d = data["dfreq"]
+        i_max = int(np.argmax(np.abs(d))) if len(d) else -1
+        if i_max < 0 or abs(d[i_max]) < 1e-3:
+            txt = "Corrimiento máximo: Δfₙ ≈ 0 Hz (reactancia despreciable)."
+        else:
+            f0 = data["f_rig"][i_max]; f1 = data["f_eff"][i_max]
+            txt = (f"Corrimiento máximo: modo {i_max} · "
+                   f"{f0:.2f} → {f1:.2f} Hz (Δ = {d[i_max]:+.2f} Hz).")
+        lbl = QLabel(txt)
+        lbl.setStyleSheet("color: #94e2d5; font-size: 10pt;")
+        return lbl
+
+    @staticmethod
+    def _rt60_from_xi(f, xi):
+        """RT60 del modo aislado: SPL cae 60 dB con envolvente e^{-δt},
+        δ = ξ·2π·f [Np/s]; T60 = 6.908/δ (3·ln10). ξ≤0 → sin decaimiento."""
+        d = xi * 2.0 * np.pi * f
+        return 6.908 / d if d > 1e-12 else float("inf")
+
+    def _rows(self):
+        d = self._data
+        xi = d["xi"]
+        rows = []
+        for i in range(len(d["f_rig"])):
+            f0 = float(d["f_rig"][i]); f1 = float(d["f_eff"][i])
+            df = f1 - f0
+            if xi is not None:
+                xv = float(xi[i])
+                xi_txt = f"{xv:.5f}"
+                rt = self._rt60_from_xi(f1, xv)
+                rt_txt = "∞" if not np.isfinite(rt) else f"{rt:.3f}"
+            else:
+                xi_txt = "—"; rt_txt = "—"
+            rows.append((str(i), f"{f0:.2f}", f"{f1:.2f}",
+                         f"{df:+.2f}" if abs(df) >= 5e-3 else "0.00",
+                         xi_txt, rt_txt))
+        return rows
+
+    def _export(self, fmt: str):
+        path, _ = QFileDialog.getSaveFileName(
+            self, f"Exportar tabla de modos como {fmt.upper()}",
+            f"modos_shift_xi.{fmt}", f"{fmt.upper()} (*.{fmt})")
+        if not path:
+            return
+        if fmt == "png":
+            self.table.grab().save(path, "PNG")
+            return
+        hdr = ["modo_n", "f_rigida_hz", "f_efectiva_hz",
+               "delta_f_hz", "xi_n", "rt60_n_s"]
+        rows = self._rows()
+        # En CSV/TXT sacamos los signos unicode raros: infinito y guion largo.
+        def clean(x):
+            return {"∞": "inf", "—": ""}.get(x, x).replace("+", "")
+        if fmt == "csv":
+            lines = [",".join(hdr)]
+            lines += [",".join(clean(x) for x in r) for r in rows]
+        else:
+            widths = [8, 14, 15, 12, 12, 12]
+            lines = ["".join(h.rjust(w) for h, w in zip(hdr, widths))]
+            lines += ["".join(clean(x).rjust(w)
+                              for x, w in zip(r, widths)) for r in rows]
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
+
+
 class AbsorptionChoiceDialog(QDialog):
     """Gate de absorcion: que usar cuando NINGUNA cara tiene material asignado.
 
@@ -3289,6 +3426,7 @@ class AcousticPanel(QWidget):
 
         self.combo_mode = QComboBox()
         self.combo_mode.currentIndexChanged.connect(self._update_slice)
+        self.combo_mode.currentIndexChanged.connect(self._update_mode_readout)
         fmode.addRow("Modo:", self.combo_mode)
 
         # Leyenda con conteo total y filtrado (texto reactivo).
@@ -3296,6 +3434,26 @@ class AcousticPanel(QWidget):
         self.lbl_modes_count.setStyleSheet("color: #94e2d5; font-size: 10pt;")
         self.lbl_modes_count.setWordWrap(True)
         fmode.addRow("", self.lbl_modes_count)
+
+        # Read-out por modo (Capa 0, Etapa 5c): corrimiento Δfₙ + ξₙ del modo
+        # seleccionado. Vacio hasta que haya modos; se puebla al elegir uno.
+        self.lbl_mode_shift = QLabel("")
+        self.lbl_mode_shift.setStyleSheet("color: #cdd6f4; font-size: 9pt;")
+        self.lbl_mode_shift.setWordWrap(True)
+        self.lbl_mode_shift.setToolTip(
+            "f efectiva = frecuencia de resonancia que usa la FRF/campo/FoM,\n"
+            "corrida por Im(β) de las construcciones (Capa 0). Δfₙ = 0 si no\n"
+            "hay construcciones. ξₙ = amortiguamiento modal; RT60ₙ del modo\n"
+            "aislado = 6.908/(ξₙ·2π·f).")
+        fmode.addRow("", self.lbl_mode_shift)
+
+        # Tabla por modo (Δfₙ, ξₙ, RT60ₙ) con export CSV/TXT/PNG.
+        self.btn_mode_table = QPushButton("Ver modos (Δfₙ, ξₙ)…")
+        self.btn_mode_table.setToolTip(
+            "Tabla de TODOS los modos: frecuencia rígida vs efectiva,\n"
+            "corrimiento Δfₙ (Capa 0), amortiguamiento ξₙ y RT60ₙ.")
+        self.btn_mode_table.clicked.connect(self._show_mode_table)
+        fmode.addRow("", self.btn_mode_table)
 
         # Selector de plano de corte
         self.combo_plane = QComboBox()
@@ -4304,6 +4462,24 @@ class AcousticPanel(QWidget):
     # -----------------------------------------------------------------------
     # FEM modal
     # -----------------------------------------------------------------------
+    @staticmethod
+    def _reconcile_npm(npm_auto: float, npm_manual: float, h_auto: float):
+        """Concilia el npm recomendado por el auto-tuner con el que escribió el
+        usuario (D4: el npm manual es un PISO, no se baja).
+
+          - npm_manual > npm_auto  -> se respeta el manual (malla más fina, más
+            válida en frecuencia); h se escala consistente (h ~ 1/npm).
+          - npm_manual <= npm_auto -> se usa el auto (cubre f_S; el manual no
+            alcanzaba).
+
+        Devuelve (npm_used, h_used, kept_manual: bool). Puro y testeable.
+        """
+        if npm_manual > npm_auto + 1e-9:
+            npm_used = npm_manual
+            h_used = h_auto * (npm_auto / npm_used) if npm_used > 0 else h_auto
+            return npm_used, h_used, True
+        return npm_auto, h_auto, False
+
     def _solve_fem(self):
         # Arrancar cronometro de la leyenda bajo el boton.
         try:
@@ -4424,9 +4600,23 @@ class AcousticPanel(QWidget):
                         f"{self.sb_nmodes.maximum()})."
                     )
 
-                # Aplicar densidades auto-tuneadas a los spinboxes (visible al usuario)
-                npm_used = auto_used.n_per_meter
-                h_used = auto_used.h_target
+                # Aplicar densidades auto-tuneadas a los spinboxes (visible al
+                # usuario). D4: el npm del usuario es un PISO, NO se baja. Si
+                # pediste MAS densidad que la recomendada (malla mas fina = mas
+                # valida, p.ej. para dar validez a mas modos bajo f_S, que es lo
+                # que pide la advertencia de perturbacion), se respeta; el
+                # auto-tuner solo SUBE cuando tu valor manual no alcanza a cubrir
+                # f_S. `npm_used`/`h_used` traen aca el valor MANUAL (leido arriba).
+                npm_auto = auto_used.n_per_meter
+                npm_manual = npm_used
+                npm_used, h_used, kept_manual = self._reconcile_npm(
+                    npm_auto, npm_manual, auto_used.h_target)
+                if kept_manual:
+                    self._log(
+                        f"Auto-tuner: mantengo tu npm manual {npm_manual:.2f} "
+                        f"(mayor que el recomendado {npm_auto:.2f}); malla más "
+                        f"fina, mayor validez en frecuencia."
+                    )
                 self.sb_density.blockSignals(True)
                 self.sb_htarget.blockSignals(True)
                 self.sb_density.setValue(npm_used)
@@ -4569,9 +4759,21 @@ class AcousticPanel(QWidget):
             f_max = self.sb_fmax.value()
             if f_max < f_min:                       # sanity: swap
                 f_min, f_max = f_max, f_min
+            # Corrimiento Capa 0 (Etapa 5c): si hay f efectivas != rigidas, se
+            # anota Δfₙ en la entrada. Sin construcciones f_eff == f_rig -> el
+            # texto queda EXACTO como antes (sin marcador, sin regresion).
+            f_eff = self._effective_modal_freqs()
+            has_shift = (f_eff is not None
+                         and len(f_eff) == len(self.modal_result.freqs))
             for i, f in enumerate(self.modal_result.freqs):
                 if f_min <= f <= f_max:
-                    self.combo_mode.addItem(f"{i}: f = {f:.2f} Hz", userData=int(i))
+                    label = f"{i}: f = {f:.2f} Hz"
+                    if has_shift:
+                        df = float(f_eff[i]) - float(f)
+                        if abs(df) >= 5e-3:
+                            label = (f"{i}: f = {float(f_eff[i]):.2f} Hz "
+                                     f"(Δ{df:+.2f})")
+                    self.combo_mode.addItem(label, userData=int(i))
                     shown += 1
         self.combo_mode.blockSignals(False)
         if self.combo_mode.count() > 0:
@@ -4600,6 +4802,8 @@ class AcousticPanel(QWidget):
                     + hi_clip)
         # Refrescar el cruce modal numerico (2c §9) con el set de modos actual.
         self._update_modal_crossover()
+        # Read-out por modo (Etapa 5c): sincronizar con el modo ahora activo.
+        self._update_mode_readout()
 
     def _on_mode_filter_changed(self, _value):
         """Slot disparado por sb_fmin / sb_fmax. Solo repinta el combo."""
@@ -4862,7 +5066,7 @@ class AcousticPanel(QWidget):
                     self._log("Para ver |p|, agregá (o activá) al menos una fuente.")
                     self.viewer.update()
                     return
-                f = float(self.modal_result.freqs[mode_idx])
+                f = self._effective_freq_of(mode_idx)   # 5c: resonancia efectiva
                 sl = aa.slice_pressure_field_plane(
                     self.modal_result, act, f=f,
                     axis=axis, offset=offset, n1=res, n2=res,
@@ -5686,7 +5890,7 @@ class AcousticPanel(QWidget):
                 if len(act) == 0:
                     self._log("Para ver |p|, agregá (o activá) al menos una fuente.")
                     return None
-                f = float(self.modal_result.freqs[mode_idx])
+                f = self._effective_freq_of(mode_idx)   # 5c: resonancia efectiva
                 return aa.slice_pressure_field_plane(
                     self.modal_result, act, f=f,
                     axis=axis, offset=offset, n1=res, n2=res, damping=damping)
@@ -5708,7 +5912,7 @@ class AcousticPanel(QWidget):
             return
         mode_idx = self._current_mode_idx()
         if 0 <= mode_idx < len(self.modal_result.freqs):
-            f = float(self.modal_result.freqs[mode_idx])
+            f = self._effective_freq_of(mode_idx)   # 5c: resonancia efectiva
             mode_name = f"Modo {mode_idx}  ({f:.1f} Hz)"
         else:
             mode_name = "—"
@@ -5849,6 +6053,7 @@ class AcousticPanel(QWidget):
             face_mat_map=self._face_mat_map,
             volume=V,
             patches=self._patches,
+            construction_keys=self._construction_keys(),
             parent=self,
         )
         # Conectar la senal applied para refrescar el panel en vivo
@@ -5899,6 +6104,9 @@ class AcousticPanel(QWidget):
     def _on_patches_applied(self, patches):
         """Adopta la lista de parches editada y recomputa xi/RT."""
         self._patches = list(patches or [])
+        # Exclusion mutua geometrica: un parche nuevo dibujado sobre una cara con
+        # construccion crea un doble-spec; resolver antes de recomputar.
+        self._resolve_patch_finish_conflicts(interactive=True)
         self._refresh_patches_summary()
         self._refresh_abs_choice_label()   # los parches tambien mueven el RT
         if self.modal_result is not None:
@@ -5927,13 +6135,20 @@ class AcousticPanel(QWidget):
     def _on_constructions_applied(self, cmap):
         """Adopta el mapa de construcciones y recomputa xi (y el corrimiento)."""
         self._construction_map = dict(cmap or {})
+        # Exclusion mutua geometrica: si alguna cara con construccion tiene
+        # parches encima, resolver el doble-spec antes de calcular.
+        self._resolve_patch_finish_conflicts(interactive=True)
         self._refresh_constructions_summary()
         if self._construction_map and self._damping_model != "perturbation":
             self._log("Aviso: las construcciones de pared solo actúan con el "
                       "modelo de amortiguamiento «Perturbación de frontera».")
         if self.modal_result is not None:
             self._xi_per_mode = self._compute_xi_from_materials()
-        self._update_modal_crossover()
+            # Etapa 5c: al cambiar el corrimiento, repintar el picker (marcador
+            # Δfₙ) y el read-out del modo. Repuebla el combo (vuelve al modo 0).
+            self._refresh_modes_combo()
+        else:
+            self._update_modal_crossover()
 
     def _refresh_constructions_summary(self):
         n = len(self._construction_map)
@@ -6174,7 +6389,10 @@ class AcousticPanel(QWidget):
             # Etapa 2a: el RT60 efectivo (label + f_cross) depende del modelo;
             # refrescar para que el cambio se vea sin re-tocar los materiales.
             self._refresh_materials_summary()
-            self._update_modal_crossover()
+            # Etapa 5c: el corrimiento existe solo en perturbación+construcciones;
+            # al togglear el modelo aparece/desaparece → repintar picker + read-out
+            # (esto ya refresca el cruce modal). Vuelve al modo 0.
+            self._refresh_modes_combo()
 
     def _on_face_materials_applied(self):
         """Refresca el resumen y recomputa xi tras editar materiales."""
@@ -6184,6 +6402,9 @@ class AcousticPanel(QWidget):
         # atraso).
         if self.modal_result is not None:
             self._xi_per_mode = self._compute_xi_from_materials()
+            # Etapa 5c: cambió ξ (el Δfₙ viene solo de Im(β) de construcciones,
+            # invariante al material) → basta con refrescar el read-out del modo.
+            self._update_mode_readout()
         self._refresh_materials_summary()
         # De donde sale la absorcion pudo cambiar (el usuario reasigno caras):
         # el label tiene que seguirlo o queda mintiendo sobre el f_S mostrado.
@@ -6316,6 +6537,63 @@ class AcousticPanel(QWidget):
         return imp.SurfaceImpedance(zf, is_locally_reacting=True,
                                     label=getattr(mat, "name", "material"))
 
+    def _construction_keys(self):
+        """Claves (firma de cara / patch.key / __furniture_i__) que YA tienen una
+        construccion-Z. La UI de materiales las bloquea (un acabado por region)."""
+        return set(self._construction_map.keys())
+
+    def _patch_finish_conflicts(self):
+        """Exclusion mutua GEOMETRICA: parches cuyo material-alpha pisa la
+        construccion-Z de su cara anfitriona. Un parche dibujado sobre una cara
+        con construccion sobrescribe esa impedancia en su huella = doble spec
+        sobre la misma region fisica. Un parche que YA tiene su propia
+        construccion NO entra (esa es su terminacion, no hay contradiccion).
+        Devuelve la lista de parches en conflicto."""
+        cmap = self._construction_map
+        if not cmap or not self._patches:
+            return []
+        return [p for p in self._patches
+                if getattr(p, "face_signature", None) in cmap
+                and getattr(p, "key", None) not in cmap]
+
+    def _resolve_patch_finish_conflicts(self, interactive=True):
+        """Resuelve el conflicto parche-alpha vs cara-construccion. Ofrece
+        heredar la construccion de la cara al parche (misma Z, sin override) o
+        mantener el material del parche (override local explicito). Sin GUI
+        (tests) hereda por defecto (coherente: un acabado por region).
+        Devuelve True si modifico `_construction_map`."""
+        conflicts = self._patch_finish_conflicts()
+        if not conflicts:
+            return False
+        if not interactive:
+            for p in conflicts:
+                self._construction_map[p.key] = dict(
+                    self._construction_map[p.face_signature])
+            return True
+        n = len(conflicts)
+        box = QMessageBox(self)
+        box.setWindowTitle("Parche sobre una construcción")
+        box.setIcon(QMessageBox.Warning)
+        box.setText(
+            f"{n} parche(s) están sobre una cara con construcción de pared.\n\n"
+            f"El material (α) del parche sobrescribe la impedancia de la "
+            f"construcción en esa zona: son dos definiciones sobre la misma "
+            f"superficie. ¿Qué hago?")
+        b_inherit = box.addButton("Heredar la construcción al parche",
+                                  QMessageBox.AcceptRole)
+        box.addButton("Mantener el material del parche", QMessageBox.RejectRole)
+        box.setDefaultButton(b_inherit)
+        box.exec_()
+        if box.clickedButton() is b_inherit:
+            for p in conflicts:
+                self._construction_map[p.key] = dict(
+                    self._construction_map[p.face_signature])
+            self._log(f"{n} parche(s) heredaron la construcción de su cara.")
+            return True
+        self._log(f"{n} parche(s) mantienen su material "
+                  f"(override local de la construcción).")
+        return False
+
     def _construction_surfaces(self, groups, g2m):
         """Superficies de Capa 0 por GRUPO y por PARCHE para la perturbacion
         compleja unificada. Para cada superficie (cara, parche o mueble):
@@ -6361,6 +6639,92 @@ class AcousticPanel(QWidget):
         if fs is not None and len(fs) == len(self.modal_result.freqs):
             return np.asarray(fs, dtype=float)
         return self.modal_result.freqs
+
+    def _effective_freq_of(self, mode_idx: int) -> float:
+        """Frecuencia EFECTIVA (corrida por Capa 0) del modo, con fallback a la
+        rigida. La usan el campo |p| (slice/heatmap) y su etiqueta, para que la
+        presion se evalue a la resonancia REAL, igual que la FRF (Etapa 5c)."""
+        fe = self._effective_modal_freqs()
+        if fe is not None and 0 <= mode_idx < len(fe):
+            return float(fe[mode_idx])
+        return float(self.modal_result.freqs[mode_idx])
+
+    def _collect_mode_table(self):
+        """Datos por modo para la tabla/read-out de la Etapa 5c (Capa 0 visible).
+
+        Devuelve dict con f_rig, f_eff, dfreq, xi (np.ndarray) del MODELO ACTIVO,
+        mas metadatos legibles. Si el amortiguamiento no esta cacheado lo calcula
+        una vez (side-effect: puebla `_freq_shift_per_mode`, que es lo que hace
+        visible el corrimiento). Devuelve None sin modos.
+        """
+        if self.modal_result is None:
+            return None
+        f_rig = np.asarray(self.modal_result.freqs, dtype=float)
+        if self._xi_per_mode is None:
+            # Poblar xi (y de paso el corrimiento) para el modelo activo.
+            self._xi_per_mode = self._compute_xi_from_materials()
+        f_eff = self._effective_modal_freqs()
+        f_eff = f_rig if f_eff is None else np.asarray(f_eff, dtype=float)
+        if f_eff.shape != f_rig.shape:
+            f_eff = f_rig
+        xi = self._xi_per_mode
+        if xi is not None:
+            xi = np.asarray(xi, dtype=float)
+            if xi.shape != f_rig.shape:
+                xi = None
+        model = ("Perturbación de frontera"
+                 if self._damping_model == "perturbation"
+                 else "Sabine por modo (A36)")
+        return {
+            "f_rig": f_rig, "f_eff": f_eff, "dfreq": f_eff - f_rig, "xi": xi,
+            "model": model, "constructions": bool(self._construction_map),
+            "max_abs_shift": float(np.max(np.abs(f_eff - f_rig)))
+                             if f_rig.size else 0.0,
+        }
+
+    def _show_mode_table(self):
+        """Abre la tabla por modo (Etapa 5c): Δfₙ + ξₙ explicitos."""
+        if not self._ensure_modes_computed():
+            return
+        data = self._collect_mode_table()
+        if data is None:
+            QMessageBox.information(self, "Sin modos",
+                                     "Calculá los modos primero.")
+            return
+        ModeTableDialog(data, parent=self).exec_()
+
+    def _update_mode_readout(self):
+        """Read-out compacto del modo seleccionado: fₙ rígida → efectiva (Δfₙ),
+        ξₙ y RT60ₙ. Barato: usa las caches vivas, NO recalcula la perturbación."""
+        if not hasattr(self, "lbl_mode_shift"):
+            return
+        mr = self.modal_result
+        if mr is None:
+            self.lbl_mode_shift.setText("")
+            return
+        i = self._current_mode_idx()
+        f_rig = np.asarray(mr.freqs, dtype=float)
+        if i < 0 or i >= f_rig.size:
+            self.lbl_mode_shift.setText("")
+            return
+        f0 = float(f_rig[i])
+        f_eff = self._effective_modal_freqs()
+        f1 = f0 if f_eff is None or len(f_eff) != f_rig.size else float(f_eff[i])
+        df = f1 - f0
+        parts = []
+        if abs(df) >= 5e-3:
+            parts.append(f"fₙ {f0:.2f} → <b>{f1:.2f}</b> Hz "
+                         f"(Δfₙ = {df:+.2f} Hz)")
+        else:
+            parts.append(f"fₙ = {f0:.2f} Hz (sin corrimiento)")
+        xi = self._xi_per_mode
+        if xi is not None and len(xi) == f_rig.size:
+            xv = float(xi[i])
+            d = xv * 2.0 * np.pi * f1
+            rt = 6.908 / d if d > 1e-12 else float("inf")
+            rt_txt = "∞" if not np.isfinite(rt) else f"{rt:.2f} s"
+            parts.append(f"ξₙ = {xv:.5f} · RT60ₙ ≈ {rt_txt}")
+        self.lbl_mode_shift.setText(" · ".join(parts))
 
     def _compute_xi_from_materials(self, model=None):
         """Calcula xi_n por modo usando el mapeo POR CARA (FaceMaterialMap).

@@ -1087,12 +1087,13 @@ def summarize_zone_areas(groups: List[FaceGroup]) -> Dict[str, float]:
 # ---------------------------------------------------------------------------
 try:
     from PyQt5.QtCore import Qt, pyqtSignal, QEvent
-    from PyQt5.QtGui import QColor, QBrush
+    from PyQt5.QtGui import QColor, QBrush, QDoubleValidator
     from PyQt5.QtWidgets import (
         QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
         QTableWidget, QTableWidgetItem, QComboBox, QDialogButtonBox,
         QHeaderView, QAbstractItemView, QGroupBox, QFormLayout,
-        QDoubleSpinBox, QMessageBox,
+        QDoubleSpinBox, QMessageBox, QLineEdit, QGridLayout, QPlainTextEdit,
+        QScrollArea, QWidget,
     )
     _HAS_QT = True
 except ImportError:
@@ -1107,6 +1108,127 @@ if _HAS_QT:
         "wall":    QColor(220, 180, 110, 220),   # ambar
         "tilted":  QColor(200, 130, 200, 220),   # violeta
     }
+
+    class MaterialFormDialog(QDialog):
+        """Crear un material propio SIN escribir JSON: una casilla de alpha por
+        tercio de octava (50-5000 Hz; se completan las bandas medidas, las
+        vacias se interpolan/extrapolan), nombre y notas. Deja el material
+        armado en self.result_data (dict formato catalogo) o None si se cancela.
+
+        Pedido del profesor: 'que se abran las casillitas para cada tercio de
+        octava y el usuario las va completando; luego nombre, luego notas;
+        finalmente guardar'."""
+
+        # Tercios de octava estandar (ISO 266), extendidos a la banda modal (50 Hz).
+        BANDS = [50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800,
+                 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000]
+
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.setWindowTitle("Crear material propio (α por tercio de octava)")
+            self.resize(560, 660)
+            self.result_data = None
+            self._cells = {}       # band(int) -> QLineEdit
+            self._build_ui()
+
+        def _build_ui(self):
+            v = QVBoxLayout(self)
+            help_lbl = QLabel(
+                "Cargá tu material midiendo α por tercio de octava. Completá las "
+                "bandas que tengas (0 a 1); las vacías se interpolan entre las "
+                "cargadas y se extienden en los extremos. Después poné el nombre "
+                "y las notas, y Guardar.")
+            help_lbl.setWordWrap(True)
+            help_lbl.setStyleSheet("color:#cdd6f4; font-size:9pt;")
+            v.addWidget(help_lbl)
+
+            grid_host = QWidget()
+            grid = QGridLayout(grid_host)
+            grid.setHorizontalSpacing(16)
+            grid.setVerticalSpacing(6)
+            ncol = 3
+            for i, b in enumerate(self.BANDS):
+                r, c = divmod(i, ncol)
+                cell = QLineEdit()
+                val = QDoubleValidator(0.0, 1.0, 3, cell)
+                val.setNotation(QDoubleValidator.StandardNotation)
+                cell.setValidator(val)
+                cell.setPlaceholderText("—")
+                cell.setMaximumWidth(68)
+                cell.setToolTip(f"α a {b} Hz (0 a 1). Vacío = no medido.")
+                lbl = QLabel(self._band_label(b))
+                lbl.setMinimumWidth(58)
+                cellbox = QHBoxLayout()
+                cellbox.setContentsMargins(0, 0, 0, 0)
+                cellbox.addWidget(lbl)
+                cellbox.addWidget(cell)
+                holder = QWidget()
+                holder.setLayout(cellbox)
+                grid.addWidget(holder, r, c)
+                self._cells[b] = cell
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setWidget(grid_host)
+            v.addWidget(scroll, 1)
+
+            form = QFormLayout()
+            self.ed_name = QLineEdit()
+            self.ed_name.setPlaceholderText("p. ej. Panel medido en cámara")
+            form.addRow("Nombre:", self.ed_name)
+            self.ed_notes = QPlainTextEdit()
+            self.ed_notes.setPlaceholderText(
+                "Descripción / notas de la medición (equipo, norma, muestra, "
+                "fecha, montaje)…")
+            self.ed_notes.setMaximumHeight(90)
+            form.addRow("Notas:", self.ed_notes)
+            v.addLayout(form)
+
+            bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+            bb.button(QDialogButtonBox.Save).setText("Guardar")
+            bb.button(QDialogButtonBox.Cancel).setText("Cancelar")
+            bb.accepted.connect(self._on_save)
+            bb.rejected.connect(self.reject)
+            v.addWidget(bb)
+
+        @staticmethod
+        def _band_label(b):
+            return f"{b/1000:.3g} kHz" if b >= 1000 else f"{b} Hz"
+
+        def _collect_alpha(self):
+            """Dict {band(int): alpha} con las casillas completadas y validas."""
+            alpha = {}
+            for b, cell in self._cells.items():
+                t = cell.text().strip().replace(",", ".")
+                if not t:
+                    continue
+                try:
+                    x = float(t)
+                except ValueError:
+                    continue
+                alpha[b] = min(max(x, 0.0), 1.0)
+            return alpha
+
+        def _on_save(self):
+            name = self.ed_name.text().strip()
+            if not name:
+                QMessageBox.warning(self, "Falta el nombre",
+                                    "Poné un nombre para el material.")
+                return
+            alpha = self._collect_alpha()
+            if not alpha:
+                QMessageBox.warning(
+                    self, "Falta α",
+                    "Completá al menos una banda de absorción (0 a 1).")
+                return
+            self.result_data = {
+                "name": name,
+                "category": "Personalizado",
+                "description": self.ed_notes.toPlainText().strip(),
+                "source": "Medición propia",
+                "alpha": {str(b): float(a) for b, a in sorted(alpha.items())},
+            }
+            self.accept()
+
 
     class MaterialsDialog(QDialog):
         """Dialogo de asignacion de materiales por grupo de caras.
@@ -1134,6 +1256,7 @@ if _HAS_QT:
                      face_mat_map: FaceMaterialMap,
                      volume: float = 0.0,
                      patches=None,
+                     construction_keys=None,
                      parent=None):
             super().__init__(parent)
             self.setWindowTitle("Materiales por cara")
@@ -1146,6 +1269,10 @@ if _HAS_QT:
             self._volume = float(volume)
             # Parches de absorcion (solo lectura aca): se listan bajo su cara.
             self._patches = list(patches or [])
+            # Exclusion mutua (Capa 0): claves (firma de cara / patch.key) que ya
+            # tienen una construccion-Z asignada. Para esas regiones el material
+            # (alpha) NO aplica -> se bloquea el combo (un acabado por region).
+            self._constr_keys = set(construction_keys or [])
             self._sig_label = {g.signature: g.label for g in groups}
             # row -> ("group", FaceGroup) | ("patch", AbsorptionPatch)
             self._row_map = []
@@ -1166,7 +1293,10 @@ if _HAS_QT:
                 "Asigna un material a cada grupo de caras. Los grupos se "
                 "detectan automaticamente por orientacion y conectividad. "
                 "Las asignaciones se guardan al cerrar el dialogo y se "
-                "restauran cuando lo abras de nuevo."
+                "restauran cuando lo abras de nuevo. Las superficies con una "
+                "construcción de pared (Capa 0) aparecen «definido por "
+                "construcción»: su impedancia reemplaza al α (un acabado por "
+                "superficie)."
             )
             help_lbl.setWordWrap(True)
             help_lbl.setStyleSheet("color: #cdd6f4; font-size: 9pt;")
@@ -1235,6 +1365,14 @@ if _HAS_QT:
             )
             self.btn_named_preset.clicked.connect(self._named_preset_dialog)
             qrow.addWidget(self.btn_named_preset)
+
+            self.btn_create_material = QPushButton("Crear material…")
+            self.btn_create_material.setToolTip(
+                "Arma un material propio completando la absorción α por tercio "
+                "de octava (sin escribir JSON). Nombre + notas + guardar; queda "
+                "en materials/ y disponible en todo el programa.")
+            self.btn_create_material.clicked.connect(self._create_material)
+            qrow.addWidget(self.btn_create_material)
 
             self.btn_load_custom = QPushButton("Cargar tu material…")
             self.btn_load_custom.setToolTip(
@@ -1328,18 +1466,21 @@ if _HAS_QT:
                 k_item.setTextAlignment(Qt.AlignCenter)
                 self.table.setItem(row, 4, k_item)
 
-                # Col 5: combo de material
-                combo = QComboBox()
-                combo.addItems(names)
-                # Restaurar seleccion previa (si la habia en el map)
-                prev_name = self._map.get(g.signature) or self._map.default
-                idx = combo.findText(prev_name) if prev_name else -1
-                combo.setCurrentIndex(max(0, idx))
-                # Cambios en combo: aplicar al mapa y refrescar resumen
-                combo.currentTextChanged.connect(
-                    lambda text, sig=g.signature: self._on_combo_changed(sig, text)
-                )
-                self.table.setCellWidget(row, 5, combo)
+                # Col 5: material (o bloqueo si la cara tiene construccion-Z).
+                if g.signature in self._constr_keys:
+                    self.table.setCellWidget(row, 5, self._locked_cell())
+                else:
+                    combo = QComboBox()
+                    combo.addItems(names)
+                    # Restaurar seleccion previa (si la habia en el map)
+                    prev_name = self._map.get(g.signature) or self._map.default
+                    idx = combo.findText(prev_name) if prev_name else -1
+                    combo.setCurrentIndex(max(0, idx))
+                    # Cambios en combo: aplicar al mapa y refrescar resumen
+                    combo.currentTextChanged.connect(
+                        lambda text, sig=g.signature: self._on_combo_changed(sig, text)
+                    )
+                    self.table.setCellWidget(row, 5, combo)
 
             # Filas de parche (solo lectura): bajo su cara, con su material.
             try:
@@ -1376,14 +1517,30 @@ if _HAS_QT:
                 cat_item = QTableWidgetItem(getattr(mat, "category", "") if mat else "")
                 cat_item.setTextAlignment(Qt.AlignCenter)
                 self.table.setItem(row, 4, cat_item)
-                # Col 5: material del parche (combo editable, como las caras)
-                pcombo = QComboBox()
-                pcombo.addItems(names)
-                pidx = pcombo.findText(p.material_name) if p.material_name else -1
-                pcombo.setCurrentIndex(max(0, pidx))
-                pcombo.currentTextChanged.connect(
-                    lambda text, pp=p, r=row: self._on_patch_mat_changed(pp, text, r))
-                self.table.setCellWidget(row, 5, pcombo)
+                # Col 5: material del parche (o bloqueo si tiene construccion-Z).
+                if getattr(p, "key", None) in self._constr_keys:
+                    self.table.setCellWidget(row, 5, self._locked_cell())
+                else:
+                    pcombo = QComboBox()
+                    pcombo.addItems(names)
+                    pidx = pcombo.findText(p.material_name) if p.material_name else -1
+                    pcombo.setCurrentIndex(max(0, pidx))
+                    pcombo.currentTextChanged.connect(
+                        lambda text, pp=p, r=row: self._on_patch_mat_changed(pp, text, r))
+                    self.table.setCellWidget(row, 5, pcombo)
+
+        def _locked_cell(self):
+            """Celda de material bloqueada: la region tiene una construccion-Z
+            (Capa 0), que es su acabado acustico. El alpha no aplica; para
+            cambiarlo hay que quitar la construccion en su dialogo."""
+            lbl = QLabel("→ definido por construcción")
+            lbl.setStyleSheet("color:#89b4fa; font-size:9pt; font-style:italic;")
+            lbl.setToolTip(
+                "Esta superficie tiene una construcción de pared (impedancia Z).\n"
+                "El material (α) no se usa acá: un acabado por superficie.\n"
+                "Para volver a un material, quitá la construcción en\n"
+                "«Construcciones de pared…».")
+            return lbl
 
         def _on_combo_changed(self, signature: str, material_name: str):
             self._map.assign(signature, material_name)
@@ -1530,6 +1687,53 @@ if _HAS_QT:
             '            "1000": 0.65, "2000": 0.50, "4000": 0.40, "8000": 0.35}\n'
             "}"
         )
+
+        def _create_material(self):
+            """Abre el formulario de tercios de octava; al guardar, escribe el
+            JSON en materials/, recarga la biblioteca y refresca el dialogo."""
+            from pathlib import Path
+            import json, re, unicodedata
+            dlg = MaterialFormDialog(parent=self)
+            if not dlg.exec_() or not dlg.result_data:
+                return
+            data = dlg.result_data
+            # Validar contra el modelo real antes de escribir.
+            from material_library import Material
+            try:
+                Material(data)
+            except Exception as e:
+                QMessageBox.warning(self, "Material inválido", str(e))
+                return
+            folder = getattr(self._mat_lib, "_folder", None) or \
+                str(Path(__file__).parent / "materials")
+            # slug filesystem-safe desde el nombre (sin pisar existentes).
+            slug = unicodedata.normalize("NFKD", data["name"]).encode(
+                "ascii", "ignore").decode()
+            slug = re.sub(r"[^A-Za-z0-9]+", "_", slug).strip("_").lower() or "material"
+            dest = Path(folder) / f"{slug}.json"
+            k = 1
+            while dest.exists():
+                dest = Path(folder) / f"{slug}_{k}.json"
+                k += 1
+            try:
+                dest.write_text(json.dumps(data, ensure_ascii=False, indent=2),
+                                encoding="utf-8")
+            except Exception as e:
+                QMessageBox.warning(self, "No se pudo guardar",
+                                    f"No se pudo escribir en materials/:\n{e}")
+                return
+            try:
+                self._mat_lib.reload()
+            except Exception as e:
+                QMessageBox.warning(self, "Recarga", str(e))
+                return
+            self._populate_table()
+            self._refresh_summary()
+            self.materialsReloaded.emit()
+            QMessageBox.information(
+                self, "Material creado",
+                f"Guardado: {data['name']}\n({dest.name})\n\n"
+                f"Ya está disponible en Acústica y Predicción.")
 
         def _load_custom_material(self):
             from pathlib import Path

@@ -28,6 +28,7 @@ BENCHES = [
     ("Etapa 3         resonantes (perforado/MPP/membrana)", "bench_resonant_facings.py"),
     ("Etapa 4         auditoria integral", "bench_capa0_audit.py"),
     ("Etapa 5a        wiring a la fisica (FRF/corrimiento)", "bench_capa0_wiring.py"),
+    ("Etapa 5c        presentacion (tabla/read-out Df_n + xi_n)", "bench_capa0_5c.py"),
 ]
 
 _RES = re.compile(r"RESULTADO:\s*(\d+)\s*OK,\s*(\d+)\s*FAIL")

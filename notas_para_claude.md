@@ -892,7 +892,7 @@ perder nada. Cada "recap" tiene que dejar el estado guardado en disco Y en el re
 clear"), o proactivamente cuando notes que el contexto se está llenando y hay trabajo
 sin persistir. Ante la duda, ofrecelo.
 
-**Qué hace un recap (los tres pasos, SIEMPRE los tres):**
+**Qué hace un recap (los cuatro pasos, SIEMPRE los cuatro):**
 
 1. **`MANUAL.md`** — si hubo cambios funcionales visibles al usuario, agregar/actualizar
    el bloque de changelog `**Cambios vX.YY**` (solo el .md; ecuaciones en LaTeX).
@@ -904,10 +904,19 @@ sin persistir. Ante la duda, ofrecelo.
    `git add -A`, commit con mensaje descriptivo (terminar con `Co-Authored-By: Claude`),
    `git push`. Si estás en una rama de trabajo (ej. `dist-exe`), pushear ahí; no mergear
    a `main` sin pedir. Reportar el hash del commit.
+4. **Distribución (`dist-exe` + zips)** — regenerar los entregables para que queden
+   al día con el commit del recap:
+   - **Win:** `build.bat` → `verify_distribution.py` → `test_distribution_smoke.py` →
+     `pack_distribution.py` (produce `Prototipo1_vX.YY.zip`).
+   - **Mac:** `pack_mac_distribution.py` (lee la versión del último `**Cambios vX.YY**`
+     del MANUAL → nombra el zip solo; correr desde fuente, no se cross-compila).
+   El `.exe`, la carpeta `dist/` y los `*.zip` NO van al repo (ya están en `.gitignore`);
+   los zips se mandan por WeTransfer/Drive. Reportar los nombres/versión de los zips.
 
-**Regla:** un recap no está completo hasta que los tres pasos están hechos y el push
-confirmado. El objetivo es que un `/clear` + re-lectura de los `.md` deje a la próxima
-instancia exactamente donde quedó esta, sin agujeros.
+**Regla:** un recap no está completo hasta que los cuatro pasos están hechos, el push
+confirmado y los zips (Mac + Win) regenerados. El objetivo es que un `/clear` +
+re-lectura de los `.md` deje a la próxima instancia exactamente donde quedó esta, sin
+agujeros.
 
 ---
 
@@ -2487,6 +2496,68 @@ bien.
     Smoke test humano: TODO OK. Memoria [[z-impedance-modeling]].
   - FALTA: Etapa 5c (mostrar Δfₙ/ξ explícito en FRF/Ver-RT60 + carga de mediciones
     Z(f)/Z(f,θ), EN PAUSA sin mediciones).
+
+- **27 Ago 2026 — Capa 0 Etapa 5c: la parte DOABLE (mostrar Δfₙ y ξₙ por modo),
+  MANUAL v2.28.** Rama `dist-exe`. Es display-only: NO toca la física (el corrimiento
+  ya propagaba a la FRF vía `_effective_modal_freqs`/`_freq_shift_per_mode` desde 5a).
+  Tres superficies nuevas en el grupo Modos:
+  - **Read-out por modo** (`lbl_mode_shift` bajo el picker): fₙ rígida → f efectiva
+    (Δfₙ), ξₙ y RT60ₙ del modo seleccionado. `_update_mode_readout` (barato, usa caches
+    vivas, NO recomputa la perturbación); enganchado a `combo_mode.currentIndexChanged`
+    y al final de `_refresh_modes_combo`.
+  - **Marcador Δ en el combo**: cada entrada anota `(Δ+x.xx)` y muestra la f efectiva
+    cuando |Δ|≥5e-3; sin corrimiento el texto queda EXACTO como antes (sin regresión).
+  - **`ModeTableDialog`** (botón "Ver modos (Δfₙ, ξₙ)…"): tabla de todos los modos
+    (n · fₙ rígida · f efectiva · Δfₙ · ξₙ · RT60ₙ) + export CSV/TXT/PNG. Helper de
+    datos `_collect_mode_table` (modelo activo; si ξ no está cacheado lo calcula una
+    vez, side-effect: puebla el corrimiento). RT60ₙ = 6.908/(ξₙ·2π·f) del modo aislado.
+  - **Refrescos:** construcciones aplicadas y toggle de modelo → `_refresh_modes_combo`
+    (repinta marcador + read-out, vuelve a modo 0); editar material → solo read-out
+    (Δfₙ es invariante al material, viene solo de Im(β) de construcciones).
+  - Decisión: Ver-RT60 (`RTComparisonDialog`) NO es el lugar para Δfₙ/ξ (es Sabine/
+    Eyring/Fitzroy). El campo/slice/heatmap de |p| ahora usan la frecuencia EFECTIVA
+    (helper `_effective_freq_of`, tres sitios), alineados con la FRF (antes usaban la
+    rígida; se corrigió a pedido del usuario, no era del scope original de 5c).
+  - `bench_capa0_5c.py` **43/43** (formateo tabla, RT60ₙ, export CSV/TXT limpio,
+    ramas ξ=None/∞/Δ≈0, glue `_collect_mode_table`, y T9 exclusión mutua). Suite
+    `bench_capa0_all` **164/164**. Smoke offscreen de MainWindow OK. **Test visual
+    humano PASÓ.** Sigue EN PAUSA: carga de mediciones Z(f)/Z(f,θ) (sin mediciones).
+    Memoria [[z-impedance-modeling]].
+
+- **27 Ago 2026 — Linkeo α↔construcción (exclusión mutua), material propio por tercios,
+  fix npm manual (todo en v2.28, rama dist-exe, test visual PASÓ).** Batch a pedido del
+  usuario tras el 5c:
+  - **Exclusión mutua (un acabado por región).** Decisión del usuario: material-α y
+    construcción-Z NO pueden coexistir sobre la misma superficie (antes se podían cargar
+    los dos y uno pisaba al otro en silencio). Como el α es baseline SIEMPRE presente y
+    la construcción es el upgrade, se implementó como BLOQUEO: `fm.MaterialsDialog`
+    recibe `construction_keys` y muestra las caras/parches con construcción como
+    `QLabel` «→ definido por construcción» (sin combo). Gate GEOMÉTRICO en el panel
+    (`_patch_finish_conflicts`/`_resolve_patch_finish_conflicts`): un parche cuyo
+    `face_signature` tiene construcción y que NO tiene construcción propia PISA la Z de
+    la cara en su huella → al aplicar (construcciones o parches) avisa y ofrece heredar
+    la construcción al parche o mantener el material. Headless: hereda por defecto. La
+    carga de `.room` setea el mapa directo (main.py:1353), no dispara popups. Bench T9.
+  - **Crear material propio por tercios de octava** (pedido textual del profesor: casillas
+    por tercio → completar → nombre → notas → guardar, sin JSON). `MaterialFormDialog`
+    (face_materials.py): grilla 50–5000 Hz (21 tercios ISO), coma/punto, clamp [0,1],
+    vacías fuera. `_create_material` en `MaterialsDialog` escribe `materials/<slug>.json`
+    (categoría «Personalizado», source «Medición propia», α dict en tercios), recarga la
+    biblioteca. **Cambio de modelo:** `Material.alpha(f)` ahora usa los datos CRUDOS
+    (`_alpha`) cuando existen, para NO colapsar los tercios a las 8 octavas de
+    `_alpha_table` (fiel a la medición, alineado con el norte de exactitud). Sin
+    regresión: los materiales de catálogo (octava completa) dan idéntico. `bench_material_
+    form.py` **19/19** + smoke de escritura/recarga.
+  - **Fix npm manual (D4).** Con motor «Automático», el auto-tuner pisaba el npm del
+    usuario hacia abajo al calcular (`_solve_fem` ~4586). Ahora el npm manual es un PISO:
+    helper puro `_reconcile_npm(npm_auto, npm_manual, h_auto)` → si manual>auto se respeta
+    (h escala ~1/npm), si manual≤auto usa el auto (cubre f_S). Es lo que necesita la
+    advertencia de validez con perturbación. `bench_schroeder_autotuner.py` **37/37**
+    (T18). Relacionado: [[mesh-autotuner-fix]].
+  - **Recap:** MANUAL v2.28 (4 ejes) + notas + memoria + commit/push + zips Mac/Win.
+    PENDIENTE (única tarea abierta de la sesión): estilo de TODOS los diálogos a fondo
+    blanco/letra negra (decidido por el usuario, reajustando textos de color; NO
+    empezado).
 
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug

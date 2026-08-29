@@ -40,3 +40,11 @@ ENTREGA_TP11/
 PRESENTACION_TP11/
 figuras para texto/
 juego/
+
+# --- Salidas de testing manual (no son del repo) ---
+# 26 Ago 2026: escenas de prueba y curvas de RT exportadas al probar la GUI.
+# NOTA: ejemplo.room / recinto2.room / silla_test.obj SI estan trackeados (samples).
+recinto3.room
+*RT60*.csv
+SIMULACION C BALCONES11.obj
+SIMULACION C BALCONES11.mtl
