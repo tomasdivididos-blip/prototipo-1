@@ -26,6 +26,7 @@ import numpy as np
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPainter, QPen, QColor, QPolygonF, QBrush
 from PyQt5.QtCore import QPointF, QRectF
+from style import apply_dialog_theme
 from PyQt5.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QCheckBox, QDoubleSpinBox, QComboBox,
@@ -286,6 +287,7 @@ class SectionWizard(QDialog):
     def __init__(self, base_polygon, default_height=3.0, grid=0.5,
                  wall_profiles=None, parent=None):
         super().__init__(parent)
+        apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Cortes laterales — perfil de cada pared")
         self.resize(680, 520)
 

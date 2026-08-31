@@ -51,7 +51,7 @@ from controls import ControlPanel
 from viewer import IsoViewer
 from geometry import make_room, room_metrics, make_arch_ribs, build_room_geometry
 from shape_dialog import ShapeDrawDialog
-from style import DARK_QSS
+from style import DARK_QSS, apply_dialog_theme
 from acoustic_panel import AcousticPanel
 from prediction_panel import PredictionPanel
 
@@ -118,8 +118,16 @@ class MainWindow(QMainWindow):
             # Etapa 2c: el FEM de ubicacion usa el modelo de amortiguamiento
             # elegido en Acustica (perturbacion -> xi por modo con materiales).
             get_damping_model=lambda: getattr(self.acoustic, "_damping_model", "a36"),
+            # Puente de absorción: Predicción hereda la decisión de la Acústica
+            # (α o materiales piso/pared/techo) en vez de volver a preguntar.
+            get_absorption=lambda: self.acoustic.absorption_state(),
         )
         self.tabs.addTab(self.prediction, "Predicción")
+        # Puente bidireccional de la decisión de absorción entre paneles.
+        self.acoustic.absorptionChoiceChanged.connect(
+            self.prediction.adopt_absorption_state)
+        self.prediction.absorptionChoiceChanged.connect(
+            self.acoustic.adopt_absorption_state)
         self.prediction.applyAsParamsRequested.connect(
             self._on_prediction_apply_params)
         self.prediction.applyAsCadRequested.connect(
@@ -358,6 +366,7 @@ class MainWindow(QMainWindow):
         prog = QProgressDialog(
             "Cargando geometria CAD...", "Cancelar", 0, 0, self
         )
+        apply_dialog_theme(prog)  # tema claro (fondo blanco)
         prog.setWindowTitle("Importacion CAD")
         prog.setMinimumDuration(200)   # solo aparece si tarda
         prog.setWindowModality(Qt.WindowModal)
@@ -429,6 +438,7 @@ class MainWindow(QMainWindow):
         prog = QProgressDialog(
             "Diagnosticando malla...", "Cancelar", 0, 0, self
         )
+        apply_dialog_theme(prog)  # tema claro (fondo blanco)
         prog.setWindowTitle("Importacion CAD")
         prog.setMinimumDuration(200)
         prog.setWindowModality(Qt.WindowModal)
@@ -1090,6 +1100,14 @@ class MainWindow(QMainWindow):
                 # la curva). Aditivo, sin bump: un .room viejo carga con 0.
                 "delay_s": float(getattr(s, "delay_s", 0.0) or 0.0),
                 "phase_deg": float(getattr(s, "phase_deg", 0.0) or 0.0),
+                # v2.29: filtro de crossover/EQ (pedido del profesor). Aditivo,
+                # sin bump: un .room viejo carga con filter_type="none".
+                "filter_type": str(getattr(s, "filter_type", "none") or "none"),
+                "filter_order": int(getattr(s, "filter_order", 4) or 4),
+                "filter_fc": float(getattr(s, "filter_fc", 100.0) or 100.0),
+                "filter_kind": str(getattr(s, "filter_kind", "lowpass") or "lowpass"),
+                "filter_ripple_db": float(getattr(s, "filter_ripple_db", 1.0) or 1.0),
+                "filter_atten_db": float(getattr(s, "filter_atten_db", 40.0) or 40.0),
             })
         # v4: asignacion de materiales por grupo de caras (estilo EASE).
         # Se guarda el mapeo {signature: material_name}. La firma es estable
@@ -1309,6 +1327,13 @@ class MainWindow(QMainWindow):
             kwargs["polarity"] = int(s.get("polarity", 1) or 1)
             kwargs["delay_s"] = float(s.get("delay_s", 0.0) or 0.0)   # v2.25
             kwargs["phase_deg"] = float(s.get("phase_deg", 0.0) or 0.0)
+            # v2.29: filtro de crossover/EQ (default "none" si el .room es viejo).
+            kwargs["filter_type"] = str(s.get("filter_type", "none") or "none")
+            kwargs["filter_order"] = int(s.get("filter_order", 4) or 4)
+            kwargs["filter_fc"] = float(s.get("filter_fc", 100.0) or 100.0)
+            kwargs["filter_kind"] = str(s.get("filter_kind", "lowpass") or "lowpass")
+            kwargs["filter_ripple_db"] = float(s.get("filter_ripple_db", 1.0) or 1.0)
+            kwargs["filter_atten_db"] = float(s.get("filter_atten_db", 40.0) or 40.0)
             src = OmniSource(**kwargs)
             # v5: reconstruir la curva de respuesta Q(f) si el .room la trae.
             resp = s.get("response")

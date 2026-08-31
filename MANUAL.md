@@ -2563,4 +2563,34 @@ Con el motor de malla en «Automático», el auto-tuner sugiere una densidad de 
 
 ---
 
-*Manual actualizado al 27 de Agosto de 2026 — v2.28.*
+**Cambios v2.29** (31 de agosto 2026): **cargar parlantes en formato CLF**, **filtro de crossover/EQ por fuente** (Butterworth, Linkwitz-Riley, Bessel, Chebyshev, elíptico), **todos los diálogos en fondo blanco/letra negra**, y **la absorción se comparte entre Acústica y Predicción**. Cuatro ejes.
+
+### Cargar la respuesta de un parlante en formato CLF
+
+El botón de respuesta de fuente ahora es **«Cargar FRD/TRF/CLF…»** y acepta archivos **CLF** binarios (`.cf2`, `.cf1`), el estándar de datos de parlantes (Common Loudspeaker Format). Al cargar uno, el programa extrae la **respuesta en eje** (sensibilidad SPL @ 1W/1m, por tercios de octava de 50 Hz a 20 kHz) y la usa como la curva Q(f) de la fuente, igual que un FRD.
+
+Lo que **no** se usa del CLF es el globo de directividad, y es a propósito: por debajo de la frecuencia de Schroeder la fuente es acústicamente omnidireccional (la longitud de onda es enorme comparada con el parlante), así que la directividad no moldea el campo modal. Meterla sería precisión falsa. El programa te avisa de esto al cargar el archivo. El lector se validó contra los valores que muestra el CLF Viewer para el mismo parlante (coincidencia exacta).
+
+### Un filtro por fuente (crossover / EQ)
+
+Cada fuente tiene ahora un grupo **«Filtro (crossover / EQ)»** en su diálogo. Elegís la **familia** de filtro, la **banda** (pasabajos o pasaaltos), el **orden** y la **frecuencia de corte**; para las familias que lo usan, aparecen además el ripple de banda de paso y la atenuación de rechazo. Familias disponibles (todas las de uso profesional en audio):
+
+- **Butterworth**: máxima planitud en la banda de paso; −3 dB en la frecuencia de corte.
+- **Linkwitz-Riley** (LR2/LR4/LR8): el estándar de crossovers; −6 dB en el corte (dos Butterworth en cascada), pasa-bajo y pasa-alto suman en fase.
+- **Bessel**: retardo de grupo plano (fase casi lineal), útil cuando importa la forma temporal.
+- **Chebyshev I / II**: corte más abrupto a cambio de ripple (en la banda de paso o en la de rechazo).
+- **Elíptico (Cauer)**: el corte más abrupto para un orden dado, con ripple en ambas bandas.
+
+El filtro se **compone** sobre la curva del parlante (magnitud y fase), la polaridad y el delay; con «Sin filtro» el resultado es idéntico a no tener filtro. El preview del diálogo muestra el filtro en vivo. El filtro se guarda en el `.room` y viaja al duplicar la fuente.
+
+### Todos los diálogos en fondo blanco, letra negra
+
+Las ventanas de diálogo (materiales, construcciones, FRF, SBIR, tabla de modos, editor de fuente, etc.) y los avisos emergentes pasaron a **fondo blanco con letra negra**, coherente con los gráficos (que ya eran claros). La ventana principal y los paneles laterales siguen con el tema oscuro. Es un cambio visual, no afecta ningún cálculo.
+
+### La absorción elegida se comparte entre Acústica y Predicción
+
+Antes, si definías la absorción de las superficies en Acústica (por ejemplo un α uniforme en el gate de Schroeder) y después ibas a Predicción, Predicción te la volvía a pedir: eran dos decisiones separadas. Ahora se **comunican**: Predicción **hereda** la absorción de Acústica (y te avisa que lo hizo) en vez de preguntar de nuevo. El α uniforme se sincroniza en los dos sentidos; los materiales por superficie se mapean a piso/paredes/techo. Cada panel puede cambiar su elección localmente, así Predicción sigue pudiendo explorar hipótesis sin pisar tu sala real.
+
+---
+
+*Manual actualizado al 31 de Agosto de 2026 — v2.29.*

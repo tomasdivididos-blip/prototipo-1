@@ -1088,6 +1088,7 @@ def summarize_zone_areas(groups: List[FaceGroup]) -> Dict[str, float]:
 try:
     from PyQt5.QtCore import Qt, pyqtSignal, QEvent
     from PyQt5.QtGui import QColor, QBrush, QDoubleValidator
+    from style import apply_dialog_theme
     from PyQt5.QtWidgets import (
         QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
         QTableWidget, QTableWidgetItem, QComboBox, QDialogButtonBox,
@@ -1125,6 +1126,7 @@ if _HAS_QT:
 
         def __init__(self, parent=None):
             super().__init__(parent)
+            apply_dialog_theme(self)  # tema claro (fondo blanco)
             self.setWindowTitle("Crear material propio (α por tercio de octava)")
             self.resize(560, 660)
             self.result_data = None
@@ -1139,7 +1141,7 @@ if _HAS_QT:
                 "cargadas y se extienden en los extremos. Después poné el nombre "
                 "y las notas, y Guardar.")
             help_lbl.setWordWrap(True)
-            help_lbl.setStyleSheet("color:#cdd6f4; font-size:9pt;")
+            help_lbl.setStyleSheet("color:#11111b; font-size:9pt;")
             v.addWidget(help_lbl)
 
             grid_host = QWidget()
@@ -1259,6 +1261,7 @@ if _HAS_QT:
                      construction_keys=None,
                      parent=None):
             super().__init__(parent)
+            apply_dialog_theme(self)  # tema claro (fondo blanco)
             self.setWindowTitle("Materiales por cara")
             self.setModal(True)
             self.resize(740, 520)
@@ -1299,7 +1302,7 @@ if _HAS_QT:
                 "superficie)."
             )
             help_lbl.setWordWrap(True)
-            help_lbl.setStyleSheet("color: #cdd6f4; font-size: 9pt;")
+            help_lbl.setStyleSheet("color: #11111b; font-size: 9pt;")
             v.addWidget(help_lbl)
 
             # Tabla principal
@@ -1332,10 +1335,10 @@ if _HAS_QT:
             f = QFormLayout(grp)
             self.lbl_zones = QLabel("—")
             self.lbl_zones.setWordWrap(True)
-            self.lbl_zones.setStyleSheet("color: #94e2d5; font-size: 9pt;")
+            self.lbl_zones.setStyleSheet("color: #179299; font-size: 9pt;")
             f.addRow("Áreas por categoría:", self.lbl_zones)
             self.lbl_rt = QLabel("—")
-            self.lbl_rt.setStyleSheet("color: #94e2d5; font-size: 9pt;")
+            self.lbl_rt.setStyleSheet("color: #179299; font-size: 9pt;")
             f.addRow("RT60 medio (500 Hz):", self.lbl_rt)
             v.addWidget(grp)
 
@@ -1534,7 +1537,7 @@ if _HAS_QT:
             (Capa 0), que es su acabado acustico. El alpha no aplica; para
             cambiarlo hay que quitar la construccion en su dialogo."""
             lbl = QLabel("→ definido por construcción")
-            lbl.setStyleSheet("color:#89b4fa; font-size:9pt; font-style:italic;")
+            lbl.setStyleSheet("color:#1e66f5; font-size:9pt; font-style:italic;")
             lbl.setToolTip(
                 "Esta superficie tiene una construcción de pared (impedancia Z).\n"
                 "El material (α) no se usa acá: un acabado por superficie.\n"

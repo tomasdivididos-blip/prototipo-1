@@ -286,6 +286,18 @@ class OmniSource:
     # delay depende de f, entra en el path de espectro y no en effective_Q().
     delay_s:        float = 0.0
     phase_deg:      float = 0.0
+    # Filtro de crossover/EQ (pedido del profesor). Es una propiedad del DRIVE
+    # (procesado), no del transductor, así que vive aparte de `response` y se
+    # COMPONE con ella (multiplica H(f)) en effective_Q_spectrum, igual que el
+    # delay/fase. filter_type="none" reduce EXACTO al comportamiento histórico.
+    # Familias en filters.FILTER_TYPES (Butterworth/Linkwitz-Riley/Bessel/
+    # Chebyshev I-II/Elíptico). fc en Hz; ripple/atten solo para Cheby/elíptico.
+    filter_type:    str   = "none"
+    filter_order:   int   = 4
+    filter_fc:      float = 100.0
+    filter_kind:    str   = "lowpass"    # "lowpass" | "highpass"
+    filter_ripple_db: float = 1.0
+    filter_atten_db:  float = 40.0
 
     def __post_init__(self):
         x, y, z = self.position
@@ -304,6 +316,12 @@ class OmniSource:
         self.polarity = -1 if int(self.polarity) < 0 else 1
         self.delay_s = float(self.delay_s)
         self.phase_deg = float(self.phase_deg)
+        self.filter_type = str(self.filter_type or "none")
+        self.filter_order = int(self.filter_order)
+        self.filter_fc = float(self.filter_fc)
+        self.filter_kind = "highpass" if self.filter_kind == "highpass" else "lowpass"
+        self.filter_ripple_db = float(self.filter_ripple_db)
+        self.filter_atten_db = float(self.filter_atten_db)
 
     def effective_Q(self) -> complex:
         """Q efectivo (escalar): recalculado desde sensibilidad si corresponde.
@@ -342,6 +360,14 @@ class OmniSource:
         if self.delay_s != 0.0 or self.phase_deg != 0.0:
             q = q * np.exp(-1j * 2.0 * np.pi * fa * self.delay_s
                            + 1j * np.radians(self.phase_deg))
+        # Filtro de crossover/EQ. Se COMPONE (magnitud + fase) sobre la curva,
+        # la polaridad y el delay. filter_type="none" -> H=1 -> sin efecto.
+        if self.filter_type and self.filter_type != "none":
+            import filters as _flt
+            q = q * _flt.filter_transfer(
+                fa, ftype=self.filter_type, order=self.filter_order,
+                fc=self.filter_fc, kind=self.filter_kind,
+                ripple_db=self.filter_ripple_db, atten_db=self.filter_atten_db)
         return q
 
     # ----- consultas ---------------------------------------------------------

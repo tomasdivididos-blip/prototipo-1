@@ -14,6 +14,7 @@ Grilla:
 
 from PyQt5.QtCore import Qt, QPointF, QRectF, pyqtSignal
 from PyQt5.QtGui import QPainter, QPen, QColor, QPolygonF
+from style import apply_dialog_theme
 from PyQt5.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QComboBox,
 )
@@ -470,7 +471,7 @@ class ShapeDrawDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Dibujar / editar forma del recinto")
         self.resize(720, 860)
-        self.setStyleSheet(_DIALOG_QSS)
+        apply_dialog_theme(self)  # tema claro (fondo blanco)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 14, 14, 14)
@@ -642,36 +643,3 @@ class ShapeDrawDialog(QDialog):
 
     def get_grid_step(self):
         return GRID_STEPS[self.combo_grid.currentIndex()]
-
-
-_DIALOG_QSS = """
-QDialog { background-color: #1e1e2e; }
-QLabel { color: #cdd6f4; }
-QLabel#DialogTitle { color: #cba6f7; font-size: 14pt; font-weight: 700; }
-QLabel#DialogInfo { color: #a6adc8; font-size: 9pt; padding-bottom: 2px; }
-QLabel#DialogStatus { color: #94e2d5; font-weight: 600; font-size: 8pt; }
-QLabel#DialogCoord { color: #f9e2af; }
-QComboBox {
-    background-color: #313244; color: #cdd6f4;
-    border: 1px solid #45475a; border-radius: 6px;
-    padding: 4px 8px; font-weight: 600; min-width: 70px;
-}
-QComboBox:hover { border-color: #89b4fa; color: #f5e0dc; }
-QComboBox::drop-down { border: none; width: 18px; }
-QComboBox QAbstractItemView {
-    background-color: #313244; color: #cdd6f4;
-    selection-background-color: #45475a; border: 1px solid #45475a;
-}
-QPushButton {
-    background-color: #313244; color: #cdd6f4;
-    border: 1px solid #45475a; border-radius: 6px;
-    padding: 7px 14px; font-weight: 600;
-}
-QPushButton:hover { background-color: #45475a; border-color: #89b4fa; color: #f5e0dc; }
-QPushButton:disabled { color: #6c7086; background-color: #181825; border-color: #313244; }
-QPushButton#DialogPrimary {
-    background-color: #89b4fa; color: #1e1e2e; border-color: #cba6f7;
-}
-QPushButton#DialogPrimary:hover { background-color: #cba6f7; }
-QPushButton#DialogPrimary:disabled { background-color: #45475a; color: #6c7086; }
-"""

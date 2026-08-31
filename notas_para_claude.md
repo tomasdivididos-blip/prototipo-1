@@ -2559,6 +2559,58 @@ bien.
     blanco/letra negra (decidido por el usuario, reajustando textos de color; NO
     empezado).
 
+- **31 Ago 2026 — v2.29 (rama dist-exe): diálogos claros + puente de absorción + filtro
+  crossover + CLF. Cuatro ejes, todos con test visual/bench. Test humano PASÓ.**
+  - **(1) Diálogos a fondo blanco/letra negra (cierra el pendiente v2.28).** `style.py`:
+    `LIGHT_QSS` + `apply_dialog_theme(w)` (paleta **Catppuccin Latte**, la variante clara
+    oficial de Mocha → mapeo oscuro→claro principiado). Se aplica por-instancia en cada
+    QDialog (cascada, anula el DARK_QSS global solo en ese subárbol; la ventana principal
+    y paneles docked siguen oscuros). `LIGHT` dict = fuente única de verdad para reajustar
+    los labels de color inline. Los `QMessageBox`/`QInputDialog` son top-level (NO heredan
+    LIGHT_QSS) → regla global scopeada dentro de `DARK_QSS` (`QMessageBox QLabel` gana a `*`),
+    así salen claros desde los ~100 call-sites estáticos sin tocarlos. Diálogos INLINE
+    (`dlg=QDialog(self)`, no subclases `class X(QDialog)`) que el barrido por clase NO
+    agarró: prediction_panel `_ask_absorption`/`_ask_shape` + 2 QProgressDialog; acoustic
+    `_compare` + 1 QProgressDialog; main 2 QProgressDialog → todos con `apply_dialog_theme`.
+    QFileDialog queda nativo del SO (no se estiliza). Verificado con `.grab()` a PNG.
+  - **(2) Puente de absorción Acústica↔Predicción (bidireccional).** Eran DOS estados
+    independientes: `acoustic._abs_choice_alpha`+FaceMaterialMap vs `prediction._abs_choice`
+    (dict). Ahora: representación normalizada `{"mode":"uniform","alpha"}` /
+    `{"mode":"materials","names":(piso,pared,techo)}` / `{"mode":"target"}` / None. Ambos
+    paneles tienen `absorption_state()`+`adopt_absorption_state()`+señal
+    `absorptionChoiceChanged`; MainWindow cablea `get_absorption` (callback) + conecta las
+    dos señales. `prediction._seed_absorption_from_acoustic()` en `_on_predict` (hereda si
+    tiene None, avisa 1×/sesión con QMessageBox, guard `_is_offscreen` para benches).
+    Política (decisión del usuario, 2 preguntas): α uniforme = auto-sync bidireccional;
+    materiales = Acústica→Predicción mapeados a piso/pared/techo (Pred→Ac queda al botón
+    explícito «Aplicar a Acústica», NO pisa la sala real). Resuelve el bug reportado
+    (elegir α=0.05 en Acústica y que Predicción re-pregunte). Test `test_bridge` 10/10.
+  - **(3) Filtro de crossover/EQ por fuente (pedido del profesor).** Núcleo nuevo
+    `filters.py` (numpy/scipy, D0): `filter_transfer(freq, ftype, order, fc, kind, ripple,
+    atten)` → H(f) COMPLEJO de prototipo ANALÓGICO (`scipy.signal` butter/cheby1/cheby2/
+    ellip/bessel + `freqs`, s=jω = convención e^{+iωt} del solver, se multiplica directo).
+    LR = Butterworth(N/2)². 6 familias (Butterworth/Linkwitz-Riley/Bessel/Chebyshev I-II/
+    Elíptico), lowpass+highpass. Campos en `OmniSource` (filter_type/order/fc/kind/ripple_db/
+    atten_db, "none"=exacto histórico), compuesto en `effective_Q_spectrum` tras el delay.
+    UI en `SourceEditDialog`: grupo con combos + ripple/atten condicionales + preview en
+    vivo (`_on_filter_type_changed`/`_filter_state`). `.room` aditivo + duplicar. `bench_
+    filters.py` 16/16 vs teoría (−3/−6 dB en fc, roll-off −6N dB/oct, LR=Butter², ripple).
+  - **(4) CLF (Common Loudspeaker Format), lector de respuesta EN EJE (pedido del profesor).**
+    El usuario pasó 3 `.cf2` QSC (EASE SpeakerLab v2.0c) + el ground truth del CLF Viewer
+    (27 valores del AC-C2T). Reversé el CF2 (NO encriptado, binario compilado): on-axis =
+    **27 float32 LE @ byte 4764**, dB SPL @1W/1m, 1/3 oct 50 Hz–20 kHz (frecuencias
+    IMPLÍCITAS del estándar, no en el archivo). Antes del array: 2.83 V (=2.828 Vrms;
+    2.83²/8Ω=1W) → ancla de fallback. `frd.load_clf(path)` → (freq, spl, None) como load_frd;
+    `_find_clf_onaxis` (offset fijo validado + fallback por marcador de tensión). Solo la
+    respuesta en eje; la directividad se descarta (omni bajo Schroeder). UI: `.cf2/.cf1/.clf`
+    en `_load_frd` (dispatch por extensión, popup explicando el descarte de directividad).
+    `bench_clf.py`: match EXACTO 0.000 dB vs viewer + los 3 archivos + integración
+    SourceResponse. Memoria [[clf-loader]], [[source-filters]].
+    **PENDIENTE opcional CLF:** generalizar a otras versiones/exportadores (solo se validó
+    v2.0c EASE); leer directividad si alguna vez importa (no bajo Schroeder).
+  - Benches del turno TODOS VERDES: filters 16/16, clf, source_response oráculos, polarity
+    26/26, frd, trf 20/20, bridge 10/10. Sin regresión.
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.

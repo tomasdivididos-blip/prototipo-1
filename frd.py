@@ -176,3 +176,102 @@ def minimum_phase(freq: np.ndarray, spl_db: np.ndarray) -> np.ndarray:
     # phase = -Im{ analytic(logmag) }  (signo validado con el oraculo del HP).
     ph_uni = -np.imag(hilbert(ext))[n:2 * n]
     return np.interp(f, f_uni, ph_uni)
+
+
+# ---------------------------------------------------------------------------
+# CLF (Common Loudspeaker Format) — lector de la RESPUESTA EN EJE
+# ---------------------------------------------------------------------------
+# Formato binario CF2 (1/3 de octava, 5°) / CF1 (octava, 10°). Es un binario
+# COMPILADO, no encriptado (se leen strings de fabricante/modelo y arrays de
+# float32), reverseado sobre 3 archivos QSC exportados por EASE SpeakerLab
+# (v2.0c): q_spk_acc_2t / acs_4t / acs_6t.
+#
+# Lo que este lector extrae es SOLO la respuesta en eje (sensibilidad SPL vs
+# frecuencia), que es lo único físicamente relevante para el solver modal bajo
+# Schroeder: ahí las fuentes son omnidireccionales, así que el globo de
+# directividad del CLF no moldea el campo. La directividad se descarta con
+# fundamento (ver notas: pedido del profesor + sutileza física).
+#
+# Layout hallado (validado contra el CLF Viewer, ver bench_clf.py):
+#   - On-axis = 27 x float32 LE en el byte 4764, en dB SPL @ 1W/1m.
+#   - Precedido por la tensión de referencia 2.83 V (=2.828 Vrms; 2.83²/8Ω=1W)
+#     repetida -> se usa como ANCLA robusta si el offset fijo no valida.
+#   - Frecuencias IMPLÍCITAS: centros ISO 1/3 de octava 50 Hz .. 20 kHz (27),
+#     no están en el archivo (son estándar del formato). El AC-C2T reproduce
+#     EXACTO los 27 valores del viewer (error 0.0).
+#
+# Ref. formato: CLF Group (clfgroup.org). El CF2/CF1 no publica el layout
+# binario; esto es ingeniería inversa validada por medición del propio viewer.
+_CLF_ONAXIS_OFFSET = 4764          # byte del array on-axis (v2.0c EASE export)
+_CLF_NBANDS = 27                   # 1/3 octava, 50 Hz .. 20 kHz
+_CLF_REF_VOLTAGE = 2.83            # V (2.828 Vrms) -> ancla de fallback
+# Centros ISO 1/3 de octava (R40 preferidas), 50 Hz .. 20 kHz.
+CLF_THIRD_OCTAVE_HZ = np.array([
+    50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250,
+    1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000, 20000,
+], dtype=float)
+
+
+def _clf_onaxis_plausible(spl: np.ndarray) -> bool:
+    """True si un candidato de 27 valores parece una respuesta en eje real:
+    finitos, en rango SPL físico y suaves (sin saltos > 20 dB entre bandas)."""
+    if spl.shape[0] != _CLF_NBANDS or not np.all(np.isfinite(spl)):
+        return False
+    if spl.min() < 20.0 or spl.max() > 150.0:
+        return False
+    return bool(np.max(np.abs(np.diff(spl))) < 20.0)
+
+
+def _find_clf_onaxis(data: bytes) -> np.ndarray:
+    """Ubica los 27 float32 de la respuesta en eje. Primero el offset fijo
+    (v2.0c); si no valida, ancla en la corrida de tensión de referencia 2.83 V.
+    Lanza ValueError si no encuentra un candidato plausible."""
+    N = _CLF_NBANDS
+
+    def _read(off):
+        if off < 0 or off + 4 * N > len(data):
+            return None
+        return np.frombuffer(data[off:off + 4 * N], dtype="<f4").astype(float)
+
+    # 1) offset fijo validado
+    spl = _read(_CLF_ONAXIS_OFFSET)
+    if spl is not None and _clf_onaxis_plausible(spl):
+        return spl
+
+    # 2) ancla: corrida de >=3 float32 ~ tensión de referencia (2..4 V), y luego
+    #    los primeros 27 valores plausibles que aparezcan (saltando ceros).
+    f32 = np.frombuffer(data[:len(data) // 4 * 4], dtype="<f4")
+    is_ref = np.isfinite(f32) & (f32 > 2.0) & (f32 < 4.0)
+    i = 0
+    while i < len(f32) - N:
+        if is_ref[i] and is_ref[i + 1] and is_ref[i + 2]:
+            j = i + 3
+            while j < len(f32) - N and abs(f32[j]) < 1e-6:   # saltar ceros
+                j += 1
+            cand = f32[j:j + N].astype(float)
+            if _clf_onaxis_plausible(cand):
+                return cand
+            i = j
+        i += 1
+    raise ValueError(
+        "CLF: no se encontró un array de respuesta en eje plausible "
+        "(27 bandas de 1/3 de octava). ¿Es un .cf2/.cf1 exportado por EASE?")
+
+
+def load_clf(path: str) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
+    """Lee la respuesta EN EJE de un CLF binario (.cf2/.cf1) ->
+    (freq_hz, spl_db, phase_deg=None), misma firma que load_frd.
+
+    Extrae solo la sensibilidad on-axis SPL(f) (dB @ 1W/1m); la directividad se
+    descarta (irrelevante bajo Schroeder). El anclaje de nivel se maneja igual
+    que un FRD absoluto al construir la SourceResponse.
+
+    Lanza ValueError si el archivo no parece un CLF binario parseable.
+    """
+    with open(path, "rb") as fh:
+        data = fh.read()
+    if len(data) < _CLF_ONAXIS_OFFSET + 4 * _CLF_NBANDS:
+        raise ValueError(f"CLF '{path}': archivo demasiado corto para ser CF2/CF1.")
+    spl = _find_clf_onaxis(data)
+    freq = CLF_THIRD_OCTAVE_HZ.copy()
+    return freq, spl, None

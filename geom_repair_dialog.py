@@ -26,6 +26,7 @@ import numpy as np
 import pyqtgraph.opengl as gl
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
+from style import apply_dialog_theme
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QPlainTextEdit, QSplitter,
@@ -137,6 +138,7 @@ class _VertexEditDialog(QDialog):
 
     def __init__(self, mesh, hole, parent=None):
         super().__init__(parent)
+        apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Editar vertice del hueco")
         self._mesh = mesh
         self._hole = hole
@@ -214,6 +216,7 @@ class MeshImportDialog(QDialog):
 
     def __init__(self, mesh, diagnosis, path: str = "", parent=None):
         super().__init__(parent)
+        apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Importar CAD — Diagnostico y reparacion")
         self.resize(1180, 680)         # +100 px para acomodar el panel izq
         self._mesh = mesh.copy()
@@ -234,7 +237,7 @@ class MeshImportDialog(QDialog):
         # Header con info del archivo
         h0 = QHBoxLayout()
         self.lbl_path = QLabel(f"<b>Archivo:</b> {self._path or '(en memoria)'}")
-        self.lbl_path.setStyleSheet("color: #cdd6f4;")
+        self.lbl_path.setStyleSheet("color: #11111b;")
         h0.addWidget(self.lbl_path, 1)
         outer.addLayout(h0)
 

@@ -26,6 +26,7 @@ from typing import Callable, Optional
 import pyqtgraph as pg
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QDoubleValidator, QColor
+from style import apply_dialog_theme
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QLabel,
     QPushButton, QListWidget, QListWidgetItem, QDoubleSpinBox, QSpinBox,
@@ -105,6 +106,7 @@ class SourceEditDialog(QDialog):
                  dims_hint: Optional[tuple] = None, parent=None,
                  get_walls=None):
         super().__init__(parent)
+        apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Fuente acústica")
         # Callback opcional -> lista de (centroide(3,), normal(3,)) de las paredes
         # (para "Pegar a pared más cercana"). El panel lo arma con los face groups.
@@ -153,11 +155,11 @@ class SourceEditDialog(QDialog):
             "dB SPL medido a 1 W de potencia eléctrica y 1 m de distancia\n"
             "(dato estándar de ficha técnica del altavoz)."
         )
-        note.setStyleSheet("color: #94a3b8; font-size: 8pt;")
+        note.setStyleSheet("color: #6c6f85; font-size: 8pt;")
         layout.addRow("", note)
 
         self.lbl_q = QLabel()
-        self.lbl_q.setStyleSheet("color: #94e2d5; font-size: 9pt;")
+        self.lbl_q.setStyleSheet("color: #179299; font-size: 9pt;")
         layout.addRow("→ Q equivalente:", self.lbl_q)
         self._update_q_label()
         self.sb_sens.valueChanged.connect(self._update_q_label)
@@ -176,7 +178,7 @@ class SourceEditDialog(QDialog):
             "Afecta FRF, campo 3D, SBIR y el optimizador de ubicación."
         )
         self.lbl_polarity = QLabel()
-        self.lbl_polarity.setStyleSheet("color: #94e2d5; font-size: 9pt;")
+        self.lbl_polarity.setStyleSheet("color: #179299; font-size: 9pt;")
         pol_row = QHBoxLayout()
         pol_row.addWidget(self.chk_polarity)
         pol_row.addWidget(self.lbl_polarity, 1)
@@ -196,6 +198,17 @@ class SourceEditDialog(QDialog):
                            if source is not None else 0.0)
         self._phase0_deg = (float(getattr(source, "phase_deg", 0.0) or 0.0)
                             if source is not None else 0.0)
+        # v2.29: filtro de crossover/EQ (campos re-leibles al reabrir la fuente).
+        self._filt0 = {
+            "type":   str(getattr(source, "filter_type", "none") or "none"),
+            "order":  int(getattr(source, "filter_order", 4) or 4),
+            "fc":     float(getattr(source, "filter_fc", 100.0) or 100.0),
+            "kind":   str(getattr(source, "filter_kind", "lowpass") or "lowpass"),
+            "ripple": float(getattr(source, "filter_ripple_db", 1.0) or 1.0),
+            "atten":  float(getattr(source, "filter_atten_db", 40.0) or 40.0),
+        } if source is not None else {
+            "type": "none", "order": 4, "fc": 100.0, "kind": "lowpass",
+            "ripple": 1.0, "atten": 40.0}
 
         grp_resp = QGroupBox("Respuesta en frecuencia  Q(f)   (opcional)")
         gl = QVBoxLayout(grp_resp)
@@ -206,7 +219,7 @@ class SourceEditDialog(QDialog):
         gl.addWidget(self.lbl_resp)
 
         brow = QHBoxLayout()
-        btn_load = QPushButton("Cargar FRD/TRF…")
+        btn_load = QPushButton("Cargar FRD/TRF/CLF…")
         btn_load.clicked.connect(self._load_frd)
         self.btn_clear_resp = QPushButton("Quitar")
         self.btn_clear_resp.clicked.connect(self._clear_resp)
@@ -270,6 +283,61 @@ class SourceEditDialog(QDialog):
         layout.addRow(grp_resp)
         self._refresh_resp_ui()
 
+        # --- Filtro de crossover / EQ (v2.29, pedido del profesor) -----------
+        import filters as _flt
+        grp_filt = QGroupBox("Filtro (crossover / EQ)   (opcional)")
+        ff = QFormLayout(grp_filt)
+        self.combo_filt = QComboBox()
+        for key, (lbl, _r, _a) in _flt.FILTER_TYPES.items():
+            self.combo_filt.addItem(lbl, key)
+        i0 = self.combo_filt.findData(self._filt0["type"])
+        self.combo_filt.setCurrentIndex(i0 if i0 >= 0 else 0)
+        ff.addRow("Tipo:", self.combo_filt)
+
+        self.combo_filt_kind = QComboBox()
+        self.combo_filt_kind.addItem("Pasabajos", "lowpass")
+        self.combo_filt_kind.addItem("Pasaaltos", "highpass")
+        ik = self.combo_filt_kind.findData(self._filt0["kind"])
+        self.combo_filt_kind.setCurrentIndex(ik if ik >= 0 else 0)
+        ff.addRow("Banda:", self.combo_filt_kind)
+
+        self.combo_filt_order = QComboBox()   # se repuebla según el tipo
+        ff.addRow("Orden:", self.combo_filt_order)
+
+        self.sb_filt_fc = QDoubleSpinBox()
+        self.sb_filt_fc.setRange(5.0, 20000.0)
+        self.sb_filt_fc.setDecimals(1)
+        self.sb_filt_fc.setSingleStep(5.0)
+        self.sb_filt_fc.setValue(self._filt0["fc"])
+        self.sb_filt_fc.setSuffix(" Hz  (corte)")
+        ff.addRow("f. corte:", self.sb_filt_fc)
+
+        self.sb_filt_ripple = QDoubleSpinBox()
+        self.sb_filt_ripple.setRange(0.01, 6.0)
+        self.sb_filt_ripple.setDecimals(2)
+        self.sb_filt_ripple.setSingleStep(0.1)
+        self.sb_filt_ripple.setValue(self._filt0["ripple"])
+        self.sb_filt_ripple.setSuffix(" dB  (ripple de paso)")
+        self.lbl_filt_ripple = QLabel("Ripple:")
+        ff.addRow(self.lbl_filt_ripple, self.sb_filt_ripple)
+
+        self.sb_filt_atten = QDoubleSpinBox()
+        self.sb_filt_atten.setRange(10.0, 120.0)
+        self.sb_filt_atten.setDecimals(0)
+        self.sb_filt_atten.setSingleStep(5.0)
+        self.sb_filt_atten.setValue(self._filt0["atten"])
+        self.sb_filt_atten.setSuffix(" dB  (rechazo)")
+        self.lbl_filt_atten = QLabel("Atenuación:")
+        ff.addRow(self.lbl_filt_atten, self.sb_filt_atten)
+
+        self.combo_filt.currentIndexChanged.connect(self._on_filter_type_changed)
+        for w in (self.combo_filt_kind, self.combo_filt_order, self.sb_filt_fc,
+                  self.sb_filt_ripple, self.sb_filt_atten):
+            (w.currentIndexChanged if isinstance(w, QComboBox)
+             else w.valueChanged).connect(self._draw_resp_preview)
+        self._on_filter_type_changed()   # puebla orden + muestra/oculta ripple/atten
+        layout.addRow(grp_filt)
+
         # --- Bafle: orientación + dimensiones (T4, visual + insumo de T8) ----
         grp_baf = QGroupBox("Bafle (visual)")
         fb = QFormLayout(grp_baf)
@@ -311,14 +379,14 @@ class SourceEditDialog(QDialog):
         self.btn_snap_wall.clicked.connect(self._snap_to_wall)
         fb.addRow(self.btn_snap_wall)
         self.lbl_mounted = QLabel("Montada en pared ✓" if self._mounted else "")
-        self.lbl_mounted.setStyleSheet("color: #94e2d5; font-size: 8pt;")
+        self.lbl_mounted.setStyleSheet("color: #179299; font-size: 8pt;")
         fb.addRow("", self.lbl_mounted)
         layout.addRow(grp_baf)
 
         if dims_hint:
             hint = QLabel(f"Recinto: {dims_hint[0]:.1f} × "
                           f"{dims_hint[1]:.1f} × {dims_hint[2]:.1f} m")
-            hint.setStyleSheet("color: #585b70; font-size: 8pt;")
+            hint.setStyleSheet("color: #6c6f85; font-size: 8pt;")
             layout.addRow("", hint)
 
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -348,29 +416,45 @@ class SourceEditDialog(QDialog):
                                       f_ref=self._F_REF))
 
     def _load_frd(self):
-        from frd import load_frd, load_trf, minimum_phase, _TRF_MAGIC
+        from frd import load_frd, load_trf, load_clf, minimum_phase, _TRF_MAGIC
         path, _ = QFileDialog.getOpenFileName(
-            self, "Cargar respuesta FRD / TRF", "",
-            "Respuesta (*.frd *.trf *.txt *.dat);;Todos los archivos (*)")
+            self, "Cargar respuesta FRD / TRF / CLF", "",
+            "Respuesta (*.frd *.trf *.txt *.dat *.cf2 *.cf1 *.clf);;"
+            "CLF (*.cf2 *.cf1 *.clf);;Todos los archivos (*)")
         if not path:
             return
-        # Sniff por contenido (no por extension): TRF binario = magic JACKREF!
+        # Dispatch: CLF binario por extension (.cf2/.cf1/.clf; no tiene magic
+        # ASCII limpio), TRF binario por magic JACKREF!, resto = FRD de texto.
+        import os
+        is_clf = os.path.splitext(path)[1].lower() in (".cf2", ".cf1", ".clf")
         try:
             with open(path, "rb") as fh:
-                is_trf = fh.read(8) == _TRF_MAGIC
+                is_trf = (not is_clf) and fh.read(8) == _TRF_MAGIC
         except Exception as e:
-            QMessageBox.warning(self, "FRD/TRF", f"No se pudo abrir:\n{e}")
+            QMessageBox.warning(self, "FRD/TRF/CLF", f"No se pudo abrir:\n{e}")
             return
         coh = None
         try:
-            if is_trf:
+            if is_clf:
+                # CLF: solo la respuesta EN EJE (SPL @1W/1m). La directividad se
+                # descarta (irrelevante bajo Schroeder, fuente omni). Fase None
+                # -> cae en el flujo de "fase ausente" de abajo.
+                freq, spl, phase_deg = load_clf(path)
+            elif is_trf:
                 freq, spl, phase_deg, coh = load_trf(path)
             else:
                 freq, spl, phase_deg = load_frd(path)
         except Exception as e:
-            QMessageBox.warning(self, "FRD/TRF",
+            QMessageBox.warning(self, "FRD/TRF/CLF",
                                 f"No se pudo leer el archivo:\n{e}")
             return
+        if is_clf:
+            QMessageBox.information(
+                self, "CLF cargado (respuesta en eje)",
+                "Se cargó la respuesta EN EJE del CLF (sensibilidad SPL @1W/1m, "
+                "1/3 de octava 50 Hz–20 kHz).\n\nLa directividad del globo se "
+                "descarta a propósito: bajo la frecuencia de Schroeder la fuente "
+                "es omnidireccional y el globo no moldea el campo modal.")
         if is_trf:
             # TF dual-channel: dB relativos (~0 en banda), no SPL absoluto.
             # Anclaje "Absoluto" mapearia 0 dB -> 20 uPa @1m (absurdo). Se
@@ -449,6 +533,45 @@ class SourceEditDialog(QDialog):
                 self.lbl_resp.setText("Curva cargada.")
         self._draw_resp_preview()
 
+    def _on_filter_type_changed(self):
+        """Repuebla los órdenes válidos y muestra/oculta ripple/atten según la
+        familia. Con tipo 'none' deshabilita los controles. Redibuja el preview."""
+        import filters as _flt
+        ftype = self.combo_filt.currentData()
+        is_none = (ftype in (None, "none"))
+        # órdenes válidos
+        cur = self.combo_filt_order.currentData()
+        self.combo_filt_order.blockSignals(True)
+        self.combo_filt_order.clear()
+        for o in _flt.valid_orders(ftype if not is_none else "butterworth"):
+            self.combo_filt_order.addItem(str(o), o)
+        want = cur if cur is not None else self._filt0.get("order", 4)
+        j = self.combo_filt_order.findData(want)
+        self.combo_filt_order.setCurrentIndex(j if j >= 0 else 0)
+        self.combo_filt_order.blockSignals(False)
+        # ripple/atten según la familia
+        _lbl, uses_ripple, uses_atten = _flt.FILTER_TYPES.get(
+            ftype, ("", False, False))
+        for w, on in ((self.lbl_filt_ripple, uses_ripple),
+                      (self.sb_filt_ripple, uses_ripple),
+                      (self.lbl_filt_atten, uses_atten),
+                      (self.sb_filt_atten, uses_atten)):
+            w.setVisible(on and not is_none)
+        for w in (self.combo_filt_kind, self.combo_filt_order, self.sb_filt_fc):
+            w.setEnabled(not is_none)
+        self._draw_resp_preview()
+
+    def _filter_state(self) -> dict:
+        """Lee los controles de filtro -> dict de campos de OmniSource."""
+        return {
+            "filter_type": self.combo_filt.currentData() or "none",
+            "filter_order": int(self.combo_filt_order.currentData() or 4),
+            "filter_fc": float(self.sb_filt_fc.value()),
+            "filter_kind": self.combo_filt_kind.currentData() or "lowpass",
+            "filter_ripple_db": float(self.sb_filt_ripple.value()),
+            "filter_atten_db": float(self.sb_filt_atten.value()),
+        }
+
     def _draw_resp_preview(self):
         if self._resp_canvas is None:
             return
@@ -469,10 +592,23 @@ class SourceEditDialog(QDialog):
                 fa = np.linspace(max(fmin, 1.0), fmax, 400)
                 g = self._response.gain_spectrum(fa)
             else:
-                fa = np.geomspace(20.0, 500.0, 200)
+                # eje ancho si hay filtro, para que se vea el roll-off completo
+                _fc = float(self.sb_filt_fc.value())
+                _hi = 500.0 if self.combo_filt.currentData() in (None, "none") \
+                    else max(2000.0, 4.0 * _fc)
+                fa = np.geomspace(20.0, _hi, 300)
                 g = np.ones_like(fa, dtype=complex)
             g = g * np.exp(-1j * 2.0 * np.pi * fa * tau + 1j * phi0)
-            solid = (self._response is not None) or has_dp
+            # Filtro (v2.29): compone H(f) sobre la curva/plana (magnitud + fase).
+            fst = self._filter_state()
+            has_filt = fst["filter_type"] not in (None, "none")
+            if has_filt:
+                import filters as _flt
+                g = g * _flt.filter_transfer(
+                    fa, ftype=fst["filter_type"], order=fst["filter_order"],
+                    fc=fst["filter_fc"], kind=fst["filter_kind"],
+                    ripple_db=fst["filter_ripple_db"], atten_db=fst["filter_atten_db"])
+            solid = (self._response is not None) or has_dp or has_filt
             col_m = '#1f6fbf' if solid else '#888888'
             col_p = '#e07000' if solid else '#888888'
             ls = '-' if solid else '--'
@@ -482,12 +618,15 @@ class SourceEditDialog(QDialog):
             self._resp_ax_p.semilogx(fa, np.degrees(np.angle(g)),
                                      color=col_p, lw=1.4, ls=ls)
             if self._response is None:
-                self._resp_ax_m.set_ylim(-12, 12)
+                self._resp_ax_m.set_ylim(-42 if has_filt else -12, 12)
                 self._resp_ax_p.set_ylim(-180, 180)
-                self._resp_ax_m.set_title(
-                    "delay / fase (magnitud plana)" if has_dp
-                    else "default: plana (Q constante)",
-                    fontsize=7, color='#666666')
+                if has_filt:
+                    _t = f"filtro {fst['filter_type']} · fc={fst['filter_fc']:.0f} Hz"
+                elif has_dp:
+                    _t = "delay / fase (magnitud plana)"
+                else:
+                    _t = "default: plana (Q constante)"
+                self._resp_ax_m.set_title(_t, fontsize=7, color='#666666')
             self._resp_ax_m.set_ylabel("g [dB]", fontsize=7)
             self._resp_ax_p.set_ylabel("fase [°]", fontsize=7)
             self._resp_ax_p.set_xlabel("Hz", fontsize=7)
@@ -558,6 +697,7 @@ class SourceEditDialog(QDialog):
             polarity=(-1 if self.chk_polarity.isChecked() else 1),
             delay_s=self.sb_delay.value() / 1000.0,     # v2.25: campos propios
             phase_deg=self.sb_phase.value(),
+            **self._filter_state(),                     # v2.29: filtro
         )
         src.response = self._response    # Fase 2: preservar la curva Q(f)
         return src
@@ -597,6 +737,7 @@ class FurnitureEditDialog(QDialog):
     def __init__(self, furn=None, mat_name=None, mat_names=None,
                  dims_hint=None, default_pos=None, parent=None):
         super().__init__(parent)
+        apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Editar mueble" if furn is not None else "Añadir mueble")
         mat_names = list(mat_names or [])
         Lx, Ly, _Lz = dims_hint or (5.0, 4.0, 3.0)
@@ -850,6 +991,7 @@ class FRFDialog(QDialog):
     def __init__(self, frf_result, modal_freqs=None, parent=None,
                  fom=None, fom_band=None, eqc=None, eqc_band=None):
         super().__init__(parent)
+        apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle(f"FRF — {frf_result.method.upper()}")
         self.resize(980, 580)
         self._fig = None
@@ -933,7 +1075,7 @@ class FRFDialog(QDialog):
                 f"     ·     consistencia espacial (FoM_espacial): "
                 f"{fom.FoM_espacial:.2f} dB" + band_txt
             )
-            fom_lbl.setStyleSheet("color:#ffffff; font-size:9pt; font-weight:600;")
+            fom_lbl.setStyleSheet("color:#11111b; font-size:9pt; font-weight:600;")
             fom_lbl.setWordWrap(True)
             fom_lbl.setToolTip(
                 "FoM_flat: planitud de la respuesta media espacial (más bajo = "
@@ -958,7 +1100,7 @@ class FRFDialog(QDialog):
                 f"irreducible (varía asiento-a-asiento). Zonas en rojo = NO se "
                 f"arreglan con EQ → exigen acústica/ubicación." + sube
             )
-            eq_lbl.setStyleSheet("color:#ffffff; font-size:9pt; font-weight:600;")
+            eq_lbl.setStyleSheet("color:#11111b; font-size:9pt; font-weight:600;")
             eq_lbl.setWordWrap(True)
             eq_lbl.setToolTip(
                 "Diagnóstico C13/C21 (fase mínima vs no mínima):\n"
@@ -987,7 +1129,7 @@ class FRFDialog(QDialog):
         audio_row.addWidget(btn_stop)
 
         self.lbl_audio_status = QLabel("")
-        self.lbl_audio_status.setStyleSheet("color:#94a3b8; font-size:8pt;")
+        self.lbl_audio_status.setStyleSheet("color:#6c6f85; font-size:8pt;")
         audio_row.addWidget(self.lbl_audio_status, 1)
 
         v.addLayout(audio_row)
@@ -1092,6 +1234,7 @@ class SBIRDialog(QDialog):
     def __init__(self, result, f_lo: float = 20.0, f_hi: float = 500.0,
                  parent=None, modal_db=None, f_schroeder=None):
         super().__init__(parent)
+        apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("SBIR — interferencia fuente-frontera")
         self.resize(980, 600)
         self._fig = None
@@ -1308,6 +1451,7 @@ class SliceHeatmapDialog(QDialog):
     def __init__(self, field_slice, mode_name: str, kind: int,
                  markers=None, parent=None):
         super().__init__(parent)
+        apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowFlags(self.windowFlags() | Qt.Window)  # independiente
         self._fig = None
         self._fs = None
@@ -1552,6 +1696,7 @@ class RTComparisonDialog(QDialog):
 
     def __init__(self, panel: "AcousticPanel", parent=None):
         super().__init__(parent)
+        apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Tiempo de reverberacion — comparativa de metodos")
         self.resize(1080, 580)
         self._panel = panel
@@ -1695,7 +1840,7 @@ class RTComparisonDialog(QDialog):
             "con materiales muy absorbentes Eyring da valores menores."
         )
         note.setWordWrap(True)
-        note.setStyleSheet("color: #94a3b8; font-size: 8pt; padding: 4px;")
+        note.setStyleSheet("color: #6c6f85; font-size: 8pt; padding: 4px;")
         right.addWidget(note)
         right.addStretch(1)
 
@@ -2077,6 +2222,7 @@ class CompareDialog(QDialog):
 
     def __init__(self, data: dict, parent=None):
         super().__init__(parent)
+        apply_dialog_theme(self)  # tema claro (fondo blanco)
         from PyQt5.QtWidgets import QTabWidget
         self.setWindowTitle("Comparar puntos de escucha")
         self.resize(880, 600)
@@ -2127,7 +2273,7 @@ class CompareDialog(QDialog):
             f"Fila CONJUNTO: <b>VSA</b> = σ_f del promedio espacial (planitud del "
             f"set) y <b>MSV</b> = media de σ entre posiciones (consistencia).")
         note.setWordWrap(True)
-        note.setStyleSheet("color: #94a3b8; font-size: 9pt;")
+        note.setStyleSheet("color: #6c6f85; font-size: 9pt;")
         v.addWidget(note)
         rows = self._fom_rows()
         self.table = QTableWidget(len(rows), 3)
@@ -2148,7 +2294,7 @@ class CompareDialog(QDialog):
         # La fila CONJUNTO usa las etiquetas VSA/MSV en el header conceptual:
         lbl = QLabel("En la fila CONJUNTO: columna planitud = <b>VSA</b>, "
                      "columna desvío = <b>MSV</b>.")
-        lbl.setStyleSheet("color: #94a3b8; font-size: 9pt;")
+        lbl.setStyleSheet("color: #6c6f85; font-size: 9pt;")
         v.addWidget(lbl)
         row = QHBoxLayout()
         for fmt in ("csv", "txt", "png"):
@@ -2250,6 +2396,7 @@ class ModeTableDialog(QDialog):
 
     def __init__(self, data: dict, parent=None):
         super().__init__(parent)
+        apply_dialog_theme(self)  # tema claro (fondo blanco)
         from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
         self.setWindowTitle("Modos: corrimiento Δfₙ y amortiguamiento ξₙ")
         self.resize(720, 560)
@@ -2268,7 +2415,7 @@ class ModeTableDialog(QDialog):
             f"(FRF/campo/FoM); la <i>forma</i> modal no cambia (perturbación "
             f"de 1er orden). RT60ₙ = 6.908/(ξₙ·2π·f) del modo aislado.")
         note.setWordWrap(True)
-        note.setStyleSheet("color: #94a3b8; font-size: 9pt;")
+        note.setStyleSheet("color: #6c6f85; font-size: 9pt;")
         v.addWidget(note)
 
         if data["constructions"]:
@@ -2314,7 +2461,7 @@ class ModeTableDialog(QDialog):
             txt = (f"Corrimiento máximo: modo {i_max} · "
                    f"{f0:.2f} → {f1:.2f} Hz (Δ = {d[i_max]:+.2f} Hz).")
         lbl = QLabel(txt)
-        lbl.setStyleSheet("color: #94e2d5; font-size: 10pt;")
+        lbl.setStyleSheet("color: #179299; font-size: 10pt;")
         return lbl
 
     @staticmethod
@@ -2391,6 +2538,7 @@ class AbsorptionChoiceDialog(QDialog):
 
     def __init__(self, mat_names, parent=None, default_alpha: float = 0.05):
         super().__init__(parent)
+        apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Absorción del recinto")
         self.setMinimumWidth(520)
         lay = QVBoxLayout(self)
@@ -2427,7 +2575,7 @@ class AbsorptionChoiceDialog(QDialog):
         )
         row_a.addWidget(self.sb_alpha)
         self.lbl_alpha_hint = QLabel("")
-        self.lbl_alpha_hint.setStyleSheet("color: #94e2d5; font-size: 9pt;")
+        self.lbl_alpha_hint.setStyleSheet("color: #179299; font-size: 9pt;")
         row_a.addWidget(self.lbl_alpha_hint)
         row_a.addStretch(1)
         lay.addLayout(row_a)
@@ -2459,7 +2607,7 @@ class AbsorptionChoiceDialog(QDialog):
             "retocarlos cara por cara en «Materiales…»."
         )
         note.setWordWrap(True)
-        note.setStyleSheet("color: #94e2d5; font-size: 9pt;")
+        note.setStyleSheet("color: #179299; font-size: 9pt;")
         lay.addWidget(note)
 
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -2507,6 +2655,7 @@ class ConstructionEditorDialog(QDialog):
 
     def __init__(self, spec=None, parent=None):
         super().__init__(parent)
+        apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Construcción de pared")
         self.resize(720, 460)
         self.spec = None
@@ -2751,6 +2900,7 @@ class WallConstructionsDialog(QDialog):
     def __init__(self, groups, construction_map, parent=None,
                  patches=None, furniture=None):
         super().__init__(parent)
+        apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Construcciones (paredes, parches y muebles)")
         self.resize(700, 540)
         self.result_map = dict(construction_map or {})
@@ -2773,7 +2923,7 @@ class WallConstructionsDialog(QDialog):
             "corrimiento de fₙ); las superficies sin construcción usan el α del "
             "material como hasta ahora.")
         help_lbl.setWordWrap(True)
-        help_lbl.setStyleSheet("color:#cdd6f4; font-size:9pt;")
+        help_lbl.setStyleSheet("color:#11111b; font-size:9pt;")
         root.addWidget(help_lbl)
 
         self.list_faces = QListWidget()
@@ -2857,6 +3007,9 @@ class AcousticPanel(QWidget):
     # se encarga del FileDialog + diagnosis + repair dialog.
     cadImportRequested = pyqtSignal()
     cadClearRequested  = pyqtSignal()
+    # Decisión de absorción del gate (α o materiales), para que Predicción la
+    # herede sin volver a preguntar. Emite el estado normalizado o None.
+    absorptionChoiceChanged = pyqtSignal(object)
 
     def __init__(self, viewer, get_surface: Callable, get_dims_hint=None):
         """
@@ -3741,7 +3894,13 @@ class AcousticPanel(QWidget):
                           active=getattr(s, "active", True),
                           polarity=getattr(s, "polarity", 1),
                           delay_s=getattr(s, "delay_s", 0.0),      # v2.25
-                          phase_deg=getattr(s, "phase_deg", 0.0))
+                          phase_deg=getattr(s, "phase_deg", 0.0),
+                          filter_type=getattr(s, "filter_type", "none"),  # v2.29
+                          filter_order=getattr(s, "filter_order", 4),
+                          filter_fc=getattr(s, "filter_fc", 100.0),
+                          filter_kind=getattr(s, "filter_kind", "lowpass"),
+                          filter_ripple_db=getattr(s, "filter_ripple_db", 1.0),
+                          filter_atten_db=getattr(s, "filter_atten_db", 40.0))
         new.response = s.response       # Fase 2: la copia conserva la curva Q(f)
         self.sources.add(new)
         self._refresh_sources_list()
@@ -4384,6 +4543,7 @@ class AcousticPanel(QWidget):
         # Eleccion de vista
         from PyQt5.QtWidgets import QRadioButton, QButtonGroup
         dlg = QDialog(self)
+        apply_dialog_theme(dlg)  # tema claro (fondo blanco)
         dlg.setWindowTitle("Comparar — elegir vista")
         v = QVBoxLayout(dlg)
         v.addWidget(QLabel(
@@ -4643,6 +4803,7 @@ class AcousticPanel(QWidget):
         # de run_fem_modal_routed.
         from PyQt5.QtWidgets import QProgressDialog, QApplication
         prog = QProgressDialog("Calculando modos FEM…", "", 0, 0, self)
+        apply_dialog_theme(prog)  # tema claro (fondo blanco)
         prog.setWindowTitle("FEM modal")
         prog.setWindowModality(Qt.WindowModal)
         prog.setMinimumDuration(200)             # solo aparece si tarda >200 ms
@@ -5531,6 +5692,61 @@ class AcousticPanel(QWidget):
         asig = self._face_mat_map.to_dict()
         return sum(1 for g in groups if asig.get(g.signature))
 
+    def absorption_state(self):
+        """Decisión de absorción normalizada para compartir con Predicción.
+
+        None si no se eligió. `{"mode":"uniform","alpha":x}` si el gate fijó un
+        α; `{"mode":"materials","names":(piso,pared,techo)}` si hay materiales
+        asignados (material representativo por zona). Ver [[z-impedance-modeling]]
+        no aplica acá: esto es el baseline de absorción, no la impedancia.
+        """
+        if self._abs_choice_alpha is not None:
+            return {"mode": "uniform", "alpha": float(self._abs_choice_alpha)}
+        try:
+            groups, _v, _t = self._get_face_groups()
+        except Exception:
+            return None
+        if not groups or self._n_assigned_groups(groups) == 0:
+            return None
+        from collections import Counter
+        by_kind = {"floor": Counter(), "wall": Counter(), "ceiling": Counter()}
+        for g in groups:
+            nm = self._face_mat_map.get(g.signature)
+            if not nm:
+                continue
+            k = g.kind if g.kind in ("floor", "ceiling") else "wall"
+            by_kind[k][nm] += 1
+        allc = Counter()
+        for c in by_kind.values():
+            allc += c
+        default = allc.most_common(1)[0][0] if allc else None
+
+        def _rep(k):
+            c = by_kind[k]
+            return c.most_common(1)[0][0] if c else default
+        floor, wall, ceil = _rep("floor"), _rep("wall"), _rep("ceiling")
+        if not (floor and wall and ceil):
+            return None
+        return {"mode": "materials", "names": (floor, wall, ceil)}
+
+    def adopt_absorption_state(self, state):
+        """Adopta una decisión venida de Predicción (puente bidireccional).
+
+        Solo el α uniforme se sincroniza automáticamente (geometría-independiente).
+        Materiales/target NO se auto-aplican a la sala real: eso queda para el
+        botón explícito «Aplicar a Acústica» de Predicción, para no pisar tus
+        asignaciones por cara. NO reemite (evita loops de señal).
+        """
+        if not state or state.get("mode") != "uniform":
+            return
+        self._abs_choice_alpha = float(state.get("alpha", 0.05))
+        self._abs_choice_asked = True
+        self._abs_choice_txt = (f"α={self._abs_choice_alpha:.3f} uniforme "
+                                f"(heredado de Predicción)")
+        self._log("Absorción: α heredado de Predicción "
+                  f"(α={self._abs_choice_alpha:.3f}).")
+        self._refresh_abs_choice_label()
+
     def _has_absorption_choice(self) -> bool:
         """True si el usuario ya definió la absorción: α uniforme elegido en el
         gate, o al menos un material asignado. Opción C (v2.24): los números que
@@ -5613,6 +5829,8 @@ class AcousticPanel(QWidget):
                 self._abs_choice_alpha = 0.05
                 self._abs_choice_txt = "α=0.05 fijo (no se pudo asignar)"
         self._refresh_abs_choice_label()
+        # Comunica la decisión a Predicción (puente bidireccional).
+        self.absorptionChoiceChanged.emit(self.absorption_state())
         return True
 
     def _refresh_abs_choice_label(self) -> None:
