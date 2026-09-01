@@ -2631,6 +2631,23 @@ bien.
     cambiar material en Predicción REASIGNA la sala real (el usuario lo pidió). Ver [[absorption-bridge]].
   - Verificado con `.grab()`: source_scroll (OK visible con ventana baja), mesh_dialog (resumen
     claro + ámbar + scroll). bridge 10/10, compila todo.
+  - **Zips v2.29 generados** (test visual del usuario = TODO OK): `Prototipo1_Mac.zip` (0.9 MB,
+    correr-desde-fuente, el del profesor) + `Prototipo1_v2.29.zip` (Windows onedir, 481 MB).
+  - **GOTCHA de build Windows (PyInstaller + PyQt5 de CONDA), NUEVO y valioso:** el PyQt5 de
+    Anaconda guarda los DLLs de Qt como `Qt5Core_conda.dll` en `<prefix>/Library/bin` y los
+    plugins en `<prefix>/Library/plugins` (NO en el layout pip `PyQt5/Qt5/bin` que espera el
+    hook de PyInstaller) → el exe fallaba con `DLL load failed while importing QtCore`. Fix en
+    `Prototipo1.spec` (commit f761add): agrega esos DLLs (`Qt5*` + icu/png/zlib/zstd/freetype/
+    harfbuzz/pcre... deps) como binaries + plugins como datas bajo `PyQt5/Qt5/plugins`,
+    derivando la ruta de `sys.prefix`; + hiddenimports `filters`/`scipy.signal`. También hay
+    que correr pyinstaller con `Library/bin` en el PATH (resuelve deps transitivas). `--clean`
+    a veces falla por lock de OneDrive (`PermissionError localpycs`) → `rm -rf build/dist` a
+    mano y buildear sin `--clean`. El exe rebuildeado arranca sin el error. Ver [[mac-distribution]].
+  - **PENDIENTE opcional (decisión del usuario, sin resolver):** el zip de Windows quedó GRANDE
+    (481 MB) porque el glob `Qt5*.dll` agarró los 75 módulos Qt de conda (WebEngine ~120 MB,
+    Qt3D, QtQuick, QtCharts… sin usar). Se puede adelgazar restringiendo a Core/Gui/Widgets/
+    OpenGL/PrintSupport/Svg + deps (~150-200 MB estimado) con 1 rebuild. El de Mac no tiene el
+    tema (0.9 MB, no usa PyInstaller).
 
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
