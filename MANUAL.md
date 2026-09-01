@@ -2589,7 +2589,7 @@ Las ventanas de diálogo (materiales, construcciones, FRF, SBIR, tabla de modos,
 
 ### La absorción elegida se comparte entre Acústica y Predicción
 
-Antes, si definías la absorción de las superficies en Acústica (por ejemplo un α uniforme en el gate de Schroeder) y después ibas a Predicción, Predicción te la volvía a pedir: eran dos decisiones separadas. Ahora se **comunican**: Predicción **hereda** la absorción de Acústica (y te avisa que lo hizo) en vez de preguntar de nuevo. El α uniforme se sincroniza en los dos sentidos; los materiales por superficie se mapean a piso/paredes/techo. Cada panel puede cambiar su elección localmente, así Predicción sigue pudiendo explorar hipótesis sin pisar tu sala real.
+Antes, si definías la absorción de las superficies en Acústica (por ejemplo un α uniforme en el gate de Schroeder) y después ibas a Predicción, Predicción te la volvía a pedir: eran dos decisiones separadas. Ahora se **comunican en los dos sentidos**: Predicción **hereda** la absorción de Acústica (y te avisa que lo hizo) en vez de preguntar de nuevo, y si la cambiás en cualquiera de los dos paneles, el otro la **adopta**. El α uniforme se sincroniza como número; los materiales se mapean a piso/paredes/techo (mismo modelo de tres zonas en los dos paneles), así que cambiar el material en Predicción reasigna también los de Acústica. La última elección que hagas manda en ambos paneles.
 
 ---
 

@@ -2611,6 +2611,27 @@ bien.
   - Benches del turno TODOS VERDES: filters 16/16, clf, source_response oráculos, polarity
     26/26, frd, trf 20/20, bridge 10/10. Sin regresión.
 
+- **1 Sep 2026 — fixes de v2.29 tras test visual del usuario (rama dist-exe).** Tres cosas
+  que salieron del test humano de la GUI:
+  - **Diálogos altos ahora scrollean** (el filtro nuevo empujó el diálogo de fuente fuera de
+    pantalla → no se llegaba al OK). Patrón: contenido en `QScrollArea` (setWidgetResizable),
+    botones OK/Cancel FUERA del scroll (siempre alcanzables), alto inicial = min(760, 0.9·
+    pantalla). Aplicado a `SourceEditDialog` (acoustic_panel) y al panel IZQUIERDO del
+    `MeshImportDialog` (geom_repair_dialog; ahí Qt comprimía los botones y RECORTABA el texto
+    cuando la ventana era más baja que el contenido).
+  - **MeshImportDialog colores:** el `lbl_status` usaba HTML inline con verde/amarillo PASTEL
+    del tema oscuro (#a6e3a1/#f9e2af) → ilegibles en blanco. Remapeados a Latte (#40a02b verde,
+    #b45309 ámbar). El cuadro de resumen (`txt_summary`) pasó de #1e1e2e/#cdd6f4 a #eff1f5/#11111b.
+    LECCIÓN: los colores en HTML inline (`<span style='color:...'>`) NO los agarra el barrido de
+    `setStyleSheet` → buscar también `color:#` dentro de `setText`/strings HTML al tematizar.
+  - **Puente de absorción, materiales AHORA bidireccional.** El usuario esperaba que cambiar el
+    material en Predicción se reflejara en Acústica (eligió "bidireccional con override"). Antes
+    Pred→Ac de materiales quedaba solo en el botón «Aplicar a Acústica». Ahora
+    `acoustic.adopt_absorption_state` maneja mode="materials" → `apply_zone_materials`. Efecto:
+    cambiar material en Predicción REASIGNA la sala real (el usuario lo pidió). Ver [[absorption-bridge]].
+  - Verificado con `.grab()`: source_scroll (OK visible con ventana baja), mesh_dialog (resumen
+    claro + ámbar + scroll). bridge 10/10, compila todo.
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.

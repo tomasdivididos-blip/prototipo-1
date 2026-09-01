@@ -113,7 +113,11 @@ class SourceEditDialog(QDialog):
         self._get_walls = get_walls
         # Bandera de montaje (one-shot informativa); se prende al pegar a pared.
         self._mounted = bool(getattr(source, "mounted", False)) if source else False
-        layout = QFormLayout(self)
+        # El contenido va en un QScrollArea (el diálogo puede ser alto: respuesta
+        # + filtro + bafle) para que OK/Cancel queden SIEMPRE alcanzables abajo.
+        _outer = QVBoxLayout(self)
+        _content = QWidget()
+        layout = QFormLayout(_content)
         layout.setLabelAlignment(Qt.AlignRight)
 
         # Etiqueta
@@ -389,10 +393,23 @@ class SourceEditDialog(QDialog):
             hint.setStyleSheet("color: #6c6f85; font-size: 8pt;")
             layout.addRow("", hint)
 
+        # Scroll con el contenido; botones fijos abajo (fuera del scroll).
+        _scroll = QScrollArea()
+        _scroll.setWidgetResizable(True)
+        _scroll.setFrameShape(QFrame.NoFrame)
+        _scroll.setWidget(_content)
+        _outer.addWidget(_scroll, 1)
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
-        layout.addRow(btns)
+        _outer.addWidget(btns)
+        # Alto inicial acotado a la pantalla (el resto entra por scroll).
+        try:
+            from PyQt5.QtWidgets import QApplication as _QA
+            _avail = _QA.primaryScreen().availableGeometry().height()
+            self.resize(self.sizeHint().width(), min(760, int(_avail * 0.9)))
+        except Exception:
+            self.resize(440, 720)
 
     def _update_q_label(self):
         from sources import q_from_sensitivity
@@ -5730,22 +5747,38 @@ class AcousticPanel(QWidget):
         return {"mode": "materials", "names": (floor, wall, ceil)}
 
     def adopt_absorption_state(self, state):
-        """Adopta una decisión venida de Predicción (puente bidireccional).
+        """Adopta una decisión venida de Predicción (puente BIDIRECCIONAL).
 
-        Solo el α uniforme se sincroniza automáticamente (geometría-independiente).
-        Materiales/target NO se auto-aplican a la sala real: eso queda para el
-        botón explícito «Aplicar a Acústica» de Predicción, para no pisar tus
-        asignaciones por cara. NO reemite (evita loops de señal).
+        Sincroniza en los DOS sentidos (decisión del usuario "bidireccional con
+        override"): α uniforme -> baseline escalar; materiales (piso/pared/techo)
+        -> se asignan de verdad a la sala con apply_zone_materials (el gate de
+        Predicción usa el mismo modelo de 3 zonas, así que el mapeo es exacto).
+        `target` no tiene equivalente acá -> se ignora. NO reemite (evita loops).
         """
-        if not state or state.get("mode") != "uniform":
+        if not state:
             return
-        self._abs_choice_alpha = float(state.get("alpha", 0.05))
-        self._abs_choice_asked = True
-        self._abs_choice_txt = (f"α={self._abs_choice_alpha:.3f} uniforme "
-                                f"(heredado de Predicción)")
-        self._log("Absorción: α heredado de Predicción "
-                  f"(α={self._abs_choice_alpha:.3f}).")
-        self._refresh_abs_choice_label()
+        mode = state.get("mode")
+        if mode == "uniform":
+            self._abs_choice_alpha = float(state.get("alpha", 0.05))
+            self._abs_choice_asked = True
+            self._abs_choice_txt = (f"α={self._abs_choice_alpha:.3f} uniforme "
+                                    f"(heredado de Predicción)")
+            self._log("Absorción: α heredado de Predicción "
+                      f"(α={self._abs_choice_alpha:.3f}).")
+            self._refresh_abs_choice_label()
+        elif mode == "materials":
+            names = state.get("names")
+            if not (names and len(names) == 3 and all(names)):
+                return
+            if self.apply_zone_materials(*names):
+                self._abs_choice_alpha = None     # ahora hay materiales reales
+                self._abs_choice_asked = True
+                nf, nw, nc = names
+                self._abs_choice_txt = (f"materiales heredados de Predicción "
+                                        f"(piso {nf} · paredes {nw} · techo {nc})")
+                self._log("Absorción: materiales heredados de Predicción "
+                          f"(piso {nf} · paredes {nw} · techo {nc}).")
+                self._refresh_abs_choice_label()
 
     def _has_absorption_choice(self) -> bool:
         """True si el usuario ya definió la absorción: α uniforme elegido en el
