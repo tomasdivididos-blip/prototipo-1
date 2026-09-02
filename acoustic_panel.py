@@ -287,6 +287,61 @@ class SourceEditDialog(QDialog):
         layout.addRow(grp_resp)
         self._refresh_resp_ui()
 
+        # --- Driver físico Thiele-Small (S2, modelo de fuente exacto) ---------
+        # Deriva Q(f) de la física del parlante (caja sellada, pasa-altos de 2º
+        # orden) en vez de una curva plana/medida. Setea self._response (se
+        # compone igual que un FRD). Ver driver.py / plan_modelo_fuente.md.
+        grp_drv = QGroupBox("Driver físico (Thiele-Small)   (opcional)")
+        dvl = QVBoxLayout(grp_drv)
+        self.combo_drv_mode = QComboBox()
+        self.combo_drv_mode.addItem("fc + Qtc (caja sellada)", "direct")
+        self.combo_drv_mode.addItem("fs, Qts, Vas + Vb (caja sellada)", "ts")
+        drow0 = QHBoxLayout()
+        drow0.addWidget(QLabel("Especificar por:"))
+        drow0.addWidget(self.combo_drv_mode, 1)
+        dvl.addLayout(drow0)
+
+        self._drv_direct = QWidget()
+        dd = QFormLayout(self._drv_direct)
+        dd.setContentsMargins(0, 0, 0, 0)
+        self.sb_drv_fc = QDoubleSpinBox()
+        self.sb_drv_fc.setRange(10.0, 300.0); self.sb_drv_fc.setValue(40.0)
+        self.sb_drv_fc.setSuffix(" Hz")
+        self.sb_drv_qtc = QDoubleSpinBox()
+        self.sb_drv_qtc.setRange(0.3, 3.0); self.sb_drv_qtc.setDecimals(3)
+        self.sb_drv_qtc.setValue(0.707); self.sb_drv_qtc.setSingleStep(0.05)
+        dd.addRow("fc (resonancia en caja):", self.sb_drv_fc)
+        dd.addRow("Qtc (Q total en caja):", self.sb_drv_qtc)
+        dvl.addWidget(self._drv_direct)
+
+        self._drv_ts = QWidget()
+        dt = QFormLayout(self._drv_ts)
+        dt.setContentsMargins(0, 0, 0, 0)
+        self.sb_drv_fs = QDoubleSpinBox()
+        self.sb_drv_fs.setRange(5.0, 200.0); self.sb_drv_fs.setValue(25.0)
+        self.sb_drv_fs.setSuffix(" Hz")
+        self.sb_drv_qts = QDoubleSpinBox()
+        self.sb_drv_qts.setRange(0.1, 2.0); self.sb_drv_qts.setDecimals(3)
+        self.sb_drv_qts.setValue(0.35); self.sb_drv_qts.setSingleStep(0.05)
+        self.sb_drv_vas = QDoubleSpinBox()
+        self.sb_drv_vas.setRange(1.0, 2000.0); self.sb_drv_vas.setValue(100.0)
+        self.sb_drv_vas.setSuffix(" L")
+        self.sb_drv_vb = QDoubleSpinBox()
+        self.sb_drv_vb.setRange(1.0, 2000.0); self.sb_drv_vb.setValue(50.0)
+        self.sb_drv_vb.setSuffix(" L")
+        dt.addRow("fs (resonancia libre):", self.sb_drv_fs)
+        dt.addRow("Qts:", self.sb_drv_qts)
+        dt.addRow("Vas (compliancia equiv.):", self.sb_drv_vas)
+        dt.addRow("Vb (volumen de caja):", self.sb_drv_vb)
+        dvl.addWidget(self._drv_ts)
+
+        btn_drv = QPushButton("Aplicar como curva Q(f)")
+        btn_drv.clicked.connect(self._apply_driver)
+        dvl.addWidget(btn_drv)
+        self.combo_drv_mode.currentIndexChanged.connect(self._on_drv_mode_changed)
+        layout.addRow(grp_drv)
+        self._on_drv_mode_changed()
+
         # --- Filtro de crossover / EQ (v2.29, pedido del profesor) -----------
         import filters as _flt
         grp_filt = QGroupBox("Filtro (crossover / EQ)   (opcional)")
@@ -526,6 +581,41 @@ class SourceEditDialog(QDialog):
         self._frd_raw = None
         self.sb_delay.setValue(0.0)
         self.sb_phase.setValue(0.0)
+        self._refresh_resp_ui()
+
+    def _on_drv_mode_changed(self):
+        """Muestra los campos fc/Qtc o los TS crudos según el modo elegido."""
+        ts = (self.combo_drv_mode.currentData() == "ts")
+        self._drv_direct.setVisible(not ts)
+        self._drv_ts.setVisible(ts)
+
+    def _apply_driver(self):
+        """Construye un DriverModel (Thiele-Small, caja sellada) y lo aplica
+        como la curva Q(f) de la fuente (S2 del modelo de fuente exacto). La
+        forma (rolloff + fase) la pone el driver; el nivel, la sensibilidad
+        (anclaje relativo). Es una alternativa a cargar un FRD/CLF."""
+        import numpy as _np
+        import driver as _drv
+        mode = self.combo_drv_mode.currentData()
+        try:
+            if mode == "ts":
+                d = _drv.DriverModel(fs=self.sb_drv_fs.value(),
+                                     Qts=self.sb_drv_qts.value(),
+                                     Vas=self.sb_drv_vas.value(),
+                                     Vb=self.sb_drv_vb.value())
+            else:
+                d = _drv.DriverModel(fc=self.sb_drv_fc.value(),
+                                     Qtc=self.sb_drv_qtc.value())
+            # La curva cubre hasta f_ref (la sensibilidad ancla ahí, |g(f_ref)|=1).
+            fpts = _np.linspace(5.0, max(600.0, self._F_REF * 1.2), 2000)
+            self._response = d.to_response(
+                freq_pts=fpts, f_ref=self._F_REF, anchor="relative",
+                name=f"driver fc={d.fc:.0f}Hz Qtc={d.Qtc:.2f}")
+        except Exception as e:
+            QMessageBox.warning(self, "Driver Thiele-Small",
+                                f"No se pudo construir el driver:\n{e}")
+            return
+        self._frd_raw = None    # curva sintética, no un FRD cargado
         self._refresh_resp_ui()
 
     def _refresh_resp_ui(self):
