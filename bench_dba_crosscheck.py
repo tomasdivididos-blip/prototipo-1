@@ -165,10 +165,73 @@ def t4_ls_beats_naive():
           f"mejora={100*(1-m_ls/m_naive):.1f}%")
 
 
+# --- posiciones exactas de la Fig 6 de Santillan --------------------------
+SANT_POS = [(0.3, 0.9, 0.3), (1.0, 1.8, 0.9), (1.7, 3.2, 1.5), (2.4, 4.1, 2.2)]
+
+
+def _two_source_before():
+    """'Antes': 2 pistones en la pared y=0 con la misma senal (setup de Fig 1)."""
+    h = 0.05
+    p1 = WallPiston(axis=AXIS, side="min",
+                    span=(0.05 - h, 0.05 + h, 2.00 - h, 2.00 + h), vn=1.0)
+    p2 = WallPiston(axis=AXIS, side="min",
+                    span=(2.65 - h, 2.65 + h, 2.00 - h, 2.00 + h), vn=1.0)
+    return [p1, p2]
+
+
+# ---------------------------------------------------------------------------
+# T5 — Fig 6: la FRF se aplana en las 4 posiciones tras ecualizar
+# ---------------------------------------------------------------------------
+def t5_fig6_frf_flattening():
+    from dba import coupling_matrix, dba_ls_coupling_fn
+    basis = _basis()
+    sensors = _listening_zone()
+    C_before = coupling_matrix(basis, _two_source_before()).sum(axis=1)
+    C_after = dba_ls_coupling_fn(
+        basis, piston_wall_grid(basis, AXIS, "min", 4, 4)
+        + piston_wall_grid(basis, AXIS, "max", 4, 4), sensors, axis=AXIS, xi=XI)
+    fa = np.linspace(40.0, 300.0, 260)
+    improved = 0
+    for pos in SANT_POS:
+        Hb = 20 * np.log10(np.abs(basis.frf(np.array(pos), fa, C_before, xi=XI)) + 1e-12)
+        Ha = 20 * np.log10(np.abs(basis.frf_dispersive(np.array(pos), fa, C_after, xi=XI)) + 1e-12)
+        if np.std(Ha) < np.std(Hb):
+            improved += 1
+    check("T5 Fig6: FRF mas plana tras ecualizar (4/4 posiciones)",
+          improved == 4, f"mejoraron {improved}/4")
+
+
+# ---------------------------------------------------------------------------
+# T6 — Fig 6: la respuesta impulsiva colapsa a delta retardada
+# ---------------------------------------------------------------------------
+def t6_fig6_impulse_delta():
+    from dba import coupling_matrix, dba_ls_coupling_fn, impulse_response, schroeder_decay_db
+    basis = _basis()
+    sensors = _listening_zone()
+    C_before = coupling_matrix(basis, _two_source_before()).sum(axis=1)
+    C_after = dba_ls_coupling_fn(
+        basis, piston_wall_grid(basis, AXIS, "min", 4, 4)
+        + piston_wall_grid(basis, AXIS, "max", 4, 4), sensors, axis=AXIS, xi=XI)
+    pos = np.array(SANT_POS[2])
+    t, hb = impulse_response(basis, pos, C_before, fmax=300.0, xi=XI)
+    _, ha = impulse_response(basis, pos, C_after, fmax=300.0, xi=XI)
+    sb, sa = schroeder_decay_db(hb), schroeder_decay_db(ha)
+
+    def t15(s):
+        i = np.argmax(s <= -15.0)
+        return t[i] if s[i] <= -15.0 else t[-1]
+
+    check("T6 Fig6: IR colapsa (decay tras eq << antes)",
+          t15(sa) < 0.5 * t15(sb),
+          f"t_antes={t15(sb)*1e3:.0f} ms  t_despues={t15(sa)*1e3:.0f} ms")
+
+
 if __name__ == "__main__":
     print("bench_dba_crosscheck.py — refinamiento S5 (LS) + cross-check Santillan\n")
     t1_t2_error_curve()
     t3_fmax_law()
     t4_ls_beats_naive()
+    t5_fig6_frf_flattening()
+    t6_fig6_impulse_delta()
     print(f"\n  {_PASS} OK, {_FAIL} FAIL")
     raise SystemExit(1 if _FAIL else 0)

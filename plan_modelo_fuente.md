@@ -206,5 +206,22 @@ Falta (opcional): CABS JAES 2008 completo (delays/decay en detalle).
   LS mejora 47% sobre el retardo naive (E 0.332→0.178, 2 fuentes de pared).
   2026-09-02.
 
-**Núcleo físico COMPLETO + validado + cross-checkeado (headless), 39 oráculos.**
-Falta: wiring de S1+S2+S5 al solver/GUI (única tarea grande abierta).
+**Núcleo físico COMPLETO + validado + cross-checkeado (headless), 41 oráculos.**
+Cross-check profundizado: `bench_dba_crosscheck.py` 8/8 (agrega T5/T6 = Fig 6 de
+Santillán: FRF se aplana en las 4 posiciones, IR colapsa a delta retardada) +
+`crosscheck_santillan_figs.py` (reproduce Fig 6 y Fig 7 como PNG).
+
+Cola de tareas (en orden):
+1. **Wiring de S1+S2+S5 al solver/GUI** (única tarea grande del modelo de fuente).
+2. **CLF** (tarea ortogonal, punto 2): generalizar el lector a otras versiones.
+3. **Material → modelo de impedancia por defecto (pedido del usuario, POST-wiring).**
+   Hoy, cuando se elige solo un material (α, sin construcción), la perturbación
+   extendida SÍ computa ξ: convierte α→β real vía `face_materials.
+   beta_from_alpha_random` (invierte Paris, reacción local + Z REAL). Pero ese
+   β es REAL → solo da amortiguamiento (ξ), NO el corrimiento Δfₙ (que necesita
+   Im(β)). El propio docstring lo marca como "el supuesto más débil de la
+   cadena". Propuesta: que cada material cargue un modelo físico de Z(f) por
+   defecto (poroso Miki/DB/JCA ajustado a su α y espesor, o Z medida), de modo
+   que elegir un material dé un Z(f) COMPLEJO → ξ Y Δfₙ, sin asignar construcción
+   a mano. Upgradea el eslabón débil. Ver [[z-impedance-modeling]],
+   [[material-form-thirds]].
