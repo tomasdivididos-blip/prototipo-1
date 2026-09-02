@@ -153,9 +153,17 @@ def ls_drive(basis: RectModalBasis, Cmat: np.ndarray, Phi_s: np.ndarray,
     Z = 1j * omega * rho0 * basis.c ** 2 * (Phi_s @ (Cmat / denom[:, None]))
     d = plane_wave_target(sensors, k, axis)
     if reg > 0.0:
-        # Tikhonov: q = (Z^H Z + reg I)^-1 Z^H d
+        # Tikhonov con penalización RELATIVA al esfuerzo (reg escala con la
+        # magnitud de Z, así el mismo reg vale a toda frecuencia): tamiza los
+        # nulos profundos del LS sin regularizar (mal condicionado con pocos
+        # subs). q = (Z^H Z + reg*<|diag|> I)^-1 Z^H d.
         ZhZ = Z.conj().T @ Z
-        q = np.linalg.solve(ZhZ + reg * np.eye(Z.shape[1]), Z.conj().T @ d)
+        dd = float(np.mean(np.abs(np.diag(ZhZ))))
+        if dd < 1e-30:                       # Z ~ 0 (p.ej. DC): sin drive
+            q = np.zeros(Z.shape[1], dtype=complex)
+        else:
+            q = np.linalg.solve(ZhZ + reg * dd * np.eye(Z.shape[1]),
+                                Z.conj().T @ d)
     else:
         q, *_ = np.linalg.lstsq(Z, d, rcond=None)
     resid = Z @ q - d
@@ -227,14 +235,32 @@ def _t_decay(t, sch, level_db=-15.0):
     return float(t[i]) if sch[i] <= level_db else float(t[-1])
 
 
+def alias_fmax(dims, axis: int, n_a: int, n_b: int, c: float = C0,
+               inset: float = 0.05) -> float:
+    """Frecuencia máxima de ecualización f_max = c/d (Santillán), con d el mayor
+    espaciado entre subs adyacentes en los dos ejes transversales a `axis`. Por
+    encima de f_max el array no puede sintetizar la onda plana (aliasing
+    espacial) y el DBA deja de servir. Devuelve inf si hay 1 sub por eje."""
+    a, b = tuple(x for x in (0, 1, 2) if x != axis)
+    ds = []
+    for L, n in ((dims[a], n_a), (dims[b], n_b)):
+        if n > 1:
+            ds.append((L - 2 * inset) / (n - 1))
+    return float(c / max(ds)) if ds else float("inf")
+
+
 def compute_dba(dims, receiver, *, axis: int = 1, n_x: int = 4, n_z: int = 4,
                 drive: str = "ls", xi: float = 0.03, fmin: float = 20.0,
-                fmax: float = 200.0, n_freq: int = 300, c: float = C0) -> dict:
-    """Análisis DBA/CABS completo para una sala rectangular (motor headless de
-    la herramienta de GUI). Compara CABS off (array frontal solo) vs on (front +
-    rear con el drive elegido). Devuelve FRF, varianza espacial y decay.
+                fmax: float = 200.0, n_freq: int = 220, reg: float = 0.005,
+                c: float = C0) -> dict:
+    """Análisis DBA/CABS para una sala rectangular (motor headless de la
+    herramienta de GUI). Compara CABS off (array frontal solo) vs on (front +
+    rear con el drive elegido).
 
-    drive: "ls" (mínimos cuadrados de Santillán) o "naive" (retardo + inversión).
+    Las métricas (planitud espectral, varianza espacial) se miden en la BANDA
+    VÁLIDA [fmin, min(fmax, f_max=c/d)]: arriba de f_max hay aliasing espacial y
+    el DBA no aplica, así que promediar ahí ensuciaría el número. El drive LS se
+    regulariza (reg) para no crear nulos profundos. drive: "ls" | "naive".
     """
     dims = tuple(float(x) for x in dims)
     receiver = np.asarray(receiver, dtype=float)
@@ -248,39 +274,41 @@ def compute_dba(dims, receiver, *, axis: int = 1, n_x: int = 4, n_z: int = 4,
     if drive == "naive":
         C_after = array_naive_coupling_fn(basis, front, rear, axis)
     else:
-        C_after = dba_ls_coupling_fn(basis, front + rear, zone, axis=axis, xi=xi)
+        C_after = dba_ls_coupling_fn(basis, front + rear, zone, axis=axis,
+                                     xi=xi, reg=reg)
+
+    f_max = alias_fmax(dims, axis, n_x, n_z, c=c)
+    band_hi = min(fmax, f_max)
 
     fa = np.linspace(fmin, fmax, n_freq)
     Hb = basis.frf(receiver, fa, C_before, xi=xi)
     Ha = basis.frf_dispersive(receiver, fa, C_after, xi=xi)
+    Hb_db = 20.0 * np.log10(np.abs(Hb) + 1e-12)
+    Ha_db = 20.0 * np.log10(np.abs(Ha) + 1e-12)
 
-    # varianza espacial de SPL, promediada en banda
+    # planitud espectral SOLO en la banda válida
+    inb = (fa >= fmin) & (fa <= band_hi)
+    if np.count_nonzero(inb) < 4:            # banda válida muy chica
+        inb = fa <= max(band_hi, fa[3])
+    flat_before = float(np.std(Hb_db[inb]))
+    flat_after = float(np.std(Ha_db[inb]))
+
+    # varianza espacial en la banda válida
     sb, sa = [], []
-    for f in np.linspace(max(fmin, 25.0), fmax, 24):
+    for f in np.linspace(max(fmin, 25.0), band_hi, 18):
         pb = np.abs(basis.pressure_field(zone, f, C_before, xi=xi))
         Cf = C_after(f) if callable(C_after) else C_after
         pa = np.abs(basis.pressure_field(zone, f, Cf, xi=xi))
         sb.append(np.std(20.0 * np.log10(pb / pb.mean())))
         sa.append(np.std(20.0 * np.log10(pa / pa.mean())))
 
-    # decay en el receptor
-    fmax_ir = max(fmax, 200.0)
-    # n_freq bajo: la IR solo alimenta el decay (Schroeder), y con drive LS cada
-    # frecuencia resuelve un mínimos-cuadrados -> 1024 mantiene la UI ágil.
-    t, hb = impulse_response(basis, receiver, C_before, fmax=fmax_ir,
-                             n_freq=1024, xi=xi)
-    _, ha = impulse_response(basis, receiver, C_after, fmax=fmax_ir,
-                             n_freq=1024, xi=xi)
-    schb, scha = schroeder_decay_db(hb), schroeder_decay_db(ha)
-
-    Hb_db = 20.0 * np.log10(np.abs(Hb) + 1e-12)
-    Ha_db = 20.0 * np.log10(np.abs(Ha) + 1e-12)
     return {
         "freq": fa, "Hb_db": Hb_db, "Ha_db": Ha_db,
-        "flat_before": float(np.std(Hb_db)), "flat_after": float(np.std(Ha_db)),
+        "flat_before": flat_before, "flat_after": flat_after,
         "spatial_before": float(np.mean(sb)), "spatial_after": float(np.mean(sa)),
-        "decay_before": _t_decay(t, schb), "decay_after": _t_decay(t, scha),
-        "n_modes": basis.n_modes, "n_sources": len(front) + len(rear),
+        "f_max": f_max, "band_hi": float(band_hi),
+        "n_modes": basis.n_modes,
+        "n_front": len(front), "n_rear": len(rear),
     }
 
 
