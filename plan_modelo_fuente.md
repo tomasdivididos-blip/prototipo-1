@@ -212,8 +212,18 @@ Santillán: FRF se aplana en las 4 posiciones, IR colapsa a delta retardada) +
 `crosscheck_santillan_figs.py` (reproduce Fig 6 y Fig 7 como PNG).
 
 Cola de tareas (en orden):
-1. **Wiring de S1+S2+S5 al solver/GUI** (única tarea grande del modelo de fuente).
-2. **CLF** (tarea ortogonal, punto 2): generalizar el lector a otras versiones.
+1. **Wiring de S1+S2+S5 al solver/GUI — HECHO (2026-09-02).**
+   - **S2 (driver):** grupo "Driver físico (Thiele-Small)" en `SourceEditDialog`
+     (fc/Qtc o fs/Qts/Vas/Vb → aplica DriverModel como curva Q(f), se compone en
+     `effective_Q_spectrum` sin tocar el solver). `smoke_test_driver_ui.py` 8/8.
+   - **S1+S5 (DBA):** herramienta autónoma `dba_dialog.DBADialog` (botón "Subs
+     enfrentados (DBA/CABS)…" en la zona FRF del panel). Usa `dba.compute_dba`
+     (motor analítico rectangular headless): sala AABB + arrays front/rear, drive
+     LS o naive → FRF antes/después + planitud/varianza/decay. `smoke_test_dba_
+     dialog.py` 7/7. **Decisión:** NO se integran fuentes distribuidas al pipeline
+     FEM (reabriría la integral sobre malla escalonada, gap A36); la herramienta
+     es analítica-rectangular (exacta para el caso DBA real).
+2. **CLF** (punto 2): generalizar el lector — HECHO (anclaje estructural).
 3. **Material → modelo de impedancia por defecto (pedido del usuario, POST-wiring).**
    Hoy, cuando se elige solo un material (α, sin construcción), la perturbación
    extendida SÍ computa ξ: convierte α→β real vía `face_materials.

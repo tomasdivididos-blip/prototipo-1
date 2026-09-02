@@ -2723,6 +2723,28 @@ bien.
   anclaje ayuda con otros exportadores/versiones pero NO hay muestras no-EASE
   para validar; CF1 octava sin implementar. Ver [[clf-loader]].
 
+- **2 Sep 2026 (cont.) — WIRING del modelo de fuente a la GUI, rama dist-exe.**
+  Dos piezas:
+  - **S2 driver en `SourceEditDialog`:** grupo "Driver físico (Thiele-Small)"
+    (modo fc/Qtc o fs/Qts/Vas/Vb) + botón "Aplicar como curva Q(f)" →
+    `DriverModel` (driver.py) → `self._response`, se compone en
+    `effective_Q_spectrum` como un FRD/CLF (sin tocar el solver). Anclaje
+    relativo (forma del driver, nivel de la sensibilidad).
+    `smoke_test_driver_ui.py` 8/8 (commit f63db7d).
+  - **S1+S5 herramienta DBA:** botón "Subs enfrentados (DBA/CABS)…" en la zona
+    FRF del panel → `dba_dialog.DBADialog` (módulo nuevo). Usa `dba.compute_dba`
+    (motor analítico rectangular headless): toma la caja AABB de la sala, arma
+    arrays front/rear (n_x×n_z pistones), drive LS (Santillán) o naive, y muestra
+    FRF antes/después + planitud espectral/varianza espacial/decay. El receptor
+    se pasa relativo a la esquina mínima (la base modal asume [0,L]).
+    `smoke_test_dba_dialog.py` 7/7. **DECISIÓN CLAVE:** NO se integran fuentes
+    distribuidas al pipeline FEM (reabriría la integral sobre malla escalonada,
+    el gap A36 diferido); la herramienta DBA es analítica-rectangular, exacta
+    para el caso real (CABS/DBA son cuartos rectangulares). Helpers nuevos en
+    dba.py: `array_naive_coupling_fn`, `compute_dba`, `_zone_grid`, `_t_decay`.
+    FALTA: test visual humano de ambos (el smoke es offscreen). Ver
+    [[source-model-dba]], `plan_modelo_fuente.md`.
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.

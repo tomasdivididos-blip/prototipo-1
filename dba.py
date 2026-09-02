@@ -35,7 +35,7 @@ import numpy as np
 from typing import Callable
 
 from source_coupling import RectModalBasis, WallPiston
-from sources import RHO0
+from sources import RHO0, C0
 
 
 def travel_delay(basis: RectModalBasis, axis: int = 1) -> float:
@@ -69,6 +69,23 @@ def dba_coupling_fn(basis: RectModalBasis, axis: int = 1,
         vr = sign * front_vn * np.exp(-1j * omega * delay)
         rear = WallPiston(axis=axis, side="max", vn=vr)
         return C_front + basis.wall_piston_coupling(rear)
+
+    return C_of_f
+
+
+def array_naive_coupling_fn(basis: RectModalBasis, front: list, rear: list,
+                            axis: int = 1, delay: float | None = None
+                            ) -> Callable[[float], np.ndarray]:
+    """Drive de RETARDO naive para arrays de pistones front/rear (generaliza
+    dba_coupling_fn a grillas): C(f) = Cf - e^{-i w tau} * Cr, con Cf/Cr los
+    acoplamientos de las grillas (vn=1) y tau el tiempo de tránsito."""
+    if delay is None:
+        delay = travel_delay(basis, axis)
+    Cf = coupling_matrix(basis, front).sum(axis=1)
+    Cr = coupling_matrix(basis, rear).sum(axis=1)
+
+    def C_of_f(f: float) -> np.ndarray:
+        return Cf - np.exp(-1j * 2.0 * np.pi * f * delay) * Cr
 
     return C_of_f
 
@@ -192,6 +209,79 @@ def impulse_response(basis: RectModalBasis, receiver, coupling, *,
     fs = 2.0 * fmax
     t = np.arange(h.size) / fs
     return t, h
+
+
+def _zone_grid(dims, axis: int, n_a=5, n_b=4, n_c=5, margin=0.5):
+    """Grilla de receptores en la zona de escucha: descuenta `margin` de las
+    dos paredes perpendiculares a `axis` (donde están los arrays) y de bordes."""
+    los = [margin, margin, margin]
+    his = [d - margin for d in dims]
+    ns = [n_a, n_b, n_c]
+    axes = [np.linspace(los[k], his[k], ns[k]) if his[k] > los[k]
+            else np.array([dims[k] / 2]) for k in range(3)]
+    return np.array([[x, y, z] for x in axes[0] for y in axes[1] for z in axes[2]])
+
+
+def _t_decay(t, sch, level_db=-15.0):
+    i = int(np.argmax(sch <= level_db))
+    return float(t[i]) if sch[i] <= level_db else float(t[-1])
+
+
+def compute_dba(dims, receiver, *, axis: int = 1, n_x: int = 4, n_z: int = 4,
+                drive: str = "ls", xi: float = 0.03, fmin: float = 20.0,
+                fmax: float = 200.0, n_freq: int = 300, c: float = C0) -> dict:
+    """Análisis DBA/CABS completo para una sala rectangular (motor headless de
+    la herramienta de GUI). Compara CABS off (array frontal solo) vs on (front +
+    rear con el drive elegido). Devuelve FRF, varianza espacial y decay.
+
+    drive: "ls" (mínimos cuadrados de Santillán) o "naive" (retardo + inversión).
+    """
+    dims = tuple(float(x) for x in dims)
+    receiver = np.asarray(receiver, dtype=float)
+    n_max = int(2.0 * fmax * max(dims) / c) + 3
+    basis = RectModalBasis(dims, fmax=fmax * 1.3, n_max=n_max, c=c)
+    front = piston_wall_grid(basis, axis, "min", n_x, n_z)
+    rear = piston_wall_grid(basis, axis, "max", n_x, n_z)
+    zone = _zone_grid(dims, axis)
+
+    C_before = coupling_matrix(basis, front).sum(axis=1)
+    if drive == "naive":
+        C_after = array_naive_coupling_fn(basis, front, rear, axis)
+    else:
+        C_after = dba_ls_coupling_fn(basis, front + rear, zone, axis=axis, xi=xi)
+
+    fa = np.linspace(fmin, fmax, n_freq)
+    Hb = basis.frf(receiver, fa, C_before, xi=xi)
+    Ha = basis.frf_dispersive(receiver, fa, C_after, xi=xi)
+
+    # varianza espacial de SPL, promediada en banda
+    sb, sa = [], []
+    for f in np.linspace(max(fmin, 25.0), fmax, 24):
+        pb = np.abs(basis.pressure_field(zone, f, C_before, xi=xi))
+        Cf = C_after(f) if callable(C_after) else C_after
+        pa = np.abs(basis.pressure_field(zone, f, Cf, xi=xi))
+        sb.append(np.std(20.0 * np.log10(pb / pb.mean())))
+        sa.append(np.std(20.0 * np.log10(pa / pa.mean())))
+
+    # decay en el receptor
+    fmax_ir = max(fmax, 200.0)
+    # n_freq bajo: la IR solo alimenta el decay (Schroeder), y con drive LS cada
+    # frecuencia resuelve un mínimos-cuadrados -> 1024 mantiene la UI ágil.
+    t, hb = impulse_response(basis, receiver, C_before, fmax=fmax_ir,
+                             n_freq=1024, xi=xi)
+    _, ha = impulse_response(basis, receiver, C_after, fmax=fmax_ir,
+                             n_freq=1024, xi=xi)
+    schb, scha = schroeder_decay_db(hb), schroeder_decay_db(ha)
+
+    Hb_db = 20.0 * np.log10(np.abs(Hb) + 1e-12)
+    Ha_db = 20.0 * np.log10(np.abs(Ha) + 1e-12)
+    return {
+        "freq": fa, "Hb_db": Hb_db, "Ha_db": Ha_db,
+        "flat_before": float(np.std(Hb_db)), "flat_after": float(np.std(Ha_db)),
+        "spatial_before": float(np.mean(sb)), "spatial_after": float(np.mean(sa)),
+        "decay_before": _t_decay(t, schb), "decay_after": _t_decay(t, scha),
+        "n_modes": basis.n_modes, "n_sources": len(front) + len(rear),
+    }
 
 
 def schroeder_decay_db(h: np.ndarray) -> np.ndarray:

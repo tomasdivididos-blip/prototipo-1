@@ -3798,6 +3798,15 @@ class AcousticPanel(QWidget):
         )
         fg.addRow(self.btn_sbir)
         self.btn_sbir.clicked.connect(self._open_sbir)
+
+        self.btn_dba = QPushButton("Subs enfrentados (DBA / CABS)…")
+        self.btn_dba.setToolTip(
+            "Analiza subs enfrentados (DBA/CABS) sobre la caja rectangular de la "
+            "sala: un array frontal lanza una onda plana y el trasero la absorbe. "
+            "Compara CABS off vs on (planitud, varianza espacial, decay). "
+            "Motor analítico rectangular exacto (independiente del FEM).")
+        fg.addRow(self.btn_dba)
+        self.btn_dba.clicked.connect(self._open_dba)
         layout.addWidget(grp_frf)
 
         # --- Estado / log ---
@@ -5460,6 +5469,30 @@ class AcousticPanel(QWidget):
     # -----------------------------------------------------------------------
     # FRF
     # -----------------------------------------------------------------------
+    def _open_dba(self):
+        """Abre la herramienta de subs enfrentados (DBA/CABS) sobre la caja
+        rectangular (AABB) de la sala. El receptor se pasa relativo a la esquina
+        mínima (la base modal analítica asume el recinto en [0,L])."""
+        try:
+            verts, _tris = self.get_surface()
+        except Exception as e:
+            QMessageBox.critical(self, "Sin geometría", str(e))
+            return
+        v = np.asarray(verts, dtype=float)
+        if v.size == 0:
+            QMessageBox.warning(self, "Sin geometría",
+                                "No hay geometría para analizar.")
+            return
+        vmin = v.min(axis=0)
+        dims = tuple((v.max(axis=0) - vmin).tolist())
+        rec = tuple((np.asarray(self.receiver, dtype=float) - vmin).tolist())
+        try:
+            from dba_dialog import DBADialog
+        except Exception as e:
+            QMessageBox.critical(self, "DBA", f"No se pudo abrir la herramienta:\n{e}")
+            return
+        DBADialog(dims, rec, self).exec_()
+
     def _compute_frf(self, method: str = "fem"):
         act = self._active_sources()
         if len(act) == 0:
