@@ -2710,6 +2710,19 @@ bien.
     crosscheck 6). Única tarea grande abierta: **wiring de S1+S2+S5 al
     solver/GUI**. Ningún archivo existente de la app tocado.
 
+- **2 Sep 2026 (cont.) — CLF generalizado (punto 2), rama dist-exe.** El lector
+  `frd.load_clf` ya NO depende del offset fijo 4764. `_find_clf_onaxis` ahora:
+  (1) offset fijo v2.0c = fast path; (2) **anclaje estructural** `_find_voltage_run`
+  = la corrida de tensión de drive constante (27 valores = nº de bandas, la
+  normalización a 1W/1m la hace constante) precede al on-axis y lo localiza sin
+  importar la impedancia (2.828 V @ 8 Ω, ~2 V @ 4 Ω…); (3) scan genérico de
+  último recurso. `_clf_format_version` detecta la versión (byte ~20). `nbands`
+  parametrizado. `bench_clf.py` 14/14 (los 3 QSC ahora viven en el proyecto como
+  fixtures; test de robustez: padear el archivo invalida el offset fijo → el
+  anclaje por tensión igual da el GT con 0.000 dB). Limitación honesta: el
+  anclaje ayuda con otros exportadores/versiones pero NO hay muestras no-EASE
+  para validar; CF1 octava sin implementar. Ver [[clf-loader]].
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.

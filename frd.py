@@ -23,6 +23,7 @@ modo de anclaje). Aca solo se lee el archivo a arrays crudos.
 
 from __future__ import annotations
 
+import re
 import numpy as np
 from typing import Tuple, Optional
 
@@ -202,6 +203,16 @@ def minimum_phase(freq: np.ndarray, spl_db: np.ndarray) -> np.ndarray:
 #
 # Ref. formato: CLF Group (clfgroup.org). El CF2/CF1 no publica el layout
 # binario; esto es ingeniería inversa validada por medición del propio viewer.
+#
+# GENERALIZACIÓN (más allá del offset fijo v2.0c): el lector ya NO depende del
+# byte 4764. Ancla en la ESTRUCTURA: el CLF normaliza a 1 W/1 m, así que hay una
+# corrida de tensión de drive CONSTANTE (un valor por banda) que precede al array
+# on-axis. Esa corrida se localiza sin importar el valor (2.828 V @ 8 Ω, ~2 V @
+# 4 Ω, etc.) y el on-axis la sigue. El offset fijo queda como camino rápido; la
+# corrida de tensión como camino robusto; un scan genérico como último recurso.
+# La versión del formato se detecta (byte ~20, p.ej. 'v2.0c'). Validado sobre 3
+# exports EASE v2.0c; el anclaje estructural es agnóstico a impedancia y ayuda
+# con otros exportadores/versiones (no validados por falta de muestras).
 _CLF_ONAXIS_OFFSET = 4764          # byte del array on-axis (v2.0c EASE export)
 _CLF_NBANDS = 27                   # 1/3 octava, 50 Hz .. 20 kHz
 _CLF_REF_VOLTAGE = 2.83            # V (2.828 Vrms) -> ancla de fallback
@@ -212,50 +223,99 @@ CLF_THIRD_OCTAVE_HZ = np.array([
 ], dtype=float)
 
 
-def _clf_onaxis_plausible(spl: np.ndarray) -> bool:
-    """True si un candidato de 27 valores parece una respuesta en eje real:
+def _clf_format_version(data: bytes) -> str:
+    """Versión del formato CLF, un string ASCII corto cerca del byte 20
+    (p.ej. 'v2.0c'). Se usa para avisar si es una versión no testeada. Devuelve
+    '' si no se encuentra."""
+    m = re.search(rb"v[0-9]+\.[0-9]+[a-z]?", data[8:64])
+    return m.group().decode("latin1") if m else ""
+
+
+def _clf_onaxis_plausible(spl: np.ndarray, nbands: int = _CLF_NBANDS) -> bool:
+    """True si un candidato parece una respuesta en eje real: nbands valores
     finitos, en rango SPL físico y suaves (sin saltos > 20 dB entre bandas)."""
-    if spl.shape[0] != _CLF_NBANDS or not np.all(np.isfinite(spl)):
+    if spl.shape[0] != nbands or not np.all(np.isfinite(spl)):
         return False
     if spl.min() < 20.0 or spl.max() > 150.0:
         return False
     return bool(np.max(np.abs(np.diff(spl))) < 20.0)
 
 
-def _find_clf_onaxis(data: bytes) -> np.ndarray:
-    """Ubica los 27 float32 de la respuesta en eje. Primero el offset fijo
-    (v2.0c); si no valida, ancla en la corrida de tensión de referencia 2.83 V.
+def _find_voltage_run(data: bytes, nbands: int = _CLF_NBANDS,
+                      vmin: float = 1.0, vmax: float = 6.0):
+    """Corrida más larga de float32 casi-constante en rango de tensión de drive
+    -> (start_byte, length, value) o None.
+
+    El CLF normaliza a 1 W/1 m: potencia constante -> tensión de drive constante
+    para una impedancia dada (2.828 V @ 8 Ω, ~2 V @ 4 Ω, etc.). Esa corrida (un
+    valor por banda) precede al array on-axis, así que sirve de ANCLA robusta
+    independiente de la impedancia (a diferencia de anclar en 2.83 V exacto)."""
+    f32 = np.frombuffer(data[:len(data) // 4 * 4], dtype="<f4")
+    n = len(f32)
+    best = None
+    i = 0
+    while i < n:
+        v = f32[i]
+        if np.isfinite(v) and vmin < v < vmax:
+            j = i + 1
+            while j < n and np.isfinite(f32[j]) and abs(f32[j] - v) < 1e-4:
+                j += 1
+            if (j - i) >= max(8, nbands // 2) and (best is None or j - i > best[1]):
+                best = (i * 4, j - i, float(v))
+            i = j
+        else:
+            i += 1
+    return best
+
+
+def _find_clf_onaxis(data: bytes, nbands: int = _CLF_NBANDS) -> np.ndarray:
+    """Ubica los `nbands` float32 de la respuesta en eje. Tres estrategias, de
+    más rápida a más general:
+      1) offset fijo 4764 (export EASE v2.0c) si valida;
+      2) ANCLA por corrida de tensión de drive: el on-axis sigue a la corrida
+         de tensión constante (robusto a la impedancia y a la versión);
+      3) scan genérico: primera ventana plausible tras una corrida en rango de
+         tensión (último recurso).
     Lanza ValueError si no encuentra un candidato plausible."""
-    N = _CLF_NBANDS
 
     def _read(off):
-        if off < 0 or off + 4 * N > len(data):
+        if off < 0 or off + 4 * nbands > len(data):
             return None
-        return np.frombuffer(data[off:off + 4 * N], dtype="<f4").astype(float)
+        return np.frombuffer(data[off:off + 4 * nbands], dtype="<f4").astype(float)
 
-    # 1) offset fijo validado
+    # 1) offset fijo validado (v2.0c) — camino rápido
     spl = _read(_CLF_ONAXIS_OFFSET)
-    if spl is not None and _clf_onaxis_plausible(spl):
+    if spl is not None and _clf_onaxis_plausible(spl, nbands):
         return spl
 
-    # 2) ancla: corrida de >=3 float32 ~ tensión de referencia (2..4 V), y luego
-    #    los primeros 27 valores plausibles que aparezcan (saltando ceros).
+    # 2) ancla estructural: el on-axis sigue a la corrida de tensión de drive.
+    run = _find_voltage_run(data, nbands)
+    if run is not None:
+        run_end = run[0] + run[1] * 4
+        # el gap run->on-axis es chico (12 bytes en v2.0c); buscar hasta 128.
+        for off in range(run_end, min(run_end + 128, len(data)) + 1, 4):
+            cand = _read(off)
+            if cand is not None and _clf_onaxis_plausible(cand, nbands):
+                return cand
+
+    # 3) último recurso: primera ventana plausible tras cualquier corrida en
+    #    rango de tensión (por si la corrida es corta o el gap es grande).
     f32 = np.frombuffer(data[:len(data) // 4 * 4], dtype="<f4")
-    is_ref = np.isfinite(f32) & (f32 > 2.0) & (f32 < 4.0)
+    in_v = np.isfinite(f32) & (f32 > 1.0) & (f32 < 6.0)
     i = 0
-    while i < len(f32) - N:
-        if is_ref[i] and is_ref[i + 1] and is_ref[i + 2]:
+    while i < len(f32) - nbands:
+        if in_v[i] and in_v[i + 1] and in_v[i + 2]:
             j = i + 3
-            while j < len(f32) - N and abs(f32[j]) < 1e-6:   # saltar ceros
+            while j < len(f32) - nbands and abs(f32[j]) < 1e-6:   # saltar ceros
                 j += 1
-            cand = f32[j:j + N].astype(float)
-            if _clf_onaxis_plausible(cand):
+            cand = f32[j:j + nbands].astype(float)
+            if _clf_onaxis_plausible(cand, nbands):
                 return cand
             i = j
         i += 1
     raise ValueError(
         "CLF: no se encontró un array de respuesta en eje plausible "
-        "(27 bandas de 1/3 de octava). ¿Es un .cf2/.cf1 exportado por EASE?")
+        f"({nbands} bandas). ¿Es un .cf2/.cf1 exportado por EASE/CLF?")
 
 
 def load_clf(path: str) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
