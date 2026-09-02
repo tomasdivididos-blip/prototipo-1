@@ -20,7 +20,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QLabel,
     QComboBox, QSpinBox, QDoubleSpinBox, QPushButton, QDialogButtonBox,
-    QApplication, QFileDialog, QSizePolicy)
+    QApplication, QFileDialog, QSizePolicy, QMessageBox)
 
 try:
     from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -49,12 +49,13 @@ class DBADialog(QDialog):
     medidas en la banda válida [fmin, f_max=c/d].
     """
 
-    def __init__(self, dims, receiver, parent=None):
+    def __init__(self, dims, receiver, parent=None, apply_callback=None):
         super().__init__(parent)
         apply_dialog_theme(self)
         self.setWindowTitle("Subs enfrentados (DBA / CABS)")
         self._dims = tuple(float(x) for x in dims)
         self._receiver = tuple(float(x) for x in receiver)
+        self._apply_callback = apply_callback
         self._last = None
 
         lay = QVBoxLayout(self)
@@ -128,10 +129,53 @@ class DBADialog(QDialog):
                 brow.addWidget(b)
             lay.addLayout(brow)
 
+        if self._apply_callback is not None:
+            self.btn_apply = QPushButton("Aplicar a la sala  (crear las fuentes)")
+            self.btn_apply.setToolTip(
+                "Crea las fuentes puntuales front+rear del DBA en la lista de "
+                "fuentes de la sala, con el drive elegido (naive = delay+inversión; "
+                "LS = curva q(f) por fuente). Reemplaza las fuentes DBA previas.")
+            self.btn_apply.clicked.connect(self._apply)
+            lay.addWidget(self.btn_apply)
+
         bb = QDialogButtonBox(QDialogButtonBox.Close)
         bb.rejected.connect(self.reject)
         lay.addWidget(bb)
         self._refresh_count()
+
+    def _apply(self):
+        from dba import build_dba_sources
+        axis = int(self.combo_axis.currentData())
+        n = self.sb_nx.value() * self.sb_nz.value()
+        drv = self.combo_drive.currentData()
+        drv_txt = "LS (Santillán)" if drv == "ls" else "retardo + inversión (naive)"
+        if QMessageBox.question(
+                self, "Aplicar DBA a la sala",
+                f"Se crearán <b>{2*n} fuentes</b> ({n} al frente + {n} atrás) "
+                f"con drive <b>{drv_txt}</b>.<br><br>"
+                "Reemplaza las fuentes DBA previas (las demás se conservan). "
+                "¿Continuar?",
+                QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            specs = build_dba_sources(
+                self._dims, axis=axis, n_x=self.sb_nx.value(),
+                n_z=self.sb_nz.value(), drive=drv, xi=self.sb_xi.value(),
+                fmin=20.0, fmax=self.sb_fmax.value())
+        except Exception as e:
+            QApplication.restoreOverrideCursor()
+            QMessageBox.warning(self, "DBA", f"No se pudo construir el preset:\n{e}")
+            return
+        QApplication.restoreOverrideCursor()
+        try:
+            self._apply_callback(specs)
+        except Exception as e:
+            QMessageBox.warning(self, "DBA", f"No se pudo aplicar a la sala:\n{e}")
+            return
+        QMessageBox.information(
+            self, "DBA aplicado",
+            f"{len(specs)} fuentes creadas en la sala (etiquetas DBA-F*/DBA-R*).")
 
     # -----------------------------------------------------------------------
     def _refresh_count(self):

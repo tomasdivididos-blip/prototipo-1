@@ -312,6 +312,81 @@ def compute_dba(dims, receiver, *, axis: int = 1, n_x: int = 4, n_z: int = 4,
     }
 
 
+def piston_center(piston: WallPiston, dims) -> tuple:
+    """Centro 3D del pistón sobre su pared (coordenadas [0,L])."""
+    d = piston.axis
+    a, b = piston.other_axes()
+    a0, a1, b0, b1 = piston.resolved_span(dims)
+    pos = [0.0, 0.0, 0.0]
+    pos[d] = 0.0 if piston.side == "min" else float(dims[d])
+    pos[a] = 0.5 * (a0 + a1)
+    pos[b] = 0.5 * (b0 + b1)
+    return tuple(pos)
+
+
+def build_dba_sources(dims, *, axis: int = 1, n_x: int = 4, n_z: int = 4,
+                      drive: str = "ls", xi: float = 0.03, fmin: float = 20.0,
+                      fmax: float = 180.0, reg: float = 0.005,
+                      inset: float = 0.06, c: float = C0) -> list:
+    """Materializa un preset DBA como fuentes PUNTUALES (monopolos) para inyectar
+    en la lista de fuentes del panel. Devuelve specs dict en coordenadas [0,L]:
+      {pos, label, Q, delay_s, polarity, response}
+
+    - naive: frente en fase (Q=1); trasero Q=1, delay=L/c, polaridad=-1. Mapea
+      EXACTO al campo de OmniSource (delay + polaridad).
+    - ls: se resuelve q_l(f) para TODAS las fuentes (Santillán) y se hornea como
+      curva de respuesta por fuente (drive dependiente de f). Bajo Schroeder el
+      pistón ≈ monopolo (ka≪1), así que el punto reproduce el DBA analítico.
+
+    Los centros se meten `inset` adentro de la pared (el sub está en la pared)."""
+    from sources import SourceResponse
+    dims = tuple(float(x) for x in dims)
+    n_max = int(2.0 * fmax * max(dims) / c) + 3
+    basis = RectModalBasis(dims, fmax=fmax * 1.3, n_max=n_max, c=c)
+    front = piston_wall_grid(basis, axis, "min", n_x, n_z)
+    rear = piston_wall_grid(basis, axis, "max", n_x, n_z)
+    pistons = front + rear
+    L = dims[axis]
+
+    def _center(p):
+        pos = list(piston_center(p, dims))
+        pos[p.axis] = inset if p.side == "min" else L - inset
+        return tuple(pos)
+
+    def _lbl(l):
+        return (f"DBA-F{l}" if l < len(front) else f"DBA-R{l - len(front)}")
+
+    specs = []
+    if drive == "naive":
+        delay = L / c
+        for i, p in enumerate(front):
+            specs.append(dict(pos=_center(p), label=f"DBA-F{i}", Q=1.0 + 0j,
+                              delay_s=0.0, polarity=1, response=None))
+        for i, p in enumerate(rear):
+            specs.append(dict(pos=_center(p), label=f"DBA-R{i}", Q=1.0 + 0j,
+                              delay_s=delay, polarity=-1, response=None))
+    else:
+        zone = _zone_grid(dims, axis)
+        Cmat = coupling_matrix(basis, pistons)
+        Phi = basis.phi_matrix(zone)
+        fa = np.linspace(fmin, fmax, 60)
+        Q = np.zeros((len(fa), len(pistons)), dtype=complex)
+        for j, f in enumerate(fa):
+            q, _, _ = ls_drive(basis, Cmat, Phi, zone, float(f),
+                               axis=axis, xi=xi, reg=reg)
+            Q[j] = q
+        norm = float(np.max(np.abs(Q))) or 1.0
+        Qn = Q / norm
+        for l, p in enumerate(pistons):
+            g = Qn[:, l]
+            gain_db = 20.0 * np.log10(np.maximum(np.abs(g), 1e-6))
+            phase = np.unwrap(np.angle(g))
+            resp = SourceResponse(fa, gain_db, phase, name=_lbl(l), anchor="")
+            specs.append(dict(pos=_center(p), label=_lbl(l), Q=1.0 + 0j,
+                              delay_s=0.0, polarity=1, response=resp))
+    return specs
+
+
 def schroeder_decay_db(h: np.ndarray) -> np.ndarray:
     """Curva de decaimiento de Schroeder (integral invertida de energia) en dB,
     normalizada a 0 dB en t=0."""

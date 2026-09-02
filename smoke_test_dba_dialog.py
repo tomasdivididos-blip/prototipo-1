@@ -49,9 +49,10 @@ ck(callable(getattr(panel, "_open_dba", None)), "_open_dba es invocable")
 # Stub de DBADialog para no bloquear en exec_(); captura dims/receptor.
 captured = {}
 class _Stub:
-    def __init__(self, dims, rec, parent=None):
+    def __init__(self, dims, rec, parent=None, apply_callback=None):
         captured["dims"] = dims
         captured["rec"] = rec
+        captured["has_apply"] = apply_callback is not None
     def exec_(self):
         return 0
 import dba_dialog
@@ -70,6 +71,41 @@ ck("dims" in captured and np.allclose(captured["dims"], exp_dims),
    f"dims desde AABB {tuple(round(x,2) for x in captured.get('dims',()))}")
 ck("rec" in captured and np.allclose(captured["rec"], exp_rec),
    "receptor relativo a la esquina mínima de la caja")
+
+# --- 3) aplicar el preset DBA a la sala ------------------------------------
+from dba import build_dba_sources
+n0 = len(panel.sources)
+specs = build_dba_sources(exp_dims, axis=1, n_x=2, n_z=2, drive="naive", fmax=180)
+panel._apply_dba_to_room(specs, vmin)
+ck(len(panel.sources) == n0 + len(specs),
+   f"apply agrega {len(specs)} fuentes ({n0}->{len(panel.sources)})")
+dba_srcs = [s for s in panel.sources if str(s.label).startswith("DBA-")]
+ck(len(dba_srcs) == 8, f"8 fuentes DBA-* ({len(dba_srcs)})")
+rear = [s for s in dba_srcs if s.label.startswith("DBA-R")][0]
+ck(abs(rear.delay_s - exp_dims[1] / 343.0) < 1e-3 and rear.polarity == -1,
+   "rear naive: delay=Ly/c + polaridad -1")
+# posiciones dentro de la caja (shift por vmin)
+ins = all(np.all(np.asarray(s.position) >= vmin - 1e-6) and
+          np.all(np.asarray(s.position) <= v.max(axis=0) + 1e-6) for s in dba_srcs)
+ck(ins, "posiciones DBA dentro de la caja (shift por vmin)")
+# re-aplicar (LS) NO duplica: reemplaza las DBA
+specs2 = build_dba_sources(exp_dims, axis=1, n_x=2, n_z=2, drive="ls", fmax=180)
+panel._apply_dba_to_room(specs2, vmin)
+ck(len([s for s in panel.sources if str(s.label).startswith("DBA-")]) == 8,
+   "re-aplicar reemplaza (no duplica) las fuentes DBA")
+ck(all(s.response is not None for s in panel.sources
+       if str(s.label).startswith("DBA-")),
+   "fuentes DBA-LS traen curva q(f) por fuente")
+
+# --- 4) apply desde el diálogo (callback + QMessageBox mockeado) ------------
+import dba_dialog as dd
+dd.QMessageBox.question = staticmethod(lambda *a, **k: dd.QMessageBox.Yes)
+dd.QMessageBox.information = staticmethod(lambda *a, **k: None)
+grabbed = {}
+d2 = DBADialog(exp_dims, exp_rec, apply_callback=lambda sp: grabbed.setdefault("n", len(sp)))
+d2.sb_nx.setValue(2); d2.sb_nz.setValue(2); d2.combo_drive.setCurrentIndex(1)
+d2._apply()
+ck(grabbed.get("n") == 8, "botón «Aplicar a la sala» invoca el callback con 8 specs")
 
 print("\nRESULTADO:", ("TODO VERDE" if not fails else f"{len(fails)} FAIL"))
 import sys

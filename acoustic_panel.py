@@ -5491,7 +5491,30 @@ class AcousticPanel(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "DBA", f"No se pudo abrir la herramienta:\n{e}")
             return
-        DBADialog(dims, rec, self).exec_()
+        DBADialog(dims, rec, self,
+                  apply_callback=lambda specs: self._apply_dba_to_room(specs, vmin)
+                  ).exec_()
+
+    def _apply_dba_to_room(self, specs, vmin):
+        """Materializa el preset DBA como fuentes en la sala. Las posiciones
+        vienen en [0,L]; se corren por `vmin` (esquina de la caja). Reemplaza las
+        fuentes DBA previas (label DBA-*); conserva el resto."""
+        from sources import OmniSource
+        vmin = np.asarray(vmin, dtype=float)
+        # sacar las fuentes DBA anteriores
+        self.sources.sources = [
+            s for s in self.sources.sources
+            if not str(getattr(s, "label", "")).startswith("DBA-")]
+        for sp in specs:
+            pos = tuple((np.asarray(sp["pos"], dtype=float) + vmin).tolist())
+            src = OmniSource(position=pos, label=sp["label"], Q=sp.get("Q", 1.0),
+                             delay_s=sp.get("delay_s", 0.0),
+                             polarity=sp.get("polarity", 1))
+            src.response = sp.get("response")
+            self.sources.add(src)
+        self._refresh_sources_list()
+        self.schedule_field_update()
+        self._log(f"DBA aplicado: {len(specs)} fuentes creadas.")
 
     def _compute_frf(self, method: str = "fem"):
         act = self._active_sources()
