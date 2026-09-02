@@ -20,7 +20,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QLabel,
     QComboBox, QSpinBox, QDoubleSpinBox, QPushButton, QDialogButtonBox,
-    QApplication, QFileDialog, QSizePolicy, QMessageBox)
+    QApplication, QFileDialog, QSizePolicy, QMessageBox, QScrollArea, QWidget)
 
 try:
     from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -58,7 +58,16 @@ class DBADialog(QDialog):
         self._apply_callback = apply_callback
         self._last = None
 
-        lay = QVBoxLayout(self)
+        # Contenido en un QScrollArea (el diálogo puede ser alto: config + gráfico
+        # + export) para que Aplicar/Close queden SIEMPRE alcanzables abajo y no
+        # se pase de la pantalla (evita el warning de setGeometry).
+        outer = QVBoxLayout(self)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        scroll.setWidget(content)
+        outer.addWidget(scroll, 1)
+        lay = QVBoxLayout(content)
         info = QLabel(
             "Analiza <b>subs enfrentados</b> (DBA/CABS) sobre la caja rectangular "
             f"de la sala ({self._dims[0]:.1f}×{self._dims[1]:.1f}×{self._dims[2]:.1f} m). "
@@ -136,11 +145,17 @@ class DBADialog(QDialog):
                 "fuentes de la sala, con el drive elegido (naive = delay+inversión; "
                 "LS = curva q(f) por fuente). Reemplaza las fuentes DBA previas.")
             self.btn_apply.clicked.connect(self._apply)
-            lay.addWidget(self.btn_apply)
+            outer.addWidget(self.btn_apply)      # fuera del scroll: siempre visible
 
         bb = QDialogButtonBox(QDialogButtonBox.Close)
         bb.rejected.connect(self.reject)
-        lay.addWidget(bb)
+        outer.addWidget(bb)                      # fuera del scroll
+        # alto inicial acotado a la pantalla (evita el warning de setGeometry)
+        try:
+            avail = QApplication.primaryScreen().availableGeometry().height()
+        except Exception:
+            avail = 900
+        self.resize(600, min(720, int(avail * 0.9)))
         self._refresh_count()
 
     def _apply(self):
@@ -149,12 +164,17 @@ class DBADialog(QDialog):
         n = self.sb_nx.value() * self.sb_nz.value()
         drv = self.combo_drive.currentData()
         drv_txt = "LS (Santillán)" if drv == "ls" else "retardo + inversión (naive)"
+        warn = ("<br><br><span style='color:#b45309;'>Son muchas fuentes: el "
+                "campo 3D, la FRF y los marcadores se recalculan sobre todas, así "
+                "que la app va a ir más lenta. Para tantear rápido usá menos subs "
+                "o bajá el nº de modos / afiná la malla.</span>"
+                if 2 * n > 16 else "")
         if QMessageBox.question(
                 self, "Aplicar DBA a la sala",
                 f"Se crearán <b>{2*n} fuentes</b> ({n} al frente + {n} atrás) "
                 f"con drive <b>{drv_txt}</b>.<br><br>"
                 "Reemplaza las fuentes DBA previas (las demás se conservan). "
-                "¿Continuar?",
+                f"¿Continuar?{warn}",
                 QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
             return
         QApplication.setOverrideCursor(Qt.WaitCursor)
