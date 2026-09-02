@@ -157,6 +157,21 @@ class RectModalBasis:
             out[i] = p / self._sqrtK[i]
         return out
 
+    def phi_matrix(self, points) -> np.ndarray:
+        """phi_n en muchos puntos, vectorizado -> (M, Nm).
+
+        Fila j = phi_n(points[j]) sobre todos los modos. Es la matriz Phi que
+        usa el drive de minimos cuadrados (Z = Phi @ diag(C/denom))."""
+        pts = np.atleast_2d(np.asarray(points, dtype=float))
+        Lx, Ly, Lz = self.dims
+        nx = np.array([m[0] for m in self.modes], dtype=float)
+        ny = np.array([m[1] for m in self.modes], dtype=float)
+        nz = np.array([m[2] for m in self.modes], dtype=float)
+        cx = np.cos(np.pi * np.outer(pts[:, 0], nx) / Lx)
+        cy = np.cos(np.pi * np.outer(pts[:, 1], ny) / Ly)
+        cz = np.cos(np.pi * np.outer(pts[:, 2], nz) / Lz)
+        return (cx * cy * cz) / self._sqrtK[None, :]
+
     # ----- acoplamiento puntual (reduce a hoy) -----------------------------
     def point_coupling(self, Q: complex, x_s) -> np.ndarray:
         """C_n = Q * phi_n(x_s)  -> (Nm,) complex."""

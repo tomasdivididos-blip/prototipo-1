@@ -2688,6 +2688,28 @@ bien.
     absoluto vs Santillán Fig 7. Ningún archivo existente de la app fue tocado
     (cero regresión). Tarea ortogonal aparte: generalizar el lector CLF (punto 2).
 
+- **2 Sep 2026 (cont.) — S5 refinado (drive LS-óptimo de Santillán) +
+  CROSS-CHECK, rama dist-exe.** Sobre el núcleo S2+S1+S5 del punto anterior:
+  - **Drive LS-óptimo (`dba.py`):** `ls_drive` implementa el método de Santillán
+    (mínimos cuadrados multicanal en dominio de f): arma Z (M sensores × L
+    fuentes de pistón), minimiza ‖Zq−d‖ con d = onda plana viajera objetivo,
+    devuelve las fuerzas óptimas q y el error E_LS normalizado. Helpers
+    `piston_wall_grid` (grillas 4×4 tipo Santillán), `coupling_matrix`,
+    `ls_error_curve`, y `source_coupling.phi_matrix` (φ vectorizado M×Nm). El LS
+    optimiza la amplitud/fase relativa front/rear considerando el
+    amortiguamiento; mejora **47%** sobre el retardo naive (E 0.332→0.178).
+  - **Cross-check vs Santillán (`bench_dba_crosscheck.py` 6/6):** reproduce su
+    setup (sala 2.7×5.0×2.2, c=346.4, ξ=0.03, grillas 4×4 front+rear, pistones
+    0.1 m, zona y∈[0.6,4.4]). Resultados: (1) **ley f_max=c/d validada**
+    (corr>0.95 variando el nº de fuentes → Fig 9 del paper); (2) E_LS<0.3 en la
+    banda de diseño con **bumps en 110/165/220 Hz IGUAL que el paper**; (3) cruce
+    de E=0.3 en 369 Hz (config exacta 4×4: 352 Hz) vs ~300 Hz de Santillán
+    (17-23%, from-scratch, con grilla de sensores más gruesa que sus 7127). El
+    régimen de muy baja frecuencia (<55 Hz) da E alto (físico: pocos modos).
+  - **NÚCLEO COMPLETO, 39 oráculos** (driver 20 + source_coupling 8 + sink 5 +
+    crosscheck 6). Única tarea grande abierta: **wiring de S1+S2+S5 al
+    solver/GUI**. Ningún archivo existente de la app tocado.
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.

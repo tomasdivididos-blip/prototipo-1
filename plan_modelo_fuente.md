@@ -194,7 +194,17 @@ Falta (opcional): CABS JAES 2008 completo (delays/decay en detalle).
   planitud espectral 7.4→3.2 dB, varianza espacial 6.3→2.3 dB, decay
   152→62 ms. 2026-09-02. Modelo (b) impedancia matcheada NO perturbativo
   (documentado, no implementado).
+- [x] **S5 refinado — drive LS-óptimo (Santillán) + CROSS-CHECK.** `dba.py`:
+  `ls_drive` (mínimos cuadrados multicanal en dominio de f: minimiza ‖Zq−d‖,
+  d=onda plana viajera objetivo sobre sensores de la zona), `piston_wall_grid`,
+  `coupling_matrix`, `ls_error_curve`. `bench_dba_crosscheck.py` **6/6**.
+  Cross-check contra Santillán (sala 2.7×5.0×2.2, c=346.4, ξ=0.03, grillas 4×4
+  front+rear, pistones 0.1 m): E_LS < 0.3 en la banda de diseño (mediana 0.16,
+  con bumps en 110/165/220 Hz IGUAL que el paper); **ley f_max=c/d validada**
+  (corr>0.95 variando N); cruce de E=0.3 en 369 Hz (config exacta 4×4: 352 Hz)
+  vs ~300 Hz de Santillán (dentro del 17-23%, from-scratch). Refinamiento:
+  LS mejora 47% sobre el retardo naive (E 0.332→0.178, 2 fuentes de pared).
+  2026-09-02.
 
-**Núcleo físico COMPLETO y validado (headless).** Falta: (i) wiring de
-S1+S2+S5 al solver/GUI; (ii) opcional: drive LS-óptimo (Santillán) en vez del
-retardo naive; (iii) opcional: cross-check absoluto vs Santillán Fig 7.
+**Núcleo físico COMPLETO + validado + cross-checkeado (headless), 39 oráculos.**
+Falta: wiring de S1+S2+S5 al solver/GUI (única tarea grande abierta).
