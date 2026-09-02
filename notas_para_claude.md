@@ -2649,6 +2649,45 @@ bien.
     OpenGL/PrintSupport/Svg + deps (~150-200 MB estimado) con 1 rebuild. El de Mac no tiene el
     tema (0.9 MB, no usa PyInstaller).
 
+- **2 Sep 2026 — Modelo de fuente exacto para subs enfrentados (DBA/CABS):
+  núcleo físico S2+S1+S5 COMPLETO y validado, headless (rama dist-exe).**
+  Motivo: el profesor dijo que subs enfrentados "no simula bien". Auditado: la
+  causa NO es la directividad (bajo Schroeder ka≪1 → sub omni), sino que la
+  fuente es un **monopolo puntual** acoplado como valor puntual pₙ(xₛ). En
+  Kuttruff *Room Acoustics* §3.6, el solver de hoy es la **Ec. 3.10** (fuente
+  puntual); el DBA necesita la **Ec. 3.6-3.7** (fuente distribuida, Cₙ=∫_S pₙvₙdS).
+  Cuando vₙ es uniforme sobre una pared, esa integral es no nula solo para los
+  axiales → esa es la razón física del DBA. Plan completo en
+  `plan_modelo_fuente.md`. Ver memoria `[[source-model-dba]]`.
+  - **S4 (validación, cerrado):** oráculo cuantificado de Santillán (JASA 2001,
+    onda plana viajera por mínimos cuadrados) + Nielsen & Celestinos (CABS): 3
+    tests (colapso de varianza espacial de SPL, selectividad axial, colapso de
+    decay) + límite f_max=c/d. Corpus minado (Kuttruff §3.6 Green modal, Santillán,
+    Rivet absorbedor electroacústico, Kinsler pistón, etc., todos en `referencias/`).
+  - **S2 driver físico:** `driver.py` (`DriverModel` Thiele-Small caja sellada,
+    U(s)∝s/(s²+(ωc/Qtc)s+ωc²), impedancia de radiación del pistón Kinsler R₁+iX₁).
+    Produce una `sources.SourceResponse` g(f) que se compone en `effective_Q_spectrum`
+    SIN tocar el solver. `bench_driver.py` **20/20**.
+  - **S1 fuente distribuida (el núcleo):** `source_coupling.py` (`RectModalBasis`
+    con modos ortonormales φₙ=pₙ/√Kₙ, `WallPiston`, Cₙ=∫pₙvₙdS analítico).
+    DECISIÓN: base analítica rectangular (integral de cosenos exacta; CABS/DBA son
+    rectangulares); base FEM escalonada DIFERIDA (problema de A36). `bench_source_
+    coupling.py` **8/8**: selectividad axial (pared entera→solo axiales), reducción
+    pistón→punto, reciprocidad, prefactor = fem_modal, campo 1-D.
+  - **S5 sink/DBA-CABS (modelo a, manejado):** `dba.py` (drive del trasero
+    v_r=-v₀·e^{-iωLy/c} = retardo Ly/c + inversión). Mecanismo: Cₘ(kₘ)=0
+    (cancelación polo-cero EXACTA a 1e-15; en kₘ, e^{-ikLy}=(-1)^m). `bench_sink.py`
+    **5/5**. Números (sala 7.8×4.1×2.8, off=frente solo, notación CABS 0.2.0 vs 0.2.2):
+    planitud espectral 7.4→3.2 dB, varianza espacial 6.3→2.3 dB, decay 152→62 ms.
+    **Modelo (b) impedancia matcheada Z=ρ₀c NO es perturbativo** (β≈1, pared
+    totalmente absorbente) → la Capa 0 de perturbación NO lo captura; CABS es
+    manejado, no pasivo, así que (a) es lo físico correcto.
+  - **PENDIENTE (mañana):** (i) refinar S5 con drive de mínimos cuadrados de
+    Santillán (mejor que el retardo naive); (ii) wiring de S1+S2+S5 al solver/GUI
+    (que el usuario arme un DBA desde la interfaz); (iii) opcional cross-check
+    absoluto vs Santillán Fig 7. Ningún archivo existente de la app fue tocado
+    (cero regresión). Tarea ortogonal aparte: generalizar el lector CLF (punto 2).
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.
