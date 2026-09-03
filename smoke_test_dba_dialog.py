@@ -97,6 +97,17 @@ ck(all(s.response is not None for s in panel.sources
        if str(s.label).startswith("DBA-")),
    "fuentes DBA-LS traen curva q(f) por fuente")
 
+# --- 3b) auto-mute de las otras fuentes al aplicar --------------------------
+from sources import OmniSource
+panel.sources.add(OmniSource((1.0, 1.0, 1.0), label="baseline", active=True))
+ap.QMessageBox.question = staticmethod(lambda *a, **k: ap.QMessageBox.Yes)
+panel._apply_dba_to_room(build_dba_sources(exp_dims, axis=1, n_x=2, n_z=2,
+                                           drive="naive", fmax=180), vmin)
+base = [s for s in panel.sources if s.label == "baseline"][0]
+ck(base.active is False, "auto-mute: la fuente baseline queda inactiva")
+ck(all(s.active for s in panel.sources if str(s.label).startswith("DBA-")),
+   "las fuentes DBA quedan activas")
+
 # --- 4) apply desde el diálogo (callback + QMessageBox mockeado) ------------
 import dba_dialog as dd
 dd.QMessageBox.question = staticmethod(lambda *a, **k: dd.QMessageBox.Yes)

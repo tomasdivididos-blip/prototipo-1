@@ -5498,13 +5498,32 @@ class AcousticPanel(QWidget):
     def _apply_dba_to_room(self, specs, vmin):
         """Materializa el preset DBA como fuentes en la sala. Las posiciones
         vienen en [0,L]; se corren por `vmin` (esquina de la caja). Reemplaza las
-        fuentes DBA previas (label DBA-*); conserva el resto."""
+        fuentes DBA previas (label DBA-*); conserva el resto. Si hay otras
+        fuentes activas, ofrece mutearlas para un A/B limpio (solo el DBA)."""
         from sources import OmniSource
         vmin = np.asarray(vmin, dtype=float)
+        # ¿Hay otras fuentes (no DBA) activas? -> ofrecer mutearlas para que el
+        # DBA sea la ÚNICA excitación (si no, se suma baseline + DBA y la FRF no
+        # significa nada). Se pueden reactivar con el mute por fuente.
+        others_active = [
+            s for s in self.sources.sources
+            if not str(getattr(s, "label", "")).startswith("DBA-")
+            and getattr(s, "active", True)]
+        mute_others = False
+        if others_active:
+            mute_others = QMessageBox.question(
+                self, "Aplicar DBA a la sala",
+                f"Hay {len(others_active)} fuente(s) que no son del DBA activas.\n\n"
+                "¿Mutearlas para medir/escuchar SOLO el DBA? (evita sumar "
+                "baseline + DBA; las reactivás cuando quieras con el mute por "
+                "fuente).", QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes
         # sacar las fuentes DBA anteriores
         self.sources.sources = [
             s for s in self.sources.sources
             if not str(getattr(s, "label", "")).startswith("DBA-")]
+        if mute_others:
+            for s in self.sources.sources:
+                s.active = False
         for sp in specs:
             pos = tuple((np.asarray(sp["pos"], dtype=float) + vmin).tolist())
             src = OmniSource(position=pos, label=sp["label"], Q=sp.get("Q", 1.0),
@@ -5514,7 +5533,8 @@ class AcousticPanel(QWidget):
             self.sources.add(src)
         self._refresh_sources_list()
         self.schedule_field_update()
-        self._log(f"DBA aplicado: {len(specs)} fuentes creadas.")
+        muted = "  (otras fuentes muteadas)" if mute_others else ""
+        self._log(f"DBA aplicado: {len(specs)} fuentes creadas.{muted}")
 
     def _compute_frf(self, method: str = "fem"):
         act = self._active_sources()
