@@ -359,6 +359,83 @@ def porous(sigma: float, thickness: float, model: str = "miki",
         is_locally_reacting=False, label=lbl)
 
 
+def porous_halfspace(sigma: float, model: str = "miki") -> SurfaceImpedance:
+    """Poroso SEMI-INFINITO (sin backing): la onda entra y no vuelve, la
+    impedancia de superficie es la caracteristica del medio, Z_s = z_c*k_c/k_z.
+    Modelo de UN parametro (sigma), reaccion EXTENDIDA (k_z = sqrt(k_c^2 - k_t^2)
+    a incidencia oblicua). Es la base minima para sintetizar la REACTANCIA de un
+    material "equivalente-poroso" a partir de su alpha de catalogo (ver
+    `sigma_from_alpha`): un espesor finito agregaria un 2do parametro (geometria
+    que el catalogo no da) e introduciria nulos de interferencia espurios.
+    Miki 1990; Cox & D'Antonio, Acoustic Absorbers and Diffusers, cap. 5-6."""
+    zk = _MODELS[model.lower()]
+
+    def zf(f, theta=0.0):
+        f = _as_f(f)
+        zc, kc = zk(f, sigma)
+        k0 = 2.0 * np.pi * f / C0
+        kt = k0 * np.sin(theta)
+        kz = np.sqrt(kc ** 2 - kt ** 2)
+        return zc * kc / kz
+
+    return SurfaceImpedance(zf, is_locally_reacting=False,
+                            label=f"poroso semi-inf {model} sigma={sigma:.0f}")
+
+
+def _alpha_random_halfspace(sigma: float, freqs, model: str = "miki",
+                            nth: int = 801) -> np.ndarray:
+    """alpha de incidencia ALEATORIA (Paris) de un poroso semi-infinito de
+    resistividad `sigma`, vectorizado sobre `freqs`. Usado por el ajuste
+    sigma<-alpha (barre muchos sigma, tiene que ser barato)."""
+    zk = _MODELS[model.lower()]
+    fq = _as_f(freqs)
+    zc, kc = zk(fq, sigma)                              # (Nf,)
+    th = np.linspace(0.0, np.pi / 2.0, nth)             # (Nth,)
+    k0 = 2.0 * np.pi * fq / C0
+    kt = k0[:, None] * np.sin(th)[None, :]              # (Nf, Nth)
+    kz = np.sqrt(kc[:, None] ** 2 - kt ** 2)            # (Nf, Nth)
+    zn = zc[:, None] * kc[:, None] / kz                 # normal-equiv por angulo
+    ct = np.cos(th)[None, :]
+    R = (zn * ct - Z0) / (zn * ct + Z0)
+    integ = (1.0 - np.abs(R) ** 2) * np.sin(2.0 * th)[None, :]
+    return _trapz(integ, th, axis=1)                   # (Nf,)
+
+
+def sigma_from_alpha(alpha_bands, freqs, model: str = "miki",
+                     amin: float = 0.15, rmax: float = 0.15):
+    """Ajusta la resistividad al flujo sigma [Pa*s/m^2] de un poroso semi-infinito
+    equivalente que reproduce (por minimos cuadrados sobre alpha de incidencia
+    aleatoria) el `alpha_bands` de catalogo del material. Devuelve
+    (sigma, resid_rms, ok):
+      - `ok=True` si el material es "poroso-compatible": max(alpha) >= `amin`
+        (si no, es duro: reactancia despreciable) Y el mejor residual <= `rmax`
+        (si no, la forma del alpha no es porosa -> tipicamente resonante, no se
+        le sintetiza reactancia porosa).
+    Es un ajuste 1-D robusto: barrido log en sigma + refinamiento parabolico.
+    Miki 1990; inversion alpha->sigma en Cox & D'Antonio cap. 5-6, Mechel."""
+    acat = np.asarray(alpha_bands, dtype=float)
+    fq = np.asarray(freqs, dtype=float)
+    if acat.size == 0 or float(acat.max()) < amin:
+        return None, None, False
+    ls = np.linspace(3.0, 6.3, 120)                    # log10(sigma) in [1e3, 2e6]
+    resid = np.array([
+        np.sqrt(np.mean((_alpha_random_halfspace(10.0 ** L, fq, model) - acat) ** 2))
+        for L in ls])
+    i = int(np.argmin(resid))
+    # refinamiento parabolico en log-sigma alrededor del minimo del grid
+    if 0 < i < len(ls) - 1:
+        y0, y1, y2 = resid[i - 1], resid[i], resid[i + 1]
+        denom = (y0 - 2.0 * y1 + y2)
+        dL = 0.5 * (y0 - y2) / denom if abs(denom) > 1e-12 else 0.0
+        Lbest = ls[i] + dL * (ls[1] - ls[0])
+    else:
+        Lbest = ls[i]
+    sigma = float(10.0 ** Lbest)
+    rbest = float(np.sqrt(np.mean(
+        (_alpha_random_halfspace(sigma, fq, model) - acat) ** 2)))
+    return sigma, rbest, bool(rbest <= rmax)
+
+
 def porous_jca(phi: float, alpha_inf: float, sigma: float, Lambda: float,
                Lambda_p: float, thickness: float,
                air_gap: float = 0.0) -> SurfaceImpedance:

@@ -2620,4 +2620,24 @@ El lector de archivos **CLF** (`.cf2`/`.cf1`) ya no depende de una posición fij
 
 ---
 
-*Manual actualizado al 2 de Septiembre de 2026 — v2.30.*
+**Cambios v2.31** (3 de septiembre 2026): **impedancia por default en cada material**. Hasta ahora el corrimiento de las frecuencias modales (la reactancia de la Capa 0) solo aparecía si asignabas una **construcción de pared** a mano. Ahora **cada material trae su propia impedancia Z(f) por default**, así el efecto reactivo se ve sin cargar nada. Un eje.
+
+### Impedancia por default en cada material
+
+El modelo de perturbación de frontera usa la admitancia de pared β = ρ₀c/Z para dos cosas: la **parte real** amortigua (mueve el RT60) y la **parte imaginaria** (reactancia) **corre la frecuencia** de cada modo. Antes, un material del catálogo solo aportaba amortiguamiento (β real, sin corrimiento); la reactancia requería asignar una construcción explícita. Ahora la app le sintetiza a cada material una Z(f) por default:
+
+- El **amortiguamiento** sigue saliendo **exacto** del α medido del catálogo (no cambia ni un dígito respecto de antes: la absorción medida es sagrada).
+- La **reactancia** se le injerta **solo a los materiales porosos**. La app ajusta la **resistividad al flujo σ** (Pa·s/m²) de un poroso equivalente cuya absorción reproduce el α del material (modelo de Miki), y toma de ahí la parte imaginaria de la impedancia. Los materiales **duros o resonantes** (hormigón, vidrio, panel perforado) **no** reciben reactancia inventada: quedan con β real, como antes.
+
+El criterio de "poroso o no" lo decide la **forma del α**, no el nombre: si la absorción es alta y con forma porosa, entra; si es baja o resonante, no. Sobre el catálogo, alrededor del 40 % de los materiales reciben reactancia (alfombras, cortinas, espumas, lanas), y las superficies rígidas/vidrios/perforados quedan afuera.
+
+Se ve en dos lugares:
+
+- En **«Ver modos (Δfₙ, ξₙ)…»**: con una sala alfombrada y **sin ninguna construcción**, la columna **Δfₙ** ya trae corrimiento (del orden de +1 a +2 % con alfombra pesada; el signo es positivo, la reactancia porosa a baja frecuencia sube las fₙ). El encabezado de la tabla aclara si el corrimiento viene de construcciones o de la Z por default de los materiales.
+- En **«Construcciones de pared…»**: cada cara sin construcción ahora muestra, en gris, **su material y su Z por default** (por ejemplo *«Alfombra fina · Z auto (poroso equiv., resistividad σ≈1.5e6 Pa·s/m²)»* o *«Hormigón · β real, sin reactancia»*), y se actualiza al cambiar el material. La construcción explícita, si la asignás, sigue pisando la Z del material.
+
+Sobre el σ que aparece: es la **resistividad al flujo** del poroso equivalente (cuánto cuesta empujar aire por el material, ISO 9053), ajustada para reproducir el α de catálogo. Es una cantidad de modelo, no una medición del material puntual; la reactancia que produce es la que tendría un absorbente poroso con esa absorción.
+
+---
+
+*Manual actualizado al 3 de Septiembre de 2026 — v2.31.*

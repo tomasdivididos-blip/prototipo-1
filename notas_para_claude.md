@@ -502,10 +502,27 @@ en lugar de ensamblar la matriz de superficie `C = (1/Z) ∫_∂Ω Ni Nj dS`.
 **Si el usuario vuelve a preguntar por C-matrix**: respondé que se evaluó,
 documentado en `acoustic_fem_explicado.md` §16. Sólo gana cuando hay
 **Z(ω) medida en tubo de Kundt** por material, escenario que NO aparece
-en el flujo de trabajo (catálogo Cox da α, no Z(ω)). Derivar Z desde α
-no agrega información — es el mismo dato repackeado, con asunciones
-adicionales (locally reacting, Z real, incidencia normal) que el catálogo
-**no** garantiza.
+en el flujo de trabajo (catálogo Cox da α, no Z(ω)).
+
+**REFINAMIENTO v2.31 (3 Sep 2026) — separar amortiguamiento de reactancia.**
+El texto viejo decía "derivar Z desde α no agrega información — es el mismo dato
+repackeado". Eso es cierto SOLO para la parte REAL (el amortiguamiento): α
+determina Re(β) de forma exacta (inversión de Paris), y ahí una Z real desde α
+no agrega nada. Pero NO es cierto para la parte IMAGINARIA (la reactancia): α NO
+determina Im(β), así que una Z compleja sintetizada desde α SÍ agrega una
+suposición nueva (el corrimiento de fₙ). La Capa 0 (posterior a D5b) es
+justamente Z compleja, así que el enunciado viejo quedó parcial.
+- **Default desde v2.31 (ver [[z-impedance-modeling]]):** cada material trae una
+  Z(f) por default con **Re(β) EXACTO del α** (amortiguamiento sin regresión, la
+  absorción medida es sagrada) MÁS **Im(β) injertada** desde un poroso semi-infinito
+  de Miki con σ ajustada al α, **solo si el material es poroso-compatible** (gate por
+  forma del α: amax≥0.15 y buen ajuste). Duros/resonantes → Im=0 (β real, como antes).
+- **La reactancia es MODELO, no medición.** Se sintetiza bajo la hipótesis "poroso
+  equivalente"; hay que decirlo cuando se reporta (el rótulo de la GUI dice "poroso
+  equiv."). Donde el modelo es más flojo (superficies duras) el gate no la aplica, y
+  donde la aplica (porosos) el efecto es chico y del signo correcto (resorte → sube fₙ).
+- **Sigue valiendo:** la matriz C ensamblada solo gana con Z(ω) medida real; derivar
+  la reactancia desde α es un modelo de 1er orden barato, no un sustituto de medir.
 
 **Hermiticidad como bonus**: con paredes 100 % rígidas, K y M son reales
 simétricas → `eigsh` Lanczos directo. Añadir C compleja rompe la
@@ -879,6 +896,35 @@ Patrón observado y que funciona:
 8. **Resumir** lo que cambió y preguntar qué sigue.
 
 Si la idea es grande, hacer la verificación con benches; si es chica, inline.
+
+---
+
+## 10a. Tests visuales: SIEMPRE en formato lista (pedido del usuario, 3 Sep 2026)
+
+Cuando un cambio necesita verificación visual humana (algo que el bench headless no
+cubre: que un dato aparezca en la GUI, que un diálogo abra, que un número se propague
+a la pantalla), el protocolo del test visual **se presenta como listas / checklists,
+nunca como párrafo en prosa**. El usuario ejecuta el test leyendo la lista; una prosa
+lo obliga a reconstruir los pasos.
+
+**Estructura obligatoria de un test visual:**
+
+1. **Cómo lanzar** — el comando en un bloque ` ```bash ` (la app le pone botón Run).
+2. **Pasos numerados** — una acción por ítem, en orden, **en infinitivo, claros y
+   concisos** ("Armar sala", "Asignar material", "Calcular", "Abrir diálogo X"). Sin
+   preámbulo ni relleno; el verbo primero.
+3. **Qué mirar** — lista o tabla con dos columnas: *qué elemento de la UI* · *PASA si…*
+   (condición concreta y falsable, con el número/rango esperado, no "debería verse bien").
+4. **Contraprueba** (si aplica) — el caso que NO debe activar el efecto (valida el gate).
+5. **Qué sería un FAIL** — lista de síntomas concretos de fallo (incluir crash).
+
+**Reglas:**
+- Rótulos de la UI textuales y verificados en el código (el nombre exacto del botón/
+  columna/diálogo), no aproximados. Buscar el `QPushButton("...")`/`setWindowTitle` real.
+- Cada "PASA si" tiene que ser **falsable**: un número, un rango, un texto exacto.
+- Si el cambio tocó texto de la GUI, incluir en "qué mirar" que el texto NUEVO aparezca
+  (un cambio de física que deja un cartel viejo mintiendo es un FAIL de UI).
+- El test visual es un paso previo al recap (§10b): sin su OK, no se regeneran los zips.
 
 ---
 
@@ -2744,6 +2790,41 @@ bien.
     dba.py: `array_naive_coupling_fn`, `compute_dba`, `_zone_grid`, `_t_decay`.
     FALTA: test visual humano de ambos (el smoke es offscreen). Ver
     [[source-model-dba]], `plan_modelo_fuente.md`.
+
+- **3 Sep 2026 — v2.31 (rama dist-exe): impedancia Z(f) por default a cada material
+  (Capa 0 automática).** Pedido del usuario: el corrimiento de fₙ (reactancia) solo
+  aparecía con construcción manual; ahora cada material trae su Z por default.
+  - **Decisión C (híbrido por gate de forma del α), refina D5b (§5 D5b).** El usuario
+    eligió C sobre A (Miki universal) y B (clase manual), y "refinar D5b".
+  - **Injerto, NO reemplazo (clave):** el ajuste semi-infinito de Miki SOBREESTIMA el α
+    de baja (alfombra fina: α_miki=0.06 vs catálogo 0.03 @63 Hz). Reemplazar el
+    amortiguamiento regresionaría la absorción medida (sagrada, §0). Solución:
+    `_material_surface` mantiene **Re(β) EXACTO del α** (Paris) y le injerta **solo
+    Im(β) de Miki** si el material pasa el gate (amax≥0.15 y residual≤0.15). Duros/
+    resonantes → Im=0 (β real, bit-a-bit como antes). Convención e^{-iwt}: el downstream
+    hace conj(Z0/Z) y hereda el signo de Miki (porosos a baja f: Im(Z)<0 → resorte → sube fₙ).
+  - **Causa raíz del "no se ve sin construcción":** el camino complejo que puebla
+    `_freq_shift_per_mode` estaba gateado tras `self._construction_map`. Se abrió el gate
+    (`_compute_xi_from_materials`, ~línea 7223): SIEMPRE corre el corrimiento desde los
+    materiales; con construcciones manda el ξ complejo, solo-materiales guarda el
+    corrimiento pero el AMORTIGUAMIENTO sigue por el camino establecido (ξ sin regresión).
+  - **Panel de construcciones refleja el material (decisión del usuario: fila read-only,
+    NO materializar).** `WallConstructionsDialog` recibe `auto_tags`; cada cara sin
+    construcción muestra en gris "material · Z auto (poroso equiv., σ≈… Pa·s/m²)" o
+    "· β real". Helpers `_material_ztag`/`_material_auto_tags`. Fix de refresh:
+    `_on_face_materials_applied` ahora llama `_refresh_modes_combo()` (el comentario viejo
+    "Δfₙ invariante al material" quedó falso). Fix de texto: la tabla de modos decía
+    "sin construcciones → Δfₙ=0", ahora distingue las 3 fuentes del corrimiento.
+  - **Nuevo en impedance.py:** `porous_halfspace(σ)`, `sigma_from_alpha(α,f)` (inversión
+    de Miki por LS + gate), `_alpha_random_halfspace`. σ = resistividad al flujo ISO 9053
+    (equivalente ajustado, no medida del material).
+  - **Benches:** `bench_default_z.py` **8/8** (invariante Re(β)==α→β = 1.67e-16 sobre 428
+    materiales; duros bit-a-bit; porosos con reactancia+signo Miki; gate 40% del catálogo).
+    Regresión Capa 0: `bench_capa0_all` **164/164**, `_wiring` **13/13**, `_5c` **43/43**.
+    E2E: shoebox alfombrado sin construcción → fₙ corre +0.5 a +1.6 Hz (~1.2–2%).
+  - **Test visual del usuario: los DOS pasaron** (corrimiento por default + panel refleja
+    material). Recap: MANUAL v2.31, notas (D5b + esta entrada + §10a nueva), memoria. Ver
+    [[z-impedance-modeling]].
 
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug

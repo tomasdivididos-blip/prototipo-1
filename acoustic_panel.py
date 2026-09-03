@@ -2511,10 +2511,18 @@ class ModeTableDialog(QDialog):
         v = QVBoxLayout(self)
 
         n_modes = len(data["f_rig"])
-        cap0 = ("<b>Capa 0 activa</b>: hay construcciones asignadas → el "
-                "corrimiento Δfₙ sale de Im(β)." if data["constructions"]
-                else "Sin construcciones asignadas → Δfₙ = 0 (la pared no "
-                "aporta reactancia; solo amortiguamiento).")
+        has_shift = float(data.get("max_abs_shift", 0.0)) >= 1e-3
+        if data["constructions"]:
+            cap0 = ("<b>Capa 0 activa (construcciones)</b>: el corrimiento Δfₙ "
+                    "sale de Im(β) de las construcciones asignadas.")
+        elif has_shift:
+            cap0 = ("<b>Z por default de los materiales</b>: los materiales "
+                    "porosos aportan reactancia (Im de la Z equivalente de Miki) "
+                    "→ Δfₙ ≠ 0 sin construcción manual. La absorción medida (α) no "
+                    "se toca: solo se agrega la reactancia.")
+        else:
+            cap0 = ("Sin construcciones y materiales sin reactancia apreciable "
+                    "→ Δfₙ ≈ 0 (solo amortiguamiento).")
         note = QLabel(
             f"<b>{n_modes} modos</b> · modelo de amortiguamiento: "
             f"<b>{data['model']}</b>.<br>{cap0}<br>"
@@ -2525,7 +2533,7 @@ class ModeTableDialog(QDialog):
         note.setStyleSheet("color: #6c6f85; font-size: 9pt;")
         v.addWidget(note)
 
-        if data["constructions"]:
+        if has_shift:
             v.addWidget(self._shift_summary_label(data))
 
         rows = self._rows()
@@ -3005,12 +3013,17 @@ class WallConstructionsDialog(QDialog):
     o __furniture_i__)."""
 
     def __init__(self, groups, construction_map, parent=None,
-                 patches=None, furniture=None):
+                 patches=None, furniture=None, auto_tags=None):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Construcciones (paredes, parches y muebles)")
         self.resize(700, 540)
         self.result_map = dict(construction_map or {})
+        # Z por default del MATERIAL de cada superficie (clave -> texto): se
+        # muestra read-only cuando la cara no tiene construccion explicita, para
+        # que el panel refleje el material actual y su reactancia auto (poroso) o
+        # su beta real (duro). Fuente de verdad = la asignacion de material.
+        self._auto_tags = dict(auto_tags or {})
         # Entradas unificadas: (clave, etiqueta, tipo, area).
         self._entries = []
         for g in groups:
@@ -3027,8 +3040,9 @@ class WallConstructionsDialog(QDialog):
             "Asigná una construcción (panel perforado, membrana, poroso con "
             "cámara) a una o varias superficies: paredes, parches (⬒) o muebles "
             "(▣). Da la impedancia en la banda modal (amortiguamiento + "
-            "corrimiento de fₙ); las superficies sin construcción usan el α del "
-            "material como hasta ahora.")
+            "corrimiento de fₙ). Las superficies sin construcción usan la <b>Z "
+            "por default de su material</b> (mostrada en gris): reactancia auto "
+            "si es poroso, β real si es duro. Asignar una construcción la pisa.")
         help_lbl.setWordWrap(True)
         help_lbl.setStyleSheet("color:#11111b; font-size:9pt;")
         root.addWidget(help_lbl)
@@ -3061,12 +3075,15 @@ class WallConstructionsDialog(QDialog):
         self.list_faces.clear()
         for key, label, kind, area in self._entries:
             spec = self.result_map.get(key)
-            tag = imp.spec_label(spec) if spec else "— (usa el material)"
+            if spec:
+                tag = imp.spec_label(spec)
+            else:
+                # sin construccion -> Z por default del material (read-only)
+                tag = self._auto_tags.get(key) or "— (usa el material)"
             area_txt = f"{area:.1f} m²   " if area is not None else ""
             it = QListWidgetItem(f"{label}   ·   {area_txt}→   {tag}")
             it.setData(Qt.UserRole, key)
-            if spec:
-                it.setForeground(QColor("#89b4fa"))
+            it.setForeground(QColor("#89b4fa") if spec else QColor("#8c8fa1"))
             self.list_faces.addItem(it)
 
     def _selected_sigs(self):
@@ -6545,7 +6562,8 @@ class AcousticPanel(QWidget):
             return
         dlg = WallConstructionsDialog(
             groups, self._construction_map, parent=self,
-            patches=self._patches, furniture=getattr(self, "furniture", None))
+            patches=self._patches, furniture=getattr(self, "furniture", None),
+            auto_tags=self._material_auto_tags(groups))
         if dlg.exec_():
             self._on_constructions_applied(dlg.result_map)
 
@@ -6819,8 +6837,10 @@ class AcousticPanel(QWidget):
         # atraso).
         if self.modal_result is not None:
             self._xi_per_mode = self._compute_xi_from_materials()
-            # Etapa 5c: cambió ξ (el Δfₙ viene solo de Im(β) de construcciones,
-            # invariante al material) → basta con refrescar el read-out del modo.
+            # Etapa 5c + Z por default: cambió ξ Y el corrimiento Δfₙ (ahora los
+            # materiales porosos aportan reactancia, no solo las construcciones).
+            # Repuebla el combo (marcador Δfₙ por modo) y el read-out.
+            self._refresh_modes_combo()
             self._update_mode_readout()
         self._refresh_materials_summary()
         # De donde sale la absorcion pudo cambiar (el usuario reasigno caras):
@@ -6943,16 +6963,83 @@ class AcousticPanel(QWidget):
 
     @staticmethod
     def _material_surface(mat):
-        """SurfaceImpedance con beta REAL = beta_from_alpha_random(alpha_mat(f)).
-        Puente exacto con el modelo alpha->beta para las caras SIN construccion
-        (mismo numero que la perturbacion real; conj(beta) es no-op por ser real)."""
+        """SurfaceImpedance por DEFAULT del material (Capa 0 automatica).
+
+        Re(beta) = beta_from_alpha_random(alpha_cat(f)) EXACTO -> preserva la
+        absorcion medida, mismo amortiguamiento que el modelo alpha->beta de
+        siempre (sin regresion, para TODO material). Im(beta) se INJERTA desde un
+        poroso semi-infinito de sigma ajustada al alpha del material
+        (imp.sigma_from_alpha), SOLO si es poroso-compatible (amax>=0.15 y ajuste
+        bueno); si no, Im=0 -> beta real (duros/resonantes quedan bit-a-bit como
+        antes). La reactancia corre f_n (Etapa 5c); el amortiguamiento no cambia.
+
+        Convencion: se devuelve Z en e^{-iwt} (nativa de impedance.py); el
+        downstream hace conj(Z0/Z) y hereda el signo de la reactancia de Miki.
+        La reactancia es MODELO (asumida a partir de alpha), no medida; ver D5b."""
+        if hasattr(mat, "alpha_bands"):
+            bands = mat.alpha_bands()                     # {banda: alpha}
+            fbands = np.array(sorted(bands), dtype=float)
+            acat = np.array([bands[int(b)] for b in fbands], dtype=float)
+        else:                                             # material sin tabla (fakes/muebles)
+            fbands = np.array([63, 125, 250, 500, 1000, 2000, 4000, 8000], float)
+            acat = np.array([float(mat.alpha(float(b))) for b in fbands], float)
+        sigma, resid, porous = imp.sigma_from_alpha(acat, fbands)
+
         def zf(f, theta=0.0):
             f = np.atleast_1d(np.asarray(f, dtype=float))
             a = np.array([float(mat.alpha(float(ff))) for ff in f])
-            beta = fm.beta_from_alpha_random(a)
-            return imp.Z0 / np.maximum(beta, 1e-12)
-        return imp.SurfaceImpedance(zf, is_locally_reacting=True,
-                                    label=getattr(mat, "name", "material"))
+            beta_re = fm.beta_from_alpha_random(a)       # exacto (real, e^{-iwt})
+            if porous:
+                zc, _ = imp.miki_zc_kc(f, sigma)
+                beta = beta_re + 1j * np.imag(imp.Z0 / zc)  # + reactancia Miki
+            else:
+                beta = beta_re.astype(complex)
+            beta = np.where(np.abs(beta) < 1e-12, 1e-12 + 0j, beta)
+            return imp.Z0 / beta
+
+        lbl = getattr(mat, "name", "material")
+        if porous:
+            lbl += f" [Z auto σ={sigma:.0f}]"
+        return imp.SurfaceImpedance(zf, is_locally_reacting=True, label=lbl)
+
+    @staticmethod
+    def _material_ztag(mat) -> str:
+        """Texto corto de la Z por default de un material (para el panel de
+        construcciones): nombre + clase (poroso con sigma equivalente, o beta
+        real si es duro). Espejo de la clasificacion de `_material_surface`."""
+        name = getattr(mat, "name", "material")
+        try:
+            if hasattr(mat, "alpha_bands"):
+                bands = mat.alpha_bands()
+                fb = np.array(sorted(bands), dtype=float)
+                ac = np.array([bands[int(b)] for b in fb], dtype=float)
+            else:
+                fb = np.array([63, 125, 250, 500, 1000, 2000, 4000, 8000], float)
+                ac = np.array([float(mat.alpha(float(b))) for b in fb], float)
+            sigma, _resid, porous = imp.sigma_from_alpha(ac, fb)
+        except Exception:
+            sigma, porous = None, False
+        if porous and sigma is not None:
+            return (f"{name} · Z auto (poroso equiv., "
+                    f"resistividad σ≈{sigma:.2g} Pa·s/m²)")
+        return f"{name} · β real (α, sin reactancia)"
+
+    def _material_auto_tags(self, groups):
+        """{clave -> texto de Z-auto} para caras (por grupo) y parches, segun su
+        material actual. Lo consume WallConstructionsDialog para mostrar la Z por
+        default read-only en las superficies sin construccion explicita."""
+        tags = {}
+        g2m = self._group_to_material_dict(groups)
+        for g in groups:
+            mat = g2m.get(g.signature)
+            if mat is not None:
+                tags[g.signature] = self._material_ztag(mat)
+        p2m = self._patch_to_material_dict() if self._patches else {}
+        for p in (self._patches or []):
+            mat = p2m.get(p.key)
+            if mat is not None:
+                tags[p.key] = self._material_ztag(mat)
+        return tags
 
     def _construction_keys(self):
         """Claves (firma de cara / patch.key / __furniture_i__) que YA tienen una
@@ -7184,15 +7271,20 @@ class AcousticPanel(QWidget):
                 ci = getattr(self.modal_result, "carve_info", None)
                 if ci is not None:
                     V = max(V - float(ci.get("V_removed_mesh", 0.0)), 1e-9)
-            # Capa 0 (Etapa 5): si hay CONSTRUCCIONES asignadas (a caras, parches
-            # o muebles), la perturbacion es COMPLEJA: amortiguamiento por Re(beta)
-            # MAS el corrimiento de f_n por Im(beta). Camino UNIFICADO con el
-            # teselado fino de los parches (compute_xi_shift_with_impedance): cada
-            # superficie (cara / parche / mueble) usa su construccion, o cae a su
-            # material (beta real, sin corrimiento) = alpha->beta de siempre. Los
-            # muebles ya estan en `groups` (augment); los parches entran como
-            # sub-slots. Incidencia normal (reaccion local) en este camino.
-            if model == "perturbation" and self._construction_map:
+            # Capa 0 (Etapa 5): perturbacion COMPLEJA unificada. SIEMPRE que el
+            # modelo sea perturbacion se computa el CORRIMIENTO de f_n desde las
+            # superficies: ahora cada MATERIAL trae su Z por default
+            # (_material_surface: Re(beta) EXACTO del alpha + Im(beta) de un poroso
+            # equivalente si es poroso-compatible), asi el corrimiento reactivo
+            # aparece SIN construccion manual (pedido del usuario). Camino UNIFICADO
+            # con el teselado fino de los parches: cada superficie (cara / parche /
+            # mueble) usa su construccion, o cae a su material. Muebles ya en
+            # `groups` (augment); parches como sub-slots. Incidencia normal.
+            #  - CON construcciones -> el xi COMPLEJO manda (como antes).
+            #  - SOLO materiales -> se guarda el corrimiento (Im de la Z default),
+            #    pero el AMORTIGUAMIENTO sigue por el camino establecido (A36 crudo/
+            #    parches) para NO regresionar xi (Re(beta) es identico en ambos).
+            if model == "perturbation":
                 import absorption_patch as ap
                 surf_g, surf_p = self._construction_surfaces(groups, g2m)
                 res = ap.compute_xi_shift_with_impedance(
@@ -7200,15 +7292,12 @@ class AcousticPanel(QWidget):
                     self.modal_result.locator, verts, tris, groups, surf_g,
                     self._patches, surf_p, V, default_surf=None)
                 if res is not None:
-                    xi, f_new = res
+                    xi_c, f_new = res
                     self._freq_shift_per_mode = np.asarray(f_new, dtype=float)
-                    return xi
-            # Modelo PERTURBACION (Etapa 1 + 1.b): xi por perturbacion de
-            # frontera, sin pasar por RT60. Compone con muebles (ya en groups/
-            # g2m) Y con parches (mismo teselado fino, Etapa 1.b).
-            if model == "perturbation":
+                    if self._construction_map:
+                        return xi_c
+                # solo-materiales: amortiguamiento por el camino establecido
                 if self._patches:
-                    import absorption_patch as ap
                     xi = ap.compute_xi_per_mode_with_patches(
                         self.modal_result.freqs, self.modal_result.phis,
                         self.modal_result.locator, verts, tris, groups, g2m,
