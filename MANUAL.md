@@ -2591,6 +2591,33 @@ Las ventanas de diálogo (materiales, construcciones, FRF, SBIR, tabla de modos,
 
 Antes, si definías la absorción de las superficies en Acústica (por ejemplo un α uniforme en el gate de Schroeder) y después ibas a Predicción, Predicción te la volvía a pedir: eran dos decisiones separadas. Ahora se **comunican en los dos sentidos**: Predicción **hereda** la absorción de Acústica (y te avisa que lo hizo) en vez de preguntar de nuevo, y si la cambiás en cualquiera de los dos paneles, el otro la **adopta**. El α uniforme se sincroniza como número; los materiales se mapean a piso/paredes/techo (mismo modelo de tres zonas en los dos paneles), así que cambiar el material en Predicción reasigna también los de Acústica. La última elección que hagas manda en ambos paneles.
 
+**Cambios v2.30** (2 de septiembre 2026): **modelo de fuente exacto para subs enfrentados (DBA/CABS)** — una herramienta nueva para diseñar y analizar subs enfrentados y aplicarlos a la sala, un **modelo físico de driver (Thiele-Small)** por fuente, y el **lector CLF generalizado**. Tres ejes.
+
+### Subs enfrentados (DBA / CABS)
+
+Motivación: la fuente del simulador era un **monopolo puntual**, y con eso los **subs enfrentados** (Double Bass Array / Controlled Acoustic Bass System) no se simulaban bien. El DBA/CABS funciona porque un array frontal lanza una **onda plana** y un array trasero la **absorbe**, dejando la sala sin la onda estacionaria en el grave. Eso necesita una **fuente distribuida** sobre la pared (una integral de superficie, no un valor puntual), que es lo que agrega esta versión. El respaldo físico es Kuttruff (*Room Acoustics* §3.6, la función de Green modal con excitación por velocidad de superficie) y la implementación de referencia de Santillán (JASA 2001) y Nielsen & Celestinos (CABS).
+
+En la zona **FRF** del panel hay un botón nuevo **«Subs enfrentados (DBA / CABS)…»**. Abre una herramienta que trabaja sobre la **caja rectangular** de la sala (los subs enfrentados están definidos para cuartos rectangulares). Elegís:
+
+- el **eje** de enfrentamiento (por defecto el más largo de la sala),
+- cuántos **subs por pared** en cada dirección transversal (una grilla n×n),
+- el **drive** del array trasero: **mínimos cuadrados (Santillán)**, el óptimo, o **retardo + inversión (naive)**, la versión clásica,
+- el **amortiguamiento** ξ y la frecuencia máxima del análisis.
+
+Al **Calcular** ves la **FRF en el receptor** antes (CABS off, solo el frente) vs después (CABS on, frente + trasero), y tres métricas de colapso: **planitud espectral**, **varianza espacial** y decay. Un dato clave que se muestra en vivo es **f_max = c/d** (con d el espaciado entre subs): el DBA **solo ecualiza hasta f_max**; por encima hay aliasing espacial y deja de servir (esa zona sale sombreada en el gráfico). Más subs → menor espaciado → mayor f_max. Por eso las métricas se miden **solo en la banda válida** [f_min, f_max].
+
+El botón **«Aplicar a la sala»** materializa el diseño como **fuentes reales** en la lista (etiquetadas DBA-F* al frente y DBA-R* atrás), con su drive: en modo naive el trasero lleva el retardo L/c y la polaridad invertida; en modo LS cada fuente lleva su curva de drive q(f). A partir de ahí el **resto de la app** (FRF, campo 3D, comparar puntos de escucha, escuchar) ve el DBA. Si tenés otras fuentes activas, te ofrece **mutearlas** para que el A/B sea limpio (medir solo el DBA, sin sumar el sistema anterior).
+
+Cómo testear el efecto: (1) con tus 2 subs normales, calculá y exportá la FRF; (2) diseñá el DBA hasta que la banda válida cubra lo que te importa; (3) aplicalo y aceptá mutear las otras; (4) volvé a calcular la FRF (con f máx ≤ f_max) y compará: más plana en la banda válida; (5) usá «Comparar puntos de escucha» en varios asientos para ver la **uniformidad espacial**, que es lo que un sub común no da. Nota: la herramienta usa un modelo analítico rectangular exacto y la FRF principal usa FEM, así que la **tendencia** coincide pero los números no son idénticos.
+
+### Modelo físico de driver (Thiele-Small)
+
+El diálogo de cada fuente tiene ahora un grupo **«Driver físico (Thiele-Small)»**. En vez de una curva plana o medida, podés derivar la respuesta Q(f) de la **física del parlante** (caja sellada): ingresás **fc + Qtc**, o los parámetros crudos **fs, Qts, Vas + Vb** (volumen de caja), y «Aplicar como curva Q(f)» genera la respuesta (pasa-altos de 2º orden con la fase correcta) y la usa como la curva de la fuente, igual que un FRD. El nivel lo pone la sensibilidad; la forma (rolloff bajo fc), el driver.
+
+### Lector CLF generalizado
+
+El lector de archivos **CLF** (`.cf2`/`.cf1`) ya no depende de una posición fija dentro del archivo: ahora **ancla en la estructura** (la corrida de tensión de referencia que precede a la respuesta en eje, invariante a la impedancia del parlante) y **detecta la versión** del formato. Sigue extrayendo solo la respuesta en eje (la directividad se descarta por diseño bajo Schroeder). Es más robusto para archivos de otros exportadores, aunque se validó sobre exports de EASE.
+
 ---
 
-*Manual actualizado al 31 de Agosto de 2026 — v2.29.*
+*Manual actualizado al 2 de Septiembre de 2026 — v2.30.*
