@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import numpy as np
 from PyQt5.QtCore import Qt
+from style import apply_dialog_theme
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
     QLabel, QPushButton, QDoubleSpinBox, QRadioButton, QButtonGroup,
@@ -60,6 +61,7 @@ class ImportScaleDialog(QDialog):
     def __init__(self, mesh, suggestion: gi.ScaleSuggestion,
                   suggested_up: str = "Z+", parent=None):
         super().__init__(parent)
+        apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Escalar y orientar geometria importada")
         self.resize(640, 640)
         self._mesh = mesh
@@ -154,7 +156,7 @@ class ImportScaleDialog(QDialog):
             "correcta para que las paredes no queden como piso."
         )
         info_orient.setWordWrap(True)
-        info_orient.setStyleSheet("QLabel { color: #94a3b8; font-size: 9pt; }")
+        info_orient.setStyleSheet("QLabel { color: #6c6f85; font-size: 9pt; }")
         ov.addWidget(info_orient)
         self.combo_up = QComboBox()
         for label, key in self.UP_AXIS_PRESETS:

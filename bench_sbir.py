@@ -21,7 +21,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from sbir import (Wall, sbir_response, reflection_from_alpha, C0)
+from sbir import (Wall, sbir_response, reflection_from_alpha, C0,
+                  modal_sbir_crossfade)
 
 
 def _ok(name, cond, detail=""):
@@ -149,6 +150,39 @@ def test_stereo_sum():
     return ok
 
 
+def test_modal_crossfade():
+    """El hibrido modal+SBIR: modal en graves, SBIR en agudos, crossfade en f_S."""
+    f = np.geomspace(20.0, 500.0, 1000)
+    fs = 120.0
+    # curvas sinteticas bien distintas para ver de cual sale cada tramo
+    modal = np.full_like(f, -8.0)       # "modal" = -8 dB en todos lados
+    sbir = np.full_like(f, +4.0)        # "sbir"  = +4 dB en todos lados
+    tot = modal_sbir_crossfade(f, sbir, modal, fs, transition_oct=0.5)
+    lo = fs * 2 ** -0.5
+    hi = fs * 2 ** +0.5
+    ok = _ok("debajo del crossfade -> modal (-8 dB)",
+             np.allclose(tot[f <= lo], -8.0, atol=1e-9),
+             f"max {np.max(np.abs(tot[f<=lo]+8)):.1e}")
+    ok &= _ok("encima del crossfade -> SBIR (+4 dB)",
+              np.allclose(tot[f >= hi], 4.0, atol=1e-9),
+              f"max {np.max(np.abs(tot[f>=hi]-4)):.1e}")
+    # en f_S el peso es 0.5 -> promedio de ambos
+    i_fs = int(np.argmin(np.abs(f - fs)))
+    ok &= _ok("en f_S -> promedio (w=0.5)",
+              abs(tot[i_fs] - (-8.0 + 4.0) / 2.0) < 0.1,
+              f"tot(f_S)={tot[i_fs]:.2f}")
+    # monotona en la transicion (de -8 a +4 al subir f)
+    trans = (f > lo) & (f < hi)
+    ok &= _ok("transicion monotona (modal->sbir)",
+              bool(np.all(np.diff(tot[trans]) >= -1e-9)),
+              "")
+    # continuidad en los bordes (sin salto)
+    ok &= _ok("continua en los bordes del crossfade",
+              abs(tot[f <= lo][-1] - tot[trans][0]) < 0.2
+              and abs(tot[trans][-1] - tot[f >= hi][0]) < 0.2, "")
+    return ok
+
+
 def main():
     print("bench_sbir.py — oraculos analiticos de SBIR\n")
     tests = [
@@ -158,6 +192,7 @@ def main():
         ("material R",         test_material_R),
         ("shoebox 6 paredes", test_shoebox6),
         ("stereo suma",        test_stereo_sum),
+        ("hibrido modal+SBIR", test_modal_crossfade),
     ]
     all_ok = True
     for name, fn in tests:

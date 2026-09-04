@@ -274,6 +274,20 @@ check("T17 Nº modos auto-cargado al Weyl de f_S",
       f"antes={n_before}, después={panelW.sb_nmodes.value()}, Weyl={weyl}, cap={cap}")
 
 # ---------------------------------------------------------------------------
+print("\nT18  D4: el npm manual es PISO (el auto-tuner no lo baja)")
+# manual > auto -> se respeta el manual, h escala (h ~ 1/npm)
+n_u, h_u, kept = AcousticPanel._reconcile_npm(2.5, 4.0, 0.20)
+check("T18a npm manual mayor se respeta (no se revierte)",
+      n_u == 4.0 and kept is True, f"npm_used={n_u}, kept={kept}")
+check("T18b h escala consistente con npm más fino",
+      abs(h_u - 0.20 * 2.5 / 4.0) < 1e-12, f"h_used={h_u:.4f}")
+# manual <= auto -> gana el auto (cubre f_S; el manual no alcanzaba)
+check("T18c npm manual menor -> usa el auto",
+      AcousticPanel._reconcile_npm(3.0, 2.0, 0.15) == (3.0, 0.15, False))
+check("T18d npm manual igual -> usa el auto (sin cambio)",
+      AcousticPanel._reconcile_npm(3.0, 3.0, 0.15) == (3.0, 0.15, False))
+
+# ---------------------------------------------------------------------------
 print()
 print(f"RESULTADO: {len(_PASS)}/{len(_PASS) + len(_FAIL)} OK")
 if _FAIL:

@@ -101,8 +101,15 @@ class Material:
         return result
 
     def alpha(self, f: float) -> float:
-        """Coeficiente de absorcion de Sabine interpolado a frecuencia f (Hz)."""
-        return self._interp(self._alpha_table, f)
+        """Coeficiente de absorcion interpolado a frecuencia f (Hz).
+
+        Usa los datos CRUDOS (`_alpha`) cuando existen, para preservar la
+        resolucion original: si el material se cargo en tercios de octava
+        (medicion propia), alpha(f) los honra en vez de colapsar a las 8
+        octavas de `_alpha_table`. Para materiales de catalogo (octava
+        completa) el resultado es identico -> sin regresion. Sin datos cae a
+        la tabla por defecto."""
+        return self._interp(self._alpha if self._alpha else self._alpha_table, f)
 
     def scattering(self, f: float) -> float:
         return self._interp(self._scat_table, f)

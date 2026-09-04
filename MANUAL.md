@@ -59,7 +59,7 @@
 3. Cambiar a la pestaña **Acústica**. Colocar una fuente con `Ctrl` + clic derecho en el visor 3D.
 4. Presionar **Calcular modos (FEM)**.
 5. Presionar **Actualizar campo 3D** (o `Enter`) para ver la distribución modal.
-6. Presionar **Calcular FRF** y luego **🔊 Escuchar** para oír la sala.
+6. Presionar **Calcular FRF** y luego **Escuchar** para oír la sala.
 
 ---
 
@@ -234,12 +234,12 @@ Apretar **Materiales…** abre una ventana modal con una tabla:
 │  ┌──┬──────────────────────┬─────┬────────┬──────────┬─────────────┐│
 │  │  │ Grupo                │Caras│Área m² │ Categoría│ Material    ││
 │  ├──┼──────────────────────┼─────┼────────┼──────────┼─────────────┤│
-│  │🟩│ Piso                 │  2  │  48.00 │  Piso    │ Madera ▾   ││
-│  │🟦│ Techo                │  2  │  48.00 │  Techo   │ Yeso  ▾    ││
-│  │🟧│ Pared 1 (-X (W))     │  2  │  24.00 │  Pared   │ Hormigón ▾ ││
-│  │🟧│ Pared 2 (+X (E))     │  2  │  24.00 │  Pared   │ Hormigón ▾ ││
-│  │🟧│ Pared 3 (+Y (N))     │  2  │  18.00 │  Pared   │ Alfombra ▾ ││
-│  │🟧│ Pared 4 (-Y (S))     │  2  │  18.00 │  Pared   │ Vidrio ▾   ││
+│  │  │ Piso                 │  2  │  48.00 │  Piso    │ Madera ▾   ││
+│  │  │ Techo                │  2  │  48.00 │  Techo   │ Yeso  ▾    ││
+│  │  │ Pared 1 (-X (W))     │  2  │  24.00 │  Pared   │ Hormigón ▾ ││
+│  │  │ Pared 2 (+X (E))     │  2  │  24.00 │  Pared   │ Hormigón ▾ ││
+│  │  │ Pared 3 (+Y (N))     │  2  │  18.00 │  Pared   │ Alfombra ▾ ││
+│  │  │ Pared 4 (-Y (S))     │  2  │  18.00 │  Pared   │ Vidrio ▾   ││
 │  └──┴──────────────────────┴─────┴────────┴──────────┴─────────────┘│
 │                                                                      │
 │  Resumen                                                             │
@@ -642,9 +642,9 @@ Presionar **Calcular FRF** en el grupo "FRF (Respuesta en frecuencia)".
 - La barra de herramientas permite zoom, paneo y guardar la figura.
 - **Exportar**: imagen (PNG / SVG / PDF) o datos crudos (CSV / TXT). Los archivos de datos llevan columnas `freq_hz; spl_db; abs_H_pa; phase_deg` para que puedas reabrirlos en Excel, Python o MATLAB.
 
-### 🔊 Escucha — ruido rosa filtrado por la sala
+### Escucha — ruido rosa filtrado por la sala
 
-El botón **🔊 Escuchar** permite oír cómo colorea la sala al sonido:
+El botón **Escuchar** permite oír cómo colorea la sala al sonido:
 
 1. Se generan 4 segundos de **ruido rosa** (densidad espectral ∝ 1/f).
 2. Se filtra con la FRF calculada usando **convolución en frecuencia**.
@@ -655,7 +655,7 @@ El botón **🔊 Escuchar** permite oír cómo colorea la sala al sonido:
 
 Formato del audio: **16 bits / 44 100 Hz / estéreo** (L = R, campo mono).
 
-El botón **⏹ Detener** interrumpe la reproducción.
+El botón **Detener** interrumpe la reproducción.
 
 > **Nota:** El ruido rosa solo tiene coloración de sala en el rango [f\_mín, f\_máx] calculado. Para incluir más frecuencias, ampliar esos parámetros antes de calcular la FRF.
 >
@@ -682,8 +682,8 @@ El botón **Ver RT60 calculado** abre un diálogo multi-curva donde se pueden co
 ┌─ Tiempo de reverberación — comparativa de métodos ─────────────────┐
 │ ┌──────────────────────────────┬──────────────────────────────────┐│
 │ │                              │ Curvas activas:                  ││
-│ │                              │   ☑ Sabine RT60     (azul)      ││
-│ │   [gráfico de curvas RT(f)]  │   ☑ Eyring RT60     (rojo)      ││
+│ │                              │     Sabine RT60     (azul)      ││
+│ │   [gráfico de curvas RT(f)]  │     Eyring RT60     (rojo)      ││
 │ │     X log: 63 → 8000 Hz      │      [Quitar curva seleccionada]││
 │ │     Y: tiempo (s)            │                                  ││
 │ │                              │ Agregar curva:                   ││
@@ -931,10 +931,10 @@ En la pestaña **Acústica**, dentro del grupo *FEM modal*, hay un **badge color
 
 | Color | Texto | Significado |
 |---|---|---|
-| 🟢 verde | `voxel · exacto` | Recinto axis-aligned: voxel coincide con la frontera. Sin error de escalera. **Óptimo.** |
-| 🔵 azul | `gmsh · boundary-fitted` | Geometría curva o CAD importado: gmsh ajusta la malla a las paredes exactas. **Óptimo.** |
-| 🟡 amarillo | `voxel · escalera` | Geometría paramétrica con techo curvo: voxel funciona pero con error sistemático. Para boundary-fitted exacto, importá un CAD. |
-| 🟠 naranja | `gmsh · forzado` | Forzaste gmsh donde voxel sería exacto. Sin perjuicio, pero algo más lento. |
+| verde | `voxel · exacto` | Recinto axis-aligned: voxel coincide con la frontera. Sin error de escalera. **Óptimo.** |
+| azul | `gmsh · boundary-fitted` | Geometría curva o CAD importado: gmsh ajusta la malla a las paredes exactas. **Óptimo.** |
+| amarillo | `voxel · escalera` | Geometría paramétrica con techo curvo: voxel funciona pero con error sistemático. Para boundary-fitted exacto, importá un CAD. |
+| naranja | `gmsh · forzado` | Forzaste gmsh donde voxel sería exacto. Sin perjuicio, pero algo más lento. |
 
 Pasá el mouse sobre el badge para ver el detalle del razonamiento.
 
@@ -944,7 +944,7 @@ El badge se actualiza automáticamente cuando cambiás la geometría: por ejempl
 
 Tres formas de invocar el importador:
 
-1. Botón **📂 Importar CAD…** en el grupo *FEM modal* de la pestaña Acústica.
+1. Botón **Importar CAD…** en el grupo *FEM modal* de la pestaña Acústica.
 2. Atajo de teclado **`Ctrl + I`**.
 3. Línea de comandos: arrastrá un `.stl`/`.obj`/`.step` sobre el ejecutable (en una futura versión).
 
@@ -955,7 +955,7 @@ Al elegir un archivo, el soft hace tres cosas:
 3. Si la malla está perfecta → la usa directamente.
 4. Si tiene problemas → abre el **diálogo de reparación guiada** (sección 15.4).
 
-Después de importar, el badge del panel acústico cambia automáticamente a 🔵 `gmsh · boundary-fitted` y el botón **✕ Volver a paramétrica** se habilita para regresar a la geometría del panel Geometría.
+Después de importar, el badge del panel acústico cambia automáticamente a `gmsh · boundary-fitted` y el botón **✕ Volver a paramétrica** se habilita para regresar a la geometría del panel Geometría.
 
 ### 15.4 Diálogo de reparación guiada
 
@@ -973,7 +973,7 @@ Cuando el CAD tiene problemas (huecos, T-junctions, vértices duplicados), apare
 │                        │                                   │
 │ Acciones (hueco actual)│                                   │
 │ ✓ Cerrar hueco (auto)  │                                   │
-│ ⛒ Soldar a vecinos     │                                   │
+│   Soldar a vecinos     │                                   │
 │ ✎ Mover vértice…       │                                   │
 │ → Omitir               │                                   │
 │                        │                                   │
@@ -1064,12 +1064,12 @@ A partir de v2.1 el router opera en modo **best-effort**: para geometrías curva
 
 | Geometría | Auto-decisión (intento) | Badge si gmsh OK | Badge si gmsh falla |
 |---|---|---|---|
-| Paramétrica · shoebox axis-aligned · techo plano | **voxel directo** | 🟢 verde "voxel · exacto" | n/a (no se intenta gmsh) |
-| Paramétrica · pentágono regular techo plano | **voxel directo** | 🟢 verde "voxel · exacto" | n/a |
-| Paramétrica · `arch_height > 0` | **intenta gmsh** | 🔵 azul "gmsh · boundary-fitted" | 🟡 amarillo "voxel · fallback" (razón en tooltip) |
-| Paramétrica · `twist`/`taper`/`pitch` ≠ 0 | **intenta gmsh** | 🔵 azul | 🟡 amarillo "voxel · fallback" |
-| Paramétrica · `base_polygon` custom no axis-aligned | **intenta gmsh** | 🔵 azul | 🟡 amarillo "voxel · fallback" |
-| **CAD importado** (cualquier formato) | **intenta gmsh** | 🔵 azul "gmsh · boundary-fitted" | 🟡 amarillo "voxel · fallback" |
+| Paramétrica · shoebox axis-aligned · techo plano | **voxel directo** | verde "voxel · exacto" | n/a (no se intenta gmsh) |
+| Paramétrica · pentágono regular techo plano | **voxel directo** | verde "voxel · exacto" | n/a |
+| Paramétrica · `arch_height > 0` | **intenta gmsh** | azul "gmsh · boundary-fitted" | amarillo "voxel · fallback" (razón en tooltip) |
+| Paramétrica · `twist`/`taper`/`pitch` ≠ 0 | **intenta gmsh** | azul | amarillo "voxel · fallback" |
+| Paramétrica · `base_polygon` custom no axis-aligned | **intenta gmsh** | azul | amarillo "voxel · fallback" |
+| **CAD importado** (cualquier formato) | **intenta gmsh** | azul "gmsh · boundary-fitted" | amarillo "voxel · fallback" |
 
 Con la geometría paramétrica actual de Prototipo 1, los techos en arco generan T-junctions entre el techo subdividido (muchos vértices en aristas del polígono) y las paredes (solo 4 vértices por arista). Gmsh detecta esto como "Wrong topology of boundary mesh for parametrization" o "PLC Error: A segment and a facet intersect at point" y el sistema cae automáticamente a voxel con badge amarillo. Para evitar este fallback en recintos curvos, importá la geometría como CAD limpio.
 
@@ -1103,9 +1103,9 @@ Para visualizar la sala en 3D estos problemas son irrelevantes — el render Ope
 
 Cuando hay un fallback, después de presionar **Calcular modos (FEM)**:
 
-1. El log de estado (parte inferior del panel) muestra una línea con el icono ⚠ y el motivo:
+1. El log de estado (parte inferior del panel) muestra una línea de advertencia con el motivo:
    ```
-   ⚠ Gmsh intentado pero falló (PLC Error: A segment and a facet intersect at point).
+   Gmsh intentado pero falló (PLC Error: A segment and a facet intersect at point).
    Cayendo a voxel.
    FEM listo (voxel). Malla: 2386 nodos, 9504 tets, V≈177.84 m³, h̄≈0.42 m.
    ```
@@ -1697,7 +1697,7 @@ Usar la librería no te hace más "real" en el método. Te hace más rápido en 
 **Cambios v2.5** (23 de mayo):
 
 1. **Diálogo de RT60 simplificado.** Se removieron el método Fitzroy y las métricas T20/T30 de la UI por pedido del usuario (T20=T30=T60 en predicciones teóricas; Fitzroy era ruido visual). Quedan **Sabine** y **Eyring** sólo en **T60**. El código de Fitzroy se conserva en `face_materials.compute_fitzroy_rt60_per_face` por si se quiere re-habilitar.
-2. **Botón "Materiales" sin emoji.** Antes decía `🎨 Materiales…`; ahora dice `Materiales…`.
+2. **Botón "Materiales" sin emoji.** Antes tenía un ícono de paleta; ahora dice `Materiales…`.
 3. **Audio +6 dB con saturación suave.** Reescrita la cadena de `audio_utils.apply_frf_filter`:
    - Normalización al **peak ±1,0** (antes ±0,85 → +1,4 dB extra).
    - **Soft-clipping tanh** con drive = 2,5 → boost equivalente a **~2× amplitud RMS** sin distorsión audible para ruido rosa filtrado.
@@ -2032,7 +2032,7 @@ Coherente con la leyenda del picker (que ahora nunca muestra modos por encima de
 
 ### E. Fixes estéticos en diálogos
 
-- **Diálogo de importar CAD / reparar agujeros**: los botones largos (`✓ Cerrar este hueco (auto)`, `⛒ Soldar a vértices cercanos`, `Reparar TODO automaticamente`) se cortaban al primer carácter por una combinación de Qt centrando el texto y la métrica irregular del Unicode al inicio. Fix con triple defensa:
+- **Diálogo de importar CAD / reparar agujeros**: los botones largos (`✓ Cerrar este hueco (auto)`, `Soldar a vértices cercanos`, `Reparar TODO automaticamente`) se cortaban al primer carácter por una combinación de Qt centrando el texto y la métrica irregular del Unicode al inicio. Fix con triple defensa:
   1. `setMinimumWidth(440)` en el panel izquierdo del splitter.
   2. `setMinimumWidth(380)` por botón.
   3. `text-align: left; padding-left: 16px` vía styleSheet local, para evitar que el centrado clipee el primer carácter cuando el sizeHint() subestima por el Unicode ancho.
@@ -2503,4 +2503,141 @@ El paquete «correr desde fuente» de Mac instala las librerías frescas, y las 
 
 ---
 
-*Manual actualizado al 25 de Agosto de 2026 — v2.25.*
+**Cambios v2.26** (26 de agosto 2026): **SBIR con la transferencia modal de la sala** y **guardar/cargar curvas de RT en CSV**. Dos ejes.
+
+### SBIR con la transferencia modal de la sala
+
+El SBIR clásico mira solo la interferencia entre el sonido directo del parlante y sus reflexiones de primer orden, tratando cada camino como campo libre; no ve los modos de la sala. La ventana de SBIR ahora tiene una casilla **«Incluir transferencia modal de la sala (híbrido en f_Schroeder)»** que agrega el efecto del recinto. Con la casilla activa se dibujan, sobre la misma referencia (0 dB = anecoico), tres curvas: el **SBIR** de imágenes de siempre, la **transferencia modal** de la sala (la respuesta modal FEM entre parlante y receptor, con sus resonancias), y una curva **Total híbrido** que combina las dos en su régimen de validez: usa la respuesta modal por **debajo de la frecuencia de Schroeder** (donde la solución modal es exacta y ya contiene las reflexiones de esas frecuencias) y el peine de imágenes por **encima** (donde la densidad modal es alta y el FEM truncado deja de ser confiable), con un cruce suave alrededor de f_Schroeder marcada con una línea vertical. Requiere tener los modos resueltos (si no, la casilla no aparece). El export a CSV incluye las columnas de la curva modal y de la híbrida.
+
+### Guardar y cargar curvas de RT para comparar configuraciones
+
+La ventana **«Ver RT60 calculado»** se limpia al cerrarla (cómodo para trabajar rápido), y ahora tiene un grupo **«Guardar / cargar curvas (CSV)»** para comparar tratamientos sin perder el trabajo. Con **«Guardar curva seleccionada…»** elegís una curva de la lista (Sabine, Eyring o Perturbación; T60 o T30) y la guardás en un archivo **CSV** eligiendo carpeta y nombre; el archivo es legible (se abre en Excel o cualquier editor) y guarda el método, la métrica y la tabla banda-por-banda. Después cambiás los revestimientos, reabrís la ventana, y con **«Cargar curva(s) desde CSV…»** traés uno o varios de esos CSV, que se superponen punteados para comparar contra la configuración actual. Como cada curva es su propio archivo, podés acumular todas las variantes que quieras.
+
+---
+
+**Cambios v2.27** (26 de agosto 2026): **construcciones de pared** (impedancia por superficie). Un eje.
+
+### Construcciones de pared: modelar la impedancia de cada superficie
+
+Hasta ahora la absorción de una superficie se resumía en su coeficiente α (medido con incidencia aleatoria, ISO 354). Eso alcanza para el tiempo de reverberación, pero en la banda modal (por debajo de la frecuencia de Schroeder) una pared real hace dos cosas que el α solo no captura: **amortigua** cada modo según cuánto absorbe en esa frecuencia, y **corre la frecuencia** del modo según la reactancia de la construcción (una cámara de aire, la masa de un panel, el resorte de un resonador). Una pared perfectamente rígida no corre nada; una construcción resonante sí, y ese corrimiento es audible.
+
+El botón **«Construcciones de pared…»** (en el grupo de Materiales) abre una ventana donde asignás una **construcción** a una o varias superficies: **paredes, parches y muebles**, todo en la misma lista. Con **«Nueva construcción y asignar…»** se abre un editor con cuatro tipos:
+
+- **Panel perforado**: una placa con orificios sobre una cámara de aire (resonador de Helmholtz distribuido). Parámetros: espesor de la placa, diámetro del orificio, porcentaje de perforación y profundidad de la cámara.
+- **Microperforado (MPP)**: lo mismo con orificios de menos de 1 mm, que dan absorción de banda ancha sin material poroso (modelo de Maa).
+- **Membrana / panel**: una placa impermeable que vibra sobre una cámara (resonador masa-resorte), típico para graves. Parámetros: masa por metro cuadrado, profundidad de la cámara y pérdidas internas.
+- **Poroso + cámara**: un material poroso (lana, espuma) sobre una cámara de aire opcional, con los modelos Miki, Delany-Bazley o JCA.
+
+Mientras editás, el panel de la derecha muestra en vivo la curva de **absorción** de esa construcción y su **frecuencia de resonancia**, así ves de una qué controla. Al aceptar, la superficie queda con esa construcción (en azul en la lista) y el cálculo de los modos usa su impedancia: el amortiguamiento por banda **más** el corrimiento de las frecuencias modales, que se ve reflejado en la respuesta en frecuencia. Las superficies sin construcción siguen usando el α de su material como siempre, así que un proyecto que no toca esto no cambia en nada.
+
+Las construcciones **solo actúan con el modelo de amortiguamiento «Perturbación de frontera»** (el que deriva el amortiguamiento de la admitancia de la pared); con Sabine se avisa. Se guardan en el archivo `.room`. Nota: en esta versión la impedancia se evalúa a incidencia normal (pared de reacción local), que es el supuesto habitual para paneles perforados y membranas.
+
+---
+
+**Cambios v2.28** (27 de agosto 2026): **Capa 0 a la vista (Δfₙ y ξₙ por modo)**, **un acabado por superficie** (material o construcción, no los dos), **crear material propio por tercios de octava**, y **el npm que escribís se respeta**. Cuatro ejes.
+
+### Cada modo, con su frecuencia corrida y su amortiguamiento a la vista
+
+Cuando una construcción de pared corre las frecuencias modales (sección anterior), ese corrimiento ya se veía en la respuesta en frecuencia, pero no como número. Ahora es explícito. En el grupo de **Modos** (pestaña Acústica):
+
+- Debajo del selector de modo hay una **línea de lectura** del modo elegido: su frecuencia rígida, la frecuencia efectiva a la que resuena de verdad (corrida por la construcción), el corrimiento **Δfₙ** entre ambas, el amortiguamiento modal **ξₙ** y el **RT60 de ese modo aislado**. Sin construcciones, Δfₙ = 0 (la pared no aporta reactancia, solo absorbe).
+- El propio **selector de modo** anota el corrimiento al lado de cada entrada cuando lo hay (por ejemplo `2: f = 75.70 Hz (Δ-1.30)`), así se ve de un vistazo qué modos se movieron y cuánto.
+- El botón **«Ver modos (Δfₙ, ξₙ)…»** abre una tabla con **todos** los modos: n, frecuencia rígida, frecuencia efectiva, Δfₙ, ξₙ y RT60ₙ. La tabla se exporta a **CSV, TXT o PNG** para llevarla a un informe.
+
+La frecuencia efectiva es la que usan la respuesta en frecuencia, el mapa de campo (slice y heatmap 2D, alineados en esta versión) y las figuras de mérito; la *forma* del modo no cambia (es una perturbación de primer orden). El RT60 del modo aislado sale de su amortiguamiento: RT60ₙ = 6.908/(ξₙ·2π·f). Sentido físico del corrimiento: por debajo de la resonancia de la construcción actúa como rigidez (resorte) y la frecuencia **sube**; por encima actúa como masa y **baja**; en la resonancia cruza por cero. Nada de esto altera el cálculo: es la Capa 0 (el modelado de impedancia) hecha visible.
+
+### Un acabado acústico por superficie
+
+Cada superficie (cara, parche o mueble) tiene **un solo** acabado: o el α de un material de catálogo, o una construcción de pared (impedancia Z). Antes se podían cargar los dos sobre la misma superficie y el programa calculaba con una definición pisando a la otra sin avisar. Ahora:
+
+- Si una superficie tiene una construcción, en «Materiales…» aparece **«→ definido por construcción»** (bloqueada): su impedancia reemplaza al α. Para volver a un material, se quita la construcción en «Construcciones de pared…».
+- Si dibujás un parche con material sobre una cara que tiene construcción (o al revés), el programa **avisa** y te deja elegir: que el parche **herede** la construcción de la cara, o que **mantenga** su material (override local explícito).
+
+### Crear un material propio sin escribir JSON
+
+En «Materiales…», el botón **«Crear material…»** abre un formulario con una casilla de absorción **por tercio de octava** (50–5000 Hz): completás las bandas que mediste, le ponés **nombre** y **notas**, y **Guardás**. Queda en la biblioteca (materials/) y disponible en Acústica y Predicción. Las bandas que dejes vacías se interpolan; el modelo usa tu resolución de tercios tal cual la cargaste (no la colapsa a octava), así una medición propia se respeta con su detalle.
+
+### El npm que escribís se respeta
+
+Con el motor de malla en «Automático», el auto-tuner sugiere una densidad de voxel (npm) que cubre hasta la frecuencia de Schroeder. Antes, al calcular los modos, ese valor **pisaba** el que hubieras escrito a mano. Ahora tu npm es un **piso**: si pedís **más** densidad que la recomendada (malla más fina, más válida en frecuencia, p. ej. para dar validez a más modos), se respeta; el auto-tuner solo lo **sube** cuando tu valor no alcanza a cubrir f_Schroeder.
+
+---
+
+**Cambios v2.29** (31 de agosto 2026): **cargar parlantes en formato CLF**, **filtro de crossover/EQ por fuente** (Butterworth, Linkwitz-Riley, Bessel, Chebyshev, elíptico), **todos los diálogos en fondo blanco/letra negra**, y **la absorción se comparte entre Acústica y Predicción**. Cuatro ejes.
+
+### Cargar la respuesta de un parlante en formato CLF
+
+El botón de respuesta de fuente ahora es **«Cargar FRD/TRF/CLF…»** y acepta archivos **CLF** binarios (`.cf2`, `.cf1`), el estándar de datos de parlantes (Common Loudspeaker Format). Al cargar uno, el programa extrae la **respuesta en eje** (sensibilidad SPL @ 1W/1m, por tercios de octava de 50 Hz a 20 kHz) y la usa como la curva Q(f) de la fuente, igual que un FRD.
+
+Lo que **no** se usa del CLF es el globo de directividad, y es a propósito: por debajo de la frecuencia de Schroeder la fuente es acústicamente omnidireccional (la longitud de onda es enorme comparada con el parlante), así que la directividad no moldea el campo modal. Meterla sería precisión falsa. El programa te avisa de esto al cargar el archivo. El lector se validó contra los valores que muestra el CLF Viewer para el mismo parlante (coincidencia exacta).
+
+### Un filtro por fuente (crossover / EQ)
+
+Cada fuente tiene ahora un grupo **«Filtro (crossover / EQ)»** en su diálogo. Elegís la **familia** de filtro, la **banda** (pasabajos o pasaaltos), el **orden** y la **frecuencia de corte**; para las familias que lo usan, aparecen además el ripple de banda de paso y la atenuación de rechazo. Familias disponibles (todas las de uso profesional en audio):
+
+- **Butterworth**: máxima planitud en la banda de paso; −3 dB en la frecuencia de corte.
+- **Linkwitz-Riley** (LR2/LR4/LR8): el estándar de crossovers; −6 dB en el corte (dos Butterworth en cascada), pasa-bajo y pasa-alto suman en fase.
+- **Bessel**: retardo de grupo plano (fase casi lineal), útil cuando importa la forma temporal.
+- **Chebyshev I / II**: corte más abrupto a cambio de ripple (en la banda de paso o en la de rechazo).
+- **Elíptico (Cauer)**: el corte más abrupto para un orden dado, con ripple en ambas bandas.
+
+El filtro se **compone** sobre la curva del parlante (magnitud y fase), la polaridad y el delay; con «Sin filtro» el resultado es idéntico a no tener filtro. El preview del diálogo muestra el filtro en vivo. El filtro se guarda en el `.room` y viaja al duplicar la fuente.
+
+### Todos los diálogos en fondo blanco, letra negra
+
+Las ventanas de diálogo (materiales, construcciones, FRF, SBIR, tabla de modos, editor de fuente, etc.) y los avisos emergentes pasaron a **fondo blanco con letra negra**, coherente con los gráficos (que ya eran claros). La ventana principal y los paneles laterales siguen con el tema oscuro. Es un cambio visual, no afecta ningún cálculo.
+
+### La absorción elegida se comparte entre Acústica y Predicción
+
+Antes, si definías la absorción de las superficies en Acústica (por ejemplo un α uniforme en el gate de Schroeder) y después ibas a Predicción, Predicción te la volvía a pedir: eran dos decisiones separadas. Ahora se **comunican en los dos sentidos**: Predicción **hereda** la absorción de Acústica (y te avisa que lo hizo) en vez de preguntar de nuevo, y si la cambiás en cualquiera de los dos paneles, el otro la **adopta**. El α uniforme se sincroniza como número; los materiales se mapean a piso/paredes/techo (mismo modelo de tres zonas en los dos paneles), así que cambiar el material en Predicción reasigna también los de Acústica. La última elección que hagas manda en ambos paneles.
+
+**Cambios v2.30** (2 de septiembre 2026): **modelo de fuente exacto para subs enfrentados (DBA/CABS)** — una herramienta nueva para diseñar y analizar subs enfrentados y aplicarlos a la sala, un **modelo físico de driver (Thiele-Small)** por fuente, y el **lector CLF generalizado**. Tres ejes.
+
+### Subs enfrentados (DBA / CABS)
+
+Motivación: la fuente del simulador era un **monopolo puntual**, y con eso los **subs enfrentados** (Double Bass Array / Controlled Acoustic Bass System) no se simulaban bien. El DBA/CABS funciona porque un array frontal lanza una **onda plana** y un array trasero la **absorbe**, dejando la sala sin la onda estacionaria en el grave. Eso necesita una **fuente distribuida** sobre la pared (una integral de superficie, no un valor puntual), que es lo que agrega esta versión. El respaldo físico es Kuttruff (*Room Acoustics* §3.6, la función de Green modal con excitación por velocidad de superficie) y la implementación de referencia de Santillán (JASA 2001) y Nielsen & Celestinos (CABS).
+
+En la zona **FRF** del panel hay un botón nuevo **«Subs enfrentados (DBA / CABS)…»**. Abre una herramienta que trabaja sobre la **caja rectangular** de la sala (los subs enfrentados están definidos para cuartos rectangulares). Elegís:
+
+- el **eje** de enfrentamiento (por defecto el más largo de la sala),
+- cuántos **subs por pared** en cada dirección transversal (una grilla n×n),
+- el **drive** del array trasero: **mínimos cuadrados (Santillán)**, el óptimo, o **retardo + inversión (naive)**, la versión clásica,
+- el **amortiguamiento** ξ y la frecuencia máxima del análisis.
+
+Al **Calcular** ves la **FRF en el receptor** antes (CABS off, solo el frente) vs después (CABS on, frente + trasero), y tres métricas de colapso: **planitud espectral**, **varianza espacial** y decay. Un dato clave que se muestra en vivo es **f_max = c/d** (con d el espaciado entre subs): el DBA **solo ecualiza hasta f_max**; por encima hay aliasing espacial y deja de servir (esa zona sale sombreada en el gráfico). Más subs → menor espaciado → mayor f_max. Por eso las métricas se miden **solo en la banda válida** [f_min, f_max].
+
+El botón **«Aplicar a la sala»** materializa el diseño como **fuentes reales** en la lista (etiquetadas DBA-F* al frente y DBA-R* atrás), con su drive: en modo naive el trasero lleva el retardo L/c y la polaridad invertida; en modo LS cada fuente lleva su curva de drive q(f). A partir de ahí el **resto de la app** (FRF, campo 3D, comparar puntos de escucha, escuchar) ve el DBA. Si tenés otras fuentes activas, te ofrece **mutearlas** para que el A/B sea limpio (medir solo el DBA, sin sumar el sistema anterior).
+
+Cómo testear el efecto: (1) con tus 2 subs normales, calculá y exportá la FRF; (2) diseñá el DBA hasta que la banda válida cubra lo que te importa; (3) aplicalo y aceptá mutear las otras; (4) volvé a calcular la FRF (con f máx ≤ f_max) y compará: más plana en la banda válida; (5) usá «Comparar puntos de escucha» en varios asientos para ver la **uniformidad espacial**, que es lo que un sub común no da. Nota: la herramienta usa un modelo analítico rectangular exacto y la FRF principal usa FEM, así que la **tendencia** coincide pero los números no son idénticos.
+
+### Modelo físico de driver (Thiele-Small)
+
+El diálogo de cada fuente tiene ahora un grupo **«Driver físico (Thiele-Small)»**. En vez de una curva plana o medida, podés derivar la respuesta Q(f) de la **física del parlante** (caja sellada): ingresás **fc + Qtc**, o los parámetros crudos **fs, Qts, Vas + Vb** (volumen de caja), y «Aplicar como curva Q(f)» genera la respuesta (pasa-altos de 2º orden con la fase correcta) y la usa como la curva de la fuente, igual que un FRD. El nivel lo pone la sensibilidad; la forma (rolloff bajo fc), el driver.
+
+### Lector CLF generalizado
+
+El lector de archivos **CLF** (`.cf2`/`.cf1`) ya no depende de una posición fija dentro del archivo: ahora **ancla en la estructura** (la corrida de tensión de referencia que precede a la respuesta en eje, invariante a la impedancia del parlante) y **detecta la versión** del formato. Sigue extrayendo solo la respuesta en eje (la directividad se descarta por diseño bajo Schroeder). Es más robusto para archivos de otros exportadores, aunque se validó sobre exports de EASE.
+
+---
+
+**Cambios v2.31** (3 de septiembre 2026): **impedancia por default en cada material**. Hasta ahora el corrimiento de las frecuencias modales (la reactancia de la Capa 0) solo aparecía si asignabas una **construcción de pared** a mano. Ahora **cada material trae su propia impedancia Z(f) por default**, así el efecto reactivo se ve sin cargar nada. Un eje.
+
+### Impedancia por default en cada material
+
+El modelo de perturbación de frontera usa la admitancia de pared β = ρ₀c/Z para dos cosas: la **parte real** amortigua (mueve el RT60) y la **parte imaginaria** (reactancia) **corre la frecuencia** de cada modo. Antes, un material del catálogo solo aportaba amortiguamiento (β real, sin corrimiento); la reactancia requería asignar una construcción explícita. Ahora la app le sintetiza a cada material una Z(f) por default:
+
+- El **amortiguamiento** sigue saliendo **exacto** del α medido del catálogo (no cambia ni un dígito respecto de antes: la absorción medida es sagrada).
+- La **reactancia** se le injerta **solo a los materiales porosos**. La app ajusta la **resistividad al flujo σ** (Pa·s/m²) de un poroso equivalente cuya absorción reproduce el α del material (modelo de Miki), y toma de ahí la parte imaginaria de la impedancia. Los materiales **duros o resonantes** (hormigón, vidrio, panel perforado) **no** reciben reactancia inventada: quedan con β real, como antes.
+
+El criterio de "poroso o no" lo decide la **forma del α**, no el nombre: si la absorción es alta y con forma porosa, entra; si es baja o resonante, no. Sobre el catálogo, alrededor del 40 % de los materiales reciben reactancia (alfombras, cortinas, espumas, lanas), y las superficies rígidas/vidrios/perforados quedan afuera.
+
+Se ve en dos lugares:
+
+- En **«Ver modos (Δfₙ, ξₙ)…»**: con una sala alfombrada y **sin ninguna construcción**, la columna **Δfₙ** ya trae corrimiento (del orden de +1 a +2 % con alfombra pesada; el signo es positivo, la reactancia porosa a baja frecuencia sube las fₙ). El encabezado de la tabla aclara si el corrimiento viene de construcciones o de la Z por default de los materiales.
+- En **«Construcciones de pared…»**: cada cara sin construcción ahora muestra, en gris, **su material y su Z por default** (por ejemplo *«Alfombra fina · Z auto (poroso equiv., resistividad σ≈1.5e6 Pa·s/m²)»* o *«Hormigón · β real, sin reactancia»*), y se actualiza al cambiar el material. La construcción explícita, si la asignás, sigue pisando la Z del material.
+
+Sobre el σ que aparece: es la **resistividad al flujo** del poroso equivalente (cuánto cuesta empujar aire por el material, ISO 9053), ajustada para reproducir el α de catálogo. Es una cantidad de modelo, no una medición del material puntual; la reactancia que produce es la que tendría un absorbente poroso con esa absorción.
+
+---
+
+*Manual actualizado al 3 de Septiembre de 2026 — v2.31.*

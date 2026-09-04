@@ -83,6 +83,11 @@ REM     Lo que QUEDA y no se puede sacar sin romper nada: los mkl_*.dll
 REM     (~370 MB, el BLAS de numpy/scipy; son variantes de despacho por CPU y
 REM     sacarlas rompe en maquinas con otro juego de instrucciones) y
 REM     gmsh-4.15.dll (~86 MB, el mallador boundary-fitted opcional).
+REM   --hidden-import=filters: filters.py (crossover/EQ por fuente, v2.29) se
+REM     importa LAZY dentro de funciones (acoustic_panel/sources: `import filters`),
+REM     asi que el analisis estatico de PyInstaller NO lo ve y el .exe crashea con
+REM     ModuleNotFoundError al usar el filtro. scipy.signal (que filters usa) va por
+REM     las dudas aunque el collect de scipy ya lo trae.
 "%PYEXE%" -m PyInstaller ^
     --onedir ^
     --windowed ^
@@ -95,6 +100,8 @@ REM     gmsh-4.15.dll (~86 MB, el mallador boundary-fitted opcional).
     --collect-all trimesh ^
     --collect-all gmsh ^
     --hidden-import=networkx ^
+    --hidden-import=filters ^
+    --hidden-import=scipy.signal ^
     --add-data "materials;materials" ^
     --exclude-module PyQt6 ^
     --exclude-module PySide6 ^

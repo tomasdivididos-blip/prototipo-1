@@ -323,6 +323,34 @@ def sbir_response(
     )
 
 
+def modal_sbir_crossfade(freq, sbir_db, modal_db, f_schroeder: float,
+                         transition_oct: float = 0.5) -> np.ndarray:
+    """Curva 'total' HIBRIDA modal(FEM) + imagenes(SBIR), en dB re directo de
+    campo libre. Combina los dos modelos en su regimen de validez:
+
+      - f < f_Schroeder: domina la TRANSFERENCIA MODAL (FEM). Debajo de Schroeder
+        la solucion modal es completa: contiene las reflexiones de frontera como
+        modos, asi que ya "incluye" el SBIR de esas frecuencias.
+      - f > f_Schroeder: domina el PEINE ESPECULAR (SBIR imagenes). Ahi la densidad
+        modal es alta y el FEM (truncado a N modos) deja de ser confiable.
+
+    Crossfade suave de +/- `transition_oct` octavas alrededor de f_S:
+        w(f) = 1 (modal) por debajo de f_S/2^t; 0 (sbir) por encima de f_S*2^t;
+        lineal en log2(f) en el medio.  total = w*modal_db + (1-w)*sbir_db.
+
+    Mezclar en dB es adecuado para una curva de comparacion (no reintroduce fase).
+    Referencia del cruce: f_Schroeder es la frontera fisica entre el regimen modal
+    (discreto) y el difuso/geometrico (Kuttruff, Room Acoustics, cap. 3-4)."""
+    f = np.asarray(freq, dtype=float)
+    fs = max(float(f_schroeder), 1e-6)
+    lo = fs * 2.0 ** (-abs(transition_oct))
+    hi = fs * 2.0 ** (+abs(transition_oct))
+    denom = np.log2(hi) - np.log2(lo)
+    w = np.clip((np.log2(hi) - np.log2(np.maximum(f, 1e-9))) / max(denom, 1e-9),
+                0.0, 1.0)
+    return w * np.asarray(modal_db, float) + (1.0 - w) * np.asarray(sbir_db, float)
+
+
 def sbir_from_sources(source_array, walls, receiver, freq_axis,
                       c: float = C0, rho0: float = RHO0,
                       order: int = 1) -> SBIRResult:

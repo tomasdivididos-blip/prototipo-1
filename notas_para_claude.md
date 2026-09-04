@@ -502,10 +502,27 @@ en lugar de ensamblar la matriz de superficie `C = (1/Z) ∫_∂Ω Ni Nj dS`.
 **Si el usuario vuelve a preguntar por C-matrix**: respondé que se evaluó,
 documentado en `acoustic_fem_explicado.md` §16. Sólo gana cuando hay
 **Z(ω) medida en tubo de Kundt** por material, escenario que NO aparece
-en el flujo de trabajo (catálogo Cox da α, no Z(ω)). Derivar Z desde α
-no agrega información — es el mismo dato repackeado, con asunciones
-adicionales (locally reacting, Z real, incidencia normal) que el catálogo
-**no** garantiza.
+en el flujo de trabajo (catálogo Cox da α, no Z(ω)).
+
+**REFINAMIENTO v2.31 (3 Sep 2026) — separar amortiguamiento de reactancia.**
+El texto viejo decía "derivar Z desde α no agrega información — es el mismo dato
+repackeado". Eso es cierto SOLO para la parte REAL (el amortiguamiento): α
+determina Re(β) de forma exacta (inversión de Paris), y ahí una Z real desde α
+no agrega nada. Pero NO es cierto para la parte IMAGINARIA (la reactancia): α NO
+determina Im(β), así que una Z compleja sintetizada desde α SÍ agrega una
+suposición nueva (el corrimiento de fₙ). La Capa 0 (posterior a D5b) es
+justamente Z compleja, así que el enunciado viejo quedó parcial.
+- **Default desde v2.31 (ver [[z-impedance-modeling]]):** cada material trae una
+  Z(f) por default con **Re(β) EXACTO del α** (amortiguamiento sin regresión, la
+  absorción medida es sagrada) MÁS **Im(β) injertada** desde un poroso semi-infinito
+  de Miki con σ ajustada al α, **solo si el material es poroso-compatible** (gate por
+  forma del α: amax≥0.15 y buen ajuste). Duros/resonantes → Im=0 (β real, como antes).
+- **La reactancia es MODELO, no medición.** Se sintetiza bajo la hipótesis "poroso
+  equivalente"; hay que decirlo cuando se reporta (el rótulo de la GUI dice "poroso
+  equiv."). Donde el modelo es más flojo (superficies duras) el gate no la aplica, y
+  donde la aplica (porosos) el efecto es chico y del signo correcto (resorte → sube fₙ).
+- **Sigue valiendo:** la matriz C ensamblada solo gana con Z(ω) medida real; derivar
+  la reactancia desde α es un modelo de 1er orden barato, no un sustituto de medir.
 
 **Hermiticidad como bonus**: con paredes 100 % rígidas, K y M son reales
 simétricas → `eigsh` Lanczos directo. Añadir C compleja rompe la
@@ -540,11 +557,30 @@ PYTHONIOENCODING=utf-8 /c/Users/aceve/anaconda3/python.exe script.py
 ```
 Alternativa: en el código, usá solo ASCII o `print('...'.encode('utf-8'))`.
 
-### LaTeX (LEGADO — ya no se usa para el manual)
-**Desde el 19 Ago 2026 el manual se mantiene SOLO en `MANUAL.md`.** Ya no se generan
-ni sincronizan `MANUAL.tex` ni `MANUAL.pdf` (decisión del usuario). Los `.tex`/`.pdf`
-existentes quedan como snapshot histórico hasta v2.22; no los toques ni los actualices.
-(Ruta de MiKTeX por si alguna vez hace falta: `/c/Users/aceve/AppData/Local/Programs/MiKTeX/miktex/bin/x64/pdflatex.exe`.)
+### Manual: master `.md` + PDF on-demand (actualizado 4 Sep 2026)
+**El manual se mantiene SOLO en `MANUAL.md`** (desde 19 Ago 2026). `MANUAL.tex` quedó
+congelado como snapshot histórico en v2.22; **NO lo toques ni lo sincronices** (ya no
+es la fuente del PDF).
+
+**PDF (nuevo pipeline, 4 Sep 2026): `render_manual_pdf.py`** renderiza `MANUAL.md` →
+`MANUAL.pdf` con **pandoc + xelatex** (ya no `pdflatex` sobre el `.tex`). Un comando:
+`/c/Users/aceve/anaconda3/python.exe render_manual_pdf.py`. Detalles:
+- pandoc está en `anaconda3/Library/bin/pandoc.exe`; xelatex de MiKTeX
+  (`/c/Users/aceve/AppData/Local/Programs/MiKTeX/miktex/bin/x64/`); el script arma el PATH solo.
+- **Fuentes DejaVu** (de matplotlib) por header fontspec → cubren α, ξₙ, ∇, ∈, ⟨⟩,
+  subíndices, box-drawing, etc. sin glyphs faltantes. lualatex se colgaba (prompt de
+  MiKTeX) → se usa `--enable-installer`; el fallback por glyph de luaotfload daba
+  "invalid font identifier" (harf vs node) → se descartó, DejaVu sola alcanza.
+- **CERO EMOJI (pedido del usuario, 4 Sep 2026).** El usuario NO quiere emojis en el
+  manual: se sacaron TODOS de `MANUAL.md` (🟢🔊💾📂🎨🟡… + ⚠ ☑ ⛒ ⬒ ⏹, con reword de
+  las frases que los referenciaban). El script igual trae un strip de emoji como red de
+  seguridad (hoy elimina 0). Se CONSERVAN símbolos de notación/UI monocromos que sí
+  renderizan y no son emoji: → ≈ √ ∇ ∈ ⟨⟩ ≥ ▾ ▸ ✓ ✕ ✎ ○ y el box-drawing.
+- **Cadencia (workflow del usuario):** el `.md` se actualiza en CADA recap; el **PDF se
+  renderiza SOLO cuando el usuario lo pide** (la diferencia acumulada ya es notable),
+  porque exportar tarda. NO regenerar el PDF en cada recap.
+- `MANUAL.pdf` (raíz) SÍ está trackeado en git; el script también lo copia a
+  `dist/Prototipo1/` si existe (para que el bundle Windows lleve el manual al día).
 
 ### Git
 **El proyecto YA tiene git inicializado** (desde 7-8 Jul 2026 — cambió la regla
@@ -812,6 +848,26 @@ donde `Path(__file__).parent / "materials"` lo encuentra (porque los
 **Verificación**: correr `verify_distribution.py` post-build; chequea
 que haya 19 JSON en `_internal/materials/`.
 
+### B11. `filters.py` no bundleado (import lazy) — FIXEADO v2.31 (3 Sep 2026)
+**Síntoma**: el `.exe` arranca, pero al usar el **filtro crossover/EQ por fuente**
+(feature v2.29) crashea con `ModuleNotFoundError: No module named 'filters'`.
+**Diagnóstico**: `filters` se importa **LAZY** dentro de funciones (`import filters
+as _flt` en `acoustic_panel.py` y `sources.py`), no a nivel de módulo. El análisis
+estático de imports de PyInstaller NO sigue los imports dentro de funciones, así que
+`filters.py` **no entra al PYZ** del bundle (no aparece ni suelto ni en los zips de
+`_internal`; buscarlo ahí es el chequeo). Igual que B8/B9/B10: build "OK", el .exe se
+genera, el bug aparece recién al ejercitar el feature.
+**Confusión del pipeline (importante)**: el `Prototipo1.spec` commiteado SÍ tenía
+`--hidden-import=filters` (bloque v2.29), pero **`build.bat` NO lo usa**: termina en
+`main.py`, o sea regenera el spec por CLI y pisa esos hand-edits. Los dos caminos de
+build divergían. Moraleja: **el source de verdad del build es `build.bat` (CLI), no el
+`.spec`** (que build.bat sobreescribe). Cualquier hidden-import va en build.bat.
+**Fix v2.31**: `build.bat` ahora pasa `--hidden-import=filters` (+ `scipy.signal` por
+las dudas, aunque el collect de scipy ya lo trae), con REM explicativo.
+**Verificación**: tras el build, `filters` tiene que aparecer en el PYZ del bundle
+(no como `.py` suelto: los módulos propios van al archivo comprimido). Regla general:
+**todo módulo propio importado SOLO de forma lazy necesita `--hidden-import` en build.bat**.
+
 ---
 
 ## 8. Si te aparece X, hacé Y
@@ -882,6 +938,35 @@ Si la idea es grande, hacer la verificación con benches; si es chica, inline.
 
 ---
 
+## 10a. Tests visuales: SIEMPRE en formato lista (pedido del usuario, 3 Sep 2026)
+
+Cuando un cambio necesita verificación visual humana (algo que el bench headless no
+cubre: que un dato aparezca en la GUI, que un diálogo abra, que un número se propague
+a la pantalla), el protocolo del test visual **se presenta como listas / checklists,
+nunca como párrafo en prosa**. El usuario ejecuta el test leyendo la lista; una prosa
+lo obliga a reconstruir los pasos.
+
+**Estructura obligatoria de un test visual:**
+
+1. **Cómo lanzar** — el comando en un bloque ` ```bash ` (la app le pone botón Run).
+2. **Pasos numerados** — una acción por ítem, en orden, **en infinitivo, claros y
+   concisos** ("Armar sala", "Asignar material", "Calcular", "Abrir diálogo X"). Sin
+   preámbulo ni relleno; el verbo primero.
+3. **Qué mirar** — lista o tabla con dos columnas: *qué elemento de la UI* · *PASA si…*
+   (condición concreta y falsable, con el número/rango esperado, no "debería verse bien").
+4. **Contraprueba** (si aplica) — el caso que NO debe activar el efecto (valida el gate).
+5. **Qué sería un FAIL** — lista de síntomas concretos de fallo (incluir crash).
+
+**Reglas:**
+- Rótulos de la UI textuales y verificados en el código (el nombre exacto del botón/
+  columna/diálogo), no aproximados. Buscar el `QPushButton("...")`/`setWindowTitle` real.
+- Cada "PASA si" tiene que ser **falsable**: un número, un rango, un texto exacto.
+- Si el cambio tocó texto de la GUI, incluir en "qué mirar" que el texto NUEVO aparezca
+  (un cambio de física que deja un cartel viejo mintiendo es un FAIL de UI).
+- El test visual es un paso previo al recap (§10b): sin su OK, no se regeneran los zips.
+
+---
+
 ## 10b. Protocolo de recap (para poder hacer /clear y seguir trabajando)
 
 **Objetivo del usuario (19 Ago 2026):** trabajar hasta que el contexto se llene,
@@ -892,7 +977,7 @@ perder nada. Cada "recap" tiene que dejar el estado guardado en disco Y en el re
 clear"), o proactivamente cuando notes que el contexto se está llenando y hay trabajo
 sin persistir. Ante la duda, ofrecelo.
 
-**Qué hace un recap (los tres pasos, SIEMPRE los tres):**
+**Qué hace un recap (los cuatro pasos, SIEMPRE los cuatro):**
 
 1. **`MANUAL.md`** — si hubo cambios funcionales visibles al usuario, agregar/actualizar
    el bloque de changelog `**Cambios vX.YY**` (solo el .md; ecuaciones en LaTeX).
@@ -904,10 +989,19 @@ sin persistir. Ante la duda, ofrecelo.
    `git add -A`, commit con mensaje descriptivo (terminar con `Co-Authored-By: Claude`),
    `git push`. Si estás en una rama de trabajo (ej. `dist-exe`), pushear ahí; no mergear
    a `main` sin pedir. Reportar el hash del commit.
+4. **Distribución (`dist-exe` + zips)** — regenerar los entregables para que queden
+   al día con el commit del recap:
+   - **Win:** `build.bat` → `verify_distribution.py` → `test_distribution_smoke.py` →
+     `pack_distribution.py` (produce `Prototipo1_vX.YY.zip`).
+   - **Mac:** `pack_mac_distribution.py` (lee la versión del último `**Cambios vX.YY**`
+     del MANUAL → nombra el zip solo; correr desde fuente, no se cross-compila).
+   El `.exe`, la carpeta `dist/` y los `*.zip` NO van al repo (ya están en `.gitignore`);
+   los zips se mandan por WeTransfer/Drive. Reportar los nombres/versión de los zips.
 
-**Regla:** un recap no está completo hasta que los tres pasos están hechos y el push
-confirmado. El objetivo es que un `/clear` + re-lectura de los `.md` deje a la próxima
-instancia exactamente donde quedó esta, sin agujeros.
+**Regla:** un recap no está completo hasta que los cuatro pasos están hechos, el push
+confirmado y los zips (Mac + Win) regenerados. El objetivo es que un `/clear` +
+re-lectura de los `.md` deje a la próxima instancia exactamente donde quedó esta, sin
+agujeros.
 
 ---
 
@@ -2412,6 +2506,370 @@ bien.
 - **v2.25 (25 Ago 2026):** batch que junta modo Rotar + delay/fase campos + fixes macOS
   (numpy2/Qt/consola). MANUAL changelog v2.25. Capa 0 NO va al MANUAL (no está wired). El
   `pack_mac_distribution.py` lee la versión del último `**Cambios v2.NN**` → los zips salen v2.25.
+
+- **25-26 Ago 2026 — Capa 0 Etapas 3/4/5a + pedidos del profesor (SBIR modal + RT CSV).**
+  Rama `dist-exe`. Dos frentes.
+  **(A) Capa 0 (modelado de Z), avance grande (headless, plan en `plan_modelado_Z.md`):**
+  - *Etapa 3 (resonantes):* `impedance.py` + `maa_zface` (panel (micro)perforado, Maa 1998
+    Ec 2-4, constante de perforado x=(d/2)√(ωρ₀/η)) y `membrane_zface` (masa-resorte,
+    Z=ρ₀c·damping+iωm). Convención atada a la cámara de aire del módulo (resorte Im(Z)<0,
+    masa Im(Z)>0). Constructores `perforated`/`microperforated`/`membrane`/`helmholtz` =
+    facing EN SERIE (`_facing_surface`) sobre backing TMM (`_facing_backing`). `bench_resonant_facings.py`
+    21/21: pico de α EN el cero de reactancia (la fórmula lumped f₀=(c/2π)√(ε/(t_ef·D)) es su
+    límite k₀D→0, se aparta ~15% con cavidad de cm), membrana f₀=60/√(mD) exacto, Maa r↑ al
+    achicar d, **corrimiento de fₙ cambia de signo al cruzar la resonancia**.
+  - *Etapa 4 (auditoría integral):* `bench_capa0_audit.py` 33/33 + suite `bench_capa0_all.py`
+    (5 etapas en procesos aislados, 117/117). Geometría irregular (pentágono/hexágono+taper/
+    caja+twist) sin NaN, θ∈[0,88°], cobertura completa; pasividad Re(Z)≥0 y α∈[0,1] en 11
+    modelos × banda × ángulos; validez por modelo (DB no físico α<0 a X<0.01, NO Re(Zc)<0);
+    convención end-to-end (ley sign(f_new−fₙ)=−sign(Im Z), ambos signos al cruzar λ/4);
+    convergencia (θ con la malla, ξ con la cuadratura/subdiv); call-path (rígido→0, default,
+    measured extrapola, grupos vacíos→None).
+  - *Etapa 5a (wiring headless a la física):* decisiones del usuario = el corrimiento PROPAGA
+    a la física (FRF/campo/FoM usan f_new; forma modal rígida) y la construcción se ancla A LA
+    CARA (mapa `_construction_map` paralelo al FaceMaterialMap). `impedance.build_surface(spec)`+
+    `spec_label` ((de)serialización JSON). Panel: `_construction_surf_by_group` (construcción→
+    Surface; cara sin construcción→`_material_surface`=resistiva de α(f)=puente exacto α→β),
+    `_effective_modal_freqs`, `_freq_shift_per_mode`, rama nueva en `_compute_xi_from_materials`
+    (→`perturbation_xi_shift_extended`). `aa.run_fem_frf(modal_freqs=...)` (param aditivo).
+    `.room` **v9** (`wall_constructions`, aditivo). `bench_capa0_wiring.py` 9/9 (reproducibilidad
+    FRF(None)==FRF(freqs) bit a bit, construcción MUEVE la FRF). **Capa 0 NO va al MANUAL: 5b
+    (diálogo UI) y 5c (mediciones, EN PAUSA: el usuario no tiene Z medida) sin hacer.**
+  **(B) Pedidos del profesor (user-facing, MANUAL v2.26):**
+  - *SBIR con transferencia modal (toggle):* decisión = HÍBRIDO con crossfade en f_Schroeder.
+    `sbir.modal_sbir_crossfade(freq, sbir_db, modal_db, f_s)` (peso lineal en log2(f), ±0.5 oct).
+    `_open_sbir` computa la FRF modal en el receptor, la normaliza al directo de campo libre
+    (20log10(|H|/|p_dir|), 0 dB=anecoico) y toma f_S de `_schroeder_context()`. `SBIRDialog`
+    refactorizado (`_rebuild_plot()` + checkbox); CSV con columnas modal/híbrido. `bench_sbir.py`
+    +test_modal_crossfade, `bench_sbir_modal.py` 6/6.
+  - *RT60 "sumar curva copia la vieja":* NO era bug de cálculo (verificado headless: recomputa
+    bien, A=10.3s B=3.4s). La ventana se limpia adrede. Solución = guardar/cargar curvas a
+    **archivos CSV** (`QFileDialog`; primera versión con lista interna+.room tenía bug: al cargar
+    solo aparecía la 1ª). `RTComparisonDialog`: `_save_selected_curve` (CSV con cabecera
+    nombre/metodo/metrica + tabla), `_load_saved_curve` (`getOpenFileNames` MÚLTIPLE, punteadas
+    "★") + `_parse_rt_csv`. NO usa `.room`.
+  Test visual humano: **Bloque A (SBIR modal) = perfecto; Bloque B (RT CSV) = todo verde** (tras
+  pasar de lista interna a CSV). Memoria: [[profesor-sbir-rt60]], [[z-impedance-modeling]].
+
+- **26 Ago 2026 — Capa 0 Etapa 5b: GUI de construcciones + impedancia en CUALQUIER
+  superficie (MANUAL v2.27).** Rama `dist-exe`. Primera vez que la Capa 0 es visible
+  para el usuario. Decisiones del usuario: ventana aparte (no columna en la tabla de
+  materiales) + tipos = resonantes (perforado/MPP/membrana) + poroso con cámara.
+  - `ConstructionEditorDialog`: combo de tipo → grupos de parámetros (mm/%/kg·m⁻²/
+    Pa·s·m⁻²) show/hide + preview en vivo de α_random(f) 20-500 Hz + hint de f₀.
+    Poroso con modelo Miki/DB/JCA (los 5 params de JCA aparecen condicionalmente).
+    `_current_spec()` → spec de `impedance.build_surface`.
+  - `WallConstructionsDialog`: lista UNIFICADA de superficies (paredes + parches ⬒ +
+    muebles ▣), selección múltiple, "Nueva y asignar…"/"Editar"/"Quitar". Edita COPIA
+    del mapa, el panel la adopta al Aceptar.
+  - **Pedido clave del usuario ("es el punto de la implementación"): impedancia en
+    TODA superficie, no solo paredes.** El `_construction_map` es unificado (claves =
+    firma de grupo / `patch.key` 16-hex / `__furniture_i__`, formatos distintos → sin
+    colisión). Núcleo nuevo `absorption_patch.compute_xi_shift_with_impedance`:
+    perturbación COMPLEJA sobre el teselado fino de parches, cada slot = una
+    SurfaceImpedance (construcción o material α→β), devuelve ξ Y f_new; muebles entran
+    como grupos augmentados, parches como sub-slots. Incidencia NORMAL (local) en este
+    camino unificado (trade-off: perdió el ángulo-por-modo de 5a a cambio de soportar
+    parches+muebles; para perforados/membrana la reacción local es lo estándar).
+    Panel: `_construction_surfaces` (surf_by_group + surf_by_patch), reemplaza el
+    `perturbation_xi_shift_extended` solo-paredes de 5a (que IGNORABA parches).
+  - Botón "Construcciones de pared…" (bajo Parches) + `_open_constructions_dialog`/
+    `_on_constructions_applied` (recomputa ξ, avisa si el modelo no es perturbación) +
+    `_refresh_constructions_summary`; load de `.room` refresca el resumen.
+  - `bench_capa0_wiring` 13/13 (W6 puente unificado==α→β <2% por cuadratura, W7 parche
+    con construcción → corrimiento 3.28 Hz). Suite `bench_capa0_all` **121/121**.
+    Smoke test humano: TODO OK. Memoria [[z-impedance-modeling]].
+  - FALTA: Etapa 5c (mostrar Δfₙ/ξ explícito en FRF/Ver-RT60 + carga de mediciones
+    Z(f)/Z(f,θ), EN PAUSA sin mediciones).
+
+- **27 Ago 2026 — Capa 0 Etapa 5c: la parte DOABLE (mostrar Δfₙ y ξₙ por modo),
+  MANUAL v2.28.** Rama `dist-exe`. Es display-only: NO toca la física (el corrimiento
+  ya propagaba a la FRF vía `_effective_modal_freqs`/`_freq_shift_per_mode` desde 5a).
+  Tres superficies nuevas en el grupo Modos:
+  - **Read-out por modo** (`lbl_mode_shift` bajo el picker): fₙ rígida → f efectiva
+    (Δfₙ), ξₙ y RT60ₙ del modo seleccionado. `_update_mode_readout` (barato, usa caches
+    vivas, NO recomputa la perturbación); enganchado a `combo_mode.currentIndexChanged`
+    y al final de `_refresh_modes_combo`.
+  - **Marcador Δ en el combo**: cada entrada anota `(Δ+x.xx)` y muestra la f efectiva
+    cuando |Δ|≥5e-3; sin corrimiento el texto queda EXACTO como antes (sin regresión).
+  - **`ModeTableDialog`** (botón "Ver modos (Δfₙ, ξₙ)…"): tabla de todos los modos
+    (n · fₙ rígida · f efectiva · Δfₙ · ξₙ · RT60ₙ) + export CSV/TXT/PNG. Helper de
+    datos `_collect_mode_table` (modelo activo; si ξ no está cacheado lo calcula una
+    vez, side-effect: puebla el corrimiento). RT60ₙ = 6.908/(ξₙ·2π·f) del modo aislado.
+  - **Refrescos:** construcciones aplicadas y toggle de modelo → `_refresh_modes_combo`
+    (repinta marcador + read-out, vuelve a modo 0); editar material → solo read-out
+    (Δfₙ es invariante al material, viene solo de Im(β) de construcciones).
+  - Decisión: Ver-RT60 (`RTComparisonDialog`) NO es el lugar para Δfₙ/ξ (es Sabine/
+    Eyring/Fitzroy). El campo/slice/heatmap de |p| ahora usan la frecuencia EFECTIVA
+    (helper `_effective_freq_of`, tres sitios), alineados con la FRF (antes usaban la
+    rígida; se corrigió a pedido del usuario, no era del scope original de 5c).
+  - `bench_capa0_5c.py` **43/43** (formateo tabla, RT60ₙ, export CSV/TXT limpio,
+    ramas ξ=None/∞/Δ≈0, glue `_collect_mode_table`, y T9 exclusión mutua). Suite
+    `bench_capa0_all` **164/164**. Smoke offscreen de MainWindow OK. **Test visual
+    humano PASÓ.** Sigue EN PAUSA: carga de mediciones Z(f)/Z(f,θ) (sin mediciones).
+    Memoria [[z-impedance-modeling]].
+
+- **27 Ago 2026 — Linkeo α↔construcción (exclusión mutua), material propio por tercios,
+  fix npm manual (todo en v2.28, rama dist-exe, test visual PASÓ).** Batch a pedido del
+  usuario tras el 5c:
+  - **Exclusión mutua (un acabado por región).** Decisión del usuario: material-α y
+    construcción-Z NO pueden coexistir sobre la misma superficie (antes se podían cargar
+    los dos y uno pisaba al otro en silencio). Como el α es baseline SIEMPRE presente y
+    la construcción es el upgrade, se implementó como BLOQUEO: `fm.MaterialsDialog`
+    recibe `construction_keys` y muestra las caras/parches con construcción como
+    `QLabel` «→ definido por construcción» (sin combo). Gate GEOMÉTRICO en el panel
+    (`_patch_finish_conflicts`/`_resolve_patch_finish_conflicts`): un parche cuyo
+    `face_signature` tiene construcción y que NO tiene construcción propia PISA la Z de
+    la cara en su huella → al aplicar (construcciones o parches) avisa y ofrece heredar
+    la construcción al parche o mantener el material. Headless: hereda por defecto. La
+    carga de `.room` setea el mapa directo (main.py:1353), no dispara popups. Bench T9.
+  - **Crear material propio por tercios de octava** (pedido textual del profesor: casillas
+    por tercio → completar → nombre → notas → guardar, sin JSON). `MaterialFormDialog`
+    (face_materials.py): grilla 50–5000 Hz (21 tercios ISO), coma/punto, clamp [0,1],
+    vacías fuera. `_create_material` en `MaterialsDialog` escribe `materials/<slug>.json`
+    (categoría «Personalizado», source «Medición propia», α dict en tercios), recarga la
+    biblioteca. **Cambio de modelo:** `Material.alpha(f)` ahora usa los datos CRUDOS
+    (`_alpha`) cuando existen, para NO colapsar los tercios a las 8 octavas de
+    `_alpha_table` (fiel a la medición, alineado con el norte de exactitud). Sin
+    regresión: los materiales de catálogo (octava completa) dan idéntico. `bench_material_
+    form.py` **19/19** + smoke de escritura/recarga.
+  - **Fix npm manual (D4).** Con motor «Automático», el auto-tuner pisaba el npm del
+    usuario hacia abajo al calcular (`_solve_fem` ~4586). Ahora el npm manual es un PISO:
+    helper puro `_reconcile_npm(npm_auto, npm_manual, h_auto)` → si manual>auto se respeta
+    (h escala ~1/npm), si manual≤auto usa el auto (cubre f_S). Es lo que necesita la
+    advertencia de validez con perturbación. `bench_schroeder_autotuner.py` **37/37**
+    (T18). Relacionado: [[mesh-autotuner-fix]].
+  - **Recap:** MANUAL v2.28 (4 ejes) + notas + memoria + commit/push + zips Mac/Win.
+    PENDIENTE (única tarea abierta de la sesión): estilo de TODOS los diálogos a fondo
+    blanco/letra negra (decidido por el usuario, reajustando textos de color; NO
+    empezado).
+
+- **31 Ago 2026 — v2.29 (rama dist-exe): diálogos claros + puente de absorción + filtro
+  crossover + CLF. Cuatro ejes, todos con test visual/bench. Test humano PASÓ.**
+  - **(1) Diálogos a fondo blanco/letra negra (cierra el pendiente v2.28).** `style.py`:
+    `LIGHT_QSS` + `apply_dialog_theme(w)` (paleta **Catppuccin Latte**, la variante clara
+    oficial de Mocha → mapeo oscuro→claro principiado). Se aplica por-instancia en cada
+    QDialog (cascada, anula el DARK_QSS global solo en ese subárbol; la ventana principal
+    y paneles docked siguen oscuros). `LIGHT` dict = fuente única de verdad para reajustar
+    los labels de color inline. Los `QMessageBox`/`QInputDialog` son top-level (NO heredan
+    LIGHT_QSS) → regla global scopeada dentro de `DARK_QSS` (`QMessageBox QLabel` gana a `*`),
+    así salen claros desde los ~100 call-sites estáticos sin tocarlos. Diálogos INLINE
+    (`dlg=QDialog(self)`, no subclases `class X(QDialog)`) que el barrido por clase NO
+    agarró: prediction_panel `_ask_absorption`/`_ask_shape` + 2 QProgressDialog; acoustic
+    `_compare` + 1 QProgressDialog; main 2 QProgressDialog → todos con `apply_dialog_theme`.
+    QFileDialog queda nativo del SO (no se estiliza). Verificado con `.grab()` a PNG.
+  - **(2) Puente de absorción Acústica↔Predicción (bidireccional).** Eran DOS estados
+    independientes: `acoustic._abs_choice_alpha`+FaceMaterialMap vs `prediction._abs_choice`
+    (dict). Ahora: representación normalizada `{"mode":"uniform","alpha"}` /
+    `{"mode":"materials","names":(piso,pared,techo)}` / `{"mode":"target"}` / None. Ambos
+    paneles tienen `absorption_state()`+`adopt_absorption_state()`+señal
+    `absorptionChoiceChanged`; MainWindow cablea `get_absorption` (callback) + conecta las
+    dos señales. `prediction._seed_absorption_from_acoustic()` en `_on_predict` (hereda si
+    tiene None, avisa 1×/sesión con QMessageBox, guard `_is_offscreen` para benches).
+    Política (decisión del usuario, 2 preguntas): α uniforme = auto-sync bidireccional;
+    materiales = Acústica→Predicción mapeados a piso/pared/techo (Pred→Ac queda al botón
+    explícito «Aplicar a Acústica», NO pisa la sala real). Resuelve el bug reportado
+    (elegir α=0.05 en Acústica y que Predicción re-pregunte). Test `test_bridge` 10/10.
+  - **(3) Filtro de crossover/EQ por fuente (pedido del profesor).** Núcleo nuevo
+    `filters.py` (numpy/scipy, D0): `filter_transfer(freq, ftype, order, fc, kind, ripple,
+    atten)` → H(f) COMPLEJO de prototipo ANALÓGICO (`scipy.signal` butter/cheby1/cheby2/
+    ellip/bessel + `freqs`, s=jω = convención e^{+iωt} del solver, se multiplica directo).
+    LR = Butterworth(N/2)². 6 familias (Butterworth/Linkwitz-Riley/Bessel/Chebyshev I-II/
+    Elíptico), lowpass+highpass. Campos en `OmniSource` (filter_type/order/fc/kind/ripple_db/
+    atten_db, "none"=exacto histórico), compuesto en `effective_Q_spectrum` tras el delay.
+    UI en `SourceEditDialog`: grupo con combos + ripple/atten condicionales + preview en
+    vivo (`_on_filter_type_changed`/`_filter_state`). `.room` aditivo + duplicar. `bench_
+    filters.py` 16/16 vs teoría (−3/−6 dB en fc, roll-off −6N dB/oct, LR=Butter², ripple).
+  - **(4) CLF (Common Loudspeaker Format), lector de respuesta EN EJE (pedido del profesor).**
+    El usuario pasó 3 `.cf2` QSC (EASE SpeakerLab v2.0c) + el ground truth del CLF Viewer
+    (27 valores del AC-C2T). Reversé el CF2 (NO encriptado, binario compilado): on-axis =
+    **27 float32 LE @ byte 4764**, dB SPL @1W/1m, 1/3 oct 50 Hz–20 kHz (frecuencias
+    IMPLÍCITAS del estándar, no en el archivo). Antes del array: 2.83 V (=2.828 Vrms;
+    2.83²/8Ω=1W) → ancla de fallback. `frd.load_clf(path)` → (freq, spl, None) como load_frd;
+    `_find_clf_onaxis` (offset fijo validado + fallback por marcador de tensión). Solo la
+    respuesta en eje; la directividad se descarta (omni bajo Schroeder). UI: `.cf2/.cf1/.clf`
+    en `_load_frd` (dispatch por extensión, popup explicando el descarte de directividad).
+    `bench_clf.py`: match EXACTO 0.000 dB vs viewer + los 3 archivos + integración
+    SourceResponse. Memoria [[clf-loader]], [[source-filters]].
+    **PENDIENTE opcional CLF:** generalizar a otras versiones/exportadores (solo se validó
+    v2.0c EASE); leer directividad si alguna vez importa (no bajo Schroeder).
+  - Benches del turno TODOS VERDES: filters 16/16, clf, source_response oráculos, polarity
+    26/26, frd, trf 20/20, bridge 10/10. Sin regresión.
+
+- **1 Sep 2026 — fixes de v2.29 tras test visual del usuario (rama dist-exe).** Tres cosas
+  que salieron del test humano de la GUI:
+  - **Diálogos altos ahora scrollean** (el filtro nuevo empujó el diálogo de fuente fuera de
+    pantalla → no se llegaba al OK). Patrón: contenido en `QScrollArea` (setWidgetResizable),
+    botones OK/Cancel FUERA del scroll (siempre alcanzables), alto inicial = min(760, 0.9·
+    pantalla). Aplicado a `SourceEditDialog` (acoustic_panel) y al panel IZQUIERDO del
+    `MeshImportDialog` (geom_repair_dialog; ahí Qt comprimía los botones y RECORTABA el texto
+    cuando la ventana era más baja que el contenido).
+  - **MeshImportDialog colores:** el `lbl_status` usaba HTML inline con verde/amarillo PASTEL
+    del tema oscuro (#a6e3a1/#f9e2af) → ilegibles en blanco. Remapeados a Latte (#40a02b verde,
+    #b45309 ámbar). El cuadro de resumen (`txt_summary`) pasó de #1e1e2e/#cdd6f4 a #eff1f5/#11111b.
+    LECCIÓN: los colores en HTML inline (`<span style='color:...'>`) NO los agarra el barrido de
+    `setStyleSheet` → buscar también `color:#` dentro de `setText`/strings HTML al tematizar.
+  - **Puente de absorción, materiales AHORA bidireccional.** El usuario esperaba que cambiar el
+    material en Predicción se reflejara en Acústica (eligió "bidireccional con override"). Antes
+    Pred→Ac de materiales quedaba solo en el botón «Aplicar a Acústica». Ahora
+    `acoustic.adopt_absorption_state` maneja mode="materials" → `apply_zone_materials`. Efecto:
+    cambiar material en Predicción REASIGNA la sala real (el usuario lo pidió). Ver [[absorption-bridge]].
+  - Verificado con `.grab()`: source_scroll (OK visible con ventana baja), mesh_dialog (resumen
+    claro + ámbar + scroll). bridge 10/10, compila todo.
+  - **Zips v2.29 generados** (test visual del usuario = TODO OK): `Prototipo1_Mac.zip` (0.9 MB,
+    correr-desde-fuente, el del profesor) + `Prototipo1_v2.29.zip` (Windows onedir, 481 MB).
+  - **GOTCHA de build Windows (PyInstaller + PyQt5 de CONDA), NUEVO y valioso:** el PyQt5 de
+    Anaconda guarda los DLLs de Qt como `Qt5Core_conda.dll` en `<prefix>/Library/bin` y los
+    plugins en `<prefix>/Library/plugins` (NO en el layout pip `PyQt5/Qt5/bin` que espera el
+    hook de PyInstaller) → el exe fallaba con `DLL load failed while importing QtCore`. Fix en
+    `Prototipo1.spec` (commit f761add): agrega esos DLLs (`Qt5*` + icu/png/zlib/zstd/freetype/
+    harfbuzz/pcre... deps) como binaries + plugins como datas bajo `PyQt5/Qt5/plugins`,
+    derivando la ruta de `sys.prefix`; + hiddenimports `filters`/`scipy.signal`. También hay
+    que correr pyinstaller con `Library/bin` en el PATH (resuelve deps transitivas). `--clean`
+    a veces falla por lock de OneDrive (`PermissionError localpycs`) → `rm -rf build/dist` a
+    mano y buildear sin `--clean`. El exe rebuildeado arranca sin el error. Ver [[mac-distribution]].
+  - **PENDIENTE opcional (decisión del usuario, sin resolver):** el zip de Windows quedó GRANDE
+    (481 MB) porque el glob `Qt5*.dll` agarró los 75 módulos Qt de conda (WebEngine ~120 MB,
+    Qt3D, QtQuick, QtCharts… sin usar). Se puede adelgazar restringiendo a Core/Gui/Widgets/
+    OpenGL/PrintSupport/Svg + deps (~150-200 MB estimado) con 1 rebuild. El de Mac no tiene el
+    tema (0.9 MB, no usa PyInstaller).
+
+- **2 Sep 2026 — Modelo de fuente exacto para subs enfrentados (DBA/CABS):
+  núcleo físico S2+S1+S5 COMPLETO y validado, headless (rama dist-exe).**
+  Motivo: el profesor dijo que subs enfrentados "no simula bien". Auditado: la
+  causa NO es la directividad (bajo Schroeder ka≪1 → sub omni), sino que la
+  fuente es un **monopolo puntual** acoplado como valor puntual pₙ(xₛ). En
+  Kuttruff *Room Acoustics* §3.6, el solver de hoy es la **Ec. 3.10** (fuente
+  puntual); el DBA necesita la **Ec. 3.6-3.7** (fuente distribuida, Cₙ=∫_S pₙvₙdS).
+  Cuando vₙ es uniforme sobre una pared, esa integral es no nula solo para los
+  axiales → esa es la razón física del DBA. Plan completo en
+  `plan_modelo_fuente.md`. Ver memoria `[[source-model-dba]]`.
+  - **S4 (validación, cerrado):** oráculo cuantificado de Santillán (JASA 2001,
+    onda plana viajera por mínimos cuadrados) + Nielsen & Celestinos (CABS): 3
+    tests (colapso de varianza espacial de SPL, selectividad axial, colapso de
+    decay) + límite f_max=c/d. Corpus minado (Kuttruff §3.6 Green modal, Santillán,
+    Rivet absorbedor electroacústico, Kinsler pistón, etc., todos en `referencias/`).
+  - **S2 driver físico:** `driver.py` (`DriverModel` Thiele-Small caja sellada,
+    U(s)∝s/(s²+(ωc/Qtc)s+ωc²), impedancia de radiación del pistón Kinsler R₁+iX₁).
+    Produce una `sources.SourceResponse` g(f) que se compone en `effective_Q_spectrum`
+    SIN tocar el solver. `bench_driver.py` **20/20**.
+  - **S1 fuente distribuida (el núcleo):** `source_coupling.py` (`RectModalBasis`
+    con modos ortonormales φₙ=pₙ/√Kₙ, `WallPiston`, Cₙ=∫pₙvₙdS analítico).
+    DECISIÓN: base analítica rectangular (integral de cosenos exacta; CABS/DBA son
+    rectangulares); base FEM escalonada DIFERIDA (problema de A36). `bench_source_
+    coupling.py` **8/8**: selectividad axial (pared entera→solo axiales), reducción
+    pistón→punto, reciprocidad, prefactor = fem_modal, campo 1-D.
+  - **S5 sink/DBA-CABS (modelo a, manejado):** `dba.py` (drive del trasero
+    v_r=-v₀·e^{-iωLy/c} = retardo Ly/c + inversión). Mecanismo: Cₘ(kₘ)=0
+    (cancelación polo-cero EXACTA a 1e-15; en kₘ, e^{-ikLy}=(-1)^m). `bench_sink.py`
+    **5/5**. Números (sala 7.8×4.1×2.8, off=frente solo, notación CABS 0.2.0 vs 0.2.2):
+    planitud espectral 7.4→3.2 dB, varianza espacial 6.3→2.3 dB, decay 152→62 ms.
+    **Modelo (b) impedancia matcheada Z=ρ₀c NO es perturbativo** (β≈1, pared
+    totalmente absorbente) → la Capa 0 de perturbación NO lo captura; CABS es
+    manejado, no pasivo, así que (a) es lo físico correcto.
+  - **PENDIENTE (mañana):** (i) refinar S5 con drive de mínimos cuadrados de
+    Santillán (mejor que el retardo naive); (ii) wiring de S1+S2+S5 al solver/GUI
+    (que el usuario arme un DBA desde la interfaz); (iii) opcional cross-check
+    absoluto vs Santillán Fig 7. Ningún archivo existente de la app fue tocado
+    (cero regresión). Tarea ortogonal aparte: generalizar el lector CLF (punto 2).
+
+- **2 Sep 2026 (cont.) — S5 refinado (drive LS-óptimo de Santillán) +
+  CROSS-CHECK, rama dist-exe.** Sobre el núcleo S2+S1+S5 del punto anterior:
+  - **Drive LS-óptimo (`dba.py`):** `ls_drive` implementa el método de Santillán
+    (mínimos cuadrados multicanal en dominio de f): arma Z (M sensores × L
+    fuentes de pistón), minimiza ‖Zq−d‖ con d = onda plana viajera objetivo,
+    devuelve las fuerzas óptimas q y el error E_LS normalizado. Helpers
+    `piston_wall_grid` (grillas 4×4 tipo Santillán), `coupling_matrix`,
+    `ls_error_curve`, y `source_coupling.phi_matrix` (φ vectorizado M×Nm). El LS
+    optimiza la amplitud/fase relativa front/rear considerando el
+    amortiguamiento; mejora **47%** sobre el retardo naive (E 0.332→0.178).
+  - **Cross-check vs Santillán (`bench_dba_crosscheck.py` 6/6):** reproduce su
+    setup (sala 2.7×5.0×2.2, c=346.4, ξ=0.03, grillas 4×4 front+rear, pistones
+    0.1 m, zona y∈[0.6,4.4]). Resultados: (1) **ley f_max=c/d validada**
+    (corr>0.95 variando el nº de fuentes → Fig 9 del paper); (2) E_LS<0.3 en la
+    banda de diseño con **bumps en 110/165/220 Hz IGUAL que el paper**; (3) cruce
+    de E=0.3 en 369 Hz (config exacta 4×4: 352 Hz) vs ~300 Hz de Santillán
+    (17-23%, from-scratch, con grilla de sensores más gruesa que sus 7127). El
+    régimen de muy baja frecuencia (<55 Hz) da E alto (físico: pocos modos).
+  - **NÚCLEO COMPLETO, 39 oráculos** (driver 20 + source_coupling 8 + sink 5 +
+    crosscheck 6). Única tarea grande abierta: **wiring de S1+S2+S5 al
+    solver/GUI**. Ningún archivo existente de la app tocado.
+
+- **2 Sep 2026 (cont.) — CLF generalizado (punto 2), rama dist-exe.** El lector
+  `frd.load_clf` ya NO depende del offset fijo 4764. `_find_clf_onaxis` ahora:
+  (1) offset fijo v2.0c = fast path; (2) **anclaje estructural** `_find_voltage_run`
+  = la corrida de tensión de drive constante (27 valores = nº de bandas, la
+  normalización a 1W/1m la hace constante) precede al on-axis y lo localiza sin
+  importar la impedancia (2.828 V @ 8 Ω, ~2 V @ 4 Ω…); (3) scan genérico de
+  último recurso. `_clf_format_version` detecta la versión (byte ~20). `nbands`
+  parametrizado. `bench_clf.py` 14/14 (los 3 QSC ahora viven en el proyecto como
+  fixtures; test de robustez: padear el archivo invalida el offset fijo → el
+  anclaje por tensión igual da el GT con 0.000 dB). Limitación honesta: el
+  anclaje ayuda con otros exportadores/versiones pero NO hay muestras no-EASE
+  para validar; CF1 octava sin implementar. Ver [[clf-loader]].
+
+- **2 Sep 2026 (cont.) — WIRING del modelo de fuente a la GUI, rama dist-exe.**
+  Dos piezas:
+  - **S2 driver en `SourceEditDialog`:** grupo "Driver físico (Thiele-Small)"
+    (modo fc/Qtc o fs/Qts/Vas/Vb) + botón "Aplicar como curva Q(f)" →
+    `DriverModel` (driver.py) → `self._response`, se compone en
+    `effective_Q_spectrum` como un FRD/CLF (sin tocar el solver). Anclaje
+    relativo (forma del driver, nivel de la sensibilidad).
+    `smoke_test_driver_ui.py` 8/8 (commit f63db7d).
+  - **S1+S5 herramienta DBA:** botón "Subs enfrentados (DBA/CABS)…" en la zona
+    FRF del panel → `dba_dialog.DBADialog` (módulo nuevo). Usa `dba.compute_dba`
+    (motor analítico rectangular headless): toma la caja AABB de la sala, arma
+    arrays front/rear (n_x×n_z pistones), drive LS (Santillán) o naive, y muestra
+    FRF antes/después + planitud espectral/varianza espacial/decay. El receptor
+    se pasa relativo a la esquina mínima (la base modal asume [0,L]).
+    `smoke_test_dba_dialog.py` 7/7. **DECISIÓN CLAVE:** NO se integran fuentes
+    distribuidas al pipeline FEM (reabriría la integral sobre malla escalonada,
+    el gap A36 diferido); la herramienta DBA es analítica-rectangular, exacta
+    para el caso real (CABS/DBA son cuartos rectangulares). Helpers nuevos en
+    dba.py: `array_naive_coupling_fn`, `compute_dba`, `_zone_grid`, `_t_decay`.
+    FALTA: test visual humano de ambos (el smoke es offscreen). Ver
+    [[source-model-dba]], `plan_modelo_fuente.md`.
+
+- **3 Sep 2026 — v2.31 (rama dist-exe): impedancia Z(f) por default a cada material
+  (Capa 0 automática).** Pedido del usuario: el corrimiento de fₙ (reactancia) solo
+  aparecía con construcción manual; ahora cada material trae su Z por default.
+  - **Decisión C (híbrido por gate de forma del α), refina D5b (§5 D5b).** El usuario
+    eligió C sobre A (Miki universal) y B (clase manual), y "refinar D5b".
+  - **Injerto, NO reemplazo (clave):** el ajuste semi-infinito de Miki SOBREESTIMA el α
+    de baja (alfombra fina: α_miki=0.06 vs catálogo 0.03 @63 Hz). Reemplazar el
+    amortiguamiento regresionaría la absorción medida (sagrada, §0). Solución:
+    `_material_surface` mantiene **Re(β) EXACTO del α** (Paris) y le injerta **solo
+    Im(β) de Miki** si el material pasa el gate (amax≥0.15 y residual≤0.15). Duros/
+    resonantes → Im=0 (β real, bit-a-bit como antes). Convención e^{-iwt}: el downstream
+    hace conj(Z0/Z) y hereda el signo de Miki (porosos a baja f: Im(Z)<0 → resorte → sube fₙ).
+  - **Causa raíz del "no se ve sin construcción":** el camino complejo que puebla
+    `_freq_shift_per_mode` estaba gateado tras `self._construction_map`. Se abrió el gate
+    (`_compute_xi_from_materials`, ~línea 7223): SIEMPRE corre el corrimiento desde los
+    materiales; con construcciones manda el ξ complejo, solo-materiales guarda el
+    corrimiento pero el AMORTIGUAMIENTO sigue por el camino establecido (ξ sin regresión).
+  - **Panel de construcciones refleja el material (decisión del usuario: fila read-only,
+    NO materializar).** `WallConstructionsDialog` recibe `auto_tags`; cada cara sin
+    construcción muestra en gris "material · Z auto (poroso equiv., σ≈… Pa·s/m²)" o
+    "· β real". Helpers `_material_ztag`/`_material_auto_tags`. Fix de refresh:
+    `_on_face_materials_applied` ahora llama `_refresh_modes_combo()` (el comentario viejo
+    "Δfₙ invariante al material" quedó falso). Fix de texto: la tabla de modos decía
+    "sin construcciones → Δfₙ=0", ahora distingue las 3 fuentes del corrimiento.
+  - **Nuevo en impedance.py:** `porous_halfspace(σ)`, `sigma_from_alpha(α,f)` (inversión
+    de Miki por LS + gate), `_alpha_random_halfspace`. σ = resistividad al flujo ISO 9053
+    (equivalente ajustado, no medida del material).
+  - **Benches:** `bench_default_z.py` **8/8** (invariante Re(β)==α→β = 1.67e-16 sobre 428
+    materiales; duros bit-a-bit; porosos con reactancia+signo Miki; gate 40% del catálogo).
+    Regresión Capa 0: `bench_capa0_all` **164/164**, `_wiring` **13/13**, `_5c` **43/43**.
+    E2E: shoebox alfombrado sin construcción → fₙ corre +0.5 a +1.6 Hz (~1.2–2%).
+  - **Test visual del usuario: los DOS pasaron** (corrimiento por default + panel refleja
+    material). Recap: MANUAL v2.31, notas (D5b + esta entrada + §10a nueva), memoria. Ver
+    [[z-impedance-modeling]].
+  - **Bug de build encontrado en el recap (B11): `filters.py` no entraba al bundle**
+    (import lazy → PyInstaller no lo ve → el .exe crasheaba al usar el filtro crossover).
+    Pre-existente (v2.29/v2.30). Fix: `--hidden-import=filters` en `build.bat` (el spec
+    commiteado lo tenía pero build.bat lo pisa: el build regenera el spec por CLI, así que
+    **el source de verdad es build.bat, no el .spec**). Detalle en §7 B11. Zips v2.31:
+    `Prototipo1_Mac.zip` 0.93 MB + `Prototipo1_v2.31.zip` ~418 MB (Windows, rebuild con el fix).
 
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug

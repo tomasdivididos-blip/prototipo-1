@@ -30,6 +30,7 @@ import numpy as np
 
 from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal
 from PyQt5.QtGui import QPainter, QPen, QColor, QBrush, QFont, QPolygonF
+from style import apply_dialog_theme
 from PyQt5.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QComboBox,
     QListWidget, QListWidgetItem, QDialogButtonBox, QGroupBox, QAbstractItemView,
@@ -395,6 +396,7 @@ class PatchEditorDialog(QDialog):
     def __init__(self, groups, verts, tris, mat_lib,
                  patches: Optional[List[ap.AbsorptionPatch]] = None, parent=None):
         super().__init__(parent)
+        apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Parches de absorcion por cara")
         self.setModal(True)
         self.resize(940, 640)
@@ -428,7 +430,7 @@ class PatchEditorDialog(QDialog):
             "perpendiculares a un eje."
         )
         help_lbl.setWordWrap(True)
-        help_lbl.setStyleSheet("color: #cdd6f4; font-size: 9pt;")
+        help_lbl.setStyleSheet("color: #11111b; font-size: 9pt;")
         v.addWidget(help_lbl)
 
         body = QHBoxLayout()
@@ -448,7 +450,7 @@ class PatchEditorDialog(QDialog):
         if self._n_skipped:
             skip = QLabel(f"({self._n_skipped} cara(s) no axis-aligned omitidas en v1)")
             skip.setWordWrap(True)
-            skip.setStyleSheet("color: #f9e2af; font-size: 8pt;")
+            skip.setStyleSheet("color: #b45309; font-size: 8pt;")
             left.addWidget(skip)
         body.addLayout(left, 0)
 
@@ -503,7 +505,7 @@ class PatchEditorDialog(QDialog):
         drow.addWidget(self.sb_depth, 1)
         dv.addLayout(drow)
         self.lbl_depth_note = QLabel("-")
-        self.lbl_depth_note.setStyleSheet("color: #f9e2af; font-size: 8pt;")
+        self.lbl_depth_note.setStyleSheet("color: #b45309; font-size: 8pt;")
         self.lbl_depth_note.setWordWrap(True)
         dv.addWidget(self.lbl_depth_note)
         right.addWidget(gb_depth)
@@ -530,7 +532,7 @@ class PatchEditorDialog(QDialog):
         right.addWidget(gb_list, 1)
 
         self.lbl_info = QLabel("-")
-        self.lbl_info.setStyleSheet("color: #94e2d5; font-size: 9pt;")
+        self.lbl_info.setStyleSheet("color: #179299; font-size: 9pt;")
         self.lbl_info.setWordWrap(True)
         right.addWidget(self.lbl_info)
         body.addLayout(right, 0)
@@ -686,9 +688,9 @@ class PatchEditorDialog(QDialog):
             txt += (f"\n⚠ Estás dibujando {d*1000:.0f} mm, pero el α elegido se "
                     f"midió con {d_mat*1000:.0f} mm. El solver usa el α: el "
                     f"dibujo queda decorativo.")
-            self.lbl_depth_note.setStyleSheet("color: #f38ba8; font-size: 8pt;")
+            self.lbl_depth_note.setStyleSheet("color: #d20f39; font-size: 8pt;")
         else:
-            self.lbl_depth_note.setStyleSheet("color: #f9e2af; font-size: 8pt;")
+            self.lbl_depth_note.setStyleSheet("color: #b45309; font-size: 8pt;")
         self.lbl_depth_note.setText(txt)
 
     def _on_depth_changed(self, val):

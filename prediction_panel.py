@@ -31,6 +31,7 @@ from PyQt5.QtWidgets import (
 import prediction as pr
 import location_opt as lo
 import material_library as ml
+from style import apply_dialog_theme
 from material_library import MaterialLibrary
 from pathlib import Path
 
@@ -356,8 +357,11 @@ class PredictionPanel(QWidget):
     # Emitido al pedir aplicar los materiales del preset a las caras de Acustica.
     applyMaterialsRequested = pyqtSignal(object)  # (floor_name, walls_name, ceiling_name)
 
+    absorptionChoiceChanged = pyqtSignal(object)  # decisión normalizada o None
+
     def __init__(self, get_design_params=None, get_sources=None,
-                 get_surface=None, get_damping_model=None, parent=None):
+                 get_surface=None, get_damping_model=None,
+                 get_absorption=None, parent=None):
         """get_design_params: callable que devuelve los params del ControlPanel
         actuales (lo que el usuario haya diseñado en la pestaña Geometría).
         Si es None, el botón 'Evaluar mi diseño actual' queda deshabilitado.
@@ -380,11 +384,15 @@ class PredictionPanel(QWidget):
         # Con "perturbation" y materiales por superficie, el FEM de ubicacion usa
         # xi POR MODO en vez del 1.1/(f_n·RT) uniforme. None -> "sabine" (default).
         self._get_damping_model = get_damping_model
+        # Callback -> decisión de absorción actual de la Acústica (para heredarla
+        # sin volver a preguntar; ver `_seed_absorption_from_acoustic`).
+        self._get_absorption = get_absorption
         # Eleccion de como ponderar una forma irregular: None | "aabb" | "none".
         self._shape_choice = None
         # Eleccion de absorcion de superficies (gate de materiales). None hasta
         # que el usuario decida -> Predecir abre el dialogo de eleccion.
         self._abs_choice = None
+        self._abs_inherited_notified = False   # aviso "heredada" una vez/sesión
         # Biblioteca de materiales para el preset/armar-el-tuyo (mismo catalogo
         # que Acustica -> los nombres coinciden al "aplicar a Acustica").
         try:
@@ -790,6 +798,96 @@ class PredictionPanel(QWidget):
             return self._mat_lib[names.index(name)]
         return self._mat_lib.get_rigid_default()
 
+    # ---- Puente de absorción con la Acústica (bidireccional) ---------------
+    @staticmethod
+    def _is_offscreen() -> bool:
+        """True bajo QT_QPA_PLATFORM=offscreen: los diálogos modales segfaultean
+        ahí (gotcha del proyecto), así que los benches no deben abrirlos."""
+        try:
+            from PyQt5.QtWidgets import QApplication
+            app = QApplication.instance()
+            return app is not None and app.platformName() == "offscreen"
+        except Exception:
+            return False
+
+    def absorption_state(self):
+        """Decisión de absorción normalizada para compartir con la Acústica.
+
+        None si no se eligió. Formatos:
+          {"mode":"uniform","alpha":x} · {"mode":"materials","names":(p,par,t)}
+          · {"mode":"target"}.  Se omite `surface_alpha` (se reconstruye por
+        nombre en el otro extremo).
+        """
+        ch = self._abs_choice
+        if not ch:
+            return None
+        mode = ch.get("mode", "target")
+        if mode == "uniform":
+            return {"mode": "uniform", "alpha": float(ch.get("alpha", 0.31))}
+        if mode == "materials":
+            return {"mode": "materials", "names": tuple(ch.get("names", ()))}
+        return {"mode": "target"}
+
+    def adopt_absorption_state(self, state):
+        """Adopta una decisión de absorción venida de la Acústica.
+
+        Bidireccional: α uniforme se sincroniza en ambos sentidos; materiales
+        se mapean a piso/pared/techo (Acústica->Predicción). NO reemite (evita
+        loops de señal); actualiza el botón/tooltip.
+        """
+        if not state:
+            return
+        mode = state.get("mode")
+        if mode == "uniform":
+            self._abs_choice = {"mode": "uniform", "alpha": float(state.get("alpha", 0.31))}
+        elif mode == "materials":
+            names = tuple(state.get("names", ()))
+            if len(names) != 3 or not all(names):
+                return
+            nf, nw, nc = names
+            mf, mw, mc = (self._material_by_name(nf), self._material_by_name(nw),
+                          self._material_by_name(nc))
+            self._abs_choice = {
+                "mode": "materials",
+                "surface_alpha": (mf.alpha_bands(), mw.alpha_bands(),
+                                  mc.alpha_bands()),
+                "names": (nf, nw, nc),
+            }
+        elif mode == "target":
+            self._abs_choice = {"mode": "target"}
+        else:
+            return
+        self._update_abs_label()
+
+    def _seed_absorption_from_acoustic(self) -> bool:
+        """Si Predicción no tiene absorción propia, la hereda de la Acústica en
+        vez de volver a preguntar. Devuelve True si heredó algo."""
+        if self._abs_choice is not None or self._get_absorption is None:
+            return False
+        try:
+            state = self._get_absorption()
+        except Exception:
+            state = None
+        if not state:
+            return False
+        self.adopt_absorption_state(state)
+        if self._abs_choice is None:
+            return False
+        print(f"[Prediccion] absorción heredada de la Acústica: {state}")
+        if not self._abs_inherited_notified and not self._is_offscreen():
+            self._abs_inherited_notified = True
+            try:
+                from PyQt5.QtWidgets import QMessageBox
+                txt = self.btn_absorption.text()
+                QMessageBox.information(
+                    self, "Absorción heredada de la Acústica",
+                    f"Se usó la absorción que definiste en la pestaña Acústica "
+                    f"({txt}).\n\nPodés cambiarla acá con el botón «Materiales…» "
+                    f"sin afectar tu sala real.")
+            except Exception:
+                pass
+        return True
+
     def _update_abs_label(self):
         """Refresca el boton de Materiales y la visibilidad de 'Aplicar a Acústica'."""
         ch = self._abs_choice
@@ -829,6 +927,7 @@ class PredictionPanel(QWidget):
                                      QLabel, QRadioButton, QButtonGroup,
                                      QDoubleSpinBox, QComboBox, QDialogButtonBox)
         dlg = QDialog(self)
+        apply_dialog_theme(dlg)  # tema claro (fondo blanco)
         dlg.setWindowTitle("Absorción de las superficies")
         v = QVBoxLayout(dlg)
         msg = QLabel(
@@ -926,6 +1025,9 @@ class PredictionPanel(QWidget):
         else:
             self._abs_choice = {"mode": "target"}
         self._update_abs_label()
+        # Propaga a la Acústica (α uniforme se sincroniza; materiales van por el
+        # botón explícito «Aplicar a Acústica» para no pisar la sala real).
+        self.absorptionChoiceChanged.emit(self.absorption_state())
         return True
 
     def _damping_model_now(self) -> str:
@@ -941,8 +1043,9 @@ class PredictionPanel(QWidget):
             return "sabine"
 
     def _on_predict(self):
-        # Gate de materiales: si no eligio absorcion, avisar y ofrecer opciones.
-        if self._abs_choice is None:
+        # Gate de materiales: si no eligio absorcion, primero HEREDAR la de la
+        # Acustica (puente bidireccional); solo si no hay, preguntar.
+        if self._abs_choice is None and not self._seed_absorption_from_acoustic():
             if not self._ask_absorption():
                 return                      # el usuario cancelo
         self._predict_timer.start()
@@ -973,6 +1076,7 @@ class PredictionPanel(QWidget):
 
         # ProgressDialog mientras corre el FEM lite paralelo
         prog = QProgressDialog("Generando candidatos...", "Cancelar", 0, 0, self)
+        apply_dialog_theme(prog)  # tema claro (fondo blanco)
         prog.setWindowTitle("Prediccion")
         prog.setMinimumDuration(150)
         prog.setWindowModality(Qt.WindowModal)
@@ -1021,6 +1125,7 @@ class PredictionPanel(QWidget):
         from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QLabel, QRadioButton,
                                      QButtonGroup, QDialogButtonBox)
         dlg = QDialog(self)
+        apply_dialog_theme(dlg)  # tema claro (fondo blanco)
         dlg.setWindowTitle("Forma irregular")
         v = QVBoxLayout(dlg)
         msg = QLabel(
@@ -1043,7 +1148,7 @@ class PredictionPanel(QWidget):
             "elegí el enfoque Ubicación o Combinado, o aproximá con la caja "
             "envolvente.")
         leyenda.setWordWrap(True)
-        leyenda.setStyleSheet("color: #f9b572; font-size: 9pt; margin-left: 22px;")
+        leyenda.setStyleSheet("color: #b45309; font-size: 9pt; margin-left: 22px;")
         v.addWidget(leyenda)
 
         {"aabb": rb_aabb, "none": rb_none}.get(
@@ -1139,6 +1244,7 @@ class PredictionPanel(QWidget):
         self._eval_timer.start()
         prog = QProgressDialog("Evaluando tu diseño actual...",
                                 "Cancelar", 0, 0, self)
+        apply_dialog_theme(prog)  # tema claro (fondo blanco)
         prog.setWindowTitle("Evaluar diseño")
         prog.setMinimumDuration(150)
         prog.setWindowModality(Qt.WindowModal)

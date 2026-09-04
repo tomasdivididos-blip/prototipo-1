@@ -26,11 +26,12 @@ import numpy as np
 import pyqtgraph.opengl as gl
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
+from style import apply_dialog_theme
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QPlainTextEdit, QSplitter,
     QGroupBox, QFormLayout, QDoubleSpinBox, QDialogButtonBox,
-    QMessageBox, QSizePolicy, QWidget,
+    QMessageBox, QSizePolicy, QWidget, QScrollArea, QFrame,
 )
 
 import geom_import as gi
@@ -137,6 +138,7 @@ class _VertexEditDialog(QDialog):
 
     def __init__(self, mesh, hole, parent=None):
         super().__init__(parent)
+        apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Editar vertice del hueco")
         self._mesh = mesh
         self._hole = hole
@@ -214,6 +216,7 @@ class MeshImportDialog(QDialog):
 
     def __init__(self, mesh, diagnosis, path: str = "", parent=None):
         super().__init__(parent)
+        apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Importar CAD — Diagnostico y reparacion")
         self.resize(1180, 680)         # +100 px para acomodar el panel izq
         self._mesh = mesh.copy()
@@ -234,7 +237,7 @@ class MeshImportDialog(QDialog):
         # Header con info del archivo
         h0 = QHBoxLayout()
         self.lbl_path = QLabel(f"<b>Archivo:</b> {self._path or '(en memoria)'}")
-        self.lbl_path.setStyleSheet("color: #cdd6f4;")
+        self.lbl_path.setStyleSheet("color: #11111b;")
         h0.addWidget(self.lbl_path, 1)
         outer.addLayout(h0)
 
@@ -257,7 +260,7 @@ class MeshImportDialog(QDialog):
         self.txt_summary.setReadOnly(True)
         self.txt_summary.setMaximumHeight(180)
         self.txt_summary.setStyleSheet(
-            "QPlainTextEdit { background:#1e1e2e; color:#cdd6f4; "
+            "QPlainTextEdit { background:#eff1f5; color:#11111b; "
             "font-family: 'Cascadia Mono', 'Consolas', monospace; font-size: 9pt; }"
         )
         sv.addWidget(self.txt_summary)
@@ -351,7 +354,15 @@ class MeshImportDialog(QDialog):
         L.addStretch(1)   # empuja todo arriba; sin esto Qt estira el ultimo
                           # group para llenar y los botones se ven gigantes
 
-        split.addWidget(left)
+        # El panel izquierdo va en un QScrollArea: si la ventana es más baja que
+        # el contenido, Qt comprimía los botones y les recortaba el texto. Con
+        # scroll cada widget mantiene su alto natural y aparece barra si hace falta.
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QFrame.NoFrame)
+        left_scroll.setWidget(left)
+        left_scroll.setMinimumWidth(465)     # left(440) + barra
+        split.addWidget(left_scroll)
 
         # === Derecha: preview 3D ===
         right = QWidget()
@@ -398,12 +409,12 @@ class MeshImportDialog(QDialog):
         # Mensaje de estado verde/amarillo
         if self._diag.ok:
             self.lbl_status.setText(
-                "<span style='color:#a6e3a1;font-weight:600'>"
+                "<span style='color:#40a02b;font-weight:600'>"
                 "✓ Malla lista para mallado volumetrico.</span>"
             )
         else:
             self.lbl_status.setText(
-                "<span style='color:#f9e2af;font-weight:600'>"
+                "<span style='color:#b45309;font-weight:600'>"
                 "Aún hay problemas. Reparalos o forza Aceptar bajo tu responsabilidad."
                 "</span>"
             )

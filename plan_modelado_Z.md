@@ -127,25 +127,67 @@ diálogo "Construcción de pared" (Etapa 5, wiring). Sin construcción → cae a
   aprox. en irregular = derivación propia) + `perturbation_xi_shift_extended`.
   `bench_extended_reaction.py` 7/7 (θ estimado vs analítico: mediana 2.4°, media 6.3°;
   puente local bit a bit; extendida ≠ normal en ξ un 47%).
-- **Etapa 3 — resonantes (física, aislada):** facings sobre cavidad vía el TMM ya
-  existente (solo falta la impedancia del facing): panel perforado (Helmholtz
-  distribuido, f₀=(c/2π)√(ε/(t_ef·D))), microperforado (Maa 1998), membrana/panel
-  (mass-spring, f₀=60/√(m·d)), Helmholtz. Ref: Cox & D'Antonio cap. 6-7; Fuchs; Maa
-  1998. Bench: resonancia en f₀ analítico, pico de α ahí, α∈[0,1], y el CORRIMIENTO
-  de fₙ CAMBIA DE SIGNO al cruzar la resonancia (reactancia masa↔resorte).
-- **Etapa 4 — auditoría integral de Capa 0 (verificación, antes de conectar):**
-  (1) suite unificada `bench_capa0_all.py`; (2) geometría IRREGULAR (pentágono/L/
-  hexágono con taper) sobre `_modal_incidence_angles` y `perturbation_xi_shift_*`
-  (lección A1/A2: cazar nan_to_num→0 y pérdida de cobertura); (3) pasividad Re(β)≥0
-  y α∈[0,1] en toda banda/ángulo; (4) rango de validez declarado y respetado por
-  modelo; (5) convención end-to-end (cámara λ/4: signo y magnitud del corrimiento
-  físicos); (6) convergencia de ξ y θ al refinar malla; (7) auditoría de call-path
-  (padding silencioso / ramas muertas).
-- **Etapa 5 — wiring a la app (integración, SEPARADA):** diálogo "construcción de
-  pared" + asignar construcciones a materiales/caras + el panel llama la perturbación
-  compleja/extendida y muestra corrimiento de fₙ y amortiguamiento en la FRF + carga
-  de mediciones Z(f) y Z(f,θ) + persistencia en `.room` (aditivo). Default sigue α→β
-  hasta que el usuario asigna construcción.
+- **Etapa 3 [HECHA] — resonantes (física, aislada):** facings sobre cavidad vía el
+  TMM ya existente. `impedance.py`: `maa_zface` (panel (micro)perforado, Maa 1998
+  Ec 2-4: r + iχ con constante de perforado x=(d/2)√(ωρ₀/η)), `membrane_zface`
+  (masa-resorte, Z=ρ₀c·damping + iωm). Convención atada a la cámara de aire del
+  módulo: resorte = Im(Z)<0, masa = Im(Z)>0. Constructores: `perforated`,
+  `microperforated` (alias), `membrane`, `helmholtz` (cuello+cavidad concentrado
+  → facing perforado equivalente), todos vía facing EN SERIE (`_facing_surface`)
+  con backing por TMM (`_facing_backing`: relleno poroso opcional + cámara).
+  `bench_resonant_facings.py` **21/21**: (T1) pico de α EXACTAMENTE en el cero de
+  reactancia; la fórmula lumped f₀=(c/2π)√(ε/(t_ef·D)) es su límite k₀D→0 (con
+  cavidad de cm, k₀D~1 → se aparta ~15%, límite conocido del Helmholtz
+  concentrado). (T2) membrana f₀=60/√(m·D) exacto. (T3) Maa: r crece al achicar d
+  (perforado→MPP), MPP da banda ancha sin poroso. (T4) α∈[0,1] y Re(Z)≥0
+  (pasividad) en banda y ángulos. (T5) el CORRIMIENTO de fₙ CAMBIA DE SIGNO al
+  cruzar la resonancia (Im(Z): resorte<0 en graves → masa>0 en agudos →
+  sign(f_new−fₙ)=sign(Im(β)) se invierte). (T6) relleno poroso sube α en graves.
+  (T7) helmholtz resuena en f₀ analítico. No-regresión: bench_impedance 36/36,
+  extended 7/7, perturbation_complex 11/11.
+- **Etapa 4 [HECHA] — auditoría integral de Capa 0 (verificación, antes de
+  conectar).** `bench_capa0_audit.py` **33/33** + suite unificada `bench_capa0_all.py`
+  (corre las 5 etapas en procesos aislados; **108/108 total**). (A1) geometría
+  IRREGULAR (pentágono/hexágono+taper/caja+twist) sobre `_modal_incidence_angles`
+  y `perturbation_xi_shift_{per_mode,extended}`: sin NaN/inf, θ∈[0,88°], ξ≥0 y
+  COBERTURA completa (ninguna pared con Sg=0 → caza nan_to_num→0 y pérdida de área
+  A1/A2). (A2) pasividad Re(β)≥0 (=Re(Z)≥0) y α∈[0,1] en los 11 constructores ×
+  banda 20-5000 Hz × 6 ángulos + α_random. (A3) validez por modelo: DB≈Miki en
+  0.01<X<1, DB no físico (α<0, no Re(Zc)<0) a X<0.01, banda modal de sala tratada
+  cae en X<0.01 (por eso Miki default). (A4) convención end-to-end: con cámara cuya
+  λ/4 cae en la banda modal, la ley sign(f_new−fₙ)=−sign(Im Z(fₙ)) se cumple modo
+  a modo y aparecen AMBOS signos. (A5) convergencia: θ al refinar la MALLA (npm
+  2.0→3.2, Δθ<6°); ξ al refinar la CUADRATURA (subdiv 1→2→3, |ξ₂−ξ₃|≪|ξ₁−ξ₃|, el
+  knob real es subdiv no la malla). (A6) call-path: rígido→ξ=0; firma faltante→
+  default_surf (idéntico a asignar a todas) y sin default→rígido (β=0); measured_Zf
+  extrapola constante en el borde; grupos vacíos→None (guardas explícitas, sin
+  padding silencioso).
+- **Etapa 5 — wiring a la app (integración, SEPARADA).** Decisiones (discutidas con
+  el usuario): el corrimiento de fₙ **propaga a la física** (FRF/campo/FoM usan f_new,
+  la forma modal sigue rígida = perturbación de 1er orden); la construcción se ancla
+  **a la cara/grupo** (mapa `construccion_por_cara` paralelo al FaceMaterialMap).
+  - **Etapa 5a [HECHA] — núcleo headless.** `impedance.build_surface(spec)` +
+    `spec_label` ((de)serialización JSON de toda SurfaceImpedance; el spec es la fuente
+    de verdad persistible). Panel: `self._construction_map` {signature: spec},
+    `_construction_surf_by_group` (construcción → SurfaceImpedance; cara sin
+    construcción → `_material_surface` = resistiva del α(f), puente exacto con α→β),
+    `_effective_modal_freqs`, y camino nuevo en `_compute_xi_from_materials` (si hay
+    construcciones y modelo perturbación → `perturbation_xi_shift_extended`, cachea
+    f_new). Propagación: `run_fem_frf(modal_freqs=...)` (param aditivo), FoM y
+    marcadores del FRFDialog usan las frecuencias efectivas. Persistencia `.room` v9
+    (`wall_constructions`, aditivo: <v9 sin la clave → mapa vacío → α→β,
+    reproducibilidad). `bench_capa0_wiring.py` **9/9**: serialización JSON,
+    reproducibilidad FRF(None)==FRF(freqs) bit a bit, puente material==α→β, la
+    construcción produce corrimiento que MUEVE la FRF (dif rel 158%), mezcla
+    construcción+material. Suite `bench_capa0_all.py` **117/117**. Pendiente en 5a
+    (documentado): composición con parches sub-cara (por ahora construcciones tienen
+    prioridad y avisan); shift en f_S/RT60/SBIR (dominados por ξ, ya correcto; el
+    corrimiento de ω es refinamiento de 5c).
+  - **Etapa 5b — diálogo "construcción de pared" + asignación por cara en la GUI**
+    (perforado/MPP/membrana/poroso/multicapa/Helmholtz con inputs de parámetros).
+  - **Etapa 5c — carga de mediciones Z(f)/Z(f,θ) + mostrar Δfₙ y ξ en FRF/Ver-RT60**
+    + composición con parches + shift en el resto de consumidores.
+  Default sigue α→β hasta que el usuario asigna construcción.
 
 ---
 

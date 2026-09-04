@@ -213,10 +213,17 @@ def run_fem_frf(
     f_max: float = 200.0,
     n_freqs: int = 200,
     damping: float = 0.03,
+    modal_freqs=None,
 ) -> FRFResult:
+    """`modal_freqs` (opcional, Nm,): frecuencias de RESONANCIA a usar en la suma
+    modal, en vez de las rigidas `modal.freqs`. Es el corrimiento reactivo de la
+    Capa 0 (Im(beta) -> fₙ corrida); la FORMA modal `modal.phis` sigue rigida
+    (perturbacion de 1er orden, D3). Sin construcciones se pasa None y coincide
+    bit a bit con el camino previo."""
     fa = np.linspace(f_min, f_max, n_freqs)
+    freqs = modal.freqs if modal_freqs is None else np.asarray(modal_freqs, float)
     H = acoustic_fem.frequency_response(
-        modal.locator, modal.freqs, modal.phis, sources, receiver,
+        modal.locator, freqs, modal.phis, sources, receiver,
         freq_axis=fa, damping=damping,
     )
     return FRFResult(method="fem", freq_axis=fa, H=H, receiver=tuple(receiver))
