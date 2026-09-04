@@ -59,7 +59,7 @@
 3. Cambiar a la pestaña **Acústica**. Colocar una fuente con `Ctrl` + clic derecho en el visor 3D.
 4. Presionar **Calcular modos (FEM)**.
 5. Presionar **Actualizar campo 3D** (o `Enter`) para ver la distribución modal.
-6. Presionar **Calcular FRF** y luego **🔊 Escuchar** para oír la sala.
+6. Presionar **Calcular FRF** y luego **Escuchar** para oír la sala.
 
 ---
 
@@ -234,12 +234,12 @@ Apretar **Materiales…** abre una ventana modal con una tabla:
 │  ┌──┬──────────────────────┬─────┬────────┬──────────┬─────────────┐│
 │  │  │ Grupo                │Caras│Área m² │ Categoría│ Material    ││
 │  ├──┼──────────────────────┼─────┼────────┼──────────┼─────────────┤│
-│  │🟩│ Piso                 │  2  │  48.00 │  Piso    │ Madera ▾   ││
-│  │🟦│ Techo                │  2  │  48.00 │  Techo   │ Yeso  ▾    ││
-│  │🟧│ Pared 1 (-X (W))     │  2  │  24.00 │  Pared   │ Hormigón ▾ ││
-│  │🟧│ Pared 2 (+X (E))     │  2  │  24.00 │  Pared   │ Hormigón ▾ ││
-│  │🟧│ Pared 3 (+Y (N))     │  2  │  18.00 │  Pared   │ Alfombra ▾ ││
-│  │🟧│ Pared 4 (-Y (S))     │  2  │  18.00 │  Pared   │ Vidrio ▾   ││
+│  │  │ Piso                 │  2  │  48.00 │  Piso    │ Madera ▾   ││
+│  │  │ Techo                │  2  │  48.00 │  Techo   │ Yeso  ▾    ││
+│  │  │ Pared 1 (-X (W))     │  2  │  24.00 │  Pared   │ Hormigón ▾ ││
+│  │  │ Pared 2 (+X (E))     │  2  │  24.00 │  Pared   │ Hormigón ▾ ││
+│  │  │ Pared 3 (+Y (N))     │  2  │  18.00 │  Pared   │ Alfombra ▾ ││
+│  │  │ Pared 4 (-Y (S))     │  2  │  18.00 │  Pared   │ Vidrio ▾   ││
 │  └──┴──────────────────────┴─────┴────────┴──────────┴─────────────┘│
 │                                                                      │
 │  Resumen                                                             │
@@ -642,9 +642,9 @@ Presionar **Calcular FRF** en el grupo "FRF (Respuesta en frecuencia)".
 - La barra de herramientas permite zoom, paneo y guardar la figura.
 - **Exportar**: imagen (PNG / SVG / PDF) o datos crudos (CSV / TXT). Los archivos de datos llevan columnas `freq_hz; spl_db; abs_H_pa; phase_deg` para que puedas reabrirlos en Excel, Python o MATLAB.
 
-### 🔊 Escucha — ruido rosa filtrado por la sala
+### Escucha — ruido rosa filtrado por la sala
 
-El botón **🔊 Escuchar** permite oír cómo colorea la sala al sonido:
+El botón **Escuchar** permite oír cómo colorea la sala al sonido:
 
 1. Se generan 4 segundos de **ruido rosa** (densidad espectral ∝ 1/f).
 2. Se filtra con la FRF calculada usando **convolución en frecuencia**.
@@ -655,7 +655,7 @@ El botón **🔊 Escuchar** permite oír cómo colorea la sala al sonido:
 
 Formato del audio: **16 bits / 44 100 Hz / estéreo** (L = R, campo mono).
 
-El botón **⏹ Detener** interrumpe la reproducción.
+El botón **Detener** interrumpe la reproducción.
 
 > **Nota:** El ruido rosa solo tiene coloración de sala en el rango [f\_mín, f\_máx] calculado. Para incluir más frecuencias, ampliar esos parámetros antes de calcular la FRF.
 >
@@ -682,8 +682,8 @@ El botón **Ver RT60 calculado** abre un diálogo multi-curva donde se pueden co
 ┌─ Tiempo de reverberación — comparativa de métodos ─────────────────┐
 │ ┌──────────────────────────────┬──────────────────────────────────┐│
 │ │                              │ Curvas activas:                  ││
-│ │                              │   ☑ Sabine RT60     (azul)      ││
-│ │   [gráfico de curvas RT(f)]  │   ☑ Eyring RT60     (rojo)      ││
+│ │                              │     Sabine RT60     (azul)      ││
+│ │   [gráfico de curvas RT(f)]  │     Eyring RT60     (rojo)      ││
 │ │     X log: 63 → 8000 Hz      │      [Quitar curva seleccionada]││
 │ │     Y: tiempo (s)            │                                  ││
 │ │                              │ Agregar curva:                   ││
@@ -931,10 +931,10 @@ En la pestaña **Acústica**, dentro del grupo *FEM modal*, hay un **badge color
 
 | Color | Texto | Significado |
 |---|---|---|
-| 🟢 verde | `voxel · exacto` | Recinto axis-aligned: voxel coincide con la frontera. Sin error de escalera. **Óptimo.** |
-| 🔵 azul | `gmsh · boundary-fitted` | Geometría curva o CAD importado: gmsh ajusta la malla a las paredes exactas. **Óptimo.** |
-| 🟡 amarillo | `voxel · escalera` | Geometría paramétrica con techo curvo: voxel funciona pero con error sistemático. Para boundary-fitted exacto, importá un CAD. |
-| 🟠 naranja | `gmsh · forzado` | Forzaste gmsh donde voxel sería exacto. Sin perjuicio, pero algo más lento. |
+| verde | `voxel · exacto` | Recinto axis-aligned: voxel coincide con la frontera. Sin error de escalera. **Óptimo.** |
+| azul | `gmsh · boundary-fitted` | Geometría curva o CAD importado: gmsh ajusta la malla a las paredes exactas. **Óptimo.** |
+| amarillo | `voxel · escalera` | Geometría paramétrica con techo curvo: voxel funciona pero con error sistemático. Para boundary-fitted exacto, importá un CAD. |
+| naranja | `gmsh · forzado` | Forzaste gmsh donde voxel sería exacto. Sin perjuicio, pero algo más lento. |
 
 Pasá el mouse sobre el badge para ver el detalle del razonamiento.
 
@@ -944,7 +944,7 @@ El badge se actualiza automáticamente cuando cambiás la geometría: por ejempl
 
 Tres formas de invocar el importador:
 
-1. Botón **📂 Importar CAD…** en el grupo *FEM modal* de la pestaña Acústica.
+1. Botón **Importar CAD…** en el grupo *FEM modal* de la pestaña Acústica.
 2. Atajo de teclado **`Ctrl + I`**.
 3. Línea de comandos: arrastrá un `.stl`/`.obj`/`.step` sobre el ejecutable (en una futura versión).
 
@@ -955,7 +955,7 @@ Al elegir un archivo, el soft hace tres cosas:
 3. Si la malla está perfecta → la usa directamente.
 4. Si tiene problemas → abre el **diálogo de reparación guiada** (sección 15.4).
 
-Después de importar, el badge del panel acústico cambia automáticamente a 🔵 `gmsh · boundary-fitted` y el botón **✕ Volver a paramétrica** se habilita para regresar a la geometría del panel Geometría.
+Después de importar, el badge del panel acústico cambia automáticamente a `gmsh · boundary-fitted` y el botón **✕ Volver a paramétrica** se habilita para regresar a la geometría del panel Geometría.
 
 ### 15.4 Diálogo de reparación guiada
 
@@ -973,7 +973,7 @@ Cuando el CAD tiene problemas (huecos, T-junctions, vértices duplicados), apare
 │                        │                                   │
 │ Acciones (hueco actual)│                                   │
 │ ✓ Cerrar hueco (auto)  │                                   │
-│ ⛒ Soldar a vecinos     │                                   │
+│   Soldar a vecinos     │                                   │
 │ ✎ Mover vértice…       │                                   │
 │ → Omitir               │                                   │
 │                        │                                   │
@@ -1064,12 +1064,12 @@ A partir de v2.1 el router opera en modo **best-effort**: para geometrías curva
 
 | Geometría | Auto-decisión (intento) | Badge si gmsh OK | Badge si gmsh falla |
 |---|---|---|---|
-| Paramétrica · shoebox axis-aligned · techo plano | **voxel directo** | 🟢 verde "voxel · exacto" | n/a (no se intenta gmsh) |
-| Paramétrica · pentágono regular techo plano | **voxel directo** | 🟢 verde "voxel · exacto" | n/a |
-| Paramétrica · `arch_height > 0` | **intenta gmsh** | 🔵 azul "gmsh · boundary-fitted" | 🟡 amarillo "voxel · fallback" (razón en tooltip) |
-| Paramétrica · `twist`/`taper`/`pitch` ≠ 0 | **intenta gmsh** | 🔵 azul | 🟡 amarillo "voxel · fallback" |
-| Paramétrica · `base_polygon` custom no axis-aligned | **intenta gmsh** | 🔵 azul | 🟡 amarillo "voxel · fallback" |
-| **CAD importado** (cualquier formato) | **intenta gmsh** | 🔵 azul "gmsh · boundary-fitted" | 🟡 amarillo "voxel · fallback" |
+| Paramétrica · shoebox axis-aligned · techo plano | **voxel directo** | verde "voxel · exacto" | n/a (no se intenta gmsh) |
+| Paramétrica · pentágono regular techo plano | **voxel directo** | verde "voxel · exacto" | n/a |
+| Paramétrica · `arch_height > 0` | **intenta gmsh** | azul "gmsh · boundary-fitted" | amarillo "voxel · fallback" (razón en tooltip) |
+| Paramétrica · `twist`/`taper`/`pitch` ≠ 0 | **intenta gmsh** | azul | amarillo "voxel · fallback" |
+| Paramétrica · `base_polygon` custom no axis-aligned | **intenta gmsh** | azul | amarillo "voxel · fallback" |
+| **CAD importado** (cualquier formato) | **intenta gmsh** | azul "gmsh · boundary-fitted" | amarillo "voxel · fallback" |
 
 Con la geometría paramétrica actual de Prototipo 1, los techos en arco generan T-junctions entre el techo subdividido (muchos vértices en aristas del polígono) y las paredes (solo 4 vértices por arista). Gmsh detecta esto como "Wrong topology of boundary mesh for parametrization" o "PLC Error: A segment and a facet intersect at point" y el sistema cae automáticamente a voxel con badge amarillo. Para evitar este fallback en recintos curvos, importá la geometría como CAD limpio.
 
@@ -1103,9 +1103,9 @@ Para visualizar la sala en 3D estos problemas son irrelevantes — el render Ope
 
 Cuando hay un fallback, después de presionar **Calcular modos (FEM)**:
 
-1. El log de estado (parte inferior del panel) muestra una línea con el icono ⚠ y el motivo:
+1. El log de estado (parte inferior del panel) muestra una línea de advertencia con el motivo:
    ```
-   ⚠ Gmsh intentado pero falló (PLC Error: A segment and a facet intersect at point).
+   Gmsh intentado pero falló (PLC Error: A segment and a facet intersect at point).
    Cayendo a voxel.
    FEM listo (voxel). Malla: 2386 nodos, 9504 tets, V≈177.84 m³, h̄≈0.42 m.
    ```
@@ -1697,7 +1697,7 @@ Usar la librería no te hace más "real" en el método. Te hace más rápido en 
 **Cambios v2.5** (23 de mayo):
 
 1. **Diálogo de RT60 simplificado.** Se removieron el método Fitzroy y las métricas T20/T30 de la UI por pedido del usuario (T20=T30=T60 en predicciones teóricas; Fitzroy era ruido visual). Quedan **Sabine** y **Eyring** sólo en **T60**. El código de Fitzroy se conserva en `face_materials.compute_fitzroy_rt60_per_face` por si se quiere re-habilitar.
-2. **Botón "Materiales" sin emoji.** Antes decía `🎨 Materiales…`; ahora dice `Materiales…`.
+2. **Botón "Materiales" sin emoji.** Antes tenía un ícono de paleta; ahora dice `Materiales…`.
 3. **Audio +6 dB con saturación suave.** Reescrita la cadena de `audio_utils.apply_frf_filter`:
    - Normalización al **peak ±1,0** (antes ±0,85 → +1,4 dB extra).
    - **Soft-clipping tanh** con drive = 2,5 → boost equivalente a **~2× amplitud RMS** sin distorsión audible para ruido rosa filtrado.
@@ -2032,7 +2032,7 @@ Coherente con la leyenda del picker (que ahora nunca muestra modos por encima de
 
 ### E. Fixes estéticos en diálogos
 
-- **Diálogo de importar CAD / reparar agujeros**: los botones largos (`✓ Cerrar este hueco (auto)`, `⛒ Soldar a vértices cercanos`, `Reparar TODO automaticamente`) se cortaban al primer carácter por una combinación de Qt centrando el texto y la métrica irregular del Unicode al inicio. Fix con triple defensa:
+- **Diálogo de importar CAD / reparar agujeros**: los botones largos (`✓ Cerrar este hueco (auto)`, `Soldar a vértices cercanos`, `Reparar TODO automaticamente`) se cortaban al primer carácter por una combinación de Qt centrando el texto y la métrica irregular del Unicode al inicio. Fix con triple defensa:
   1. `setMinimumWidth(440)` en el panel izquierdo del splitter.
   2. `setMinimumWidth(380)` por botón.
   3. `text-align: left; padding-left: 16px` vía styleSheet local, para evitar que el centrado clipee el primer carácter cuando el sizeHint() subestima por el Unicode ancho.
@@ -2511,7 +2511,7 @@ El SBIR clásico mira solo la interferencia entre el sonido directo del parlante
 
 ### Guardar y cargar curvas de RT para comparar configuraciones
 
-La ventana **«Ver RT60 calculado»** se limpia al cerrarla (cómodo para trabajar rápido), y ahora tiene un grupo **«Guardar / cargar curvas (CSV)»** para comparar tratamientos sin perder el trabajo. Con **«💾 Guardar curva seleccionada…»** elegís una curva de la lista (Sabine, Eyring o Perturbación; T60 o T30) y la guardás en un archivo **CSV** eligiendo carpeta y nombre; el archivo es legible (se abre en Excel o cualquier editor) y guarda el método, la métrica y la tabla banda-por-banda. Después cambiás los revestimientos, reabrís la ventana, y con **«📂 Cargar curva(s) desde CSV…»** traés uno o varios de esos CSV, que se superponen punteados para comparar contra la configuración actual. Como cada curva es su propio archivo, podés acumular todas las variantes que quieras.
+La ventana **«Ver RT60 calculado»** se limpia al cerrarla (cómodo para trabajar rápido), y ahora tiene un grupo **«Guardar / cargar curvas (CSV)»** para comparar tratamientos sin perder el trabajo. Con **«Guardar curva seleccionada…»** elegís una curva de la lista (Sabine, Eyring o Perturbación; T60 o T30) y la guardás en un archivo **CSV** eligiendo carpeta y nombre; el archivo es legible (se abre en Excel o cualquier editor) y guarda el método, la métrica y la tabla banda-por-banda. Después cambiás los revestimientos, reabrís la ventana, y con **«Cargar curva(s) desde CSV…»** traés uno o varios de esos CSV, que se superponen punteados para comparar contra la configuración actual. Como cada curva es su propio archivo, podés acumular todas las variantes que quieras.
 
 ---
 
@@ -2521,7 +2521,7 @@ La ventana **«Ver RT60 calculado»** se limpia al cerrarla (cómodo para trabaj
 
 Hasta ahora la absorción de una superficie se resumía en su coeficiente α (medido con incidencia aleatoria, ISO 354). Eso alcanza para el tiempo de reverberación, pero en la banda modal (por debajo de la frecuencia de Schroeder) una pared real hace dos cosas que el α solo no captura: **amortigua** cada modo según cuánto absorbe en esa frecuencia, y **corre la frecuencia** del modo según la reactancia de la construcción (una cámara de aire, la masa de un panel, el resorte de un resonador). Una pared perfectamente rígida no corre nada; una construcción resonante sí, y ese corrimiento es audible.
 
-El botón **«Construcciones de pared…»** (en el grupo de Materiales) abre una ventana donde asignás una **construcción** a una o varias superficies: **paredes, parches (⬒) y muebles (▣)**, todo en la misma lista. Con **«Nueva construcción y asignar…»** se abre un editor con cuatro tipos:
+El botón **«Construcciones de pared…»** (en el grupo de Materiales) abre una ventana donde asignás una **construcción** a una o varias superficies: **paredes, parches y muebles**, todo en la misma lista. Con **«Nueva construcción y asignar…»** se abre un editor con cuatro tipos:
 
 - **Panel perforado**: una placa con orificios sobre una cámara de aire (resonador de Helmholtz distribuido). Parámetros: espesor de la placa, diámetro del orificio, porcentaje de perforación y profundidad de la cámara.
 - **Microperforado (MPP)**: lo mismo con orificios de menos de 1 mm, que dan absorción de banda ancha sin material poroso (modelo de Maa).

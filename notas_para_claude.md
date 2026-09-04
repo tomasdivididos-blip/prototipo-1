@@ -557,11 +557,30 @@ PYTHONIOENCODING=utf-8 /c/Users/aceve/anaconda3/python.exe script.py
 ```
 Alternativa: en el código, usá solo ASCII o `print('...'.encode('utf-8'))`.
 
-### LaTeX (LEGADO — ya no se usa para el manual)
-**Desde el 19 Ago 2026 el manual se mantiene SOLO en `MANUAL.md`.** Ya no se generan
-ni sincronizan `MANUAL.tex` ni `MANUAL.pdf` (decisión del usuario). Los `.tex`/`.pdf`
-existentes quedan como snapshot histórico hasta v2.22; no los toques ni los actualices.
-(Ruta de MiKTeX por si alguna vez hace falta: `/c/Users/aceve/AppData/Local/Programs/MiKTeX/miktex/bin/x64/pdflatex.exe`.)
+### Manual: master `.md` + PDF on-demand (actualizado 4 Sep 2026)
+**El manual se mantiene SOLO en `MANUAL.md`** (desde 19 Ago 2026). `MANUAL.tex` quedó
+congelado como snapshot histórico en v2.22; **NO lo toques ni lo sincronices** (ya no
+es la fuente del PDF).
+
+**PDF (nuevo pipeline, 4 Sep 2026): `render_manual_pdf.py`** renderiza `MANUAL.md` →
+`MANUAL.pdf` con **pandoc + xelatex** (ya no `pdflatex` sobre el `.tex`). Un comando:
+`/c/Users/aceve/anaconda3/python.exe render_manual_pdf.py`. Detalles:
+- pandoc está en `anaconda3/Library/bin/pandoc.exe`; xelatex de MiKTeX
+  (`/c/Users/aceve/AppData/Local/Programs/MiKTeX/miktex/bin/x64/`); el script arma el PATH solo.
+- **Fuentes DejaVu** (de matplotlib) por header fontspec → cubren α, ξₙ, ∇, ∈, ⟨⟩,
+  subíndices, box-drawing, etc. sin glyphs faltantes. lualatex se colgaba (prompt de
+  MiKTeX) → se usa `--enable-installer`; el fallback por glyph de luaotfload daba
+  "invalid font identifier" (harf vs node) → se descartó, DejaVu sola alcanza.
+- **CERO EMOJI (pedido del usuario, 4 Sep 2026).** El usuario NO quiere emojis en el
+  manual: se sacaron TODOS de `MANUAL.md` (🟢🔊💾📂🎨🟡… + ⚠ ☑ ⛒ ⬒ ⏹, con reword de
+  las frases que los referenciaban). El script igual trae un strip de emoji como red de
+  seguridad (hoy elimina 0). Se CONSERVAN símbolos de notación/UI monocromos que sí
+  renderizan y no son emoji: → ≈ √ ∇ ∈ ⟨⟩ ≥ ▾ ▸ ✓ ✕ ✎ ○ y el box-drawing.
+- **Cadencia (workflow del usuario):** el `.md` se actualiza en CADA recap; el **PDF se
+  renderiza SOLO cuando el usuario lo pide** (la diferencia acumulada ya es notable),
+  porque exportar tarda. NO regenerar el PDF en cada recap.
+- `MANUAL.pdf` (raíz) SÍ está trackeado en git; el script también lo copia a
+  `dist/Prototipo1/` si existe (para que el bundle Windows lleve el manual al día).
 
 ### Git
 **El proyecto YA tiene git inicializado** (desde 7-8 Jul 2026 — cambió la regla
