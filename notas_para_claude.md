@@ -829,6 +829,26 @@ donde `Path(__file__).parent / "materials"` lo encuentra (porque los
 **Verificación**: correr `verify_distribution.py` post-build; chequea
 que haya 19 JSON en `_internal/materials/`.
 
+### B11. `filters.py` no bundleado (import lazy) — FIXEADO v2.31 (3 Sep 2026)
+**Síntoma**: el `.exe` arranca, pero al usar el **filtro crossover/EQ por fuente**
+(feature v2.29) crashea con `ModuleNotFoundError: No module named 'filters'`.
+**Diagnóstico**: `filters` se importa **LAZY** dentro de funciones (`import filters
+as _flt` en `acoustic_panel.py` y `sources.py`), no a nivel de módulo. El análisis
+estático de imports de PyInstaller NO sigue los imports dentro de funciones, así que
+`filters.py` **no entra al PYZ** del bundle (no aparece ni suelto ni en los zips de
+`_internal`; buscarlo ahí es el chequeo). Igual que B8/B9/B10: build "OK", el .exe se
+genera, el bug aparece recién al ejercitar el feature.
+**Confusión del pipeline (importante)**: el `Prototipo1.spec` commiteado SÍ tenía
+`--hidden-import=filters` (bloque v2.29), pero **`build.bat` NO lo usa**: termina en
+`main.py`, o sea regenera el spec por CLI y pisa esos hand-edits. Los dos caminos de
+build divergían. Moraleja: **el source de verdad del build es `build.bat` (CLI), no el
+`.spec`** (que build.bat sobreescribe). Cualquier hidden-import va en build.bat.
+**Fix v2.31**: `build.bat` ahora pasa `--hidden-import=filters` (+ `scipy.signal` por
+las dudas, aunque el collect de scipy ya lo trae), con REM explicativo.
+**Verificación**: tras el build, `filters` tiene que aparecer en el PYZ del bundle
+(no como `.py` suelto: los módulos propios van al archivo comprimido). Regla general:
+**todo módulo propio importado SOLO de forma lazy necesita `--hidden-import` en build.bat**.
+
 ---
 
 ## 8. Si te aparece X, hacé Y
@@ -2825,6 +2845,12 @@ bien.
   - **Test visual del usuario: los DOS pasaron** (corrimiento por default + panel refleja
     material). Recap: MANUAL v2.31, notas (D5b + esta entrada + §10a nueva), memoria. Ver
     [[z-impedance-modeling]].
+  - **Bug de build encontrado en el recap (B11): `filters.py` no entraba al bundle**
+    (import lazy → PyInstaller no lo ve → el .exe crasheaba al usar el filtro crossover).
+    Pre-existente (v2.29/v2.30). Fix: `--hidden-import=filters` en `build.bat` (el spec
+    commiteado lo tenía pero build.bat lo pisa: el build regenera el spec por CLI, así que
+    **el source de verdad es build.bat, no el .spec**). Detalle en §7 B11. Zips v2.31:
+    `Prototipo1_Mac.zip` 0.93 MB + `Prototipo1_v2.31.zip` ~418 MB (Windows, rebuild con el fix).
 
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
