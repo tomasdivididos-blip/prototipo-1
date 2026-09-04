@@ -102,4 +102,15 @@ _(se completa a medida que entran datos)_
 
 ## 10. Cambios al protocolo posteriores al congelamiento
 
-_(vacío al momento de congelar; cualquier cambio va acá con fecha y motivo)_
+- **2026-09-04 — reactancia auto del material APAGADA por default (hallazgo M1 de
+  `REVIEW-FISICO.md`).** La auditoría independiente confirmó (reproducido) que el
+  corrimiento de fₙ por la Z auto derivada del α (Miki extrapolado, modelo no medido)
+  sesga las fₙ hasta ~9% en salas muy tratadas. Decisión del usuario: se apaga por default
+  (`_auto_material_reactance=False`, toggle opt-in en el panel). **Consecuencia para la
+  validación:** la comparación primaria fₙ_sim vs fₙ_medida se corre con la reactancia auto
+  OFF (β real, amortiguamiento exacto). La reactancia queda como HIPÓTESIS a testear: se
+  puede correr un segundo pase con el toggle ON y medir si M1/M4 mejoran o empeoran vs las
+  RIRs. Las construcciones explícitas (perforado/membrana/poroso+cámara) NO se ven
+  afectadas: son modelos elegidos, no extrapolados, y aportan reactancia siempre.
+- Pendiente antes de correr validación (mismo audit): C1 (acotar la FRF a la banda válida)
+  y M2 (truncar el RT por piso de ruido en `rir.py`). Ver `REVIEW-FISICO.md`.
