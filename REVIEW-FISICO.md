@@ -302,9 +302,24 @@ de medición. Con la afirmación de "máxima exactitud" en JAAS, hay que acotarl
   ruido (Chu/ISO 3382) en `schroeder_curve` (flag `noise_trunc=True`). `bench_rir_noise`
   5/5: RIR ruidosa/truncada recupera el RT dentro de 3-10% vs +312-424% sin truncar; IR
   limpia sin regresión (`bench_rir` 14/14).
-- **M3 — PENDIENTE.** Falta oráculo (QEP sobre malla voxel) o estudio de convergencia del
-  amortiguamiento/corrimiento en geometría no axis-aligned. Las *frecuencias* modales en
-  geometría irregular sí están verificadas (S5).
+- **M3 — HECHO (`bench_perturbation_oblique.py`, 3/3).** Se montó el oráculo QEP sobre
+  malla voxel de recintos OBLICUOS (paredes en taper 0.35 y techo inclinado). Resultado en
+  dos partes:
+  - **(A) La fórmula de perturbación es exacta a 1er orden en geometría oblicua:** sobre el
+    MISMO borde voxel que usa el QEP (δ = (c/2)β·φᵀCφ, φ M-ortonormal), el amortiguamiento
+    coincide con el QEP a **1.4% (taper) / 0.8% (techo)**, el corrimiento a ~1.5%. La
+    afirmación "recintos arbitrarios" queda respaldada para el amortiguamiento/corrimiento,
+    no solo para las frecuencias.
+  - **(B) Integrar sobre la superficie LISA (lo que hace la app) es lo correcto, no un bug:**
+    el borde voxel del taper tiene **+34% de área** (escalera); un amortiguamiento sobre el
+    borde voxel (como el QEP) sobreestimaría el del recinto real liso por ese factor. La
+    integral de la app sobre la superficie lisa (con re-escala por cobertura) evita ese
+    sesgo (difiere del voxel en ~22%, del orden del 34% de inflación de área). Vindica la
+    decisión de diseño que el auditor había marcado como no validada.
+  - **Caveat honesto:** el valor de la superficie lisa no está PROBADO exacto (para eso
+    haría falta un QEP sobre malla boundary-fitted/gmsh como oráculo del recinto liso
+    verdadero); corrige la mayor parte de la inflación de escalera, con incertidumbre
+    residual acotada y MENOR que el ~34% que incurriría un enfoque de borde-voxel.
 - Menores (m1-m4): documentados; m1 (ppw=6→~2%) y m3 (docstring Miki) pendientes de nota.
 
 ---
