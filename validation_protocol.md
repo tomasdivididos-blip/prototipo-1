@@ -96,8 +96,32 @@ métrica se cambia después de ver los números sin dejarlo registrado en §10.
 
 ## 9. Estado (recintos y datos)
 
-_(se completa a medida que entran datos)_
-- [ ] Datasets públicos identificados (geometría + posiciones + RIR).
+**Datasets públicos identificados (2026-09-04).** Gate crítico para rango modal =
+contenido de BAJA FRECUENCIA (sweep/parlante que baje de ~40 Hz); si no, no excita los
+modos. A confirmar antes de comprometer cada uno.
+
+| Dataset | Recinto | V, f_S aprox | Geometría | Posiciones | Baja frec | Uso |
+|---|---|---|---|---|---|---|
+| **MeshRIR** | cuboide 7.0×6.4×2.7 | ~121 m³, f_S~112 Hz (RT 0.38) | cuboide conocido | **3969** mics (grilla 5 cm) desde 1 fuente + 441 desde 32 | a confirmar (parlante 3 vías con woofer) | M1 (forma modal), **M4 (varianza espacial, ideal por densidad)**. CC BY 4.0, Zenodo |
+| **FLAIR (2025)** | 1 recinto, geometría láser | a confirmar (paper) | **nube de puntos 3D mm** → construíble a .obj | 270 RIR, mics calibradas láser | a confirmar (paper) | **el mejor para "geometría arbitraria"** (geometría exacta no trivial). CC BY 4.0, Zenodo 17037517 |
+| dEchorate | cuboide 6×6×2.4 | 86.4 m³, f_S~118 Hz | cuboide, pos ±2 cm | 30 mics × 6 fuentes × 11 config | **NO: sweep 100 Hz–14 kHz** (se pierde 28–100 Hz) | marginal para modal (banda 100–118 Hz muy angosta); su config "totalmente absorbente" sirve de caso límite del damping. Zenodo+GitHub |
+
+Descartado para validación: `facebookresearch/AcousticRooms` (RIR SIMULADAS, no medición → no es ground truth). Secundarios a mirar: MIRaGe, Arni (Aalto), Univ. Rochester RIR.
+
+- [x] Datasets públicos identificados.
+- [x] **Descargados y baja frecuencia CONFIRMADA sobre datos reales (2026-09-05)** en `datasets/`:
+  - **FLAIR** (`datasets/flair/data_FLAIR.mat`, 116 MB, MD5 OK): fs 48 kHz, c 344.7,
+    270 RIRs (135 mics × 2 fuentes, XYZ exactas), **nube de 2.9M puntos de contorno +
+    normales** (geometría exacta → construíble). bbox 5.78×5.62×3.35 m. **Baja frecuencia
+    FUERTE: 62% de la energía 20-2000 Hz está en 20-120 Hz.** Ideal para modal + geometría
+    arbitraria. PRIMARIO.
+  - **MeshRIR S1-M3969** (`datasets/meshrir/S1-M3969_npy/`, 1.0 GB, ZIP íntegro): fs 48 kHz,
+    T 26.3°C, cuboide 7.0×6.4×2.7, fuente (2.0,1.5,0.0), **3969 mics en grilla de 5 cm**
+    (región ±0.5×±0.5×±0.2 m). LF más débil (1.5% de energía <120 Hz) pero **los modos son
+    resolubles**: picos del promedio espacial a 23.4/52.7/57.1/68.8/79.1/117 Hz (axiales
+    teóricos 24.5/26.8/63.5). Usable para M1 y sobre todo **M4 (varianza espacial, densidad
+    única)**; M3 con cuidado en las bandas bajas. COMPLEMENTO.
+  - dEchorate NO descargado (sweep desde 100 Hz, descartado para modal).
 - [ ] Mediciones/planos propios.
 
 ## 10. Cambios al protocolo posteriores al congelamiento
