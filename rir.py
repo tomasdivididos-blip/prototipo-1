@@ -161,22 +161,76 @@ def band_filter(ir: np.ndarray, fs: int, center: float,
     return sosfiltfilt(sos, np.asarray(ir, dtype=np.float64))
 
 
+def _noise_crosspoint(x2: np.ndarray, fs: int,
+                      margin_db: float = 10.0, n_iter: int = 6
+                      ) -> Tuple[int, float]:
+    """Punto de cruce decaimiento-ruido (Lundeby 1995, versión iterativa) sobre la
+    IR al cuadrado. Devuelve (idx_cross, noise_level_lineal): la muestra donde la
+    recta de decaimiento cae al piso de ruido, y la energía media del ruido. ISO
+    3382 exige truncar ahí antes de la integral de Schroeder (si no, la integral
+    regresiva del ruido levanta la cola de la EDC y sesga la pendiente/RT)."""
+    n = len(x2)
+    win = max(1, int(0.02 * fs))            # ventanas de ~20 ms
+    nb = n // win
+    if nb < 5:                               # IR muy corta: sin truncado
+        tail = x2[int(0.9 * n):] if n else x2
+        return n, float(np.mean(tail)) if len(tail) else 0.0
+    seg = x2[:nb * win].reshape(nb, win).mean(axis=1)
+    tseg = (np.arange(nb) + 0.5) * win / fs
+    with np.errstate(divide="ignore"):
+        seg_db = 10.0 * np.log10(np.maximum(seg, 1e-30))
+    noise = float(np.mean(seg[int(0.9 * nb):]))   # ruido inicial: último 10%
+    cross = n
+    for _ in range(n_iter):
+        noise_db = 10.0 * np.log10(max(noise, 1e-30))
+        m = seg_db >= noise_db + margin_db        # tramo de decaimiento "limpio"
+        if int(np.sum(m)) < 3:
+            break
+        A = np.vstack([tseg[m], np.ones(int(np.sum(m)))]).T
+        (slope, b), *_ = np.linalg.lstsq(A, seg_db[m], rcond=None)
+        if slope >= 0:
+            break
+        t_cross = (noise_db - b) / slope
+        new_cross = int(np.clip(t_cross * fs, win, n))
+        # re-estimar ruido desde ~10 ms después del cruce
+        i0 = min(n, new_cross + int(0.01 * fs))
+        tail = x2[i0:]
+        if len(tail) >= win:
+            new_noise = float(np.mean(tail))
+        else:
+            new_noise = noise
+        conv = abs(10.0 * np.log10(max(new_noise, 1e-30)) - noise_db) < 0.5
+        noise, cross = new_noise, new_cross
+        if conv:
+            break
+    return int(np.clip(cross, win, n)), float(noise)
+
+
 def schroeder_curve(ir: np.ndarray, fs: int,
-                    trim_tail_frac: float = 0.05
+                    trim_tail_frac: float = 0.05,
+                    noise_trunc: bool = True
                     ) -> Tuple[np.ndarray, np.ndarray]:
     """Curva de decaimiento (EDC) por integración regresiva de Schroeder.
 
         EDC(t) = 10*log10( int_t^T ir^2 / int_0^T ir^2 )
 
-    Con RIR truncada la EDC se desploma artificialmente cerca del final
-    (queda poca energía por integrar): se descarta el último
-    ``trim_tail_frac`` de la curva.
+    `noise_trunc=True` (default, ISO 3382): detecta el piso de ruido y el punto de
+    cruce (Lundeby), **trunca** la integral ahí y **resta** la energía media del
+    ruido (compensación de Chu) antes de integrar. Sin esto, en una RIR real
+    (truncada/ruidosa) la cola de ruido curva la EDC y sesga el RT. En una IR
+    limpia el cruce cae al final y la resta es ~0 → reduce al comportamiento previo.
+    `trim_tail_frac`: descarte final adicional (colchón numérico).
     """
     x2 = np.asarray(ir, dtype=np.float64) ** 2
+    n = len(x2)
+    if float(np.sum(x2)) <= 0:
+        return np.arange(n) / fs, np.full(n, -np.inf)
+    if noise_trunc:
+        cross, noise = _noise_crosspoint(x2, fs)
+        x2 = np.maximum(x2[:cross] - noise, 0.0)      # Chu: resta de ruido + truncado
+        if float(np.sum(x2)) <= 0:                     # resta dejó todo en cero
+            x2 = np.asarray(ir, dtype=np.float64)[:cross] ** 2
     total = float(np.sum(x2))
-    if total <= 0:
-        t = np.arange(len(x2)) / fs
-        return t, np.full(len(x2), -np.inf)
     edc = np.cumsum(x2[::-1])[::-1] / total
     n_keep = max(2, int(len(edc) * (1.0 - trim_tail_frac)))
     t = np.arange(n_keep) / fs

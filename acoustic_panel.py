@@ -1096,7 +1096,7 @@ class FRFDialog(QDialog):
     """Diálogo de FRF con gráfico matplotlib, exportación y escucha con ruido rosa."""
 
     def __init__(self, frf_result, modal_freqs=None, parent=None,
-                 fom=None, fom_band=None, eqc=None, eqc_band=None):
+                 fom=None, fom_band=None, eqc=None, eqc_band=None, f_valid=None):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle(f"FRF — {frf_result.method.upper()}")
@@ -1118,7 +1118,25 @@ class FRFDialog(QDialog):
         self._fig, ax = plt.subplots(figsize=(9.5, 4.2), dpi=96)
         self._fig.patch.set_facecolor('#f0f0f0')
         ax.set_facecolor('#ffffff')
-        ax.plot(f, db, color='#1f6fbf', linewidth=1.8, label='FRF (FEM)')
+
+        # C1 (auditoria 2026-09-04): por encima de f_valid = min(f_max_malla,
+        # ultimo modo) la superposicion modal es cola-suma truncada y/o esta fuera
+        # de la validez numerica de la malla (hasta 27 dB de error). Se dibuja la
+        # curva VALIDA en solido y la INVALIDA en gris punteado, y se sombrea la banda.
+        fv = float(f_valid) if (f_valid is not None and f_valid > float(f[0])) else None
+        if fv is not None and fv < float(f[-1]):
+            mvalid = f <= fv
+            ax.plot(f[mvalid], db[mvalid], color='#1f6fbf', linewidth=1.8,
+                    label='FRF (FEM) · banda válida')
+            # incluir el punto de cruce para que la curva no quede cortada
+            minv = f >= fv
+            ax.plot(f[minv], db[minv], color='#9aa0a6', linewidth=1.3,
+                    linestyle=':', label='Fuera de banda válida (no confiable)')
+            ax.axvspan(fv, float(f[-1]), color='#9aa0a6', alpha=0.16, zorder=0)
+            ax.axvline(x=fv, color='#666666', linestyle='-.', linewidth=1.0,
+                       alpha=0.8)
+        else:
+            ax.plot(f, db, color='#1f6fbf', linewidth=1.8, label='FRF (FEM)')
 
         if modal_freqs is not None:
             for i, fn in enumerate(modal_freqs):
@@ -5695,12 +5713,29 @@ class AcousticPanel(QWidget):
         except Exception as e:
             self._log(f"Aviso FoM: {e}")
 
+        # C1 (auditoria): techo de validez de la FRF = min(f_max_malla, ultimo modo
+        # calculado). Por encima, la superposicion modal es cola-suma truncada
+        # (hasta 27 dB de error medido) y/o esta fuera de la validez numerica de la
+        # malla. Se lo pasamos al plot para SOMBREAR esa banda, no mostrarla como valida.
+        f_valid = None
+        if self.modal_result is not None:
+            try:
+                h_max = self.modal_result.mesh_info.get("h_max", 0.0)
+                f_mesh = self._validity_freq(h_max) if h_max and h_max > 0 else None
+                mf = self._effective_modal_freqs()
+                f_last = float(np.max(mf)) if mf is not None and len(mf) else None
+                cands = [x for x in (f_mesh, f_last) if x and x > 0]
+                f_valid = min(cands) if cands else None
+            except Exception:
+                f_valid = None
+
         dlg = FRFDialog(
             result,
             modal_freqs=(self._effective_modal_freqs()
                          if self.modal_result else None),
             parent=self,
             fom=fom, fom_band=fom_band, eqc=eqc, eqc_band=eqc_band,
+            f_valid=f_valid,
         )
         dlg.exec_()
 

@@ -288,6 +288,26 @@ de medición. Con la afirmación de "máxima exactitud" en JAAS, hay que acotarl
   diseño, no el campo físico bajo Schroeder; lo revisé sólo superficialmente por prioridad.
 
 ---
+
+## Estado de remediación (post-auditoría, agregado por el asistente principal)
+
+- **M1 — HECHO (commit 9b9f167).** Reactancia auto del material APAGADA por default
+  (`_auto_material_reactance=False`, toggle opt-in). Amortiguamiento exacto intacto;
+  construcciones explícitas sin cambios. `bench_default_z` 10/10, Capa 0 164/164.
+- **C1 — HECHO.** La FRF ahora sombrea y dibuja punteada la banda `> min(f_max_malla,
+  último modo)`; la curva sólida es solo la banda válida. Reproducido el 27 dB antes de
+  arreglar. (No se cambian defaults de `n_modes`/`npm` en silencio; se respeta la palanca
+  del usuario y se avisa visualmente.)
+- **M2 — HECHO.** `rir.py`: truncado por piso de ruido (Lundeby iterativo) + resta de
+  ruido (Chu/ISO 3382) en `schroeder_curve` (flag `noise_trunc=True`). `bench_rir_noise`
+  5/5: RIR ruidosa/truncada recupera el RT dentro de 3-10% vs +312-424% sin truncar; IR
+  limpia sin regresión (`bench_rir` 14/14).
+- **M3 — PENDIENTE.** Falta oráculo (QEP sobre malla voxel) o estudio de convergencia del
+  amortiguamiento/corrimiento en geometría no axis-aligned. Las *frecuencias* modales en
+  geometría irregular sí están verificadas (S5).
+- Menores (m1-m4): documentados; m1 (ppw=6→~2%) y m3 (docstring Miki) pendientes de nota.
+
+---
 *Reproducción rápida:*
 `PYTHONIOENCODING=utf-8 QT_QPA_PLATFORM=offscreen /c/Users/aceve/anaconda3/python.exe bench_modal_vs_impedance.py`
 (C1, 27 dB), y con `PYTHONPATH` al proyecto: `scratchpad/quantify_shift.py` (M1, +9%),
