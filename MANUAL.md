@@ -2640,4 +2640,26 @@ Sobre el σ que aparece: es la **resistividad al flujo** del poroso equivalente 
 
 ---
 
-*Manual actualizado al 3 de Septiembre de 2026 — v2.31.*
+**Cambios v2.32** (5 de septiembre 2026): correcciones tras una **auditoría físico-numérica independiente** del núcleo, hechas para presentar en JAAS con la afirmación de "máxima exactitud bajo Schroeder" sin sesgos. Tres cambios visibles.
+
+### Reactancia por material: ahora APAGADA por default (era experimental)
+
+La v2.31 corría las frecuencias modales por una reactancia sintetizada del α de cada material poroso. La auditoría mostró que esa reactancia usa el modelo de Miki **extrapolado muy por debajo de su rango de validez** y es **modelo, no medición**: podía correr todas las fₙ hasta ~9% en salas muy tratadas, empeorando el acuerdo con mediciones en vez de mejorarlo. Por eso ahora:
+
+- **Por default la reactancia por material está apagada**: cada cara sin construcción usa β real (solo **amortiguamiento**, que sale exacto del α medido). Las frecuencias modales NO se corren.
+- Hay un toggle nuevo **«Reactancia por material (experimental, no medida)»** en el grupo de Materiales para encenderla si querés explorarla como hipótesis (dice explícitamente que no está medida).
+- Las **construcciones de pared explícitas** (panel perforado, membrana, poroso con cámara) siguen aportando su reactancia siempre: esas son modelos que elegís, no extrapolados del α.
+
+El amortiguamiento (RT60 por banda, decaimiento) no cambia con esto: siempre fue exacto desde el α.
+
+### FRF: se marca la banda fuera de validez
+
+La respuesta en frecuencia (FRF) por superposición modal solo es confiable hasta el menor de: la frecuencia del último modo calculado, y la frecuencia máxima de la malla (`f_max_malla = c/(ppw·h)`). Por encima es cola-suma truncada o numéricamente sucia. Ahora el gráfico dibuja la **banda válida en línea sólida** y la **banda no confiable en gris punteado con sombreado y una línea de corte**, en vez de mostrar una única curva "válida" en todo el eje. Si querés extender la banda válida: subí el número de modos y/o el npm (la sugerencia de npm ya está en el panel).
+
+### Diagnóstico de RT desde mediciones (RIR): truncado por ruido
+
+La herramienta que estima RT60 a partir de respuestas impulsivas medidas ahora **trunca por el piso de ruido** (método de Lundeby) y resta el ruido antes de la integral de Schroeder (ISO 3382). Sin esto, la cola de ruido de una RIR real curva la curva de decaimiento y sobreestima el RT; con esto el RT medido es fiel aun en grabaciones ruidosas o truncadas.
+
+---
+
+*Manual actualizado al 5 de Septiembre de 2026 — v2.32.*
