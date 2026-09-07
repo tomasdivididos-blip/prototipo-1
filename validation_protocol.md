@@ -109,6 +109,38 @@ modos. A confirmar antes de comprometer cada uno.
 Descartado para validación: `facebookresearch/AcousticRooms` (RIR SIMULADAS, no medición → no es ground truth). Secundarios a mirar: MIRaGe, Arni (Aalto), Univ. Rochester RIR.
 
 - [x] Datasets públicos identificados.
+- [x] **Runner M1 corrido sobre MeshRIR (`validate_meshrir.py` → `validation_results.md`), 2026-09-05.**
+  Caja 7.0×6.4×2.7, c=347.0 m/s (T=26.3°C), 3969 mics promediados, reactancia auto OFF.
+  Resultado: **M1 (vs FEM) = 0.76% → PASA** (umbral ≤3%), **M2 = 80% (4/5) → PASA** (umbral ≥80%).
+  M1 vs analítico = 1.11% (el desacuerdo es FÍSICO: piso numérico del FEM ~0.38% a npm=4, converge O(h²)).
+  Pico medido de 22.0 Hz excluido por sub-modal (< 1er axial 24.8 Hz = c/2Lx): no es resonancia de sala.
+  Único residual >tol: modo medido a 52.0 Hz (4.5%), en región modal densa (analíticos 54.2 y 56.5 a <5 Hz →
+  el peak-pick sobre el promedio espacial se corre). M1 (mediana) es robusto a esto.
+- [x] **M4 sobre MeshRIR corrido (`validate_meshrir_m4.py`), 2026-09-05 → INCONCLUSO.**
+  MeshRIR NO publica la ubicación absoluta del rig en el cuarto (verificado en paper/repo/página/dataset).
+  Barrido de 27 ubicaciones plausibles: M4 crudo máx 0.44, destendenciado máx 0.53, **0/27 ≥ 0.7**.
+  Dos causas: (1) ubicación no publicada → patrón de amplitudes modales no fijable; (2) coloración de
+  fuente (DS-7) + monopolo iω domina la M4 cruda. Los picos SÍ coinciden en frecuencia (M1 <1%).
+  **M4 autoritativo → FLAIR.** MeshRIR aporta solo M1.
+- [x] **FLAIR: M1 + M4 corrido (`validate_flair.py` + `flair_geometry.py`), 2026-09-06.**
+  Geometría RECONSTRUIDA de la nube de 2.9M puntos (alinear yaw 8.5° + occupancy + sellar/corregir +
+  marching_cubes → superficie cerrada → build_volume_mesh). Sala 4.96×5.08×2.72, V=60.8 m³, posiciones exactas.
+  **M1 = 1.42% → PASA** (M2 80%), sobre geometría arbitraria: resultado fuerte para JAAS.
+  **M4 (destendenciado, banda [45, f_S=142]) = 0.615 → MISS marginal**; crudo 0.655; fuente 1: 0.539.
+  Limitante de M4: rolloff LF del parlante + discrepancia cerca de f_S + reconstrucción ±1.6%; las fₙ SÍ coinciden.
+- [x] **Auditoría independiente (`auditor-fisico`) + test de discriminación, 2026-09-06.** Reporte en
+  `REVIEW-VALIDACION.md`. Hallazgo crítico C1 (M1/M2 pueden pasar con sala equivocada) → se implementó
+  `validate_discrimination.py` (línea base nula + barrido de escala): **MeshRIR M1 NO discrimina**
+  (percentil 42, azar); **FLAIR M1 SÍ discrimina** (percentil 1). **M4 FLAIR discrimina fuerte** (pico
+  agudo en s=1.045) y revela un sesgo de malla ~4.5% (modos sim altos). Fixes: guard de sellado
+  (`seal="auto"` en flair_geometry), docstring, y bug de clobber de validation_results.md (el runner
+  ahora escribe `validation_meshrir_m1.md`). Ningún número fabricado (auditor).
+- [x] **M3 (RT60 por banda): NO EVALUABLE sobre estos datasets, 2026-09-06.** Doble bloqueo: (1) físico,
+  RT es de campo difuso, mal definido bajo Schroeder (medido: n_confiable 1-5 de 200 mics en 31/63 Hz;
+  MeshRIR 63 Hz da 1.24 s absurdo); solo 125 Hz (≈f_S) es confiable. Refuerza la tesis (la estadística de
+  sala no vale ahí). (2) De dato: el sim predice RT desde materiales que los datasets no documentan; usar
+  el RT medido sería circular. **DIFERIDO a medición propia con materiales.** Ver `validation_results.md`.
+- [ ] **Refinar malla/reconstrucción FLAIR** para testear si cierra el sesgo ~4.5% de M4. FUTURO.
 - [x] **Descargados y baja frecuencia CONFIRMADA sobre datos reales (2026-09-05)** en `datasets/`:
   - **FLAIR** (`datasets/flair/data_FLAIR.mat`, 116 MB, MD5 OK): fs 48 kHz, c 344.7,
     270 RIRs (135 mics × 2 fuentes, XYZ exactas), **nube de 2.9M puntos de contorno +
@@ -137,4 +169,19 @@ Descartado para validación: `facebookresearch/AcousticRooms` (RIR SIMULADAS, no
   RIRs. Las construcciones explícitas (perforado/membrana/poroso+cámara) NO se ven
   afectadas: son modelos elegidos, no extrapolados, y aportan reactancia siempre.
 - Pendiente antes de correr validación (mismo audit): C1 (acotar la FRF a la banda válida)
-  y M2 (truncar el RT por piso de ruido en `rir.py`). Ver `REVIEW-FISICO.md`.
+  y M2 (truncar el RT por piso de ruido en `rir.py`). Ver `REVIEW-FISICO.md`. **[HECHO, commit 3785f3f]**
+- **2026-09-05 — M4 quedó SUB-ESPECIFICADA frente a la coloración de fuente (hallazgo del run MeshRIR).**
+  La definición congelada ("correlación del promedio espacial de la FRF") no dice cómo tratar la coloración
+  del parlante ni el modelo de fuente. Al correrla cruda sobre MeshRIR, la correlación la domina la
+  diferencia de banda ancha (parlante DS-7 real vs monopolo ideal iω), no la estructura modal, dando ~0
+  aun cuando los picos coinciden (M1 <1%). **Decisión pendiente (a fijar CON el usuario antes de correr M4
+  sobre FLAIR, para no ajustar la métrica al resultado):** o bien (a) destendenciar/blanquear ambos
+  espectros de forma simétrica (comparar estructura modal, no coloración), o (b) comparar sobre picos
+  modales apareados, o (c) modelar la respuesta de fuente medida si el dataset la trae. Se elige el criterio
+  ANTES de ver el número de FLAIR y se registra acá. El umbral M4 ≥ 0.7 NO se toca.
+- **2026-09-06 — RATIFICADO (con el usuario): M4 = correlación DESTENDENCIADA** (baseline suavizada en
+  log-f restada simétricamente a sim y medido) sobre la banda [f_min, f_S]. f_min = piso útil de la RIR
+  (protocolo §3; para FLAIR = 45 Hz, el parlante DS no radia por debajo). f_S = 2000·√(RT/V). La banda NO
+  se elige para pasar; el umbral 0.7 no se toca. Resultado FLAIR bajo esta definición: M4 = 0.615 (MISS
+  marginal), reportado como tal. La opción (c) (modelar la respuesta de fuente del dato) queda como
+  refinamiento futuro si se quiere cerrar el gap 0.62→0.7.

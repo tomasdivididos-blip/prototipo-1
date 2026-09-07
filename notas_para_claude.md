@@ -985,6 +985,12 @@ sin persistir. Ante la duda, ofrecelo.
    qué se hizo, decisiones tomadas, gotchas, benches, qué quedó pendiente. Actualizar
    §5 (decisiones) o las reglas si cambió algo estructural. Actualizar la memoria
    persistente (`memory/*.md` + `MEMORY.md`) si corresponde.
+2b. **`auditor_contexto.md`** (desde 6 Sep 2026, pedido del usuario) — actualizar el
+   contexto vivo del `auditor-fisico`: qué archivos de núcleo/validación existen, qué
+   resultados se AFIRMAN, y dónde el autor sospecha bugs. Es un mapa de qué mirar, NO
+   evidencia (el auditor lo trata como afirmaciones a verificar). Así el auditor entra
+   caliente en la próxima corrida sin re-derivar el estado. Si cambió el alcance (archivos
+   nuevos), reflejarlo también en `.claude/agents/auditor-fisico.md` (sección Alcance).
 3. **Repo** — commitear y pushear TODO lo necesario para dejar el repo al día:
    `git add -A`, commit con mensaje descriptivo (terminar con `Co-Authored-By: Claude`),
    `git push`. Si estás en una rama de trabajo (ej. `dist-exe`), pushear ahí; no mergear
@@ -2947,6 +2953,43 @@ bien.
 
   **Recap de esta sesión: SOLO MANUAL.md (changelog v2.32) + notas (esta entrada), a pedido
   del usuario** (para poder /clear). NO se generaron PDF ni zips (el usuario los pide aparte).
+
+- **5-6 Sep 2026 — VALIDACIÓN empírica CORRIDA (MeshRIR + FLAIR) + auditoría + campaña propia.**
+  Se ejecutó el pipeline del protocolo congelado (`validation_protocol.md`). Archivos nuevos:
+  `validate_meshrir.py` (M1), `validate_meshrir_m4.py` (M4+barrido), `flair_geometry.py`
+  (reconstrucción de nube), `validate_flair.py` (M1+M4), `validate_discrimination.py`,
+  `validation_results.md` (master, a mano), `REVIEW-VALIDACION.md` (auditoría), `protocolo_medicion.md`,
+  `auditor_contexto.md`. Resultados en `validation_results.md`. Resumen:
+  - **MeshRIR M1 = 0.76% PASA pero NO discrimina** (percentil 42 de la nula; densidad modal alta +
+    pocos picos → azar). M4 INCONCLUSO (MeshRIR no publica la ubicación absoluta del rig; verificado
+    en paper/repo/página). Aporta solo el chequeo del núcleo FEM.
+  - **FLAIR M1 = 1.42% PASA y SÍ discrimina** (percentil 1; barrido de escala min en s=1.005), sobre
+    **geometría arbitraria reconstruida** de una nube de 2.9M puntos (yaw 8.5° alineado, occupancy +
+    sellar/corregir + marching_cubes; sala 4.96×5.08×2.72). Es el resultado fuerte para JAAS.
+  - **M4 destendenciado FLAIR = 0.615 (MISS marginal)** pero **discrimina fuerte** (pico agudo en
+    s=1.045) → detecta un **sesgo de malla ~4.5%** (modos sim altos) que M1 no ve. M4 crudo ~0 por
+    coloración de fuente (parlante vs monopolo iω).
+  - **M3 NO evaluable**: RT es de campo difuso, mal definido < Schroeder (n_confiable 1-5 de 200 en
+    bandas bajas) + sin materiales. DIFERIDO a medición propia. (Refuerza la tesis del proyecto.)
+  - **Decisiones pre-registradas (protocolo §10):** reactancia auto OFF; M4 = destendenciada sobre
+    banda [f_min=piso de fuente, f_S] (ratificada con el usuario); barrido de ubicación para MeshRIR.
+  - **Auditoría (`auditor-fisico`, REVIEW-VALIDACION.md):** hallazgo crítico C1 (M1/M2 pueden pasar con
+    sala equivocada). Correcto en el MECANISMO pero generalizado de más: el test de discriminación lo
+    separó (MeshRIR no / FLAIR sí). Ningún número fabricado. Fixes aplicados: guard de sellado
+    (`seal="auto"` en flair_geometry), docstring "converge estable" (era falsa), y **bug de clobber**
+    (`validate_meshrir.py` sobrescribía `validation_results.md` → ahora escribe `validation_meshrir_m1.md`;
+    lo descubrí porque el auditor re-corrió el script y borró las secciones de FLAIR/M4).
+  - **Campaña de medición propia** (para destrabar M3/M4): `protocolo_medicion.md` (checklist de campo +
+    normas de adquisición: ISO 3382-1/-2, ISO 18233, ISO 10534-2, IEC 60268-21/61260/60942...). El
+    ANÁLISIS modal queda fuera del ámbito de esas normas (se valida contra oráculo + línea base nula).
+  - **Gotcha nuevo:** los runners NO deben escribir `validation_results.md` (master a mano); cada uno su
+    archivo. Y el `auditor-fisico` corre los scripts → puede tocar archivos de salida (tenerlo en cuenta).
+  - **Pendiente:** M3 con recinto propio+materiales; afinar malla/reconstrucción FLAIR (cerrar el 4.5%
+    de M4); 2º pase con reactancia ON. Datasets: `datasets/flair/data_FLAIR.mat`, `datasets/meshrir/`.
+
+  **Recap de esta sesión:** MANUAL.md (changelog v2.33) + notas (esta entrada) + `auditor_contexto.md`
+  + perfil `.claude/agents/auditor-fisico.md` (alcance ampliado) + memoria + commit/push en `dist-exe`.
+  NO se regeneraron zips/PDF (sin cambio funcional en la app; es código de investigación).
 
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug

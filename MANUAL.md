@@ -2662,4 +2662,22 @@ La herramienta que estima RT60 a partir de respuestas impulsivas medidas ahora *
 
 ---
 
-*Manual actualizado al 5 de Septiembre de 2026 — v2.32.*
+**Cambios v2.33** (6 de septiembre 2026): **validación empírica contra mediciones reales** (para JAAS) y **protocolo de medición propia**. No cambia la app; documenta cuán exacto es el modelo y cómo se lo probó.
+
+### Validación contra RIRs medidas (MeshRIR + FLAIR)
+
+Se corrió el protocolo pre-registrado (congelado antes de ver los resultados, para no sesgar) contra dos datasets públicos de respuestas impulsivas medidas:
+
+- **Frecuencias modales (M1): exactas.** En FLAIR (un recinto real, geometría reconstruida de un escaneo láser de 2.9 millones de puntos) el error de frecuencia modal es **1.4%**, y **discrimina**: la geometría verdadera queda en el percentil 1 contra salas aleatorias (no es azar). Es exactitud modal por debajo de 1.5% sobre geometría no trivial. En MeshRIR (cuboide) el número es aún mejor (0.76%) pero no discrimina (la sala tiene demasiados modos juntos: cualquier geometría aparea), así que ese caso solo confirma el núcleo FEM, no la predicción de esa sala en particular.
+- **Forma espacial del campo (M4): cerca, y reveló un sesgo.** La correlación espacial de la respuesta en FLAIR da 0.62 (el umbral era 0.7): marginalmente corta. Lo interesante es que la métrica **discrimina fuerte** (responde agudo a la geometría) y en el proceso detectó un **sesgo de malla de ~4.5%** que la métrica de frecuencias no ve. Es un hallazgo accionable (afinar la malla), no un fracaso.
+- **RT60 por banda (M3): no evaluable en rango modal.** El RT es una cantidad de campo difuso, mal definida por debajo de Schroeder (pocos modos por banda, cada uno decae distinto). Esto **confirma la premisa del proyecto**: la acústica estadística de sala no vale ahí, por eso el modelo valida por frecuencias y por campo, no por RT.
+
+Honestidad del proceso: una auditoría independiente confirmó que **ningún número está fabricado**; los casos que no dan (M4 marginal, MeshRIR no discriminante, M3 no medible) se reportan como tales.
+
+### Protocolo de medición propia
+
+Para cerrar M3 y M4 con datos completos (que los datasets públicos no traen: impedancia de materiales y respuesta del parlante), se preparó un **protocolo de medición** para relevar habitaciones propias: qué sala elegir (relaciones de dimensión que separen los modos), qué fuente (compacta, con su respuesta medida), cómo ubicar micrófonos, qué normas seguir para la adquisición (ISO 3382, ISO 18233, ISO 10534-2 para impedancia, IEC para instrumentación) y qué datos entregar. El análisis modal en sí queda fuera del ámbito de esas normas (pensadas para campo difuso), y se valida contra solución analítica y línea base nula.
+
+---
+
+*Manual actualizado al 6 de Septiembre de 2026 — v2.33.*

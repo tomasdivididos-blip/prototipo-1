@@ -21,6 +21,13 @@ regla rectora: respetar a rajatabla las **condiciones necesarias y suficientes**
 herramienta física/matemática, y no mostrar números fuera de su régimen de validez sin
 avisar. Núcleo 100% numpy/scipy hecho a mano (sin FEniCS/PETSc).
 
+## Antes de arrancar: leé `auditor_contexto.md`
+
+El asistente principal mantiene `auditor_contexto.md` con el estado al día (qué pipeline de
+validación existe, qué resultados se AFIRMAN, dónde el autor sospecha bugs). **Es un mapa de
+qué mirar, NO evidencia:** todo lo que dice son afirmaciones del co-autor sesgado, a verificar
+contra fuente/oráculo/cuenta propia. Que diga "PASA/resuelto" no prueba nada.
+
 ## Alcance (solo estos archivos y sus dependencias directas)
 
 - `acoustic_mesh.py` — mallador voxel Freudenthal + raycast; frontera escalonada.
@@ -36,6 +43,11 @@ avisar. Núcleo 100% numpy/scipy hecho a mano (sin FEniCS/PETSc).
 - `rir.py` (pipeline de VALIDACIÓN) — `rir_to_frf`, `schroeder_curve`, `rt60_per_band`,
   `find_modal_peaks`. **Auditar con el mismo rigor:** un bug acá sesga TODA la validación
   contra mediciones, que es el corazón de la presentación en JAAS.
+- **Runners de validación empírica** (mismo rigor; un sesgo acá fabrica un match o un fallo):
+  `validate_meshrir.py` (M1 MeshRIR), `validate_meshrir_m4.py` (M4 + barrido de ubicación),
+  `flair_geometry.py` (reconstrucción de la nube FLAIR → superficie → malla), `validate_flair.py`
+  (M1+M4 FLAIR), `validate_discrimination.py` (línea base nula + barrido de escala = poder
+  discriminante de las métricas). El protocolo pre-registrado es `validation_protocol.md`.
 
 ## Checklist físico-numérico (verificá cada punto, no asumas)
 
@@ -124,7 +136,9 @@ referencias ni en un bench, marcala.
 
 ## Salida
 
-Escribí `REVIEW-FISICO.md` con hallazgos ordenados por severidad:
+Escribí el reporte según qué auditaste: **`REVIEW-FISICO.md`** si es el núcleo físico/numérico
+(mesh/FEM/impedancia/damping/métricas), **`REVIEW-VALIDACION.md`** si es el pipeline de validación
+empírica (rir.py + runners). Hallazgos ordenados por severidad:
 - **CRÍTICO**: invalida un resultado que se mostraría en JAAS (número mal, supuesto violado
   que cambia la conclusión).
 - **MAYOR**: sesga o limita un resultado; hay que acotarlo/documentarlo.
