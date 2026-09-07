@@ -985,6 +985,12 @@ sin persistir. Ante la duda, ofrecelo.
    qué se hizo, decisiones tomadas, gotchas, benches, qué quedó pendiente. Actualizar
    §5 (decisiones) o las reglas si cambió algo estructural. Actualizar la memoria
    persistente (`memory/*.md` + `MEMORY.md`) si corresponde.
+2b. **`auditor_contexto.md`** (desde 6 Sep 2026, pedido del usuario) — actualizar el
+   contexto vivo del `auditor-fisico`: qué archivos de núcleo/validación existen, qué
+   resultados se AFIRMAN, y dónde el autor sospecha bugs. Es un mapa de qué mirar, NO
+   evidencia (el auditor lo trata como afirmaciones a verificar). Así el auditor entra
+   caliente en la próxima corrida sin re-derivar el estado. Si cambió el alcance (archivos
+   nuevos), reflejarlo también en `.claude/agents/auditor-fisico.md` (sección Alcance).
 3. **Repo** — commitear y pushear TODO lo necesario para dejar el repo al día:
    `git add -A`, commit con mensaje descriptivo (terminar con `Co-Authored-By: Claude`),
    `git push`. Si estás en una rama de trabajo (ej. `dist-exe`), pushear ahí; no mergear
@@ -2870,6 +2876,120 @@ bien.
     commiteado lo tenía pero build.bat lo pisa: el build regenera el spec por CLI, así que
     **el source de verdad es build.bat, no el .spec**). Detalle en §7 B11. Zips v2.31:
     `Prototipo1_Mac.zip` 0.93 MB + `Prototipo1_v2.31.zip` ~418 MB (Windows, rebuild con el fix).
+
+- **4-5 Sep 2026 — AUDITORÍA físico-numérica independiente + remediación + setup de
+  VALIDACIÓN para JAAS (rama dist-exe).** Objetivo del usuario: presentar el software en
+  JAAS (Buenos Aires) afirmando ser la simulación modal más exacta bajo Schroeder en
+  recintos arbitrarios; quiere validar la fidelidad contra RIRs, SIN sesgos (yo soy
+  co-autor → sesgado). Ciclo grande, todo commiteado y pusheado a dist-exe.
+
+  **(0) Anti-sesgo montado (commit 7a67f6d):**
+  - `.claude/agents/auditor-fisico.md`: agente auditor INDEPENDIENTE (contexto fresco,
+    adversarial). Alcance = núcleo físico/numérico (acoustic_mesh, acoustic_fem, impedance,
+    face_materials, modal_metrics, prediction, rir.py). Usa `referencias/_scrape.py` sobre
+    las dos bibliotecas (`referencias/` + `C:\Users\aceve\Tomas\Recursos Programación`:
+    Atalla&Sgard FEM, Kuttruff, Oppenheim DSP, Bilbao, Kirkup). NO toma comentarios/notas
+    como prueba. Se corre con `Agent subagent_type=claude` (el .md nuevo no aparece como
+    tipo hasta recargar sesión; en frío pasarle el .md como prompt).
+  - `validation_protocol.md`: protocolo PRE-REGISTRADO y **CONGELADO**. Umbrales (elegidos
+    por el usuario): **M1 error de fₙ ≤3%, M2 cobertura ≥80%, M3 RT ±5%/±0.05s, M4 corr del
+    promedio espacial ≥0.7**. Regla anti-sesgo: α de catálogo, CERO tuneo. **La correlación
+    punto-a-punto de la FRF NO es criterio** (es baja por física, M>1); solo se reporta.
+
+  **(1) Auditoría (agente Opus, `REVIEW-FISICO.md`).** Verificó el núcleo contra oráculos
+  (QEP complejo exacto, spread 8:10:12, modos analíticos, escalera 30°): **el núcleo está
+  bien** (FEM P1 masa consistente, superposición modal c², perturbación de amortiguamiento,
+  Paris, voxel-para-fₙ). Encontró 1 CRÍTICO + 3 MAYORES + 4 menores. Reproduje C1 y M1 yo
+  mismo antes de aceptarlos. Los 4 arreglados (commits abajo):
+  - **M1 (commit 9b9f167) — reactancia auto del material OFF por default.** Era ON en v2.31;
+    usa Miki extrapolado (X<0.01) y es modelo NO medido; sesga fₙ +6-10% en salas muy
+    tratadas. Fix: `_material_surface(mat, with_reactance=False)` default → β real
+    (amortiguamiento EXACTO intacto). Toggle opt-in `chk_auto_reactance`
+    (`_auto_material_reactance`, default False) + handler `_on_auto_reactance_toggled`.
+    Construcciones explícitas NO afectadas. `bench_default_z` 10/10, Capa 0 164/164.
+    Corrige la nota §5 D5b (ya refinada) y la memoria [[z-impedance-modeling]].
+  - **C1 (commit 3785f3f) — FRF acotada a banda válida.** `FRFDialog(f_valid=...)` con
+    `f_valid=min(f_max_malla, último modo)`; banda válida sólida, resto gris punteado +
+    sombreado. Antes se medían 27 dB de error en 100-150 Hz mostrados como válidos. NO se
+    cambian n_modes/npm en silencio (palanca del usuario, D4).
+  - **M2 (commit 3785f3f) — `rir.py` RT con truncado de ruido.** `_noise_crosspoint`
+    (Lundeby) + resta de Chu en `schroeder_curve(noise_trunc=True)`. `bench_rir_noise` 5/5
+    (recupera RT dentro de 3-10% vs +312-424% sin truncar); `bench_rir` 14/14 sin regresión.
+  - **M3 (commit a95f1c0) — oráculo en geometría oblicua (`bench_perturbation_oblique.py`,
+    3/3).** (A) La fórmula de perturbación es exacta a 1er orden en geometría oblicua
+    (amortiguamiento vs QEP: taper 1.4%, techo 0.8%). (B) Integrar sobre la superficie LISA
+    (lo que hace la app) es lo CORRECTO: el borde voxel del taper tiene +34% de área
+    (escalera) → un damping sobre el voxel sobreestimaría; la superficie lisa lo evita.
+    **Vindica** la decisión de diseño. Caveat: no probado exacto (haría falta QEP gmsh).
+  - Menores m1-m4 documentados en REVIEW-FISICO.md (ppw=6→~2% fₙ; zeroeo silencioso de
+    fuentes fuera de malla; docstring Miki mal escrito; FFT sin ventana). No bloquean.
+
+  **(2) VALIDACIÓN empírica — datasets (commits 20b702a).** Decisión del usuario: usar
+  datasets públicos + mediciones propias. Gate crítico para modal = **contenido de baja
+  frecuencia**. Descargados a `datasets/` (GITIGNOREADO), baja frecuencia CONFIRMADA sobre
+  datos reales:
+  - **FLAIR** (`datasets/flair/data_FLAIR.mat`, 116 MB, MD5 41e06a…OK) — PRIMARIO. fs 48k,
+    c 344.7, 270 RIRs = `rirs` (17873, 135, 2); `mic_positions`(3,135), `spkr_positions`(3,2)
+    XYZ EXACTAS; **`boundary_points`+`boundary_normals` (3, 2.9M) = geometría exacta**.
+    bbox 5.78×5.62×3.35 m. **62% de la energía 20-2000 Hz está en 20-120 Hz** → LF fuerte.
+    Es el caso de "geometría arbitraria" (el norte de JAAS). CC BY 4.0, Zenodo 17037517.
+  - **MeshRIR S1-M3969** (`datasets/meshrir/S1-M3969_npy/`, 1.0 GB) — COMPLEMENTO espacial.
+    fs 48k, T 26.3°C, cuboide 7.0×6.4×2.7, fuente (2.0,1.5,0.0), **3969 mics en grilla 5cm**
+    (región ±0.5×±0.5×±0.2). Loader `datasets/meshrir/src/irutilities.py` (`loadIR`);
+    formato: `ir_N.npy` + `data.json` (posiciones en `data.json['ir_N']['pos']={x,y,z}`,
+    fuente en `src_0['pos']`). LF más débil (1.5% <120Hz) pero **modos resolubles** (picos
+    del promedio espacial a 23.4/52.7/57.1/68.8/79.1/117 Hz). Fuerte para M4. CC BY 4.0,
+    Zenodo 5500451. Los .zip quedaron al lado (borrables).
+  - **dEchorate DESCARTADO** para modal: sweep desde 100 Hz (pierde 28-100 Hz).
+
+  **PRÓXIMO PASO (donde quedamos):** construir el pipeline del protocolo empezando por FLAIR:
+  (1) caracterizar la nube de 2.9M puntos de FLAIR (¿caja o irregular?) y llevarla a malla
+  (si es irregular, reconstrucción de superficie → .obj; ese es el test real de "geometría
+  arbitraria"); (2) ubicar fuente+mics en las posiciones exactas; (3) correr el sim modal
+  **con reactancia OFF** (decisión M1), extraer fₙ/FRF/RT; (4) comparar vs medido con
+  `rir.py` (`find_modal_peaks`, `rt60_per_band`, promedio espacial) y calcular M1-M4 vs los
+  umbrales congelados; (5) generar `validation_results.md`. MeshRIR después para M4.
+  Recordatorio: NO pedir mediciones de impedancia al usuario; sí RIRs/planos/geometría.
+
+  **Recap de esta sesión: SOLO MANUAL.md (changelog v2.32) + notas (esta entrada), a pedido
+  del usuario** (para poder /clear). NO se generaron PDF ni zips (el usuario los pide aparte).
+
+- **5-6 Sep 2026 — VALIDACIÓN empírica CORRIDA (MeshRIR + FLAIR) + auditoría + campaña propia.**
+  Se ejecutó el pipeline del protocolo congelado (`validation_protocol.md`). Archivos nuevos:
+  `validate_meshrir.py` (M1), `validate_meshrir_m4.py` (M4+barrido), `flair_geometry.py`
+  (reconstrucción de nube), `validate_flair.py` (M1+M4), `validate_discrimination.py`,
+  `validation_results.md` (master, a mano), `REVIEW-VALIDACION.md` (auditoría), `protocolo_medicion.md`,
+  `auditor_contexto.md`. Resultados en `validation_results.md`. Resumen:
+  - **MeshRIR M1 = 0.76% PASA pero NO discrimina** (percentil 42 de la nula; densidad modal alta +
+    pocos picos → azar). M4 INCONCLUSO (MeshRIR no publica la ubicación absoluta del rig; verificado
+    en paper/repo/página). Aporta solo el chequeo del núcleo FEM.
+  - **FLAIR M1 = 1.42% PASA y SÍ discrimina** (percentil 1; barrido de escala min en s=1.005), sobre
+    **geometría arbitraria reconstruida** de una nube de 2.9M puntos (yaw 8.5° alineado, occupancy +
+    sellar/corregir + marching_cubes; sala 4.96×5.08×2.72). Es el resultado fuerte para JAAS.
+  - **M4 destendenciado FLAIR = 0.615 (MISS marginal)** pero **discrimina fuerte** (pico agudo en
+    s=1.045) → detecta un **sesgo de malla ~4.5%** (modos sim altos) que M1 no ve. M4 crudo ~0 por
+    coloración de fuente (parlante vs monopolo iω).
+  - **M3 NO evaluable**: RT es de campo difuso, mal definido < Schroeder (n_confiable 1-5 de 200 en
+    bandas bajas) + sin materiales. DIFERIDO a medición propia. (Refuerza la tesis del proyecto.)
+  - **Decisiones pre-registradas (protocolo §10):** reactancia auto OFF; M4 = destendenciada sobre
+    banda [f_min=piso de fuente, f_S] (ratificada con el usuario); barrido de ubicación para MeshRIR.
+  - **Auditoría (`auditor-fisico`, REVIEW-VALIDACION.md):** hallazgo crítico C1 (M1/M2 pueden pasar con
+    sala equivocada). Correcto en el MECANISMO pero generalizado de más: el test de discriminación lo
+    separó (MeshRIR no / FLAIR sí). Ningún número fabricado. Fixes aplicados: guard de sellado
+    (`seal="auto"` en flair_geometry), docstring "converge estable" (era falsa), y **bug de clobber**
+    (`validate_meshrir.py` sobrescribía `validation_results.md` → ahora escribe `validation_meshrir_m1.md`;
+    lo descubrí porque el auditor re-corrió el script y borró las secciones de FLAIR/M4).
+  - **Campaña de medición propia** (para destrabar M3/M4): `protocolo_medicion.md` (checklist de campo +
+    normas de adquisición: ISO 3382-1/-2, ISO 18233, ISO 10534-2, IEC 60268-21/61260/60942...). El
+    ANÁLISIS modal queda fuera del ámbito de esas normas (se valida contra oráculo + línea base nula).
+  - **Gotcha nuevo:** los runners NO deben escribir `validation_results.md` (master a mano); cada uno su
+    archivo. Y el `auditor-fisico` corre los scripts → puede tocar archivos de salida (tenerlo en cuenta).
+  - **Pendiente:** M3 con recinto propio+materiales; afinar malla/reconstrucción FLAIR (cerrar el 4.5%
+    de M4); 2º pase con reactancia ON. Datasets: `datasets/flair/data_FLAIR.mat`, `datasets/meshrir/`.
+
+  **Recap de esta sesión:** MANUAL.md (changelog v2.33) + notas (esta entrada) + `auditor_contexto.md`
+  + perfil `.claude/agents/auditor-fisico.md` (alcance ampliado) + memoria + commit/push en `dist-exe`.
+  NO se regeneraron zips/PDF (sin cambio funcional en la app; es código de investigación).
 
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug

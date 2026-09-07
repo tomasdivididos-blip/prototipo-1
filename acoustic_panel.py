@@ -1096,7 +1096,7 @@ class FRFDialog(QDialog):
     """Diálogo de FRF con gráfico matplotlib, exportación y escucha con ruido rosa."""
 
     def __init__(self, frf_result, modal_freqs=None, parent=None,
-                 fom=None, fom_band=None, eqc=None, eqc_band=None):
+                 fom=None, fom_band=None, eqc=None, eqc_band=None, f_valid=None):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle(f"FRF — {frf_result.method.upper()}")
@@ -1118,7 +1118,25 @@ class FRFDialog(QDialog):
         self._fig, ax = plt.subplots(figsize=(9.5, 4.2), dpi=96)
         self._fig.patch.set_facecolor('#f0f0f0')
         ax.set_facecolor('#ffffff')
-        ax.plot(f, db, color='#1f6fbf', linewidth=1.8, label='FRF (FEM)')
+
+        # C1 (auditoria 2026-09-04): por encima de f_valid = min(f_max_malla,
+        # ultimo modo) la superposicion modal es cola-suma truncada y/o esta fuera
+        # de la validez numerica de la malla (hasta 27 dB de error). Se dibuja la
+        # curva VALIDA en solido y la INVALIDA en gris punteado, y se sombrea la banda.
+        fv = float(f_valid) if (f_valid is not None and f_valid > float(f[0])) else None
+        if fv is not None and fv < float(f[-1]):
+            mvalid = f <= fv
+            ax.plot(f[mvalid], db[mvalid], color='#1f6fbf', linewidth=1.8,
+                    label='FRF (FEM) · banda válida')
+            # incluir el punto de cruce para que la curva no quede cortada
+            minv = f >= fv
+            ax.plot(f[minv], db[minv], color='#9aa0a6', linewidth=1.3,
+                    linestyle=':', label='Fuera de banda válida (no confiable)')
+            ax.axvspan(fv, float(f[-1]), color='#9aa0a6', alpha=0.16, zorder=0)
+            ax.axvline(x=fv, color='#666666', linestyle='-.', linewidth=1.0,
+                       alpha=0.8)
+        else:
+            ax.plot(f, db, color='#1f6fbf', linewidth=1.8, label='FRF (FEM)')
 
         if modal_freqs is not None:
             for i, fn in enumerate(modal_freqs):
@@ -3414,6 +3432,13 @@ class AcousticPanel(QWidget):
         # f_n por Im); el material sigue dando alpha para bandas > f_S (difuso).
         # Vacio = comportamiento historico (alpha->beta real, sin corrimiento).
         self._construction_map = {}       # Dict[str signature, dict spec]
+        # Reactancia AUTO del material (corrimiento de f_n por Im(beta) sintetizada
+        # de un poroso Miki ajustado al alpha): OPT-IN, apagada por default desde la
+        # auditoria 2026-09-04 (hallazgo M1: modelo no medido + Miki extrapolado,
+        # sesga f_n hasta ~9% en salas muy tratadas). El amortiguamiento (Re beta)
+        # es exacto y va SIEMPRE; las construcciones explicitas aportan reactancia
+        # siempre. Esto es solo para la Z auto derivada del alpha del catalogo.
+        self._auto_material_reactance = False
 
         # --- Gate de absorcion para f_Schroeder (v2.23) ---
         # El FaceMaterialMap SIEMPRE devuelve un material (su `default`), asi
@@ -3476,6 +3501,22 @@ class AcousticPanel(QWidget):
         self.lbl_constr_summary.setStyleSheet("color: #94a3b8; font-size: 9pt;")
         self.lbl_constr_summary.setWordWrap(True)
         fmat.addRow(self.lbl_constr_summary)
+
+        # Reactancia auto del material (opt-in, apagada por default). Corre f_n con
+        # una reactancia sintetizada del alpha (Miki extrapolado, MODELO NO MEDIDO).
+        self.chk_auto_reactance = QCheckBox(
+            "Reactancia por material (experimental, no medida)")
+        self.chk_auto_reactance.setChecked(self._auto_material_reactance)
+        self.chk_auto_reactance.setToolTip(
+            "APAGADO (recomendado): las caras sin construcción usan β real (solo\n"
+            "amortiguamiento exacto del α). Las frecuencias modales NO se corren.\n\n"
+            "ENCENDIDO: además sintetiza una reactancia de poroso (Miki) desde el α\n"
+            "y corre las fₙ. Es un MODELO NO MEDIDO y Miki queda extrapolado en la\n"
+            "banda modal; puede correr las fₙ hasta ~9% en salas muy tratadas. Es\n"
+            "una hipótesis a validar contra mediciones, no exactitud. Las\n"
+            "construcciones explícitas aportan reactancia con o sin esto.")
+        self.chk_auto_reactance.toggled.connect(self._on_auto_reactance_toggled)
+        fmat.addRow(self.chk_auto_reactance)
 
         btn_rt60_plot  = QPushButton("Ver RT60 calculado")
         btn_reload_mat = QPushButton("Recargar materiales")
@@ -5672,12 +5713,29 @@ class AcousticPanel(QWidget):
         except Exception as e:
             self._log(f"Aviso FoM: {e}")
 
+        # C1 (auditoria): techo de validez de la FRF = min(f_max_malla, ultimo modo
+        # calculado). Por encima, la superposicion modal es cola-suma truncada
+        # (hasta 27 dB de error medido) y/o esta fuera de la validez numerica de la
+        # malla. Se lo pasamos al plot para SOMBREAR esa banda, no mostrarla como valida.
+        f_valid = None
+        if self.modal_result is not None:
+            try:
+                h_max = self.modal_result.mesh_info.get("h_max", 0.0)
+                f_mesh = self._validity_freq(h_max) if h_max and h_max > 0 else None
+                mf = self._effective_modal_freqs()
+                f_last = float(np.max(mf)) if mf is not None and len(mf) else None
+                cands = [x for x in (f_mesh, f_last) if x and x > 0]
+                f_valid = min(cands) if cands else None
+            except Exception:
+                f_valid = None
+
         dlg = FRFDialog(
             result,
             modal_freqs=(self._effective_modal_freqs()
                          if self.modal_result else None),
             parent=self,
             fom=fom, fom_band=fom_band, eqc=eqc, eqc_band=eqc_band,
+            f_valid=f_valid,
         )
         dlg.exec_()
 
@@ -6567,6 +6625,17 @@ class AcousticPanel(QWidget):
         if dlg.exec_():
             self._on_constructions_applied(dlg.result_map)
 
+    def _on_auto_reactance_toggled(self, checked):
+        """Prende/apaga la reactancia auto del material (opt-in). Recomputa xi y el
+        corrimiento y refresca el picker de modos. Amortiguamiento no cambia."""
+        self._auto_material_reactance = bool(checked)
+        estado = "ENCENDIDA (modelo no medido)" if checked else "apagada (β real)"
+        self._log(f"Reactancia auto por material: {estado}.")
+        if self.modal_result is not None:
+            self._xi_per_mode = self._compute_xi_from_materials()
+            self._refresh_modes_combo()
+            self._update_mode_readout()
+
     def _on_constructions_applied(self, cmap):
         """Adopta el mapa de construcciones y recomputa xi (y el corrimiento)."""
         self._construction_map = dict(cmap or {})
@@ -6962,20 +7031,26 @@ class AcousticPanel(QWidget):
         return g2m
 
     @staticmethod
-    def _material_surface(mat):
-        """SurfaceImpedance por DEFAULT del material (Capa 0 automatica).
+    def _material_surface(mat, with_reactance: bool = False):
+        """SurfaceImpedance por DEFAULT del material.
 
         Re(beta) = beta_from_alpha_random(alpha_cat(f)) EXACTO -> preserva la
         absorcion medida, mismo amortiguamiento que el modelo alpha->beta de
-        siempre (sin regresion, para TODO material). Im(beta) se INJERTA desde un
-        poroso semi-infinito de sigma ajustada al alpha del material
-        (imp.sigma_from_alpha), SOLO si es poroso-compatible (amax>=0.15 y ajuste
-        bueno); si no, Im=0 -> beta real (duros/resonantes quedan bit-a-bit como
-        antes). La reactancia corre f_n (Etapa 5c); el amortiguamiento no cambia.
+        siempre (sin regresion, para TODO material). Este es SIEMPRE el default.
 
-        Convencion: se devuelve Z en e^{-iwt} (nativa de impedance.py); el
-        downstream hace conj(Z0/Z) y hereda el signo de la reactancia de Miki.
-        La reactancia es MODELO (asumida a partir de alpha), no medida; ver D5b."""
+        `with_reactance=True` (OPT-IN, apagado por default desde la auditoria
+        2026-09-04): ADEMAS injerta Im(beta) desde un poroso semi-infinito de Miki
+        con sigma ajustada al alpha, si el material es poroso-compatible. Esa
+        reactancia es MODELO NO MEDIDO y Miki queda extrapolado ~10-40x por debajo
+        de su rango (X<0.01) en la banda modal: corre f_n hasta ~9% en salas muy
+        tratadas, sin respaldo de medicion. Por eso NO va por default; es una
+        hipotesis a validar contra RIRs (ver validation_protocol.md, hallazgo M1).
+        Las construcciones EXPLICITAS (panel perforado, membrana, poroso+camara)
+        siguen aportando reactancia siempre: esas son modelos elegidos, no
+        extrapolados del alpha.
+
+        Convencion: Z en e^{-iwt} (nativa de impedance.py); el downstream hace
+        conj(Z0/Z) y hereda el signo de la reactancia de Miki."""
         if hasattr(mat, "alpha_bands"):
             bands = mat.alpha_bands()                     # {banda: alpha}
             fbands = np.array(sorted(bands), dtype=float)
@@ -6983,7 +7058,10 @@ class AcousticPanel(QWidget):
         else:                                             # material sin tabla (fakes/muebles)
             fbands = np.array([63, 125, 250, 500, 1000, 2000, 4000, 8000], float)
             acat = np.array([float(mat.alpha(float(b))) for b in fbands], float)
-        sigma, resid, porous = imp.sigma_from_alpha(acat, fbands)
+        porous = False
+        sigma = None
+        if with_reactance:
+            sigma, resid, porous = imp.sigma_from_alpha(acat, fbands)
 
         def zf(f, theta=0.0):
             f = np.atleast_1d(np.asarray(f, dtype=float))
@@ -6991,7 +7069,7 @@ class AcousticPanel(QWidget):
             beta_re = fm.beta_from_alpha_random(a)       # exacto (real, e^{-iwt})
             if porous:
                 zc, _ = imp.miki_zc_kc(f, sigma)
-                beta = beta_re + 1j * np.imag(imp.Z0 / zc)  # + reactancia Miki
+                beta = beta_re + 1j * np.imag(imp.Z0 / zc)  # + reactancia Miki (opt-in)
             else:
                 beta = beta_re.astype(complex)
             beta = np.where(np.abs(beta) < 1e-12, 1e-12 + 0j, beta)
@@ -7003,11 +7081,14 @@ class AcousticPanel(QWidget):
         return imp.SurfaceImpedance(zf, is_locally_reacting=True, label=lbl)
 
     @staticmethod
-    def _material_ztag(mat) -> str:
+    def _material_ztag(mat, with_reactance: bool = False) -> str:
         """Texto corto de la Z por default de un material (para el panel de
-        construcciones): nombre + clase (poroso con sigma equivalente, o beta
-        real si es duro). Espejo de la clasificacion de `_material_surface`."""
+        construcciones). Con la reactancia auto APAGADA (default), toda cara sin
+        construccion usa beta real (solo amortiguamiento). Con la reactancia auto
+        encendida (opt-in), los porosos muestran su sigma equivalente."""
         name = getattr(mat, "name", "material")
+        if not with_reactance:
+            return f"{name} · β real (α, sin reactancia)"
         try:
             if hasattr(mat, "alpha_bands"):
                 bands = mat.alpha_bands()
@@ -7028,17 +7109,18 @@ class AcousticPanel(QWidget):
         """{clave -> texto de Z-auto} para caras (por grupo) y parches, segun su
         material actual. Lo consume WallConstructionsDialog para mostrar la Z por
         default read-only en las superficies sin construccion explicita."""
+        wr = getattr(self, "_auto_material_reactance", False)
         tags = {}
         g2m = self._group_to_material_dict(groups)
         for g in groups:
             mat = g2m.get(g.signature)
             if mat is not None:
-                tags[g.signature] = self._material_ztag(mat)
+                tags[g.signature] = self._material_ztag(mat, wr)
         p2m = self._patch_to_material_dict() if self._patches else {}
         for p in (self._patches or []):
             mat = p2m.get(p.key)
             if mat is not None:
-                tags[p.key] = self._material_ztag(mat)
+                tags[p.key] = self._material_ztag(mat, wr)
         return tags
 
     def _construction_keys(self):
@@ -7104,8 +7186,13 @@ class AcousticPanel(QWidget):
           - con construccion asignada (en _construction_map) -> SurfaceImpedance.
           - sin construccion pero con material -> resistiva del alpha(f) (beta
             real, sin corrimiento) = camino alpha->beta de siempre.
+        La reactancia auto del material es OPT-IN (self._auto_material_reactance,
+        default OFF desde la auditoria 2026-09-04, hallazgo M1): con OFF las caras
+        sin construccion usan beta real (solo amortiguamiento, sin corrimiento).
+        Las construcciones explicitas SIEMPRE aportan su reactancia.
         Claves: firma de grupo (paredes + muebles __furniture_i__) y patch.key.
         Devuelve (surf_by_group, surf_by_patch)."""
+        wr = getattr(self, "_auto_material_reactance", False)
         surf_g = {}
         for g in groups:
             spec = self._construction_map.get(g.signature)
@@ -7117,7 +7204,7 @@ class AcousticPanel(QWidget):
                     self._log(f"Construccion invalida ({g.signature[:8]}): {e}")
             mat = g2m.get(g.signature)
             if mat is not None:
-                surf_g[g.signature] = self._material_surface(mat)
+                surf_g[g.signature] = self._material_surface(mat, wr)
         surf_p = {}
         p2m = self._patch_to_material_dict() if self._patches else {}
         for p in (self._patches or []):
@@ -7130,7 +7217,7 @@ class AcousticPanel(QWidget):
                     self._log(f"Construccion de parche invalida: {e}")
             mat = p2m.get(p.key)
             if mat is not None:
-                surf_p[p.key] = self._material_surface(mat)
+                surf_p[p.key] = self._material_surface(mat, wr)
         return surf_g, surf_p
 
     def _effective_modal_freqs(self):

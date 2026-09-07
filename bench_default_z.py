@@ -7,9 +7,10 @@ Verifica la decision C (hibrido por gate de forma del alpha):
   2. INVARIANTE SAGRADO: Re(beta_solver) del SurfaceImpedance por default es
      bit-a-bit igual a beta_from_alpha_random(alpha_cat) para TODO material
      -> la absorcion medida / el amortiguamiento NO se tocan (no regresion).
-  3. Duros (amax<0.15 o mal ajuste): Im(beta)=0 -> beta REAL -> identico al
-     comportamiento previo (Z = Z0/beta_real).
-  4. Porosos: Im(beta)!=0 con el signo/magnitud de Miki (reactancia injertada).
+  3. DEFAULT (reactancia OFF, desde auditoria 2026-09-04 / M1): TODO material da
+     Im(beta)=0 -> beta REAL -> solo amortiguamiento, sin corrimiento de f_n.
+  4. OPT-IN (with_reactance=True): los porosos dan Im(beta)!=0 con el signo/magnitud
+     de Miki (reactancia injertada, MODELO no medido).
 
 Convencion: el downstream de la perturbacion hace beta_solver = conj(Z0/Z).
 """
@@ -86,29 +87,29 @@ def main():
     check(f"max|Re(beta) - alpha->beta| sobre {len(mats)} materiales x {len(FTEST)} f",
           worst < 1e-9, f"worst={worst:.2e}")
 
-    # -- 3. Duro: reactancia CERO (bit-a-bit como antes) --------------------
-    print("\n3. Material duro -> Im(beta)=0 (identico al comportamiento previo)")
-    if hard_ex is not None:
-        surf = AcousticPanel._material_surface(hard_ex)
+    # -- 3. DEFAULT (reactancia OFF): Im(beta)=0 en TODO material -----------
+    print("\n3. DEFAULT reactancia OFF -> Im(beta)=0 (solo amortiguamiento)")
+    for m in (hard_ex, porous_ex):
+        if m is None:
+            continue
+        surf = AcousticPanel._material_surface(m)          # default: with_reactance=False
         b = beta_solver(surf, FTEST)
-        check(f"{hard_ex.name[:30]:30s} Im(beta)==0",
+        check(f"{m.name[:30]:30s} Im(beta)==0 por default",
               float(np.max(np.abs(b.imag))) == 0.0,
               f"max|Im|={np.max(np.abs(b.imag)):.2e}")
-        # equivalencia con la Z real vieja
-        a = np.array([float(hard_ex.alpha(float(ff))) for ff in FTEST])
+        a = np.array([float(m.alpha(float(ff))) for ff in FTEST])
         z_old = imp.Z0 / np.maximum(fm.beta_from_alpha_random(a), 1e-12)
-        check("Z(default) == Z0/beta_real (regresion cero en duros)",
+        check(f"{m.name[:22]:22s} Z(default)==Z0/beta_real (β real puro)",
               float(np.max(np.abs(surf.Z(FTEST) - z_old))) < 1e-6)
 
-    # -- 4. Poroso: reactancia presente + signo de Miki --------------------
-    print("\n4. Material poroso -> Im(beta)!=0 con el signo de Miki")
+    # -- 4. OPT-IN (with_reactance=True): poroso -> Im!=0 con signo de Miki --
+    print("\n4. OPT-IN with_reactance=True -> poroso con reactancia de Miki")
     if porous_ex is not None:
-        surf = AcousticPanel._material_surface(porous_ex)
+        surf = AcousticPanel._material_surface(porous_ex, with_reactance=True)
         b = beta_solver(surf, FTEST)
         nz = float(np.max(np.abs(b.imag))) > 1e-4
-        check(f"{porous_ex.name[:30]:30s} Im(beta)!=0", nz,
+        check(f"{porous_ex.name[:30]:30s} Im(beta)!=0 (opt-in)", nz,
               f"Im(beta@63)={b.imag[1]:+.4f}")
-        # signo: debe coincidir con la reactancia Miki cruda conj(Z0/zc)
         bands = porous_ex.alpha_bands()
         fb = np.array(sorted(bands), float)
         ac = np.array([bands[int(x)] for x in fb], float)

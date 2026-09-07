@@ -2640,4 +2640,44 @@ Sobre el σ que aparece: es la **resistividad al flujo** del poroso equivalente 
 
 ---
 
-*Manual actualizado al 3 de Septiembre de 2026 — v2.31.*
+**Cambios v2.32** (5 de septiembre 2026): correcciones tras una **auditoría físico-numérica independiente** del núcleo, hechas para presentar en JAAS con la afirmación de "máxima exactitud bajo Schroeder" sin sesgos. Tres cambios visibles.
+
+### Reactancia por material: ahora APAGADA por default (era experimental)
+
+La v2.31 corría las frecuencias modales por una reactancia sintetizada del α de cada material poroso. La auditoría mostró que esa reactancia usa el modelo de Miki **extrapolado muy por debajo de su rango de validez** y es **modelo, no medición**: podía correr todas las fₙ hasta ~9% en salas muy tratadas, empeorando el acuerdo con mediciones en vez de mejorarlo. Por eso ahora:
+
+- **Por default la reactancia por material está apagada**: cada cara sin construcción usa β real (solo **amortiguamiento**, que sale exacto del α medido). Las frecuencias modales NO se corren.
+- Hay un toggle nuevo **«Reactancia por material (experimental, no medida)»** en el grupo de Materiales para encenderla si querés explorarla como hipótesis (dice explícitamente que no está medida).
+- Las **construcciones de pared explícitas** (panel perforado, membrana, poroso con cámara) siguen aportando su reactancia siempre: esas son modelos que elegís, no extrapolados del α.
+
+El amortiguamiento (RT60 por banda, decaimiento) no cambia con esto: siempre fue exacto desde el α.
+
+### FRF: se marca la banda fuera de validez
+
+La respuesta en frecuencia (FRF) por superposición modal solo es confiable hasta el menor de: la frecuencia del último modo calculado, y la frecuencia máxima de la malla (`f_max_malla = c/(ppw·h)`). Por encima es cola-suma truncada o numéricamente sucia. Ahora el gráfico dibuja la **banda válida en línea sólida** y la **banda no confiable en gris punteado con sombreado y una línea de corte**, en vez de mostrar una única curva "válida" en todo el eje. Si querés extender la banda válida: subí el número de modos y/o el npm (la sugerencia de npm ya está en el panel).
+
+### Diagnóstico de RT desde mediciones (RIR): truncado por ruido
+
+La herramienta que estima RT60 a partir de respuestas impulsivas medidas ahora **trunca por el piso de ruido** (método de Lundeby) y resta el ruido antes de la integral de Schroeder (ISO 3382). Sin esto, la cola de ruido de una RIR real curva la curva de decaimiento y sobreestima el RT; con esto el RT medido es fiel aun en grabaciones ruidosas o truncadas.
+
+---
+
+**Cambios v2.33** (6 de septiembre 2026): **validación empírica contra mediciones reales** (para JAAS) y **protocolo de medición propia**. No cambia la app; documenta cuán exacto es el modelo y cómo se lo probó.
+
+### Validación contra RIRs medidas (MeshRIR + FLAIR)
+
+Se corrió el protocolo pre-registrado (congelado antes de ver los resultados, para no sesgar) contra dos datasets públicos de respuestas impulsivas medidas:
+
+- **Frecuencias modales (M1): exactas.** En FLAIR (un recinto real, geometría reconstruida de un escaneo láser de 2.9 millones de puntos) el error de frecuencia modal es **1.4%**, y **discrimina**: la geometría verdadera queda en el percentil 1 contra salas aleatorias (no es azar). Es exactitud modal por debajo de 1.5% sobre geometría no trivial. En MeshRIR (cuboide) el número es aún mejor (0.76%) pero no discrimina (la sala tiene demasiados modos juntos: cualquier geometría aparea), así que ese caso solo confirma el núcleo FEM, no la predicción de esa sala en particular.
+- **Forma espacial del campo (M4): cerca, y reveló un sesgo.** La correlación espacial de la respuesta en FLAIR da 0.62 (el umbral era 0.7): marginalmente corta. Lo interesante es que la métrica **discrimina fuerte** (responde agudo a la geometría) y en el proceso detectó un **sesgo de malla de ~4.5%** que la métrica de frecuencias no ve. Es un hallazgo accionable (afinar la malla), no un fracaso.
+- **RT60 por banda (M3): no evaluable en rango modal.** El RT es una cantidad de campo difuso, mal definida por debajo de Schroeder (pocos modos por banda, cada uno decae distinto). Esto **confirma la premisa del proyecto**: la acústica estadística de sala no vale ahí, por eso el modelo valida por frecuencias y por campo, no por RT.
+
+Honestidad del proceso: una auditoría independiente confirmó que **ningún número está fabricado**; los casos que no dan (M4 marginal, MeshRIR no discriminante, M3 no medible) se reportan como tales.
+
+### Protocolo de medición propia
+
+Para cerrar M3 y M4 con datos completos (que los datasets públicos no traen: impedancia de materiales y respuesta del parlante), se preparó un **protocolo de medición** para relevar habitaciones propias: qué sala elegir (relaciones de dimensión que separen los modos), qué fuente (compacta, con su respuesta medida), cómo ubicar micrófonos, qué normas seguir para la adquisición (ISO 3382, ISO 18233, ISO 10534-2 para impedancia, IEC para instrumentación) y qué datos entregar. El análisis modal en sí queda fuera del ámbito de esas normas (pensadas para campo difuso), y se valida contra solución analítica y línea base nula.
+
+---
+
+*Manual actualizado al 6 de Septiembre de 2026 — v2.33.*
