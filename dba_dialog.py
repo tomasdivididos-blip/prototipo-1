@@ -49,13 +49,18 @@ class DBADialog(QDialog):
     medidas en la banda válida [fmin, f_max=c/d].
     """
 
-    def __init__(self, dims, receiver, parent=None, apply_callback=None):
+    def __init__(self, dims, receiver, parent=None, apply_callback=None,
+                 eval_context=None):
         super().__init__(parent)
         apply_dialog_theme(self)
         self.setWindowTitle("Subs enfrentados (DBA / CABS)")
         self._dims = tuple(float(x) for x in dims)
         self._receiver = tuple(float(x) for x in receiver)
         self._apply_callback = apply_callback
+        # Contexto para "Evaluar mis fuentes cargadas" (None -> solo diseño).
+        # dict: sources() -> [OmniSource], walls_fn(freq) -> [Wall],
+        # receiver_world, origin, f_schroeder.
+        self._eval_ctx = eval_context
         self._last = None
 
         # Contenido en un QScrollArea (el diálogo puede ser alto: config + gráfico
@@ -76,6 +81,19 @@ class DBADialog(QDialog):
         info.setWordWrap(True)
         lay.addWidget(info)
 
+        # Modo: diseñar el array ideal (histórico) vs evaluar las fuentes que el
+        # usuario ya cargó contra el criterio CABS (respuesta total = SBIR+modos).
+        self.combo_mode = None
+        if self._eval_ctx is not None:
+            mrow = QHBoxLayout()
+            mrow.addWidget(QLabel("Modo:"))
+            self.combo_mode = QComboBox()
+            self.combo_mode.addItem("Diseñar array ideal", "design")
+            self.combo_mode.addItem("Evaluar mis fuentes cargadas", "eval")
+            self.combo_mode.currentIndexChanged.connect(self._on_mode_changed)
+            mrow.addWidget(self.combo_mode, 1)
+            lay.addLayout(mrow)
+
         grp = QGroupBox("Configuración")
         fl = QFormLayout(grp)
         self.combo_axis = QComboBox()
@@ -86,8 +104,12 @@ class DBADialog(QDialog):
 
         self.sb_nx = QSpinBox(); self.sb_nx.setRange(1, 8); self.sb_nx.setValue(4)
         self.sb_nz = QSpinBox(); self.sb_nz.setRange(1, 8); self.sb_nz.setValue(4)
-        fl.addRow("Subs por pared, transversal A:", self.sb_nx)
-        fl.addRow("Subs por pared, transversal B:", self.sb_nz)
+        # Rótulos dinámicos: muestran el eje real de cada dirección de la pared
+        # (se actualizan al cambiar el eje de enfrentamiento, en _refresh_count).
+        self.lbl_na = QLabel("Cantidad de subs en pared (dir. A):")
+        self.lbl_nb = QLabel("Cantidad de subs en pared (dir. B):")
+        fl.addRow(self.lbl_na, self.sb_nx)
+        fl.addRow(self.lbl_nb, self.sb_nz)
         self.lbl_count = QLabel("")
         self.lbl_count.setStyleSheet("color:#555; font-size:8pt;")
         fl.addRow("", self.lbl_count)
@@ -113,8 +135,23 @@ class DBADialog(QDialog):
 
         self.btn = QPushButton("Calcular")
         self.btn.setObjectName("PrimaryButton")
-        self.btn.clicked.connect(self._calc)
+        self.btn.clicked.connect(self._on_calc)
         lay.addWidget(self.btn)
+
+        # Optimizar fuentes libres (item 6): solo en modo evaluar. Mueve las
+        # variables liberadas (free_vars) de cada fuente para minimizar el
+        # criterio CABS. Oculto hasta entrar en modo evaluar.
+        self.btn_opt = None
+        if self._eval_ctx is not None:
+            self.btn_opt = QPushButton("Optimizar fuentes libres")
+            self.btn_opt.setToolTip(
+                "Mueve las variables que marcaste como libres (Optimizar: "
+                "posición/delay/corte/filtro) en cada fuente, para minimizar la "
+                "planitud + varianza espacial CABS. Las fuentes sin nada tildado "
+                "quedan fijas.")
+            self.btn_opt.clicked.connect(self._optimize)
+            self.btn_opt.setVisible(False)
+            lay.addWidget(self.btn_opt)
 
         self.lbl_res = QLabel("Elegí la configuración y tocá «Calcular».")
         self.lbl_res.setWordWrap(True)
@@ -158,6 +195,240 @@ class DBADialog(QDialog):
         self.resize(600, min(720, int(avail * 0.9)))
         self._refresh_count()
 
+    # -----------------------------------------------------------------------
+    # Modo evaluación
+    # -----------------------------------------------------------------------
+    def _mode(self):
+        return self.combo_mode.currentData() if self.combo_mode else "design"
+
+    def _on_mode_changed(self):
+        """Habilita/deshabilita controles segun el modo. Los subs/pared y el drive
+        son solo para DISEÑAR; en modo evaluar el array se toma de las fuentes."""
+        ev = self._mode() == "eval"
+        for w in (self.sb_nx, self.sb_nz, self.combo_drive):
+            w.setEnabled(not ev)
+        self.btn.setText("Evaluar" if ev else "Calcular")
+        if hasattr(self, "btn_apply"):
+            self.btn_apply.setVisible(not ev)
+        if self.btn_opt is not None:
+            self.btn_opt.setVisible(ev)
+        if ev:
+            # Auto-detectar el eje donde las fuentes se enfrentan (no depender del
+            # default = eje mas largo). El usuario lo puede cambiar despues.
+            try:
+                import dba_evaluate as dev
+                ctx = self._eval_ctx or {}
+                srcs = [s for s in ctx.get("sources", lambda: [])()
+                        if getattr(s, "active", True)]
+                if srcs:
+                    ax = dev.best_axis(srcs, self._dims,
+                                       ctx.get("origin", (0.0, 0.0, 0.0)))
+                    j = self.combo_axis.findData(ax)
+                    if j >= 0:
+                        self.combo_axis.setCurrentIndex(j)
+            except Exception:
+                pass
+        if not ev:
+            self.lbl_res.setText("Elegí la configuración y tocá «Calcular».")
+            return
+        # Heads-up de factibilidad CABS apenas se entra al modo (barato, sin
+        # computar respuesta), para que el diagnóstico salga antes de tocar nada.
+        head = ("Tocá «Evaluar» para analizar las fuentes que cargaste, o "
+                "«Optimizar fuentes libres» para reacomodar las que marcaste.")
+        try:
+            import dba_evaluate as dev
+            ctx = self._eval_ctx or {}
+            srcs = [s for s in ctx.get("sources", lambda: [])()
+                    if getattr(s, "active", True)]
+            if srcs:
+                feasible, reasons, _ax = dev.cabs_feasibility(
+                    srcs, self._dims, origin=ctx.get("origin", (0.0, 0.0, 0.0)),
+                    axis=int(self.combo_axis.currentData()))
+                if not feasible:
+                    head = ("<span style='color:#b45309;'><b>Aviso:</b> esta "
+                            "configuración no puede satisfacer CABS:</span><br>"
+                            + "<br>".join(f"• {x}" for x in reasons)
+                            + "<br>Podés evaluarla igual (uniformidad general) o "
+                            "arreglar la config.")
+        except Exception:
+            pass
+        self.lbl_res.setText(head)
+
+    def _on_calc(self):
+        if self._mode() == "eval":
+            self._calc_eval()
+        else:
+            self._calc()
+
+    def _calc_eval(self):
+        """Evalua las fuentes reales del usuario contra CABS (respuesta total)."""
+        import dba_evaluate as dev
+        ctx = self._eval_ctx or {}
+        sources = [s for s in ctx.get("sources", lambda: [])()
+                   if getattr(s, "active", True)]
+        if not sources:
+            self.lbl_res.setText(
+                "<span style='color:#b00'>No hay fuentes activas en la sala. "
+                "Cargá tus subs (y asignáles Tipo Sub-Woofer/Woofer) primero."
+                "</span>")
+            return
+        axis = int(self.combo_axis.currentData())
+        self.btn.setEnabled(False)
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            r = dev.evaluate_cabs(
+                sources, self._dims, ctx.get("receiver_world", self._receiver),
+                origin=ctx.get("origin", (0.0, 0.0, 0.0)),
+                walls=ctx.get("walls_fn"), axis=axis,
+                fmin=20.0, fmax=self.sb_fmax.value(), xi=self.sb_xi.value(),
+                f_schroeder=ctx.get("f_schroeder"))
+        except Exception as e:
+            self.lbl_res.setText(f"<span style='color:#b00'>Error: {e}</span>")
+            return
+        finally:
+            QApplication.restoreOverrideCursor()
+            self.btn.setEnabled(True)
+        self._last = None                    # el export CSV es del modo diseño
+        self._last_eval = r
+        self._show_eval(r)
+        if self._canvas is not None:
+            self._draw_eval(r)
+
+    def _optimize(self):
+        """Optimiza las variables libres (free_vars) de las fuentes (item 6)."""
+        import cabs_optimize as copt
+        ctx = self._eval_ctx or {}
+        sources = list(ctx.get("sources", lambda: [])())
+        if not any(getattr(s, "free_vars", None) for s in sources
+                   if getattr(s, "active", True)):
+            self.lbl_res.setText(
+                "<span style='color:#b00'>Ninguna fuente tiene variables libres. "
+                "Editá tus subs y tildá en «Optimizar:» qué puede mover el "
+                "optimizador (posición/delay/corte/filtro). Sin nada tildado, la "
+                "fuente queda fija.</span>")
+            return
+        axis = int(self.combo_axis.currentData())
+        # Pre-chequeo de factibilidad CABS (barato, estructural). Estas condiciones
+        # son invariantes bajo la optimizacion, asi que si fallan hay que avisar
+        # ANTES de mover nada: el optimizador puede mejorar la uniformidad general
+        # pero NO va a lograr la cancelacion modal del CABS.
+        import dba_evaluate as _dev
+        feasible, reasons, _ax = _dev.cabs_feasibility(
+            sources, self._dims, origin=ctx.get("origin", (0.0, 0.0, 0.0)),
+            axis=axis)
+        if not feasible:
+            msg = ("<b>Con esta configuración no se puede lograr CABS aunque "
+                   "optimice:</b><br>"
+                   + "<br>".join(f"• {x}" for x in reasons)
+                   + "<br><br>El optimizador igual puede mejorar la <b>uniformidad "
+                   "general</b> (planitud + varianza espacial), pero <b>no va a "
+                   "lograr la cancelación modal del CABS</b>.<br><br>¿Optimizar "
+                   "igual para uniformidad, o cancelar y arreglar la config?")
+            box = QMessageBox(self)
+            box.setWindowTitle("Configuración no apta para CABS")
+            box.setIcon(QMessageBox.Warning)
+            box.setTextFormat(Qt.RichText)
+            box.setText(msg)
+            b_go = box.addButton("Optimizar igual", QMessageBox.AcceptRole)
+            box.addButton("Cancelar", QMessageBox.RejectRole)
+            box.exec_()
+            if box.clickedButton() is not b_go:
+                self.lbl_res.setText(
+                    "Optimización cancelada. Revisá: " + " ".join(reasons))
+                return
+        self.btn_opt.setEnabled(False)
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            r = copt.optimize_cabs(
+                sources, self._dims, ctx.get("receiver_world", self._receiver),
+                origin=ctx.get("origin", (0.0, 0.0, 0.0)),
+                walls=ctx.get("walls_fn"), axis=axis,
+                fmin=20.0, fmax=self.sb_fmax.value(), xi=self.sb_xi.value(),
+                f_schroeder=ctx.get("f_schroeder"))
+        except Exception as e:
+            self.lbl_res.setText(f"<span style='color:#b00'>Error: {e}</span>")
+            return
+        finally:
+            QApplication.restoreOverrideCursor()
+            self.btn_opt.setEnabled(True)
+        self._last_opt = r
+        c0 = r["before"]["flat"] + r["before"]["spatial"]
+        c1 = r["after"]["flat"] + r["after"]["spatial"]
+        lines = [f"<b>Optimización de {r['n_free']} fuente(s) libre(s)</b> "
+                 f"(eje {_AXIS_NAMES[r['axis']]}):",
+                 f"Planitud+varianza: {c0:.2f} → <b>{c1:.2f}</b> dB "
+                 + ("(mejora)" if r["improved"] else "(sin mejora)"),
+                 f"&nbsp;&nbsp;planitud {r['before']['flat']:.2f}→{r['after']['flat']:.2f}, "
+                 f"varianza {r['before']['spatial']:.2f}→{r['after']['spatial']:.2f}"]
+        if r["changes"]:
+            lines.append("<b>Cambios propuestos:</b>")
+            lines += [f"&nbsp;• {c}" for c in r["changes"]]
+        self.lbl_res.setText("<br>".join(lines))
+        apply_cb = ctx.get("apply_optimized")
+        if r["improved"] and apply_cb is not None:
+            if QMessageBox.question(
+                    self, "Aplicar optimización",
+                    f"El optimizador bajó el criterio CABS de {c0:.2f} a {c1:.2f} dB.\n\n"
+                    "¿Aplicar los cambios a las fuentes libres de la sala? "
+                    "(las fuentes fijas no se tocan).",
+                    QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
+                try:
+                    apply_cb(r["optimized"])
+                    QMessageBox.information(self, "Optimización aplicada",
+                                            "Fuentes libres reubicadas/ajustadas.")
+                except Exception as e:
+                    QMessageBox.warning(self, "Optimización",
+                                        f"No se pudo aplicar:\n{e}")
+
+    def _show_eval(self, r):
+        verdict = ("<span style='color:#2e7d32;'><b>PASA</b></span>" if r["passed"]
+                   else "<span style='color:#b00;'><b>NO cumple CABS</b></span>")
+        na, nb = r["ideal_grid"]
+        lines = [f"<b>Veredicto CABS:</b> {verdict} "
+                 f"(eje {_AXIS_NAMES[r['axis']]}, {r['n_modes']} modos)"]
+        # clasificacion
+        roles = r["roles"]
+        fr = [ro.label for ro in roles if ro.role == "front"]
+        re = [ro.label for ro in roles if ro.role == "rear"]
+        ot = [ro.label for ro in roles if ro.role == "other"]
+        lines.append(
+            f"<b>Clasificación:</b> front: {', '.join(fr) or '—'} · "
+            f"rear: {', '.join(re) or '—'} · otras: {', '.join(ot) or '—'}")
+        lines.append("<b>Condiciones:</b>")
+        for it in r["checklist"]:
+            mark = "✓" if it["ok"] else "✕"
+            col = "#2e7d32" if it["ok"] else "#b00"
+            lines.append(f"&nbsp;<span style='color:{col};'>{mark}</span> "
+                         + it["text"])
+        lines.append(
+            f"<span style='color:#555; font-size:8pt;'>Ideal de referencia: "
+            f"array LS {na}×{nb} por pared (mismo motor). El «ideal» es el techo "
+            f"alcanzable para esta sala.</span>")
+        self.lbl_res.setText("<br>".join(lines))
+
+    def _draw_eval(self, r):
+        self._ax.clear()
+        fa = r["freq"]
+        real = r["total_db_mean_real"] - np.mean(r["total_db_mean_real"])
+        ideal = r["total_db_mean_ideal"] - np.mean(r["total_db_mean_ideal"])
+        self._ax.plot(fa, ideal, "--", color="#888", lw=1.0,
+                      label="CABS ideal (referencia)")
+        self._ax.plot(fa, real, "-", color="#1f77b4", lw=1.5,
+                      label="tus fuentes (total)")
+        if r["band_hi"] < fa[-1] and np.isfinite(r["f_max"]):
+            self._ax.axvspan(r["band_hi"], fa[-1], color="#f2c14e", alpha=0.15)
+            self._ax.axvline(r["band_hi"], color="#b45309", ls=":", lw=1.0)
+        if r.get("f_schroeder"):
+            self._ax.axvline(r["f_schroeder"], color="#444", ls="-.", lw=0.8,
+                             label=f"f_S ≈ {r['f_schroeder']:.0f} Hz")
+        self._ax.set_xlabel("frecuencia [Hz]")
+        self._ax.set_ylabel("respuesta TOTAL (SBIR+modos) [dB]")
+        self._ax.set_title("Respuesta total media (zona de escucha)")
+        self._ax.grid(alpha=0.3)
+        self._ax.legend(fontsize=8)
+        self._fig.tight_layout()
+        self._canvas.draw()
+
     def _apply(self):
         from dba import build_dba_sources
         axis = int(self.combo_axis.currentData())
@@ -200,8 +471,15 @@ class DBADialog(QDialog):
     # -----------------------------------------------------------------------
     def _refresh_count(self):
         from dba import alias_fmax
+        axis = int(self.combo_axis.currentData())
+        # Rótulos con el eje real de cada dirección de la pared (los dos ejes
+        # transversales al de enfrentamiento). Así "dir. A/B" deja de ser opaco.
+        short = ["X (ancho)", "Y (largo)", "Z (alto)"]
+        a, b = tuple(k for k in (0, 1, 2) if k != axis)
+        self.lbl_na.setText(f"Cantidad de subs en pared, a lo {short[a]}:")
+        self.lbl_nb.setText(f"Cantidad de subs en pared, a lo {short[b]}:")
         n = self.sb_nx.value() * self.sb_nz.value()
-        fmx = alias_fmax(self._dims, int(self.combo_axis.currentData()),
+        fmx = alias_fmax(self._dims, axis,
                          self.sb_nx.value(), self.sb_nz.value())
         fmx_txt = "∞" if not np.isfinite(fmx) else f"{fmx:.0f} Hz"
         self.lbl_count.setText(

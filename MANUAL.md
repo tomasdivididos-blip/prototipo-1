@@ -2680,4 +2680,80 @@ Para cerrar M3 y M4 con datos completos (que los datasets públicos no traen: im
 
 ---
 
-*Manual actualizado al 6 de Septiembre de 2026 — v2.33.*
+**Cambios v2.34** (7 de septiembre 2026): **evaluar tus fuentes contra CABS** (el flujo inverso al diseño del array ideal) y **etiqueta de tipo de fuente**. Dos ejes.
+
+### Tipo de fuente (Woofer / Sub-Woofer / Full Range / Horn)
+
+El diálogo de cada fuente tiene ahora un campo **«Tipo»** (Sub-Woofer, Woofer, Full Range, Horn, Genérica). Es **metadato de configuración, no física**: la fuente sigue siendo un monopolo omni y el campo no cambia ningún cálculo (FRF, campo, SBIR). Sirve para que la evaluación CABS sepa **cuáles fuentes son subs** (las que participan de la cancelación de modos) y para habilitar la discriminación de fuentes que viene a futuro. El default «Genérica» reproduce exacto el comportamiento anterior, y los `.room` viejos abren igual (las fuentes sin tipo quedan Genéricas).
+
+### Evaluar mis fuentes cargadas (DBA / CABS)
+
+Hasta ahora la herramienta «Subs enfrentados (DBA / CABS)…» solo **diseñaba** un array ideal y lo aplicaba. Ahora tiene un selector **«Modo»** con dos opciones:
+
+- **Diseñar array ideal** — lo de siempre (sintetiza el array óptimo y lo aplica a la sala).
+- **Evaluar mis fuentes cargadas** — toma **las fuentes que vos ya pusiste** en la sala (con sus posiciones, tipo, delay, polaridad, filtros y curvas) y responde: **¿esta configuración es válida para CABS?**
+
+En modo evaluar, la herramienta **detecta sola el eje** donde tus subs se enfrentan, clasifica cada fuente en **frente / atrás / otras**, y entrega un **veredicto con checklist falsable** (no un puntaje opaco): ¿hay arrays enfrentados en las dos paredes del eje?, ¿el array trasero está retardado ≈ L/c e invertido?, ¿el espaciado da un f_max = c/d que cubra la banda?, ¿hay subs suficientes por pared? Cada condición dice por qué pasa o falla.
+
+Diferencia clave con el criterio de la pestaña **Predicción**: aquel usa criterios históricos (ratios de Bolt/Bonello, varianza espacial, media espectral); **este usa el criterio CABS específico** (la cancelación polo-cero de los modos axiales por el array trasero manejado). Y el criterio se mide **siempre sobre la respuesta TOTAL = SBIR + modos** (la misma curva híbrida de la pestaña Acústica: la solución modal manda por debajo de f_Schroeder, donde ya contiene las reflexiones de frontera, y el peine SBIR por encima), no solo sobre la FRF modal.
+
+El resultado se compara contra el **CABS ideal** para esa misma sala (medido con el mismo motor), así el número es accionable: *«tu setup logra σ = X dB; el ideal para esta sala llega a Y»*. El gráfico muestra la respuesta total media de tus fuentes vs la del ideal.
+
+---
+
+**Cambios v2.35** (7 de septiembre 2026): **optimizador de fuentes libres (CABS)** — el software reacomoda las fuentes que vos marcás como ajustables y deja fijas las demás. Un eje.
+
+### Optimizar fuentes libres (discriminación parcial)
+
+Ahora podés decirle al software **cuáles fuentes puede mover y cuáles no**, y por cada una **qué variables** puede tocar. En el diálogo de cada fuente hay una fila **«Optimizar:»** con casillas: **posición**, **delay**, **corte**, **polaridad** y **filtro**. Sin ninguna tildada, la fuente queda **fija** (el optimizador no la toca). Por ejemplo: un sub trabado por un mueble lo dejás sin tildar posición pero sí delay; otro lo liberás en posición.
+
+La **polaridad** entra como variable binaria (+/−): una inversión es una fase de 180° **constante en frecuencia**, que un delay (fase que crece con la frecuencia) no puede reproducir, así que es un grado de libertad propio. Con ella liberada, el optimizador puede encontrar solo la inversión del array trasero o corregir una fuente mal cableada.
+
+En la herramienta **«Subs enfrentados (DBA / CABS)…»**, en modo **«Evaluar mis fuentes cargadas»**, aparece el botón **«Optimizar fuentes libres»**. Al tocarlo, el software mueve solo las variables liberadas de cada fuente para **minimizar el criterio CABS** (planitud + varianza espacial de la respuesta total SBIR + modos), usando la misma evaluación de la sección anterior como objetivo. Te muestra el antes/después del criterio y la lista de cambios propuestos (posición, delay o corte de cada fuente), y si mejora te ofrece **aplicarlos a la sala** (las fuentes fijas no se tocan).
+
+Dos decisiones físicas que respeta: (1) un sub de pared se mueve **en el plano de su pared** pero **no se despega** de ella (despegarlo rompería el array enfrentado); (2) arranca optimizando posición y delay (lo que más mueve la aguja en el grave), dejando el corte/filtro como refinamiento. El buscador es de optimización global acotada (`differential_evolution` de scipy). El precedente es MSO (Multi-Sub Optimizer): por sub se marcan los parámetros ajustables y el optimizador recorre solo esos.
+
+**Aviso de factibilidad.** Antes de mover nada, el optimizador chequea si la configuración *puede* satisfacer CABS (¿hay subs marcados como tales?, ¿forman arrays en las dos paredes del eje?, ¿están sobre las paredes?). Esas condiciones no cambian por reacomodar fuentes, así que si fallan te avisa con el motivo concreto y te deja elegir entre optimizar igual (mejora la uniformidad general, pero no logra la cancelación modal del CABS) o cancelar y arreglar la configuración. El mismo diagnóstico aparece al entrar en «Evaluar mis fuentes cargadas», así sale antes de tocar nada.
+
+---
+
+**Cambios v2.36** (7 de septiembre 2026): **modelo de fuente más fiel — baffle step y "qué trae medido"** (para que la simulación coincida con la medición). Fase A de un modelo de fuente exacto.
+
+### Radiador y baffle step (sin contar el bafle dos veces)
+
+Un parlante real no es un monopolo perfecto: el **bafle** (la caja) hace que en la banda grave la respuesta suba unos **+6 dB** al pasar de radiar a espacio completo (baja frecuencia) a radiar al semiespacio frontal (alta), con la transición cerca de f ≈ c/(π·ancho). Como tu banda modal llega a ~400 Hz, ese **baffle step** cae dentro y ahora se puede modelar.
+
+En el diálogo de cada fuente hay un grupo **«Modelo de radiación»** con dos opciones:
+- **Radiador**: Caja (sellada/ported) o Bafle abierto. (El bafle abierto es un dipolo real; su acoplamiento direccional llega en un paso siguiente. Por ahora define el tipo.)
+- **La respuesta ya incluye**: el punto clave para no contar el bafle dos veces.
+  - **Sistema completo medido (FRD/CLF)**: la medición ya trae transductor + bafle → el software **no** agrega baffle step. Se setea solo al cargar un FRD/CLF/TRF.
+  - **Solo el transductor (Thiele-Small)**: cargaste los parámetros del driver, falta el bafle → el software **sí** agrega el baffle step (transición de +6 dB según el ancho del bafle de la fuente). Se setea solo al aplicar un driver T-S.
+  - **Nada (monopolo ideal)**: sin bafle, monopolo puntual como antes (comportamiento histórico).
+
+El baffle step se compone como un modelo de mínima fase sobre la respuesta de la fuente, igual que el filtro o la curva del driver; con «Nada» no cambia nada respecto de versiones anteriores.
+
+### Parámetros Thiele-Small persistentes
+
+Los parámetros crudos del driver (fs, Qts, Vas, Vb) ahora se **guardan y se pueden releer/editar**: al reabrir una fuente con driver T-S, los campos vuelven a aparecer con sus valores (antes se horneaban en la curva y se perdían). Quedan en el `.room`.
+
+---
+
+*Manual actualizado al 7 de Septiembre de 2026 — v2.36.*
+
+---
+
+**Cambios v2.37** (7 de septiembre 2026): **radiador de bafle abierto (dipolo)**. Completa el modelo de fuente exacto: ahora el tipo de radiador «Bafle abierto» se simula como un dipolo real. Un eje.
+
+### Bafle abierto = dipolo (figura-8)
+
+Un parlante sin caja (driver en una tabla, sin gabinete) radia como un **dipolo**: el frente y el dorso están en antifase, con un nulo en el plano perpendicular al eje del bafle (patrón de figura-8). Eso cambia **cómo excita los modos** de la sala: donde un monopolo empuja un modo, un dipolo puede no acoplarse (si su eje es perpendicular al gradiente del modo) y viceversa. No es lo mismo que una caja.
+
+Al elegir **Radiador → Bafle abierto** en el «Modelo de radiación» de una fuente, el software ahora:
+- La acopla a los modos como un **dipolo** (dos fuentes opuestas separadas por el ancho del bafle, a lo largo del eje que apunta el bafle: su orientación y pitch). El nulo de la figura-8 aparece solo.
+- Le aplica el **rolloff dipolar** propio del bafle abierto (cae ~6 dB/oct en el grave por debajo de f = c/(2·ancho), porque los lóbulos frente/dorso se cancelan), en vez del baffle step de la caja. Solo cuando la respuesta es «solo el transductor»; con FRD/CLF medido no se agrega nada (ya está en la medición).
+
+El eje del dipolo es la orientación del bafle que ya se define en la fuente (azimut + inclinación). Con radiador «Caja» todo sigue como antes (monopolo).
+
+---
+
+*Manual actualizado al 7 de Septiembre de 2026 — v2.37.*

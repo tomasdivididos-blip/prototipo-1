@@ -356,15 +356,31 @@ def build_dba_sources(dims, *, axis: int = 1, n_x: int = 4, n_z: int = 4,
     def _lbl(l):
         return (f"DBA-F{l}" if l < len(front) else f"DBA-R{l - len(front)}")
 
+    def _facing(p):
+        """(orientation_deg | None, pitch_deg) del bafle mirando HACIA ADENTRO
+        del recinto. El frente (side='min') mira en +eje; el trasero
+        (side='max'), en -eje. Para el eje Z (piso/techo) el frente mira con la
+        inclinacion (pitch) hacia arriba/abajo, no con el azimut."""
+        inward = (p.side == "min")
+        if p.axis == 0:      # X
+            return (0.0 if inward else 180.0, 0.0)
+        if p.axis == 1:      # Y
+            return (90.0 if inward else 270.0, 0.0)
+        return (90.0, 90.0 if inward else -90.0)   # Z: por pitch
+
     specs = []
     if drive == "naive":
         delay = L / c
         for i, p in enumerate(front):
+            ori, pit = _facing(p)
             specs.append(dict(pos=_center(p), label=f"DBA-F{i}", Q=1.0 + 0j,
-                              delay_s=0.0, polarity=1, response=None))
+                              delay_s=0.0, polarity=1, response=None,
+                              orientation=ori, pitch=pit))
         for i, p in enumerate(rear):
+            ori, pit = _facing(p)
             specs.append(dict(pos=_center(p), label=f"DBA-R{i}", Q=1.0 + 0j,
-                              delay_s=delay, polarity=-1, response=None))
+                              delay_s=delay, polarity=-1, response=None,
+                              orientation=ori, pitch=pit))
     else:
         zone = _zone_grid(dims, axis)
         Cmat = coupling_matrix(basis, pistons)
@@ -382,8 +398,10 @@ def build_dba_sources(dims, *, axis: int = 1, n_x: int = 4, n_z: int = 4,
             gain_db = 20.0 * np.log10(np.maximum(np.abs(g), 1e-6))
             phase = np.unwrap(np.angle(g))
             resp = SourceResponse(fa, gain_db, phase, name=_lbl(l), anchor="")
+            ori, pit = _facing(p)
             specs.append(dict(pos=_center(p), label=_lbl(l), Q=1.0 + 0j,
-                              delay_s=0.0, polarity=1, response=resp))
+                              delay_s=0.0, polarity=1, response=resp,
+                              orientation=ori, pitch=pit))
     return specs
 
 

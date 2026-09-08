@@ -33,6 +33,87 @@ Z0 = RHO0 * C0       # impedancia caracteristica del aire [Pa s / m]
 
 
 # ---------------------------------------------------------------------------
+# Tipos de fuente (metadato de configuracion, NO fisica)
+# ---------------------------------------------------------------------------
+# El tipo NO afecta ningun camino de computo (FRF, campo, SBIR): la fuente sigue
+# siendo un monopolo omni. Sirve para (a) identificar que fuentes son subs en la
+# evaluacion CABS (las que participan de la cancelacion axial) vs full-range/horn
+# (que igual contribuyen a la respuesta total pero no al array enfrentado), y
+# (b) habilitar la discriminacion/optimizacion parcial futura. El default
+# "generic" reduce EXACTO al comportamiento historico.
+SOURCE_TYPES = ("subwoofer", "woofer", "fullrange", "horn", "generic")
+SOURCE_TYPE_LABELS = {
+    "subwoofer": "Sub-Woofer",
+    "woofer":    "Woofer",
+    "fullrange": "Full Range",
+    "horn":      "Horn",
+    "generic":   "Genérica",
+}
+# Tipos que la evaluacion CABS considera "subs" (candidatos al array enfrentado).
+SUBWOOFER_TYPES = ("subwoofer", "woofer")
+
+# Variables que el optimizador CABS (discriminacion parcial, item 6) puede liberar
+# POR FUENTE. Ver plan_modelo_fuente.md item 6 (Opcion C, granular por parametro).
+# "polarity" es BINARIA (+1/-1): una inversion es una fase pi CONSTANTE en f, que un
+# delay (fase -2pi f tau, dependiente de f) no puede reproducir -> es un DOF propio.
+FREE_VARS = ("pos", "delay", "fc", "polarity", "filter")
+
+
+def normalize_free_vars(value) -> frozenset:
+    """Devuelve un frozenset de claves validas de FREE_VARS (ignora lo demas)."""
+    if not value:
+        return frozenset()
+    return frozenset(v for v in value if v in FREE_VARS)
+
+
+# ---------------------------------------------------------------------------
+# Modelo de fuente exacto (item 5): radiador + que radiacion ya esta horneada
+# ---------------------------------------------------------------------------
+# radiator_kind: tipo de radiador. "box" = caja (monopolo + baffle step); "open_
+#   baffle" = bafle abierto (dipolo; el acoplamiento dipolar es Fase B, en Fase A
+#   se comporta como box para el shaping de Q(f)).
+# radiation_baked: que trae ya la respuesta de la fuente, para NO doble-contar:
+#   "full_system" = FRD/CLF medido (bafle+transductor ya incluidos) -> no se agrega
+#     baffle step; "driver" = solo Thiele-Small (falta el bafle) -> se agrega baffle
+#     step; "none" = monopolo ideal, sin shaping extra (comportamiento historico).
+RADIATOR_KINDS = ("box", "open_baffle")
+RADIATION_BAKED = ("none", "driver", "full_system")
+
+
+def normalize_radiator_kind(v) -> str:
+    v = str(v or "box").strip().lower()
+    return v if v in RADIATOR_KINDS else "box"
+
+
+def normalize_radiation_baked(v) -> str:
+    v = str(v or "none").strip().lower()
+    return v if v in RADIATION_BAKED else "none"
+
+
+def dipole_direction(orientation_deg, pitch_deg=0.0) -> np.ndarray:
+    """Vector unitario del eje del bafle (frente del dipolo). orientation = azimut
+    [grados, 0=+X, CCW] (None -> 90 = +Y); pitch = elevacion [grados, + arriba]."""
+    az = np.radians(90.0 if orientation_deg is None else float(orientation_deg))
+    el = np.radians(float(pitch_deg or 0.0))
+    return np.array([np.cos(el) * np.cos(az),
+                     np.cos(el) * np.sin(az),
+                     np.sin(el)], dtype=float)
+
+
+def normalize_source_type(value) -> str:
+    """Devuelve un tipo valido (fallback "generic" si no se reconoce)."""
+    v = str(value or "generic").strip().lower().replace(" ", "").replace("-", "")
+    alias = {
+        "subwoofer": "subwoofer", "sub": "subwoofer",
+        "woofer": "woofer",
+        "fullrange": "fullrange", "full": "fullrange",
+        "horn": "horn",
+        "generic": "generic", "generica": "generic", "genérica": "generic",
+    }
+    return alias.get(v, "generic")
+
+
+# ---------------------------------------------------------------------------
 # Fuente puntual
 # ---------------------------------------------------------------------------
 def q_from_sensitivity(sensitivity_dB: float, power_W: float = 1.0,
@@ -249,6 +330,26 @@ class OmniSource:
     position:       Tuple[float, float, float]
     Q:              complex = 1.0 + 0.0j
     label:          str     = ""
+    # Tipo de fuente (metadato de configuracion, NO fisica). Ver SOURCE_TYPES.
+    # Inerte para todos los caminos de computo; lo usa la evaluacion CABS para
+    # identificar subs. "generic" = comportamiento historico.
+    source_type:    str     = "generic"
+    # Variables que el optimizador CABS puede LIBERAR en esta fuente (item 6,
+    # Opcion C granular). Subset de FREE_VARS = {"pos","delay","fc","filter"}.
+    # Vacio (default) = fuente FIJA: el optimizador NO la toca -> comportamiento
+    # historico. Inerte fuera del optimizador (no afecta FRF/campo/SBIR).
+    free_vars:      "frozenset" = field(default_factory=frozenset)
+    # Modelo de fuente exacto (item 5). Ver RADIATOR_KINDS / RADIATION_BAKED.
+    # Defaults (box/none) = comportamiento historico: monopolo puntual sin shaping.
+    radiator_kind:   str = "box"
+    radiation_baked: str = "none"
+    # Thiele-Small crudos persistidos (para releer/editar; alimentan el DriverModel
+    # y, a futuro, la radiacion). None = no cargados.
+    ts_fs:  "float | None" = None
+    ts_qts: "float | None" = None
+    ts_vas: "float | None" = None
+    ts_vb:  "float | None" = None
+    ts_sd:  "float | None" = None
     # Configuración por sensibilidad de altavoz
     sensitivity_dB: float | None = None   # dB SPL @ 1W/1m  (None = modo directo)
     power_W:        float        = 1.0    # potencia electrica de entrada [W]
@@ -322,6 +423,10 @@ class OmniSource:
         self.filter_kind = "highpass" if self.filter_kind == "highpass" else "lowpass"
         self.filter_ripple_db = float(self.filter_ripple_db)
         self.filter_atten_db = float(self.filter_atten_db)
+        self.source_type = normalize_source_type(self.source_type)
+        self.free_vars = normalize_free_vars(self.free_vars)
+        self.radiator_kind = normalize_radiator_kind(self.radiator_kind)
+        self.radiation_baked = normalize_radiation_baked(self.radiation_baked)
 
     def effective_Q(self) -> complex:
         """Q efectivo (escalar): recalculado desde sensibilidad si corresponde.
@@ -368,6 +473,21 @@ class OmniSource:
                 fa, ftype=self.filter_type, order=self.filter_order,
                 fc=self.filter_fc, kind=self.filter_kind,
                 ripple_db=self.filter_ripple_db, atten_db=self.filter_atten_db)
+        # Baffle step (item 5): SOLO cuando la respuesta trae "solo el driver" (TS)
+        # -> falta el bafle. Con "full_system" (FRD/CLF medido) el bafle YA esta
+        # incluido (no doble contar); con "none" (monopolo ideal) no hay bafle.
+        # Es un shaping de radiacion en campo libre (independiente de la sala), se
+        # compone como un g(f) mas. radiation_baked="none" (default) -> sin efecto.
+        if self.radiation_baked == "driver":
+            import driver as _drv
+            width = float(self.baffle_size[0]) if self.baffle_size else 0.4
+            if self.radiator_kind == "open_baffle":
+                # Bafle abierto = dipolo: rolloff de +6 dB/oct por debajo de la
+                # frecuencia de pico dipolar f_D = c/(2*ancho) (radia poco en el
+                # grave profundo). Es la contraparte del baffle step de la caja.
+                q = q * _drv.open_baffle_gain(fa, width)
+            else:
+                q = q * _drv.baffle_step_gain(fa, width)
         return q
 
     # ----- consultas ---------------------------------------------------------
@@ -381,6 +501,29 @@ class OmniSource:
 
     def as_array(self) -> np.ndarray:
         return np.asarray(self.position, dtype=float)
+
+    # ----- acoplamiento modal: puntos monopolares equivalentes (item 5, Fase B) -
+    def coupling_points(self):
+        """Puntos monopolares equivalentes para el acoplamiento a los modos.
+
+        - Monopolo (caja / ideal): [(posicion, +1.0)] -> acopla como phi_n(x_s),
+          idntico al comportamiento historico.
+        - DIPOLO (bafle abierto): DOS monopolos opuestos en x ± (ell/2)*d, con
+          d = eje del bafle (orientacion/pitch) y ell = ancho del bafle
+          (baffle_size[0]). Un dipolo ES dos monopolos opuestos: el acoplamiento
+          resultante C_n = phi_n(x+) - phi_n(x-) es la derivada direccional del
+          modo (figura-8), sin necesitar evaluar el gradiente. Se usa en el FEM y
+          en la base rectangular por igual.
+        """
+        pos = self.as_array()
+        if self.radiator_kind != "open_baffle":
+            return [(pos, 1.0)]
+        ell = float(self.baffle_size[0]) if self.baffle_size else 0.0
+        if ell <= 1e-6:
+            return [(pos, 1.0)]
+        d = dipole_direction(self.orientation, self.pitch)
+        h = 0.5 * ell * d
+        return [(pos + h, 1.0), (pos - h, -1.0)]
 
     # ----- campo libre -------------------------------------------------------
     def free_field_pressure(

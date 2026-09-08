@@ -1071,6 +1071,17 @@ class MainWindow(QMainWindow):
         for s in ap.sources:
             srcs.append({
                 "label": s.label,
+                # Tipo de fuente (evaluacion CABS). Aditivo, sin bump: un .room
+                # viejo carga con source_type="generic".
+                "source_type": str(getattr(s, "source_type", "generic")),
+                # Variables liberadas para el optimizador CABS (item 6). Lista
+                # (frozenset no es JSON). Aditivo: vacio si el .room es viejo.
+                "free_vars": sorted(getattr(s, "free_vars", frozenset()) or []),
+                # Modelo de fuente exacto (item 5). Aditivo, sin bump.
+                "radiator_kind": str(getattr(s, "radiator_kind", "box")),
+                "radiation_baked": str(getattr(s, "radiation_baked", "none")),
+                "ts": {k: getattr(s, "ts_" + k, None)
+                       for k in ("fs", "qts", "vas", "vb", "sd")},
                 "position": [float(s.position[0]),
                               float(s.position[1]),
                               float(s.position[2])],
@@ -1311,6 +1322,20 @@ class MainWindow(QMainWindow):
             Q = complex(float(s.get("Q_real", 1.0)), float(s.get("Q_imag", 0.0)))
             sens = s.get("sensitivity_dB")
             kwargs = {"position": pos, "Q": Q, "label": s.get("label", "src")}
+            # Tipo de fuente (default "generic" si el .room es viejo).
+            kwargs["source_type"] = str(s.get("source_type", "generic")
+                                        or "generic")
+            # Variables liberadas para el optimizador CABS (vacio si es viejo).
+            kwargs["free_vars"] = frozenset(s.get("free_vars", []) or [])
+            # Modelo de fuente exacto (item 5). Default box/none si es viejo.
+            kwargs["radiator_kind"] = str(s.get("radiator_kind", "box") or "box")
+            kwargs["radiation_baked"] = str(s.get("radiation_baked", "none")
+                                            or "none")
+            _ts = s.get("ts") or {}
+            for _k in ("fs", "qts", "vas", "vb", "sd"):
+                _v = _ts.get(_k)
+                if _v is not None:
+                    kwargs["ts_" + _k] = float(_v)
             if sens is not None:
                 kwargs["sensitivity_dB"] = float(sens)
             # v6: bafle (T4)

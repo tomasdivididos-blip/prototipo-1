@@ -235,3 +235,140 @@ Cola de tareas (en orden):
    que elegir un material dé un Z(f) COMPLEJO → ξ Y Δfₙ, sin asignar construcción
    a mano. Upgradea el eslabón débil. Ver [[z-impedance-modeling]],
    [[material-form-thirds]].
+4. **Evaluar config real contra CABS — HECHO (7 Sep 2026, v2.34).** Flujo inverso
+   al sintetizador: `dba_evaluate.evaluate_cabs` toma las fuentes reales del usuario
+   (tipo/pos/delay/pol/curva), clasifica front/rear/other, y mide el colapso sobre
+   la **respuesta TOTAL = SBIR + modos** (crossfade en f_S), comparando contra el
+   ideal LS medido por el MISMO pipeline. Checklist falsable + auto-deteccion de eje
+   (por coherencia de drive). Etiqueta `OmniSource.source_type` (Woofer/Sub/FR/Horn,
+   inerte para la fisica). Modo "Evaluar mis fuentes" en `DBADialog`. `.room` aditivo
+   (sin bump, default "generic"). `bench_dba_evaluate.py` 13/13. Decay ventaneado
+   (el drive LS es no causal -> cola acausal envuelta en el IFFT; se ventanea a
+   ~6*RT60 antes del T15). Ver [[source-model-dba]].
+
+5. **Modelo de fuente fisico EXACTO (dipolo/bafle/imagenes) - DISENO, NO implementado.**
+   Motivacion: al medir, la fuente sera un transductor en un bafle sobre una mesa; el
+   monopolo puntual no lo simula fiel. Decisiones a tomar antes de codear:
+   - **Baffle step SI es relevante** (correccion del usuario, 7 Sep): la banda modal
+     del usuario llega a ~400 Hz, dentro de la subida de +6 dB del baffle step
+     (f ~ c/(2*ancho)). NO queda arriba de Schroeder como se asumio en §1.1.
+   - **PROBLEMA CENTRAL: doble conteo.** Un FRD/CLF ya trae el SISTEMA COMPLETO
+     (bafle + transductor). Aplicar baffle-step/dipolo encima lo cuenta dos veces. El
+     modelo debe saber que trae ya cada fuente: descriptor tipo
+     `radiation_baked: none|driver|driver+baffle|full_system` (FRD/CLF -> full_system,
+     no aplicar bafle extra; TS crudo -> driver, falta bafle -> aplicar).
+   - **Radiador (segun el setup de medicion real, aun no fijado):** caja+mesa =
+     monopolo + imagenes de frontera (mesa/piso), reusando `sbir.py`; bafle abierto =
+     dipolo real (grad phi_n, analitico en base rectangular; grad N en FEM P1); piston
+     bafleado 2pi + baffle step (`driver.piston_radiation_impedance` ya lo tiene).
+   - **TS de primera clase:** hoy `DriverModel` hornea la curva y pierde los params
+     crudos. Persistir fs/Qts/Vas/Vb/Sd editables, que alimenten Q(f) Y la radiacion.
+   Ver [[source-model-dba]], [[clf-loader]].
+
+   **FASE A HECHA (7 Sep 2026, v2.36).** Shaping de Q(f) + guard + TS de primera
+   clase, SIN tocar el solver. `OmniSource`: campos `radiator_kind` (box/open_baffle),
+   `radiation_baked` (none/driver/full_system) y `ts_fs/qts/vas/vb/sd` (aditivos,
+   `.room` sin bump). `driver.baffle_step_gain/baffle_step_response`: low-shelf de
+   -6 dB de MINIMA FASE, corte f_b=c/(pi*ancho), H(s)=(g_lo*w_b+s)/(w_b+s). Guard en
+   `effective_Q_spectrum`: baffle step SOLO si radiation_baked=="driver" (con
+   full_system NO, evita doble conteo; con none tampoco = monopolo historico). UI:
+   grupo "Modelo de radiacion" en SourceEditDialog + TS releibles; auto-set del guard
+   al cargar FRD/CLF (full_system) y aplicar driver (driver). `bench_source_model.py`
+   12/12 (shelf, guard anti-doble-conteo, regresion con defaults bit a bit, round-trip
+   TS). **FALTA FASE B:** acoplamiento DIPOLO (bafle abierto) = C_n ~ d.grad phi_n;
+   rectangular analitico + `FieldEvaluator.evaluate_grad_one` en FEM (P1 grad por tet).
+
+   **FASE B HECHA (7 Sep 2026, v2.37).** DECISION que bajo el riesgo: el dipolo se
+   modela como DOS MONOPOLOS OPUESTOS en x ± (ell/2)*d (ell=ancho del bafle,
+   d=orientacion/pitch) -> C_n = phi_n(x+)-phi_n(x-) (derivada direccional, figura-8)
+   REUSA el point-coupling existente, NO hizo falta evaluador de gradiente en el FEM.
+   `OmniSource.coupling_points()` + `sources.dipole_direction()`. Cableado: FEM
+   `acoustic_fem._source_modal_coupling` (frequency_response + modal_pressure_field);
+   rectangular `dba_evaluate._modal_coupling`. Shaping por tipo: caja ->
+   `baffle_step_gain`, bafle abierto -> `open_baffle_gain` (pasa-altos 1er orden
+   min-fase en f_D=c/(2*ancho)). SIN UI nueva (combo Radiador de Fase A +
+   orientacion/pitch ya existen). `bench_dipole.py` 10/10; regresion FEM verde
+   (`bench_modal_vs_impedance`, `bench_modal_metrics`: monopolos identicos).
+   ITEM 5 COMPLETO (Fase A + B).
+
+   **CAVEAT documentado (7 Sep 2026) — baffle step en el camino MODAL.** El baffle
+   step se aplica en `effective_Q_spectrum`, que alimenta TANTO el acoplamiento
+   modal como el SBIR. Estrictamente el baffle step es un efecto de DIRECTIVIDAD en
+   eje (transicion 4pi->2pi, potencia casi constante); el acoplamiento modal depende
+   de la VELOCIDAD DE VOLUMEN, no de la directividad. Aplicarlo al Q modal es un
+   modelo de 1er orden DEFENDIBLE (hace que una fuente por Thiele-Small se comporte
+   como una medicion FRD real, que tambien trae el baffle step), pero NO es exacto.
+   Verificado que NO invierte la fisica gruesa: la caja da MAS grave que el bafle
+   abierto en todas las posiciones (FRF box vs open_baffle: +9 a +40 dB en el grave).
+   El reporte del usuario "caja con menos grave" fue artefacto de configuracion
+   (baffle step del box) + vista normalizada, no bug. RIGOR MAXIMO futuro (opcional):
+   mover el baffle step SOLO al campo directo/SBIR, fuera del Q que inyecta a modos.
+
+6. **Discriminacion / optimizacion parcial - MINI-SPEC (diseno cerrado, 7 Sep 2026).**
+   Objetivo: fijar unas fuentes y liberar otras para que el soft optimice SUS
+   variables (posicion/delay/corte/filtro) segun el criterio CABS. Pedido del usuario.
+
+   **Descomposicion (decidida):** QUIEN toca el optimizador es una propiedad POR
+   FUENTE; QUE variables entran es una eleccion POR CORRIDA. Asi "reacomoda estas dos
+   pero esta no, en posicion y delay" = 2 fuentes libres x conjunto {pos, delay}, sin
+   necesitar una matriz fuente x variable.
+
+   **Mecanismo elegido = OPCION C (granular por parametro)** (elegido por el usuario
+   sobre A=pin por fuente y B=seleccion por corrida). Motivo: captura el caso real
+   "posicion trabada por un mueble pero delay/EQ ajustables", que A (todo-o-nada por
+   fuente) no da.
+
+   **Modelo de datos:** `OmniSource.free_vars: frozenset[str]`, subset de
+   {"pos","delay","fc","filter"}. Vacio = fuente FIJA (default -> comportamiento
+   historico, no se optimiza nada). Persistir en `.room` ADITIVO (sin bump, como
+   `source_type`). Cotas por variable: pos dentro de la sala + sin choque de muebles +
+   respeta pegada-a-pared/mounted; delay 0..~L/c; fc en el rango del filtro; filter =
+   familia/orden DISCRETOS del catalogo de `filters.py`.
+
+   **UI:** grupo por fuente "Optimizar: [ ] posicion [ ] delay [ ] corte [ ] filtro"
+   (en `SourceEditDialog` o en el dialogo de optimizacion). Nada tildado = fija (el
+   "esta no" del usuario).
+
+   **Optimizador:**
+   - Funcion objetivo = `dba_evaluate.evaluate_cabs` (YA EXISTE, item 4): fuentes
+     fijas como termino constante de la respuesta total; las libres arman el vector de
+     DOF. Minimiza planitud/varianza (o maximiza el colapso CABS).
+   - Variables MIXTAS (continuas pos/delay/fc + DISCRETA familia de filtro). Camino
+     recomendado: ANIDADO -> bucle externo sobre las pocas combinaciones discretas de
+     filtro liberadas, interno continuo con `scipy.optimize.differential_evolution`
+     (acotado; respeta D0, es scipy puro). Alternativa: DE mixto en un solo vector.
+   - Arrancar con {pos, delay} continuas (lo que mas mueve la aguja bajo Schroeder);
+     agregar fc/filtro despues.
+
+   **Precedente:** MSO (Multi-Sub Optimizer): por sub se marcan los parametros
+   ajustables (gain/delay/PEQ), el resto fijo, y un optimizador global recorre solo
+   los liberados. Welti & Devantier (JAES 54, 2006) optimizan nivel/retardo con
+   posiciones fijas o variables.
+
+   **Prerequisitos ya puestos (item 4):** `source_type` (que fuentes son subs) y el
+   evaluador CABS (la funcion objetivo).
+
+   **PRIMER CUT HECHO (7 Sep 2026, v2.35).** `cabs_optimize.py`: `optimize_cabs`
+   con `differential_evolution` sobre las variables CONTINUAS (pos/delay/fc);
+   `OmniSource.free_vars` (frozenset, `.room` aditivo); UI = fila "Optimizar:
+   [pos][delay][corte][filtro]" en `SourceEditDialog` + boton "Optimizar fuentes
+   libres" en el modo evaluar de `DBADialog` (con aplicar-a-la-sala via
+   `apply_optimized`). `bench_cabs_optimize.py` 10/10. Restriccion fisica: un sub
+   de pared solo libera los ejes TRANSVERSALES (no se despega de la pared); objetivo
+   = flat+spatial con grilla/n_freq gruesos (rapido) + basis reusada. **FALTA:** la
+   familia de filtro DISCRETA (bucle anidado), y refinamientos (respetar choque de
+   muebles en pos, pesos flat vs spatial configurables).
+   **Polaridad optimizable (7 Sep 2026):** "polarity" agregada a FREE_VARS como
+   variable BINARIA (una inversion = fase pi constante en f, que un delay no
+   reproduce). En DE via `integrality` (fallback a umbral 0.5 si scipy es viejo).
+   `bench_cabs_optimize` T5: el optimizador arranca en la peor polaridad y elige la
+   mejor. OJO fisico: para subs PUNTUALES la inversion NO siempre mejora flat+spatial
+   (la cancelacion polo-cero del DBA es de pistones de pared, no de monopolos); el
+   optimizador elige el optimo binario sin asumir el signo.
+   **Pre-chequeo de factibilidad (7 Sep 2026):** `dba_evaluate.cabs_feasibility`
+   (barato, estructural, sin computar respuesta) avisa ANTES de optimizar si la
+   config no puede ser CABS (sin subs marcados / no hay arrays en las dos paredes /
+   sub fuera de pared). Son condiciones INVARIANTES bajo la optimizacion. El aviso da
+   a elegir "optimizar igual (uniformidad general) vs cancelar"; tambien se muestra
+   al entrar al modo Evaluar. Motivado por un caso del usuario (2 fuentes genericas:
+   optimizaba sin avisar que la config nunca iba a dar CABS).
