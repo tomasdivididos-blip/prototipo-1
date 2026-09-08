@@ -49,10 +49,12 @@ ck(callable(getattr(panel, "_open_dba", None)), "_open_dba es invocable")
 # Stub de DBADialog para no bloquear en exec_(); captura dims/receptor.
 captured = {}
 class _Stub:
-    def __init__(self, dims, rec, parent=None, apply_callback=None):
+    def __init__(self, dims, rec, parent=None, apply_callback=None,
+                 eval_context=None):
         captured["dims"] = dims
         captured["rec"] = rec
         captured["has_apply"] = apply_callback is not None
+        captured["has_eval_ctx"] = eval_context is not None
     def exec_(self):
         return 0
 import dba_dialog

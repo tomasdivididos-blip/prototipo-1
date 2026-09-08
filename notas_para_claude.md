@@ -242,6 +242,39 @@ de `_source_positions`, es independiente de los items GL.
 
 ---
 
+## 1e. Batch evaluar-cabs (7 Sep 2026) — evaluar CABS + optimizador + modelo de fuente exacto
+
+Rama **evaluar-cabs** (forkeada de main, PR aparte). Tres ítems del roadmap de
+`plan_modelo_fuente.md` (detalle vivo en la memoria `[[source-model-dba]]`):
+
+- **Item 4 — Evaluar mis fuentes contra CABS (v2.34).** `dba_evaluate.evaluate_cabs`:
+  toma las fuentes REALES del usuario, clasifica front/rear/other, mide el colapso
+  sobre la **respuesta TOTAL = SBIR + modos** (crossfade en f_S, requisito del
+  usuario) y compara contra el ideal LS por el MISMO pipeline. Checklist falsable +
+  auto-detección de eje. Etiqueta `OmniSource.source_type` (Woofer/Sub/FR/Horn,
+  inerte para la física). Modo "Evaluar mis fuentes" en `DBADialog`.
+  `bench_dba_evaluate` 13/13. **Fix de creación DBA:** los subs traseros ahora se
+  orientan hacia adentro (bug de "cara al revés").
+- **Item 6 — Discriminación/optimización parcial (v2.35).** `OmniSource.free_vars`
+  (subset de pos/delay/fc/**polarity**/filter; vacío=fija). `cabs_optimize.
+  optimize_cabs` con `differential_evolution` sobre continuas + polaridad binaria
+  (integrality); objetivo = `evaluate_cabs`. Restricción: un sub de pared solo mueve
+  ejes transversales (no se despega). `cabs_feasibility` avisa ANTES si la config no
+  puede ser CABS. `bench_cabs_optimize` 12/12.
+- **Item 5 — Modelo de fuente exacto (v2.36 Fase A + v2.37 Fase B).** `radiator_kind`
+  (box/open_baffle) + `radiation_baked` (none/driver/full_system, guard anti-doble-
+  conteo) + TS crudos persistidos. `driver.baffle_step_gain` (caja, low-shelf −6 dB)
+  y `open_baffle_gain` (dipolo). **Dipolo = dos monopolos opuestos** (ℓ=ancho del
+  bafle) → `coupling_points`; acopla a d·∇φₙ (figura-8) reusando point-coupling, sin
+  evaluador de gradiente. Cableado FEM (`acoustic_fem._source_modal_coupling`) +
+  rectangular (`dba_evaluate._modal_coupling`). `bench_source_model` 12/12,
+  `bench_dipole` 10/10; regresión FEM verde. **Caveat:** el baffle step estrictamente
+  es directividad, no velocidad de volumen; aplicarlo al Q modal es 1er orden
+  defendible (ver plan item 5, caveat). Rigor máximo futuro: baffle step solo en el
+  campo directo/SBIR.
+
+Todo aditivo en `.room` (sin bump; defaults = comportamiento histórico).
+
 ## 2. Perfil del usuario
 
 - **Profesión**: ingeniero en acústica.

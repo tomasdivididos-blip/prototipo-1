@@ -111,6 +111,74 @@ def piston_radiation_impedance(ka) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
+# Baffle step (item 5): transicion de radiacion 4pi (LF) -> 2pi (HF)
+# ---------------------------------------------------------------------------
+def baffle_step_gain(freq, width: float, *, c: float = C0,
+                     step_db: float = 6.0) -> np.ndarray:
+    """Ganancia compleja g(f) del baffle step de una caja de ancho `width` [m].
+
+    Cuando lambda >> ancho del bafle (baja frecuencia) la fuente radia a ESPACIO
+    COMPLETO (4pi) y la presion en eje cae ~6 dB respecto de la banda pasante;
+    cuando lambda << ancho (alta frecuencia) radia al SEMIESPACIO frontal (2pi) y
+    recupera esos +6 dB. La transicion esta cerca de  f_b = c / (pi * ancho).
+
+    Se modela como un LOW-SHELF de 1er orden, referido a la BANDA PASANTE (0 dB
+    arriba de f_b, -step_db abajo), de MINIMA FASE (polo/cero en el semiplano
+    izquierdo), consistente con la convencion e^{+i*omega*t} (s = i*omega):
+
+        H(s) = (g_lo * w_b + s) / (w_b + s),   g_lo = 10^(-step_db/20),  w_b = 2*pi*f_b
+
+    |H(0)| = g_lo (banda LF, -step_db);  |H(inf)| = 1 (banda pasante, 0 dB).
+    Referencia: Olson, baffle diffraction; Beranek & Mellow, Sound Fields and
+    Transducers, Ch12 (radiacion de cajas / step de difraccion).
+    """
+    f = np.atleast_1d(np.asarray(freq, dtype=float))
+    if width <= 0:
+        return np.ones_like(f, dtype=complex)
+    f_b = c / (np.pi * float(width))
+    w_b = 2.0 * np.pi * f_b
+    g_lo = 10.0 ** (-abs(step_db) / 20.0)
+    s = 1j * 2.0 * np.pi * f
+    return (g_lo * w_b + s) / (w_b + s)
+
+
+def open_baffle_gain(freq, width: float, *, c: float = C0) -> np.ndarray:
+    """Ganancia compleja g(f) del rolloff de un DIPOLO (bafle abierto) de ancho
+    `width` [m], referido a la banda de pico.
+
+    Un dipolo radia como ~sin(k*D/2); muy por debajo del pico f_D = c/(2*width)
+    cae a +6 dB/oct (radia cada vez menos en el grave: los lobulos frente/dorso se
+    cancelan). Se modela como un PASA-ALTOS de 1er orden de MINIMA FASE con corte
+    en f_D (0 dB arriba, -6 dB/oct abajo), convencion e^{+i*omega*t}:
+
+        H(s) = s / (s + w_D),   w_D = 2*pi*f_D
+
+    |H(inf)| = 1 (banda de pico);  |H(0)| = 0 (el dipolo no radia en DC). Referencia:
+    Olson; Beranek & Mellow Ch4 (dipolo/doblete). Es la contraparte del baffle step
+    de la caja para el radiador de bafle abierto (item 5)."""
+    f = np.atleast_1d(np.asarray(freq, dtype=float))
+    if width <= 0:
+        return np.ones_like(f, dtype=complex)
+    f_d = c / (2.0 * float(width))
+    w_d = 2.0 * np.pi * f_d
+    s = 1j * 2.0 * np.pi * f
+    return s / (s + w_d)
+
+
+def baffle_step_response(freq=None, width: float = 0.4, *, c: float = C0,
+                         step_db: float = 6.0, name: str = "baffle step"
+                         ) -> SourceResponse:
+    """Envuelve `baffle_step_gain` como `SourceResponse` (para preview/UI)."""
+    if freq is None:
+        freq = np.linspace(5.0, 500.0, 2000)
+    f = np.asarray(freq, dtype=float)
+    g = baffle_step_gain(f, width, c=c, step_db=step_db)
+    gain_db = 20.0 * np.log10(np.maximum(np.abs(g), 1e-12))
+    phase = np.unwrap(np.angle(g))
+    return SourceResponse(f, gain_db, phase, name=name, anchor="")
+
+
+# ---------------------------------------------------------------------------
 # Modelo de driver
 # ---------------------------------------------------------------------------
 @dataclass

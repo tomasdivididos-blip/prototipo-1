@@ -373,6 +373,28 @@ class FieldEvaluator:
 # ---------------------------------------------------------------------------
 # Respuesta en frecuencia por superposicion modal
 # ---------------------------------------------------------------------------
+def _source_modal_coupling(locator: "FieldEvaluator", phis: np.ndarray,
+                           sources) -> np.ndarray:
+    """Matriz de acoplamiento fuente-modo kappa[s,n] (Ns, Nm) real.
+
+    Para cada fuente suma sobre sus PUNTOS MONOPOLARES equivalentes
+    (`OmniSource.coupling_points`): un monopolo aporta phi_n(x_s) (== historico);
+    un dipolo de bafle abierto aporta phi_n(x+) - phi_n(x-) (derivada direccional
+    del modo, figura-8), sin evaluar el gradiente. Un punto fuera de la malla
+    (evaluate_one -> None) aporta 0, igual que antes."""
+    Nm = phis.shape[1]
+    src_list = list(sources)
+    kappa = np.zeros((len(src_list), Nm), dtype=float)
+    for s_idx, s in enumerate(src_list):
+        cpts = (s.coupling_points() if hasattr(s, "coupling_points")
+                else [(np.asarray(s.position, float), 1.0)])
+        for pt, sign in cpts:
+            for n in range(Nm):
+                val = locator.evaluate_one(phis[:, n], pt)
+                kappa[s_idx, n] += sign * (0.0 if val is None else val.real)
+    return kappa
+
+
 def frequency_response(
     locator: FieldEvaluator,
     freqs: np.ndarray,
@@ -409,13 +431,9 @@ def frequency_response(
         val = locator.evaluate_one(phis[:, n], receiver)
         phi_r[n] = 0.0 if val is None else val.real
 
-    src_pos = sources.positions()
-    Ns = len(src_pos)
-    phi_s = np.zeros((Ns, Nm), dtype=float)
-    for s_idx in range(Ns):
-        for n in range(Nm):
-            val = locator.evaluate_one(phis[:, n], src_pos[s_idx])
-            phi_s[s_idx, n] = 0.0 if val is None else val.real
+    # Acoplamiento fuente-modo (monopolo = phi_n(x_s); dipolo de bafle abierto =
+    # phi_n(x+)-phi_n(x-), item 5 Fase B). Monopolo -> idntico al historico.
+    phi_s = _source_modal_coupling(locator, phis, sources)   # (Ns, Nm)
 
     # Acople fuente-modo dependiente de f (Fase 0 — plan_fuentes):
     # src_spec[i, s] = Q_s(f_i).  coupling[i, n] = sum_s Q_s(f_i) phi_n(x_s).
@@ -461,14 +479,7 @@ def modal_pressure_field(
 
     # Q(f) a la frecuencia unica f (Fase 0): sin curva == amplitudes() historico.
     src_arr = sources.amplitudes_spectrum(np.array([f]))[0]   # (Ns,) complejo
-    src_pos = sources.positions()
-    Ns = len(src_pos)
-    phi_s = np.zeros((Ns, Nm), dtype=float)
-    for s_idx in range(Ns):
-        for n in range(Nm):
-            val = locator.evaluate_one(phis[:, n], src_pos[s_idx])
-            phi_s[s_idx, n] = 0.0 if val is None else val.real
-
+    phi_s = _source_modal_coupling(locator, phis, sources)    # (Ns, Nm)
     src_weight = src_arr @ phi_s                  # (Nm,) complejo
     xi = (np.full(Nm, float(damping)) if np.isscalar(damping)
           else np.asarray(damping, dtype=float)[:Nm])

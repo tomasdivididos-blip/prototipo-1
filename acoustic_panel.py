@@ -124,6 +124,37 @@ class SourceEditDialog(QDialog):
         self.le_label = QLineEdit(source.label if source else "src")
         layout.addRow("Etiqueta:", self.le_label)
 
+        # Tipo de fuente (metadato de configuracion, NO fisica). Alimenta la
+        # evaluacion CABS (identifica que fuentes son subs). "Genérica" =
+        # comportamiento historico. Ver sources.SOURCE_TYPES.
+        from sources import SOURCE_TYPES, SOURCE_TYPE_LABELS
+        self.combo_stype = QComboBox()
+        for _t in SOURCE_TYPES:
+            self.combo_stype.addItem(SOURCE_TYPE_LABELS[_t], _t)
+        _cur = getattr(source, "source_type", "generic") if source else "generic"
+        _idx = self.combo_stype.findData(_cur)
+        self.combo_stype.setCurrentIndex(_idx if _idx >= 0
+                                         else SOURCE_TYPES.index("generic"))
+        layout.addRow("Tipo:", self.combo_stype)
+
+        # Discriminacion (item 6): que variables puede LIBERAR el optimizador CABS
+        # en esta fuente. Nada tildado = fuente FIJA (el optimizador no la toca).
+        _free = getattr(source, "free_vars", frozenset()) if source else frozenset()
+        self.chk_free = {}
+        _frow = QHBoxLayout()
+        for _key, _lbl in (("pos", "posición"), ("delay", "delay"),
+                           ("fc", "corte"), ("polarity", "polaridad"),
+                           ("filter", "filtro")):
+            cb = QCheckBox(_lbl)
+            cb.setChecked(_key in (_free or frozenset()))
+            self.chk_free[_key] = cb
+            _frow.addWidget(cb)
+        _fw = QWidget(); _fw.setLayout(_frow)
+        _fw.setToolTip(
+            "Variables que el optimizador «Optimizar fuentes libres» (DBA/CABS) "
+            "puede mover en esta fuente. Sin ninguna tildada, la fuente queda FIJA.")
+        layout.addRow("Optimizar:", _fw)
+
         # Posición
         def spin(val, lo=-1e3, hi=1e3, step=0.1, dec=2):
             sb = QDoubleSpinBox()
@@ -340,7 +371,42 @@ class SourceEditDialog(QDialog):
         dvl.addWidget(btn_drv)
         self.combo_drv_mode.currentIndexChanged.connect(self._on_drv_mode_changed)
         layout.addRow(grp_drv)
+        # TS crudos persistidos (item 5): repoblar los spinboxes al reabrir.
+        if source is not None and getattr(source, "ts_fs", None) is not None:
+            self.sb_drv_fs.setValue(float(source.ts_fs))
+            self.sb_drv_qts.setValue(float(source.ts_qts or 0.35))
+            self.sb_drv_vas.setValue(float(source.ts_vas or 100.0))
+            self.sb_drv_vb.setValue(float(source.ts_vb or 50.0))
+            _jts = self.combo_drv_mode.findData("ts")
+            if _jts >= 0:
+                self.combo_drv_mode.setCurrentIndex(_jts)
         self._on_drv_mode_changed()
+
+        # --- Modelo de radiación (item 5): radiador + qué trae horneada la resp. -
+        grp_rad = QGroupBox("Modelo de radiación")
+        rl = QFormLayout(grp_rad)
+        self.combo_radiator = QComboBox()
+        self.combo_radiator.addItem("Caja (sellada / ported)", "box")
+        self.combo_radiator.addItem("Bafle abierto (dipolo)", "open_baffle")
+        _rk = getattr(source, "radiator_kind", "box") if source else "box"
+        _jrk = self.combo_radiator.findData(_rk)
+        self.combo_radiator.setCurrentIndex(_jrk if _jrk >= 0 else 0)
+        rl.addRow("Radiador:", self.combo_radiator)
+        self.combo_baked = QComboBox()
+        self.combo_baked.addItem("Nada (monopolo ideal)", "none")
+        self.combo_baked.addItem("Solo el transductor (Thiele-Small)", "driver")
+        self.combo_baked.addItem("Sistema completo medido (FRD/CLF)", "full_system")
+        _rb = getattr(source, "radiation_baked", "none") if source else "none"
+        _jrb = self.combo_baked.findData(_rb)
+        self.combo_baked.setCurrentIndex(_jrb if _jrb >= 0 else 0)
+        self.combo_baked.setToolTip(
+            "Qué incluye ya la respuesta de la fuente, para NO contar el bafle dos "
+            "veces:\n• Sistema completo medido (FRD/CLF): el bafle ya está en la "
+            "medición → el soft no agrega baffle step.\n• Solo el transductor "
+            "(Thiele-Small): falta el bafle → el soft agrega baffle step.\n• Nada: "
+            "monopolo ideal (comportamiento histórico).")
+        rl.addRow("La respuesta ya incluye:", self.combo_baked)
+        layout.addRow(grp_rad)
 
         # --- Filtro de crossover / EQ (v2.29, pedido del profesor) -----------
         import filters as _flt
@@ -556,6 +622,9 @@ class SourceEditDialog(QDialog):
         import os
         self._frd_raw = (freq, spl, phase_rad, os.path.basename(path))
         self._rebake_frd()
+        # Item 5: un FRD/TRF/CLF medido trae el SISTEMA COMPLETO (transductor +
+        # bafle) -> el soft no debe agregar baffle step encima (no doble contar).
+        self._set_baked("full_system")
 
     def _rebake_frd(self):
         """Re-hornea g(f) desde el FRD crudo (solo si se cargó en esta sesión)."""
@@ -581,7 +650,18 @@ class SourceEditDialog(QDialog):
         self._frd_raw = None
         self.sb_delay.setValue(0.0)
         self.sb_phase.setValue(0.0)
+        self._set_baked("none")     # sin curva -> monopolo ideal, sin baffle step
         self._refresh_resp_ui()
+
+    def _set_baked(self, key):
+        """Auto-set del combo 'La respuesta ya incluye' (item 5). Best-effort:
+        el combo puede no existir aún si se llama durante __init__."""
+        cb = getattr(self, "combo_baked", None)
+        if cb is None:
+            return
+        j = cb.findData(key)
+        if j >= 0:
+            cb.setCurrentIndex(j)
 
     def _on_drv_mode_changed(self):
         """Muestra los campos fc/Qtc o los TS crudos según el modo elegido."""
@@ -616,6 +696,7 @@ class SourceEditDialog(QDialog):
                                 f"No se pudo construir el driver:\n{e}")
             return
         self._frd_raw = None    # curva sintética, no un FRD cargado
+        self._set_baked("driver")   # TS = solo el driver -> el soft agrega baffle step
         self._refresh_resp_ui()
 
     def _refresh_resp_ui(self):
@@ -794,6 +875,7 @@ class SourceEditDialog(QDialog):
         src = OmniSource(
             position=(self.sb_x.value(), self.sb_y.value(), self.sb_z.value()),
             label=self.le_label.text().strip() or "src",
+            source_type=self.combo_stype.currentData(),
             sensitivity_dB=self.sb_sens.value(),
             power_W=1.0,
             f_ref=self._F_REF,
@@ -807,6 +889,17 @@ class SourceEditDialog(QDialog):
             **self._filter_state(),                     # v2.29: filtro
         )
         src.response = self._response    # Fase 2: preservar la curva Q(f)
+        # Discriminacion (item 6): variables liberadas para el optimizador CABS.
+        src.free_vars = frozenset(k for k, cb in self.chk_free.items()
+                                  if cb.isChecked())
+        # Modelo de radiacion (item 5).
+        src.radiator_kind = self.combo_radiator.currentData()
+        src.radiation_baked = self.combo_baked.currentData()
+        if self.combo_drv_mode.currentData() == "ts":
+            src.ts_fs = self.sb_drv_fs.value()
+            src.ts_qts = self.sb_drv_qts.value()
+            src.ts_vas = self.sb_drv_vas.value()
+            src.ts_vb = self.sb_drv_vb.value()
         return src
 
 
@@ -4059,6 +4152,7 @@ class AcousticPanel(QWidget):
         # el del drag arreglado en v2.13.
         new = OmniSource(position=s.position, Q=s.Q,
                           label=f"{s.label}_dup",
+                          source_type=getattr(s, "source_type", "generic"),
                           sensitivity_dB=s.sensitivity_dB,
                           power_W=s.power_W, f_ref=s.f_ref,
                           orientation=getattr(s, "orientation", None),
@@ -4076,6 +4170,11 @@ class AcousticPanel(QWidget):
                           filter_ripple_db=getattr(s, "filter_ripple_db", 1.0),
                           filter_atten_db=getattr(s, "filter_atten_db", 40.0))
         new.response = s.response       # Fase 2: la copia conserva la curva Q(f)
+        new.free_vars = frozenset(getattr(s, "free_vars", frozenset()))
+        new.radiator_kind = getattr(s, "radiator_kind", "box")
+        new.radiation_baked = getattr(s, "radiation_baked", "none")
+        for _a in ("ts_fs", "ts_qts", "ts_vas", "ts_vb", "ts_sd"):
+            setattr(new, _a, getattr(s, _a, None))
         self.sources.add(new)
         self._refresh_sources_list()
         self.schedule_field_update()      # el campo |p| cambió (una fuente más)
@@ -5527,6 +5626,53 @@ class AcousticPanel(QWidget):
     # -----------------------------------------------------------------------
     # FRF
     # -----------------------------------------------------------------------
+    def _cabs_sbir_walls(self, freq):
+        """Paredes SBIR (materiales + muebles) sobre un eje `freq` dado, para la
+        evaluación CABS. Mismo criterio que el SBIR de la pestaña (α por cara →
+        R=√(1−α); default α=0.03 casi rígido). Se pasa como callable a
+        dba_evaluate.evaluate_cabs para que R(f) se muestree en el eje del motor."""
+        import sbir     # sbir se importa local en este modulo (no a nivel top)
+        try:
+            groups, _v, _t = self._get_face_groups()
+        except Exception:
+            return []
+        g2m = self._group_to_material_dict(groups)
+        walls = []
+        for g in groups:
+            mat = g2m.get(g.signature)
+            alpha = (np.array([mat.alpha(float(ff)) for ff in freq])
+                     if mat is not None else np.full(np.shape(freq), 0.03))
+            walls.append(sbir.Wall(point=g.centroid, normal=g.normal,
+                                   label=g.label,
+                                   R=sbir.reflection_from_alpha(alpha)))
+        muebles = getattr(self, "furniture", None)
+        if muebles:
+            import furniture as fu
+            walls.extend(fu.furniture_walls(
+                muebles, self._furniture_mat_by_index(), freq))
+        return walls
+
+    def _apply_cabs_optimization(self, optimized):
+        """Escribe los parámetros optimizados (posición/delay/corte) sobre las
+        fuentes LIBRES reales de la sala. `optimized` viene en el MISMO orden que
+        self.sources.sources (el optimizador copió esa lista). Las fuentes fijas
+        (free_vars vacío) no se tocan. Item 6."""
+        for real, opt in zip(self.sources.sources, optimized):
+            fv = getattr(real, "free_vars", None) or frozenset()
+            if not fv:
+                continue
+            if "pos" in fv:
+                real.position = tuple(float(x) for x in opt.position)
+            if "delay" in fv:
+                real.delay_s = float(opt.delay_s)
+            if "fc" in fv:
+                real.filter_fc = float(opt.filter_fc)
+            if "polarity" in fv:
+                real.polarity = -1 if int(opt.polarity) < 0 else 1
+        self._refresh_sources_list()
+        self.schedule_field_update()
+        self._log("Optimización CABS aplicada a las fuentes libres.")
+
     def _open_dba(self):
         """Abre la herramienta de subs enfrentados (DBA/CABS) sobre la caja
         rectangular (AABB) de la sala. El receptor se pasa relativo a la esquina
@@ -5549,8 +5695,25 @@ class AcousticPanel(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "DBA", f"No se pudo abrir la herramienta:\n{e}")
             return
+        # Contexto para el modo "Evaluar mis fuentes cargadas": las fuentes
+        # reales (mundo), las paredes SBIR (callable), el receptor y el f_S.
+        try:
+            ctx = self._schroeder_context()
+            f_s = float(ctx["fs"]) if ctx else None
+        except Exception:
+            f_s = None
+        eval_context = {
+            "sources": lambda: list(self.sources.sources),
+            "walls_fn": self._cabs_sbir_walls,
+            "receiver_world": tuple(np.asarray(self.receiver,
+                                               dtype=float).tolist()),
+            "origin": tuple(np.asarray(vmin, dtype=float).tolist()),
+            "f_schroeder": f_s,
+            "apply_optimized": self._apply_cabs_optimization,
+        }
         DBADialog(dims, rec, self,
-                  apply_callback=lambda specs: self._apply_dba_to_room(specs, vmin)
+                  apply_callback=lambda specs: self._apply_dba_to_room(specs, vmin),
+                  eval_context=eval_context
                   ).exec_()
 
     def _apply_dba_to_room(self, specs, vmin):
@@ -5585,8 +5748,12 @@ class AcousticPanel(QWidget):
         for sp in specs:
             pos = tuple((np.asarray(sp["pos"], dtype=float) + vmin).tolist())
             src = OmniSource(position=pos, label=sp["label"], Q=sp.get("Q", 1.0),
+                             source_type="subwoofer",
                              delay_s=sp.get("delay_s", 0.0),
-                             polarity=sp.get("polarity", 1))
+                             polarity=sp.get("polarity", 1),
+                             orientation=sp.get("orientation"),
+                             pitch=sp.get("pitch", 0.0),
+                             mounted=True)
             src.response = sp.get("response")
             self.sources.add(src)
         self._refresh_sources_list()
