@@ -87,6 +87,38 @@ def apply_vector(sources, dofs, x):
 
 
 # ---------------------------------------------------------------------------
+# Criterio DBA: el drive del array lo FIJA el criterio (no lo optimiza)
+# ---------------------------------------------------------------------------
+def _apply_dba_drive(sources, dims, origin, axis, c):
+    """Bajo criterio DBA fija el drive CANONICO en los subs clasificados cuyo drive
+    el usuario LIBERO (delay/polarity en free_vars): front -> delay 0, polaridad +1;
+    rear -> delay L/c, polaridad -1. Devuelve (sources_mod, excluded) donde
+    `excluded` = set de (src_index, kind) a sacar de los DOFs (el criterio los fija,
+    el optimizador ya no los busca -> optimizar y evaluar concuerdan).
+
+    Los subs sin free_vars de drive quedan INTACTOS (una fuente fija es fija): el
+    criterio solo actua sobre lo que el usuario declaro ajustable. Los 'other' (no
+    subs / fuera de pared) no se tocan."""
+    roles = dev.classify_sources(sources, dims, origin, axis)
+    L = float(dims[axis])
+    tau = L / c
+    out = [replace(s) for s in sources]
+    excluded = set()
+    for r in roles:
+        if r.role not in ("front", "rear"):
+            continue
+        fv = getattr(sources[r.index], "free_vars", frozenset()) or frozenset()
+        s = out[r.index]
+        if "delay" in fv:
+            s.delay_s = 0.0 if r.role == "front" else tau
+            excluded.add((r.index, "delay"))
+        if "polarity" in fv:
+            s.polarity = 1 if r.role == "front" else -1
+            excluded.add((r.index, "polarity"))
+    return out, excluded
+
+
+# ---------------------------------------------------------------------------
 # Optimizacion
 # ---------------------------------------------------------------------------
 def _cost(x, sources, dofs, dims, origin, walls, receiver, axis, fa, xi, c, f_s,
@@ -98,17 +130,40 @@ def _cost(x, sources, dofs, dims, origin, walls, receiver, axis, fa, xi, c, f_s,
     return float(m["flat"] + m["spatial"])
 
 
+def _criterion_drive_changes(orig, base, excluded) -> list:
+    """Resumen legible del drive que FIJO el criterio (delay/polaridad canonicos)."""
+    out = []
+    for (i, kind) in sorted(excluded):
+        b, a = orig[i], base[i]
+        label = getattr(b, "label", "") or f"S{i+1}"
+        if kind == "delay" and abs(a.delay_s - b.delay_s) > 1e-6:
+            out.append(f"{label}: delay {b.delay_s*1e3:.1f} -> {a.delay_s*1e3:.1f} "
+                       "ms (DBA canonico)")
+        elif kind == "polarity" and a.polarity != b.polarity:
+            _p = lambda s: "invertida" if s.polarity < 0 else "normal"
+            out.append(f"{label}: polaridad {_p(b)} -> {_p(a)} (DBA canonico)")
+    return out
+
+
 def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None,
                   axis: Optional[int] = None, fmin: float = 20.0, fmax: float = 200.0,
                   xi: float = 0.03, c: float = C0, f_schroeder: Optional[float] = None,
                   n_freq: int = 70, grid=(3, 2, 3), maxiter: int = 25,
-                  popsize: int = 12, seed: int = 0) -> dict:
+                  popsize: int = 12, seed: int = 0, criterion: str = "dba") -> dict:
     """Optimiza las variables liberadas de las fuentes (item 6). Devuelve dict con
     la config optimizada, metricas antes/despues, los DOF y un resumen de cambios.
 
     Objetivo = flat + spatial de la respuesta TOTAL (evaluate_cabs). Grilla y n_freq
     gruesos para ir rapido (el objetivo se llama cientos de veces); la evaluacion
     'oficial' de alta fidelidad se hace aparte con `evaluate_cabs`.
+
+    `criterion` ("dba" | "cabs") es EL MISMO que se le pasa a `evaluate_cabs`, para
+    que optimizar y evaluar sigan UN SOLO criterio (cierra el bug del delay 2x):
+      - "dba": el drive del array lo FIJA el criterio (front 0/+1, rear L/c/-1) y
+        sale de los DOFs -> el optimizador solo mueve posicion/fc dentro de esa
+        forma. El resultado satisface el chequeo DBA de evaluate por construccion.
+      - "cabs": el drive del trasero queda LIBRE (manejado); el optimizador lo busca
+        para aplanar y evaluate lo juzga por el colapso, no por L/c.
     """
     from scipy.optimize import differential_evolution
     dims = tuple(float(x) for x in dims)
@@ -116,6 +171,13 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
     active = [s for s in sources if getattr(s, "active", True)]
     if axis is None:
         axis = dev.best_axis(active, dims, origin, c)
+
+    # Criterio: bajo DBA el drive del array lo fija el criterio y sale de los DOFs;
+    # bajo CABS el drive queda libre (el optimizador lo busca).
+    if criterion == "dba":
+        base, excluded = _apply_dba_drive(sources, dims, origin, axis, c)
+    else:
+        base, excluded = [replace(s) for s in sources], set()
 
     fa = np.linspace(fmin, fmax, n_freq)
     if callable(walls):
@@ -130,18 +192,26 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
                                    basis=basis, with_decay=False, zone_box=zone_box)
 
     before = _metrics(sources)
-    dofs = collect_dofs(sources, dims, origin, axis)
+    dofs = [d for d in collect_dofs(base, dims, origin, axis)
+            if (d[0], d[1]) not in excluded]
+    crit_changes = _criterion_drive_changes(sources, base, excluded)
+
     if not dofs:
-        return {"optimized": list(sources), "before": before, "after": before,
-                "dofs": [], "improved": False, "axis": axis, "changes": [],
-                "n_free": 0}
+        # Sin DOFs continuos: o no hay nada libre (config intacta), o el criterio ya
+        # fijo el drive (DBA) y no queda mas que optimizar.
+        after = _metrics(base) if excluded else before
+        improved = (after["flat"] + after["spatial"]
+                    < before["flat"] + before["spatial"] - 1e-6)
+        return {"optimized": base, "before": before, "after": after, "dofs": [],
+                "result": None, "improved": bool(improved), "axis": axis,
+                "n_free": 0, "changes": crit_changes, "criterion": criterion}
 
     bounds = [(lo, hi) for (_i, _k, _a, lo, hi) in dofs]
     # La polaridad es entera (binaria): scipy>=1.9 la maneja con integrality.
     # Si la version es vieja (sin integrality), apply_vector igual la umbrala en
     # 0.5, asi que el fallback es correcto (solo un poco menos eficiente).
     integrality = [k == "polarity" for (_i, k, _a, _lo, _hi) in dofs]
-    kw = dict(args=(sources, dofs, dims, origin, walls, receiver, axis, fa, xi, c,
+    kw = dict(args=(base, dofs, dims, origin, walls, receiver, axis, fa, xi, c,
                     f_s, basis, zone_box),
               maxiter=maxiter, popsize=popsize, seed=seed, tol=1e-3,
               mutation=(0.5, 1.0), recombination=0.7, polish=True,
@@ -151,14 +221,15 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
     except TypeError:                          # scipy viejo: sin integrality
         res = differential_evolution(_cost, bounds, **kw)
 
-    best = apply_vector(sources, dofs, res.x)
+    best = apply_vector(base, dofs, res.x)
     after = _metrics(best)
     improved = (after["flat"] + after["spatial"]
                 < before["flat"] + before["spatial"] - 1e-6)
     n_free = len({i for (i, *_r) in dofs})
     return {"optimized": best, "before": before, "after": after, "dofs": dofs,
             "result": res, "improved": improved, "axis": axis, "n_free": n_free,
-            "changes": summarize_changes(sources, best, dofs)}
+            "changes": crit_changes + summarize_changes(sources, best, dofs),
+            "criterion": criterion}
 
 
 def summarize_changes(before_sources, after_sources, dofs) -> list:

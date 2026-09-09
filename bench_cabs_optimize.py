@@ -5,6 +5,11 @@ bench_cabs_optimize.py
 Oraculos de `cabs_optimize.optimize_cabs` (discriminacion/optimizacion parcial,
 item 6). Asserts falsables, cada uno con su racional.
 
+Los tests que liberan delay/polaridad usan `criterion="cabs"` (modo MANEJADO: el
+drive del trasero es libre, es lo que estos tests ejercitan). La consistencia
+optimizar<->evaluar bajo `criterion="dba"` (el drive lo fija el criterio) vive en
+`bench_cabs_criterion.py`.
+
 Correr:
     PYTHONIOENCODING=utf-8 /c/Users/aceve/anaconda3/python.exe bench_cabs_optimize.py
 """
@@ -55,7 +60,8 @@ def test_improves():
     """T2: con 2 subs desalineados y {pos,delay} libres, baja el costo flat+spatial."""
     print("T2 optimiza -> baja el costo")
     subs = _subs({"pos", "delay"}, {"pos", "delay"})
-    r = opt.optimize_cabs(subs, DIMS, RX, axis=AXIS, fmax=FMAX, maxiter=18)
+    r = opt.optimize_cabs(subs, DIMS, RX, axis=AXIS, fmax=FMAX, maxiter=18,
+                          criterion="cabs")
     c0 = r["before"]["flat"] + r["before"]["spatial"]
     c1 = r["after"]["flat"] + r["after"]["spatial"]
     check("costo despues < antes", c1 < c0, f"{c0:.2f} -> {c1:.2f}")
@@ -81,7 +87,8 @@ def test_fixed_untouched():
     """T4: con una fuente libre y otra FIJA, la fija queda iduntica."""
     print("T4 la fuente fija no se toca")
     subs = _subs({"pos", "delay"}, frozenset())   # solo el front es libre
-    r = opt.optimize_cabs(subs, DIMS, RX, axis=AXIS, fmax=FMAX, maxiter=12)
+    r = opt.optimize_cabs(subs, DIMS, RX, axis=AXIS, fmax=FMAX, maxiter=12,
+                          criterion="cabs")
     rear0, rear1 = subs[1], r["optimized"][1]
     check("rear (fija): posicion intacta", rear1.position == rear0.position)
     check("rear (fija): delay intacto", rear1.delay_s == rear0.delay_s)
@@ -119,7 +126,8 @@ def test_polarity_flip():
         OmniSource((2.5, L - 0.1, 1.0), label="R", source_type="subwoofer",
                    delay_s=tau, polarity=worse, free_vars={"polarity"}),
     ]
-    r = opt.optimize_cabs(subs, DIMS, RX, axis=AXIS, fmax=FMAX, maxiter=10)
+    r = opt.optimize_cabs(subs, DIMS, RX, axis=AXIS, fmax=FMAX, maxiter=10,
+                          criterion="cabs")
     rear = r["optimized"][1]
     c0 = r["before"]["flat"] + r["before"]["spatial"]
     c1 = r["after"]["flat"] + r["after"]["spatial"]

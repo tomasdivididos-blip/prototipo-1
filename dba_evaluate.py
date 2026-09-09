@@ -288,8 +288,9 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
                   walls=None, axis: Optional[int] = None, fmin: float = 20.0,
                   fmax: float = 200.0, xi: float = 0.03, c: float = C0,
                   n_freq: int = 200, ideal_grid=None,
-                  f_schroeder: Optional[float] = None) -> dict:
-    """Evalua la configuracion de fuentes real contra el criterio CABS.
+                  f_schroeder: Optional[float] = None,
+                  criterion: str = "dba") -> dict:
+    """Evalua la configuracion de fuentes real contra el criterio elegido.
 
     Parameters
     ----------
@@ -303,6 +304,13 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
     ideal_grid: (n_a, n_b) del array ideal de referencia. None -> se infiere del
                 nº de subs front del usuario (grilla ~cuadrada), min 2x2.
     f_schroeder: cruce modal<->SBIR. None -> estimado desde V y xi.
+    criterion : "dba" (double bass array: front+rear, trasero con drive CANONICO
+                retardo L/c e invertido; el chequeo del drive es CRITICO) o "cabs"
+                (controlled acoustic bass: el trasero es MANEJADO/absorbente, su
+                drive no tiene por que ser L/c; se juzga por el colapso de la
+                respuesta, el drive deja de ser critico). El mismo criterio se pasa
+                a `cabs_optimize.optimize_cabs` para que optimizar y evaluar sigan
+                UNO SOLO -> concuerdan por construccion (cierra el bug del delay 2x).
 
     Las metricas (planitud, varianza, decay) se miden sobre la respuesta TOTAL en
     [fmin, fmax] (la banda que le importa al usuario). El f_max=c/d (aliasing del
@@ -352,7 +360,7 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
 
     # --- checklist ---
     checklist = _build_checklist(roles, fronts, rears, dims, axis, L, band_hi,
-                                 fmax, c, real, ideal)
+                                 fmax, c, real, ideal, criterion=criterion)
     passed = all(item["ok"] for item in checklist if item["critical"])
 
     return {
@@ -367,7 +375,7 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
         "checklist": checklist, "passed": bool(passed),
         "freq": fa, "total_db_mean_real": real["L_bar"],
         "total_db_mean_ideal": ideal["L_bar"],
-        "f_schroeder": f_s,
+        "f_schroeder": f_s, "criterion": criterion,
     }
 
 
@@ -421,8 +429,8 @@ def _alias_fmax_from_roles(fronts, dims, axis, c) -> float:
 
 
 def _build_checklist(roles, fronts, rears, dims, axis, L, band_hi, fmax, c,
-                     real, ideal) -> list:
-    """Lista falsable de condiciones CABS (por que pasa/falla)."""
+                     real, ideal, criterion: str = "dba") -> list:
+    """Lista falsable de condiciones del criterio elegido (por que pasa/falla)."""
     items = []
     axis_name = ["X (ancho)", "Y (largo)", "Z (alto)"][axis]
 
@@ -440,8 +448,17 @@ def _build_checklist(roles, fronts, rears, dims, axis, L, band_hi, fmax, c,
 
     tau_ideal = L / c
     ok_drive, drive_txt = _check_rear_drive(rears, tau_ideal)
-    items.append({"key": "rear_drive", "ok": ok_drive, "critical": True,
-                  "text": drive_txt})
+    if criterion == "cabs":
+        # CABS: el trasero es MANEJADO (absorbe la onda), su drive no tiene por que
+        # ser el DBA canonico L/c. El criterio se juzga por el COLAPSO de la
+        # respuesta (planitud/varianza), no por el retardo -> rear_drive informativo.
+        items.append({
+            "key": "rear_drive", "ok": True, "critical": False,
+            "text": "Modo CABS: trasero manejado (se juzga por el colapso de la "
+                    "respuesta, no por el retardo L/c). " + drive_txt})
+    else:
+        items.append({"key": "rear_drive", "ok": ok_drive, "critical": True,
+                      "text": drive_txt})
 
     f_max_alias = _alias_fmax_from_roles(fronts, dims, axis, c)
     ok_alias = (not np.isfinite(f_max_alias)) or f_max_alias >= min(fmax, band_hi) - 1e-6

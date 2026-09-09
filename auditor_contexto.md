@@ -75,3 +75,16 @@ Dónde desconfiar primero: (1) el crossfade SBIR+modos en f_S ¿doble-cuenta ref
 **Columnas (cilíndricas/prismáticas):** PLANEADO, sin implementar (`plan_columnas.md`). El motor
 de carve rígido de `furniture.py` es el que se reusaría; lo nuevo a validar sería el agujero
 pasante piso-techo (topología de túnel).
+
+**Respuesta compuesta + criterio CABS/DBA (9 Sep 2026, headless, sin commitear a UI todavía —
+VERIFICAR):**
+- `composed_response.py` — función canónica `composed_response(...)` → curva modal ⊕ SBIR
+  (crossfade en f_S) en SPL absoluto dBSPL (P_REF=20e-6). Reusa `acoustic_fem.frequency_response`
+  (modal, c²) y `sbir.sbir_from_sources` (imágenes). A auditar: ¿modal y SBIR están realmente en
+  la MISMA escala absoluta de Pa para el mismo Q? (el crossfade asume que sí; `bench_composed_
+  response.py` C4 lo chequea contra el monopolo analítico). ¿Hay escalón de nivel en f_S?
+- `dba_evaluate.evaluate_cabs(criterion=...)` y `cabs_optimize.optimize_cabs(criterion=...)` —
+  bajo "dba" el drive del array (front 0/+1, rear L/c/−1) lo fija el criterio y sale de los DOFs;
+  bajo "cabs" queda libre. A auditar: ¿`tau_ideal=L/c` es el delay DBA correcto cuando los subs
+  están inset de la pared (vs distancia frente→trasero real)? El tol_rel 0.35 lo tapa, pero es una
+  aproximación. `bench_cabs_criterion.py` 8/8.

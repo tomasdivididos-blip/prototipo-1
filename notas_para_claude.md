@@ -3064,6 +3064,35 @@ bien.
      evaluar acepta el delay listener-óptimo. Esto es exactamente lo que resuelve el ítem (vii)
      (discriminar por criterio).
 
+- **9 Sep 2026 — grupo A, ejecución Fase 1 + paso 2 (headless, sin exponer a UI todavía).**
+  Plan cerrado en `plan_respuesta_compuesta.md` (D1 = SPL absoluto dBSPL; D2 = selector de
+  criterio gobierna optimizar+evaluar; corregibilidad en CABS = solo capa visual).
+  1. **Fase 1 — `composed_response.py`** (núcleo canónico): `composed_response(sources, receiver,
+     freq, *, modal_result, walls, f_schroeder, ...)` → curva única modal ⊕ SBIR (crossfade en
+     f_S) en **SPL absoluto dBSPL re 20 µPa** (`P_REF=20e-6`, igual que el plot de FRF). La FRF
+     modal ya está en dBSPL (c² de B5); el SBIR (presión absoluta en Pa de `SBIRResult.total_p_
+     total`) se lleva a dBSPL con la misma referencia. `bench_composed_response.py` **11/11**:
+     reducción modal (walls=None ≡ FRF modal, 0.00 dB), reducción SBIR (sin modos ≡ SBIR
+     absoluto), crossfade continuo, escala absoluta = monopolo analítico ωρ₀|Q|/(4πr), guard.
+  2. **Paso 2 — selector de criterio CABS/DBA** (cierra el bug del delay 2×). `criterion`
+     ("dba"|"cabs") en `dba_evaluate.evaluate_cabs` y `cabs_optimize.optimize_cabs`. Bajo **DBA**
+     el drive del array lo FIJA el criterio (front delay 0/pol +1; rear delay L/c/pol −1) y **sale
+     de los DOFs** (`_apply_dba_drive`); el optimizador solo mueve posición/fc dentro de esa forma.
+     Bajo **CABS** el drive del trasero queda libre (manejado) y el `rear_drive` del checklist pasa
+     a informativo (se juzga por el colapso). **Default = "dba"** → optimizar y evaluar concuerdan
+     por construcción incluso SIN el selector en la GUI: el bug del usuario queda cerrado ya.
+     `bench_cabs_criterion.py` **8/8** (optimizar dba da delay=L/c=18.1 ms, no L/2c=9.0; evaluar
+     dba PASA sin duplicar a mano; contraste L/2c falla dba/pasa cabs; regresión canónica).
+     `bench_cabs_optimize` **12/12** (T2/T4/T5, que ejercitan drive libre, migrados a
+     criterion="cabs"), `bench_dba_evaluate` **13/13** (intacto: default dba = comportamiento previo).
+  3. **Falta (GUI, necesita test visual):** botón/combo selector CABS|DBA en el `DBADialog` (pasarlo
+     a optimizar y evaluar) + mostrar la polaridad en el cartel (bug estético, item vii). Después:
+     rutear FRF/SBIR/CABS por `composed_response` (Fase 2) + overlay de corregibilidad, y Predicción
+     con la FRF compuesta (Fase 3).
+  4. **Recap:** SOLO notas (esta entrada) + `auditor_contexto.md` + commit/push (headless, sin
+     exponer a UI). **NO MANUAL** todavía (el changelog de usuario va con el incremento GUI). NO zips
+     ni PDF (sin cambio funcional visible en la app). Ver memoria [[backlog-charla-sep]].
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.
