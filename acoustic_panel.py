@@ -906,19 +906,8 @@ class SourceEditDialog(QDialog):
 # ---------------------------------------------------------------------------
 # Dialogo FRF (grafico matplotlib)
 # ---------------------------------------------------------------------------
-def _contiguous_runs(fa, mask):
-    """Devuelve [(f_ini, f_fin), ...] de las corridas contiguas donde mask es True."""
-    spans, i, n = [], 0, len(mask)
-    while i < n:
-        if mask[i]:
-            j = i
-            while j + 1 < n and mask[j + 1]:
-                j += 1
-            spans.append((float(fa[i]), float(fa[j])))
-            i = j + 1
-        else:
-            i += 1
-    return spans
+from plot_utils import (contiguous_runs as _contiguous_runs,  # noqa: E402
+                        draw_correctability_overlay as _draw_correctability_overlay)
 
 
 class FurnitureEditDialog(QDialog):
@@ -1189,7 +1178,8 @@ class FRFDialog(QDialog):
     """Diálogo de FRF con gráfico matplotlib, exportación y escucha con ruido rosa."""
 
     def __init__(self, frf_result, modal_freqs=None, parent=None,
-                 fom=None, fom_band=None, eqc=None, eqc_band=None, f_valid=None):
+                 fom=None, fom_band=None, eqc=None, eqc_band=None, f_valid=None,
+                 composed_spl=None, f_schroeder=None, composed_freq=None):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle(f"FRF — {frf_result.method.upper()}")
@@ -1231,6 +1221,22 @@ class FRFDialog(QDialog):
         else:
             ax.plot(f, db, color='#1f6fbf', linewidth=1.8, label='FRF (FEM)')
 
+        # Fase 2 (grupo A): curva TOTAL = modal + SBIR (crossfade en f_S), en la
+        # misma escala SPL absoluta. Coincide con el modal debajo de f_S y toma el
+        # peine de imagenes por encima (donde el modal truncado ya no es confiable),
+        # asi la FRF "tiene en cuenta el SBIR" y coincide con la curva del SBIR.
+        if composed_spl is not None:
+            cs = np.asarray(composed_spl, dtype=float)
+            cf = np.asarray(composed_freq if composed_freq is not None else f,
+                            dtype=float)
+            if cs.shape == cf.shape:
+                ax.plot(cf, cs, color='#8a5cd1', linewidth=1.6,
+                        label='Total: modal + SBIR')
+                if f_schroeder and float(cf[0]) <= float(f_schroeder) <= float(cf[-1]):
+                    ax.axvline(x=float(f_schroeder), color='#8a5cd1', linestyle=':',
+                               linewidth=1.0, alpha=0.75,
+                               label=f'f_S ≈ {float(f_schroeder):.0f} Hz')
+
         if modal_freqs is not None:
             for i, fn in enumerate(modal_freqs):
                 if float(f[0]) <= fn <= float(f[-1]):
@@ -1239,17 +1245,7 @@ class FRFDialog(QDialog):
                                label='Modos FEM' if i == 0 else '_nolegend_')
 
         # --- Overlay de corregibilidad EQ (C13/C21): sombrear lo NO ecualizable ---
-        if eqc is not None:
-            fe, vd = eqc.freq_axis, eqc.verdict
-            first_no = first_unc = True
-            for f0, f1 in _contiguous_runs(fe, vd == 0):       # no corregible -> rojo
-                ax.axvspan(f0, f1, color='#e05050', alpha=0.13, zorder=0,
-                           label='No ecualizable (exige acústica)' if first_no else '_nolegend_')
-                first_no = False
-            for f0, f1 in _contiguous_runs(fe, vd == 1):       # incierto -> amarillo
-                ax.axvspan(f0, f1, color='#e0b020', alpha=0.10, zorder=0,
-                           label='Corregibilidad incierta' if first_unc else '_nolegend_')
-                first_unc = False
+        _draw_correctability_overlay(ax, eqc)
 
         ax.set_xlabel('Frecuencia (Hz)', fontsize=10)
         ax.set_ylabel('Nivel SPL (dB re 20 µPa)', fontsize=10)
@@ -1260,10 +1256,15 @@ class FRFDialog(QDialog):
         # eje log, look tipo REW. Permite leer en que banda cae cada modo.
         from matplotlib.ticker import FixedLocator, NullLocator, FuncFormatter
         from plot_utils import third_octave_edges
-        edges = third_octave_edges(float(f[0]), float(f[-1]))
+        # Opción B: si la compuesta se extiende por encima del fmax de la FRF,
+        # el eje X llega hasta ahí (para ver el tramo SBIR).
+        x_hi = float(f[-1])
+        if composed_freq is not None and len(composed_freq):
+            x_hi = max(x_hi, float(np.asarray(composed_freq)[-1]))
+        edges = third_octave_edges(float(f[0]), x_hi)
         if len(edges) >= 2:
             ax.set_xscale('log')
-            ax.set_xlim(float(f[0]), float(f[-1]))
+            ax.set_xlim(float(f[0]), x_hi)
             ax.xaxis.set_major_locator(FixedLocator(edges))
             ax.xaxis.set_major_formatter(
                 FuncFormatter(lambda x, _: f"{x:.0f}"))
@@ -1444,22 +1445,25 @@ class FRFDialog(QDialog):
 # ---------------------------------------------------------------------------
 class SBIRDialog(QDialog):
     """Diálogo SBIR: peine de interferencia directo + reflexiones de 1er orden
-    en el receptor, por fuente y para la suma estéreo. dB relativo al directo.
+    en el receptor, por fuente y para la suma estéreo. En SPL absoluto (dBSPL re
+    20 µPa, decisión D1: la misma escala que la FRF, así las curvas coinciden).
     """
 
     _COLORS = ['#2a9d8f', '#e76f51', '#8a5cd1', '#577590', '#bc6c25', '#386641']
 
     def __init__(self, result, f_lo: float = 20.0, f_hi: float = 500.0,
-                 parent=None, modal_db=None, f_schroeder=None):
+                 parent=None, modal_db=None, f_schroeder=None, eqc=None):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("SBIR — interferencia fuente-frontera")
+        # Diagnóstico de corregibilidad EQ (C13/C21) de la sala, para el overlay.
+        self._eqc = eqc
         self.resize(980, 600)
         self._fig = None
         self._res = result
         self._flo, self._fhi = float(f_lo), float(f_hi)
-        # Transferencia modal de la sala (FEM) normalizada a dB re directo, y f_S
-        # para el hibrido. modal_db=None -> el toggle no aparece (sin modos).
+        # Transferencia modal de la sala (FEM) en SPL absoluto (dBSPL), y f_S para
+        # el hibrido. modal_db=None -> el toggle no aparece (sin modos).
         self._modal_db = (np.asarray(modal_db, dtype=float)
                           if modal_db is not None else None)
         self._f_s = float(f_schroeder) if f_schroeder else None
@@ -1486,9 +1490,9 @@ class SBIRDialog(QDialog):
             self._chk_modal.setToolTip(
                 "SBIR solo = directo + imágenes de 1er orden (campo libre).\n"
                 "Con transferencia modal: superpone la respuesta modal FEM de la\n"
-                "sala (misma referencia 0 dB = anecoico) y una curva TOTAL híbrida\n"
-                "que usa la modal por debajo de f_Schroeder (donde es exacta) y las\n"
-                "imágenes por encima (peine especular).")
+                "sala (en SPL absoluto, la misma escala que la FRF) y una curva\n"
+                "TOTAL híbrida que usa la modal por debajo de f_Schroeder (donde es\n"
+                "exacta) y las imágenes por encima (peine especular).")
             self._chk_modal.stateChanged.connect(lambda _s: self._rebuild_plot())
             v.addWidget(self._chk_modal)
 
@@ -1535,19 +1539,22 @@ class SBIRDialog(QDialog):
     def _rebuild_plot(self):
         """Dibuja (o redibuja) las curvas segun el toggle de transferencia modal."""
         import sbir
+        from composed_response import to_spl
         ax = self._ax
         ax.clear()
         res = self._res
         f = res.freq_axis
+        # SPL absoluto (dBSPL) desde la presion compleja: total y por fuente.
+        total_abs = to_spl(res.total_p_total)
         multi = len(res.per_source) > 1
         for i, src in enumerate(res.per_source):
-            ax.plot(f, src.sbir_db, linewidth=1.3,
+            ax.plot(f, to_spl(src.p_total), linewidth=1.3,
                     alpha=0.65 if multi else 1.0,
                     color=self._COLORS[i % len(self._COLORS)],
                     label=src.label)
         total_lbl = 'SBIR total (imágenes)' if multi else 'SBIR (imágenes)'
         if multi:
-            ax.plot(f, res.total_sbir_db, color='#1f6fbf', linewidth=2.4,
+            ax.plot(f, total_abs, color='#1f6fbf', linewidth=2.4,
                     label=total_lbl)
 
         show_modal = (self._chk_modal is not None and self._chk_modal.isChecked()
@@ -1557,16 +1564,12 @@ class SBIRDialog(QDialog):
                     linestyle='--', label='Transferencia modal (sala)')
             if self._f_s:
                 total_hybrid = sbir.modal_sbir_crossfade(
-                    f, res.total_sbir_db, self._modal_db, self._f_s)
+                    f, total_abs, self._modal_db, self._f_s)
                 ax.plot(f, total_hybrid, color='#c1121f', linewidth=2.6,
                         label='Total híbrido (modal + imágenes)')
                 ax.axvline(self._f_s, color='#444444', linestyle='-.',
                            linewidth=1.0, alpha=0.7,
                            label=f'f_Schroeder ≈ {self._f_s:.0f} Hz')
-
-        # Linea de referencia 0 dB (anecoico).
-        ax.axhline(0.0, color='#888888', linewidth=0.8, linestyle='--',
-                   alpha=0.6)
 
         # Marcadores de notch teorico c/(4d) por pared (dedup por frecuencia).
         seen = set()
@@ -1579,8 +1582,11 @@ class SBIRDialog(QDialog):
                        linewidth=1.1, alpha=0.7,
                        label='Notch c/(4d)' if len(seen) == 1 else '_nolegend_')
 
+        # Overlay de corregibilidad EQ (C13/C21): zonas NO ecualizables (item i).
+        _draw_correctability_overlay(ax, self._eqc)
+
         ax.set_xlabel('Frecuencia (Hz)', fontsize=10)
-        ax.set_ylabel('Nivel (dB re directo)', fontsize=10)
+        ax.set_ylabel('Nivel SPL (dB re 20 µPa)', fontsize=10)
         ax.set_title('SBIR — directo + reflexiones de 1er orden',
                      fontweight='bold', fontsize=11, pad=8)
 
@@ -1612,28 +1618,32 @@ class SBIRDialog(QDialog):
         if not path:
             return
         if fmt in ('csv', 'txt'):
+            from composed_response import to_spl
             res = self._res
             f = np.asarray(res.freq_axis)
-            header = ['freq_hz'] + [f"sbir_db_{s.label}" for s in res.per_source]
+            # SPL absoluto (dBSPL), la misma escala que la FRF.
+            per_abs = [to_spl(s.p_total) for s in res.per_source]
+            total_abs = to_spl(res.total_p_total)
+            header = ['freq_hz'] + [f"spl_db_{s.label}" for s in res.per_source]
             if len(res.per_source) > 1:
-                header.append('sbir_db_total')
+                header.append('spl_db_total')
             # Columnas del hibrido si el toggle esta activo y hay modos.
             show_modal = (self._chk_modal is not None
                           and self._chk_modal.isChecked()
                           and self._modal_db is not None)
             hybrid = None
             if show_modal:
-                header.append('modal_db')
+                header.append('modal_spl_db')
                 if self._f_s:
                     import sbir as _sbir
                     hybrid = _sbir.modal_sbir_crossfade(
-                        f, res.total_sbir_db, self._modal_db, self._f_s)
-                    header.append('total_hibrido_db')
+                        f, total_abs, self._modal_db, self._f_s)
+                    header.append('total_hibrido_spl_db')
             rows = []
             for i in range(len(f)):
-                row = [float(f[i])] + [float(s.sbir_db[i]) for s in res.per_source]
+                row = [float(f[i])] + [float(p[i]) for p in per_abs]
                 if len(res.per_source) > 1:
-                    row.append(float(res.total_sbir_db[i]))
+                    row.append(float(total_abs[i]))
                 if show_modal:
                     row.append(float(self._modal_db[i]))
                     if hybrid is not None:
@@ -5515,6 +5525,34 @@ class AcousticPanel(QWidget):
     # -----------------------------------------------------------------------
     # SBIR (Speaker-Boundary Interference Response)
     # -----------------------------------------------------------------------
+    def _walls_from_groups(self, groups, g2m, freq, muebles=None):
+        """Planos reflectantes SBIR (por grupo de caras planas + muebles). Núcleo
+        compartido por `_open_sbir` y `_compute_frf` (Fase 2, grupo A: la FRF y el
+        SBIR arman las MISMAS paredes). R(f)=√(1−α) del material; sin material →
+        α=0.03 (casi rígido). Devuelve (walls, n_default, area_default)."""
+        import sbir
+        freq = np.asarray(freq, dtype=float)
+        walls = []
+        n_default = 0
+        area_default = 0.0
+        for g in groups:
+            mat = g2m.get(g.signature)
+            if mat is not None:
+                alpha = np.array([mat.alpha(float(ff)) for ff in freq])
+            else:
+                alpha = np.full(freq.shape, 0.03)   # default rigido
+                n_default += 1
+                area_default += float(getattr(g, "area", 0.0) or 0.0)
+            walls.append(sbir.Wall(
+                point=g.centroid, normal=g.normal, label=g.label,
+                R=sbir.reflection_from_alpha(alpha),
+            ))
+        if muebles:
+            import furniture as fu
+            walls.extend(fu.furniture_walls(
+                muebles, self._furniture_mat_by_index(), freq))
+        return walls, n_default, area_default
+
     def _open_sbir(self):
         """Calcula y muestra el SBIR (directo + reflexiones de 1er orden).
 
@@ -5542,21 +5580,12 @@ class AcousticPanel(QWidget):
         f_lo, f_hi = 20.0, 500.0
         freq = np.linspace(f_lo, f_hi, 2000)
         g2m = self._group_to_material_dict(groups)
-        walls = []
-        n_default = 0
-        area_default = 0.0
-        for g in groups:
-            mat = g2m.get(g.signature)
-            if mat is not None:
-                alpha = np.array([mat.alpha(float(ff)) for ff in freq])
-            else:
-                alpha = np.full(freq.shape, 0.03)   # default rigido
-                n_default += 1
-                area_default += float(getattr(g, "area", 0.0) or 0.0)
-            walls.append(sbir.Wall(
-                point=g.centroid, normal=g.normal, label=g.label,
-                R=sbir.reflection_from_alpha(alpha),
-            ))
+        # SBIR-mueble (Fase C): la cara superior de cada mueble entra como panel
+        # finito (Rindel) dentro del helper. Sin muebles no agrega nada.
+        muebles = getattr(self, "furniture", None)
+        walls, n_default, area_default = self._walls_from_groups(
+            groups, g2m, freq, muebles)
+        n_furn = len(muebles) if muebles else 0
         # El default alpha=0.03 se dibuja con la misma autoridad visual que un
         # material real: una pared casi perfectamente reflectante que el usuario
         # nunca eligio. Se avisa en vez de rellenar en silencio.
@@ -5568,17 +5597,6 @@ class AcousticPanel(QWidget):
                 f"({frac:.0f} % del área) → α=0.03 supuesto (casi rígido). "
                 f"Las reflexiones de esas caras salen más fuertes de lo real; "
                 f"asignales material en «Materiales…» para un SBIR fiel.")
-
-        # SBIR-mueble (Fase C): la cara superior de cada mueble (tope del
-        # escritorio, respaldo del sofa) rebota con rolloff de panel FINITO
-        # (Rindel). Sin muebles no agrega nada -> SBIR historico intacto.
-        n_furn = 0
-        muebles = getattr(self, "furniture", None)
-        if muebles:
-            import furniture as fu
-            walls.extend(fu.furniture_walls(
-                muebles, self._furniture_mat_by_index(), freq))
-            n_furn = len(muebles)
 
         try:
             res = sbir.sbir_from_sources(act, walls, self.receiver, freq)
@@ -5593,10 +5611,11 @@ class AcousticPanel(QWidget):
 
         # Transferencia MODAL de la sala (FEM) en el MISMO receptor y banda, para
         # el hibrido modal+SBIR (pedido del profesor: ver el efecto de la sala
-        # ademas del comb de imagenes). Se normaliza al DIRECTO de campo libre
-        # (misma referencia 0 dB = anecoico que el SBIR). Solo si hay modos.
+        # ademas del comb de imagenes). En SPL ABSOLUTO (dBSPL re 20 uPa, decision
+        # D1), la MISMA escala que la FRF -> las curvas coinciden. Solo si hay modos.
         modal_db = None
         f_s = None
+        eqc = None
         if self.modal_result is not None and len(self.modal_result.freqs) > 0:
             try:
                 if self._xi_per_mode is None:
@@ -5607,20 +5626,21 @@ class AcousticPanel(QWidget):
                     self.modal_result, act, self.receiver,
                     f_min=f_lo, f_max=f_hi, n_freqs=len(freq), damping=damping,
                     modal_freqs=self._effective_modal_freqs())
-                p_dir = np.abs(res.total_p_direct)
                 modal_db = 20.0 * np.log10(
-                    np.maximum(np.abs(frf.H), 1e-30) / np.maximum(p_dir, 1e-30))
+                    np.maximum(np.abs(frf.H), 1e-30) / 20e-6)   # SPL absoluto
                 ctx = self._schroeder_context()
                 f_s = float(ctx["fs"]) if ctx else None
                 self._log(
                     f"SBIR: transferencia modal disponible (hibrido en "
                     f"f_S={f_s:.0f} Hz)." if f_s else
                     "SBIR: transferencia modal disponible.")
+                # Corregibilidad EQ (C13/C21) de la sala para el overlay (item i).
+                eqc = self._modal_fom_eqc(act, damping, freq)[2]
             except Exception as e:
                 self._log(f"SBIR: sin transferencia modal ({e}).")
                 modal_db = None
         dlg = SBIRDialog(res, f_lo=f_lo, f_hi=f_hi, parent=self,
-                         modal_db=modal_db, f_schroeder=f_s)
+                         modal_db=modal_db, f_schroeder=f_s, eqc=eqc)
         dlg.exec_()
 
     # -----------------------------------------------------------------------
@@ -5702,6 +5722,18 @@ class AcousticPanel(QWidget):
             f_s = float(ctx["fs"]) if ctx else None
         except Exception:
             f_s = None
+        # Corregibilidad EQ (C13/C21) de la sala para el overlay del CABS (item i,
+        # capa VISUAL: CABS mantiene sus métricas propias). Best-effort.
+        eqc = None
+        try:
+            if self.modal_result is not None:
+                _dmp = (self._xi_per_mode
+                        if self._xi_per_mode is not None else 0.03)
+                eqc = self._modal_fom_eqc(
+                    self._active_sources(), _dmp,
+                    np.linspace(20.0, 200.0, 300))[2]
+        except Exception:
+            eqc = None
         eval_context = {
             "sources": lambda: list(self.sources.sources),
             "walls_fn": self._cabs_sbir_walls,
@@ -5710,6 +5742,7 @@ class AcousticPanel(QWidget):
             "origin": tuple(np.asarray(vmin, dtype=float).tolist()),
             "f_schroeder": f_s,
             "apply_optimized": self._apply_cabs_optimization,
+            "eqc": eqc,
         }
         DBADialog(dims, rec, self,
                   apply_callback=lambda specs: self._apply_dba_to_room(specs, vmin),
@@ -5760,6 +5793,64 @@ class AcousticPanel(QWidget):
         self.schedule_field_update()
         muted = "  (otras fuentes muteadas)" if mute_others else ""
         self._log(f"DBA aplicado: {len(specs)} fuentes creadas.{muted}")
+
+    def _modal_fom_eqc(self, act, damping, fa):
+        """FoM (planitud/espacial, §8) + corregibilidad EQ (C13/C21) sobre una
+        grilla de receptores, en la banda válida de la malla. Best-effort: nunca
+        bloquea. Devuelve (fom, fom_band, eqc, eqc_band); (None,)*4 si no se puede.
+        Compartido por `_compute_frf`, `_open_sbir` y `_open_dba` para que el overlay
+        de corregibilidad sea el MISMO en los tres (es una propiedad de la sala)."""
+        if self.modal_result is None:
+            return None, None, None, None
+        fom = fom_band = eqc = eqc_band = None
+        try:
+            import modal_metrics as mm
+            h_max = self.modal_result.mesh_info.get("h_max", 0.0)
+            fa = np.asarray(fa, dtype=float)
+            f_max = self._validity_freq(h_max) if h_max > 0 else float(fa[-1])
+            mask = fa <= f_max
+            if np.count_nonzero(mask) >= 10:
+                fa_valid = fa[mask]
+                # locator+phis: descarta los puntos de la grilla fuera del recinto
+                # (el bbox no es la planta) para no inflar el FoM espacial.
+                receivers = mm.default_receiver_grid(
+                    self.modal_result.nodes,
+                    locator=self.modal_result.locator,
+                    phis=self.modal_result.phis)
+                H, H_env = mm.forced_response_with_envelope(
+                    self.modal_result.locator,
+                    self._effective_modal_freqs(), self.modal_result.phis,
+                    act, receivers, fa_valid, damping=damping)
+                fom = mm.response_figures_of_merit(H, fa_valid)
+                fom_band = (float(fa_valid[0]), float(fa_valid[-1]),
+                            int(len(receivers)))
+                self._log(
+                    f"FoM (banda ≤{f_max:.0f} Hz, {len(receivers)} receptores): "
+                    f"planitud {fom.FoM_flat:.2f} dB · "
+                    f"espacial {fom.FoM_espacial:.2f} dB")
+                # Corregibilidad EQ: necesita más resolución que el solver (ppw~15,
+                # signos de φₙ cerca de nodos) -> sub-banda confiable más angosta.
+                f_eq_max = (343.0 / (mm.PPW_EQ_DIAGNOSIS * h_max)
+                            if h_max > 0 else float(fa_valid[-1]))
+                eq_mask = fa_valid <= f_eq_max
+                if np.count_nonzero(eq_mask) >= 10:
+                    fa_eq = fa_valid[eq_mask]
+                    eqc = mm.eq_correctability(H[:, eq_mask], fa_eq,
+                                               H_env=H_env[:, eq_mask])
+                    eqc_band = (float(fa_eq[0]), float(fa_eq[-1]))
+                    self._log(
+                        f"Corregibilidad EQ (banda ≤{fa_eq[-1]:.0f} Hz): aplana "
+                        f"{eqc.improvement_flat:.1f} dB, {eqc.fom_espacial:.1f} dB "
+                        f"irreducible" +
+                        ("" if f_eq_max >= fa_valid[-1] - 1.0
+                         else " · subí npm para diagnosticar más arriba"))
+                else:
+                    self._log("Corregibilidad EQ: malla muy gruesa (npm bajo), omitida.")
+            else:
+                self._log("FoM: banda válida muy chica para la grilla, omitida.")
+        except Exception as e:
+            self._log(f"Aviso FoM/corregibilidad: {e}")
+        return fom, fom_band, eqc, eqc_band
 
     def _compute_frf(self, method: str = "fem"):
         act = self._active_sources()
@@ -5821,64 +5912,10 @@ class AcousticPanel(QWidget):
             self.setEnabled(True)
         self._log("FRF FEM listo.")
 
-        # Figura de merito (2c §8): respuesta forzada sobre una grilla de
-        # receptores, en la banda valida de la malla. Best-effort: nunca debe
-        # bloquear la FRF.
-        fom = None
-        fom_band = None
-        eqc = None
-        eqc_band = None
-        try:
-            import modal_metrics as mm
-            h_max = self.modal_result.mesh_info.get("h_max", 0.0)
-            fa = np.asarray(result.freq_axis, dtype=float)
-            f_max = self._validity_freq(h_max) if h_max > 0 else float(fa[-1])
-            mask = fa <= f_max
-            if np.count_nonzero(mask) >= 10:
-                fa_valid = fa[mask]
-                # locator+phis: descarta los puntos de la grilla que caen fuera
-                # del recinto (el bbox no es la planta). Sin esto, en cualquier
-                # sala no rectangular los puntos de afuera entraban con presion
-                # 0 y el FoM espacial salia ~90 dB en vez de ~5.
-                receivers = mm.default_receiver_grid(
-                    self.modal_result.nodes,
-                    locator=self.modal_result.locator,
-                    phis=self.modal_result.phis)
-                # H_real (= compute_forced_response) + H_env para corregibilidad EQ.
-                H, H_env = mm.forced_response_with_envelope(
-                    self.modal_result.locator,
-                    self._effective_modal_freqs(), self.modal_result.phis,
-                    act, receivers, fa_valid, damping=damping)
-                fom = mm.response_figures_of_merit(H, fa_valid)
-                fom_band = (float(fa_valid[0]), float(fa_valid[-1]),
-                            int(len(receivers)))
-                self._log(
-                    f"FoM (banda ≤{f_max:.0f} Hz, {len(receivers)} receptores): "
-                    f"planitud {fom.FoM_flat:.2f} dB · "
-                    f"espacial {fom.FoM_espacial:.2f} dB")
-                # Diagnostico de corregibilidad EQ (C13/C21). Necesita MAS resolucion
-                # que el solver (ppw~15: signos de phi_n cerca de nodos) -> se limita
-                # a su sub-banda confiable, mas angosta que la banda valida del FoM.
-                f_eq_max = (343.0 / (mm.PPW_EQ_DIAGNOSIS * h_max)
-                            if h_max > 0 else float(fa_valid[-1]))
-                eq_mask = fa_valid <= f_eq_max
-                if np.count_nonzero(eq_mask) >= 10:
-                    fa_eq = fa_valid[eq_mask]
-                    eqc = mm.eq_correctability(H[:, eq_mask], fa_eq,
-                                               H_env=H_env[:, eq_mask])
-                    eqc_band = (float(fa_eq[0]), float(fa_eq[-1]))
-                    self._log(
-                        f"Corregibilidad EQ (banda ≤{fa_eq[-1]:.0f} Hz): aplana "
-                        f"{eqc.improvement_flat:.1f} dB, {eqc.fom_espacial:.1f} dB "
-                        f"irreducible" +
-                        ("" if f_eq_max >= fa_valid[-1] - 1.0
-                         else " · subí npm para diagnosticar más arriba"))
-                else:
-                    self._log("Corregibilidad EQ: malla muy gruesa (npm bajo), omitida.")
-            else:
-                self._log("FoM: banda válida muy chica para la grilla, omitida.")
-        except Exception as e:
-            self._log(f"Aviso FoM: {e}")
+        # Figura de merito + corregibilidad EQ (C13/C21) sobre una grilla de
+        # receptores. Best-effort. Helper compartido con SBIR/CABS (mismo overlay).
+        fom, fom_band, eqc, eqc_band = self._modal_fom_eqc(
+            act, damping, result.freq_axis)
 
         # C1 (auditoria): techo de validez de la FRF = min(f_max_malla, ultimo modo
         # calculado). Por encima, la superposicion modal es cola-suma truncada
@@ -5896,13 +5933,47 @@ class AcousticPanel(QWidget):
             except Exception:
                 f_valid = None
 
+        # Fase 2 (grupo A): curva TOTAL = modal + SBIR (crossfade en f_S), en la
+        # MISMA escala SPL absoluta que la FRF (composed_response, P_REF=20 µPa).
+        # Aditiva: la FRF modal, el audio y el export NO se tocan. Best-effort.
+        composed_spl = None
+        composed_freq = None
+        f_s_comp = None
+        if self.modal_result is not None:
+            try:
+                import composed_response as cr
+                groups, _v, _t = self._get_face_groups()
+                ctx = self._schroeder_context()
+                f_s_comp = float(ctx["fs"]) if ctx else None
+                if groups and f_s_comp:
+                    g2m = self._group_to_material_dict(groups)
+                    fa0 = np.asarray(result.freq_axis, dtype=float)
+                    # Opción B: extender la compuesta por encima de f_S (hasta ~500
+                    # Hz o el fmax de la FRF, lo que sea mayor) para que se vea el
+                    # tramo SBIR, aunque el modal quede en la banda de la FRF.
+                    f_comp_hi = max(float(fa0[-1]), 500.0)
+                    fa = np.linspace(float(fa0[0]), f_comp_hi, 2000)
+                    walls, _nd, _ad = self._walls_from_groups(
+                        groups, g2m, fa, getattr(self, "furniture", None))
+                    comp = cr.composed_response(
+                        act, self.receiver, fa, modal_result=self.modal_result,
+                        walls=walls, f_schroeder=f_s_comp, damping=damping,
+                        modal_freqs=self._effective_modal_freqs())
+                    composed_spl = comp.composed_spl
+                    composed_freq = fa
+            except Exception as e:
+                self._log(f"Aviso curva compuesta (modal+SBIR): {e}")
+                composed_spl = None
+                composed_freq = None
+
         dlg = FRFDialog(
             result,
             modal_freqs=(self._effective_modal_freqs()
                          if self.modal_result else None),
             parent=self,
             fom=fom, fom_band=fom_band, eqc=eqc, eqc_band=eqc_band,
-            f_valid=f_valid,
+            f_valid=f_valid, composed_spl=composed_spl, f_schroeder=f_s_comp,
+            composed_freq=composed_freq,
         )
         dlg.exec_()
 

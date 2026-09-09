@@ -83,6 +83,15 @@ VERIFICAR):**
   (modal, c²) y `sbir.sbir_from_sources` (imágenes). A auditar: ¿modal y SBIR están realmente en
   la MISMA escala absoluta de Pa para el mismo Q? (el crossfade asume que sí; `bench_composed_
   response.py` C4 lo chequea contra el monopolo analítico). ¿Hay escalón de nivel en f_S?
+- **Fase 2 (v2.39): la respuesta compuesta YA está cableada a la GUI en los tres.** La FRF suma la
+  curva compuesta (extendida hasta ~500 Hz, opción B); el SBIR pasó a dBSPL absoluto (`_open_sbir` +
+  `SBIRDialog` con `to_spl(p_total)`); el overlay de corregibilidad EQ (C13/C21) vive en
+  `plot_utils.draw_correctability_overlay` y el cómputo en `AcousticPanel._modal_fom_eqc` (grilla de
+  receptores, `mm.eq_correctability`). A auditar: (1) verificado headless que la «Total híbrido» del
+  SBIR == la «Total» de la FRF (max|dif|=0.0), pero ¿coincide también con lo que muestra la GUI real?
+  (2) el overlay usa el mismo `eqc` en los tres: ¿es correcto asumir que el veredicto EQ es
+  independiente de la config de fuentes (es propiedad de la sala)? (3) la compuesta debajo de f_S usa
+  modal aunque el mesh no valga hasta f_S (si f_valid < f_S) → zona modal poco confiable en el cruce.
 - `dba_evaluate.evaluate_cabs(criterion=...)` y `cabs_optimize.optimize_cabs(criterion=...)` —
   bajo "dba" el drive del array (front 0/+1, rear L/c/−1) lo fija el criterio y sale de los DOFs;
   bajo "cabs" queda libre. **Ya cableado a la GUI (v2.38): selector «Criterio» en `DBADialog`.**

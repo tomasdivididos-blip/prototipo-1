@@ -475,6 +475,14 @@ class DBADialog(QDialog):
         if r.get("f_schroeder"):
             self._ax.axvline(r["f_schroeder"], color="#444", ls="-.", lw=0.8,
                              label=f"f_S ≈ {r['f_schroeder']:.0f} Hz")
+        # Overlay de corregibilidad EQ (C13/C21): capa VISUAL (CABS mantiene sus
+        # métricas propias; el veredicto EQ es una propiedad de la sala). Lo pasa
+        # el panel en el eval_context (best-effort, None si no hay modos).
+        try:
+            from plot_utils import draw_correctability_overlay
+            draw_correctability_overlay(self._ax, (self._eval_ctx or {}).get("eqc"))
+        except Exception:
+            pass
         self._ax.set_xlabel("frecuencia [Hz]")
         self._ax.set_ylabel("respuesta TOTAL (SBIR+modos) [dB]")
         self._ax.set_title("Respuesta total media (zona de escucha)")

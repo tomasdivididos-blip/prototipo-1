@@ -2791,3 +2791,23 @@ El gráfico de la herramienta rotula la **banda de aliasing espacial** (por enci
 ---
 
 *Manual actualizado al 9 de Septiembre de 2026 — v2.38.*
+
+---
+
+**Cambios v2.39** (9 de septiembre 2026): **la respuesta en frecuencia, el SBIR y el análisis CABS/DBA hablan el mismo idioma**. Una sola curva compuesta (modal + SBIR) en SPL absoluto compartida por los tres, y el diagnóstico de corregibilidad EQ (las zonas que no arregla el ecualizador) ahora también aparece en el SBIR y en el CABS, no solo en la FRF. Tres ejes.
+
+### A. La FRF ahora tiene en cuenta el SBIR
+
+El gráfico de la **FRF** suma una curva **«Total: modal + SBIR»**: usa la respuesta **modal** (exacta) por debajo de la frecuencia de Schroeder, y el **peine de imágenes (SBIR)** por encima, donde el modal truncado deja de ser confiable, con un cruce suave en f_S. Debajo de f_S la curva coincide con la modal (la solución modal ya contiene las reflexiones como modos; sumar el SBIR ahí sería doble conteo); el aporte del SBIR se ve **arriba de f_S**. Para que ese tramo sea visible, la curva compuesta se dibuja hasta ~500 Hz aunque el modal quede en la banda de la FRF.
+
+### B. El SBIR pasa a SPL absoluto (dBSPL)
+
+El diálogo **SBIR** ahora está en **nivel SPL absoluto (dB re 20 µPa)**, la misma escala que la FRF (antes estaba en «dB re directo de campo libre»). Así la curva **«Total híbrido»** del SBIR y la **«Total»** de la FRF son **la misma curva**. El «Realce / Atenuación máx» sigue informándose como un delta respecto del directo (es una diferencia, vale en cualquier escala).
+
+### C. Corregibilidad EQ en el SBIR y en el CABS
+
+El overlay de **corregibilidad EQ (C13/C21)** que ya tenía la FRF (zonas en **rojo** = no ecualizables, que exigen acústica/ubicación; **amarillo** = inciertas) ahora también se dibuja en el **SBIR** y en el análisis **CABS/DBA**. El veredicto es una propiedad de la sala, así que las zonas sombreadas son **las mismas** en los tres. En el CABS es una capa visual: el análisis mantiene sus propias métricas de colapso.
+
+---
+
+*Manual actualizado al 9 de Septiembre de 2026 — v2.39.*

@@ -42,6 +42,44 @@ def third_octave_edges(f_min: float, f_max: float) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
+# Overlay de corregibilidad EQ (C13/C21) — compartido por FRF, SBIR y CABS/DBA
+# ---------------------------------------------------------------------------
+def contiguous_runs(fa, mask):
+    """[(f_ini, f_fin), ...] de las corridas contiguas donde `mask` es True."""
+    spans, i, n = [], 0, len(mask)
+    while i < n:
+        if mask[i]:
+            j = i
+            while j + 1 < n and mask[j + 1]:
+                j += 1
+            spans.append((float(fa[i]), float(fa[j])))
+            i = j + 1
+        else:
+            i += 1
+    return spans
+
+
+def draw_correctability_overlay(ax, eqc):
+    """Sombrea sobre `ax` (matplotlib) las zonas NO ecualizables (rojo) e inciertas
+    (amarillo) del diagnostico de corregibilidad EQ (C13/C21). El veredicto es una
+    propiedad de la SALA, asi que el overlay es el mismo en FRF, SBIR y CABS/DBA.
+    `eqc` debe tener `.freq_axis` y `.verdict` (0=no corregible, 1=incierto, 2=ok);
+    None -> no dibuja nada."""
+    if eqc is None:
+        return
+    fe, vd = eqc.freq_axis, eqc.verdict
+    first_no = first_unc = True
+    for f0, f1 in contiguous_runs(fe, vd == 0):       # no corregible -> rojo
+        ax.axvspan(f0, f1, color='#e05050', alpha=0.13, zorder=0,
+                   label='No ecualizable (exige acústica)' if first_no else '_nolegend_')
+        first_no = False
+    for f0, f1 in contiguous_runs(fe, vd == 1):       # incierto -> amarillo
+        ax.axvspan(f0, f1, color='#e0b020', alpha=0.10, zorder=0,
+                   label='Corregibilidad incierta' if first_unc else '_nolegend_')
+        first_unc = False
+
+
+# ---------------------------------------------------------------------------
 # Smoke test
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":

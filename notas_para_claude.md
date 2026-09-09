@@ -3112,6 +3112,30 @@ bien.
   (rutear FRF/SBIR/CABS por `composed_response` + overlay de corregibilidad) y Fase 3 (Predicción).
   Ver [[backlog-charla-sep]].
 
+- **9 Sep 2026 (cont.) — Fase 2 del grupo A: curvas unificadas + overlay de corregibilidad
+  en los tres (v2.39, test visual PASÓ por incrementos).** Rutear FRF/SBIR/CABS por la respuesta
+  compuesta y el diagnóstico común. Hecho en tres incrementos, cada uno con su test visual:
+  1. **FRF con curva compuesta** (`_compute_frf` + `FRFDialog`): curva «Total: modal + SBIR» via
+     `composed_response` (SPL absoluto), aditiva (modal/audio/export intactos). Helper compartido
+     `_walls_from_groups` (FRF y SBIR arman las MISMAS paredes). **Opción B:** la compuesta se dibuja
+     hasta ~500 Hz (o el fmax de la FRF) para ver el tramo SBIR arriba de f_S; el eje X se extiende
+     (`composed_freq`). Debajo de f_S la compuesta = modal por diseño (no doble conteo).
+  2. **SBIR a SPL absoluto (dBSPL, decisión D1):** `_open_sbir` pasa el modal en absoluto;
+     `SBIRDialog` dibuja/exporta desde `to_spl(p_total)`, eje «Nivel SPL (dB re 20 µPa)», sin la línea
+     0 dB anecoico. Verificado headless: la «Total híbrido» del SBIR == la «Total» de la FRF
+     (max|dif|=0.0). El «Realce/Atenuación máx» queda como delta re directo (correcto).
+  3. **Overlay de corregibilidad en SBIR y CABS:** helper `plot_utils.draw_correctability_overlay`
+     (+ `contiguous_runs`, numpy puro → sin import circular; FRF/SBIR/dba_dialog lo usan). Cómputo
+     compartido `AcousticPanel._modal_fom_eqc(act, damping, fa)` (extraído de `_compute_frf`, reusado
+     por `_open_sbir` y `_open_dba`). CABS = capa visual (mantiene sus métricas); el `eqc` va por
+     `eval_context`. El veredicto es propiedad de la sala → mismo overlay en los tres.
+  Benches sin regresión: `bench_composed_response` 11/11, `bench_sbir_modal` 6/6, `bench_cabs_criterion`
+  14/14, `bench_cabs_optimize` 12/12, `bench_dba_evaluate` 13/13, `smoke_test_dba_dialog` verde.
+  **Recap: MANUAL v2.39 + notas + `auditor_contexto.md` + commit/push. SIN dist-exe ni win.zip.**
+  Falta del grupo A: **Fase 3** (optimizador de ubicación de Predicción sobre la FRF compuesta) +
+  los ítems sueltos del backlog (iii pesos a 100, iv validación de criterios, v hover α, vi ampliar
+  impedancia). Ver [[backlog-charla-sep]].
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.
