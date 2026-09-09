@@ -2759,3 +2759,35 @@ El eje del dipolo es la orientación del bafle que ya se define en la fuente (az
 ---
 
 *Manual actualizado al 7 de Septiembre de 2026 — v2.37.*
+
+---
+
+**Cambios v2.38** (9 de septiembre 2026): en la herramienta **«Subs enfrentados (DBA / CABS)»** ahora **elegís el criterio** (DBA o CABS), y ese criterio manda **tanto en evaluar como en optimizar**, así los dos concuerdan (antes «Optimizar fuentes libres» dejaba un retardo que después «Evaluar» rechazaba). Además: reglas de array claras por criterio, la polaridad de cada fuente en el veredicto, y la zona de aliasing rotulada en el gráfico. Cuatro ejes.
+
+### A. Elegí el criterio: DBA o CABS
+
+En modo **«Evaluar mis fuentes cargadas»** aparece un selector **«Criterio:»** con dos opciones:
+- **DBA (subs adelante y atrás):** el array trasero reproduce al frente **retardado L/c e invertido** (drive canónico del double bass array). Al **«Optimizar fuentes libres»**, ese retardo lo **fija el criterio** (no lo busca libremente); el optimizador solo mueve lo demás (posición, etc.).
+- **CABS (trasero manejado):** el trasero absorbe la onda; su drive queda **libre** y el resultado se juzga por el **colapso de la respuesta** (planitud + uniformidad espacial), no por el retardo L/c.
+
+**Por qué importa:** antes, «Optimizar» minimizaba la planitud y dejaba el trasero con un retardo cercano a **L/(2c)**, mientras «Evaluar» exigía el canónico **L/c**, así que el veredicto fallaba y había que **duplicar el retardo a mano**. Con el selector, evaluar y optimizar siguen el **mismo** criterio y concuerdan por construcción.
+
+### B. Reglas de array por criterio
+
+Qué configuración es válida depende del criterio:
+- **DBA:** mínimo **4 subs**, ≥2 adelante y ≥2 atrás (las dos paredes con Sub-Woofer/Woofer).
+- **CABS:** mínimo **2 subs atrás**, y adelante una fuente **de cualquier tipo** (puede ser **Full Range**).
+
+En consecuencia: con 4 subs enfrentados, **los dos** criterios pasan; con un **Full Range atrás**, **ninguno** (atrás tiene que haber subs); con un **Full Range adelante**, **solo CABS**.
+
+### C. Polaridad en el veredicto
+
+La línea de **«Clasificación»** del veredicto ahora muestra la **polaridad de cada fuente** (`[0°]` = normal, `[180°]` = invertida). El cálculo ya la usaba; ahora también se ve.
+
+### D. Zona de aliasing en el gráfico
+
+El gráfico de la herramienta rotula la **banda de aliasing espacial** (por encima de f_max = c/d, donde el array no puede sintetizar la onda plana) en el cuadro de referencias, junto a f_Schroeder y las curvas de respuesta.
+
+---
+
+*Manual actualizado al 9 de Septiembre de 2026 — v2.38.*

@@ -49,8 +49,10 @@ class SourceRole:
     type:     str
     pos_box:  tuple          # posicion en coords de caja [0, L]
     is_sub:   bool           # el tipo es sub/woofer (candidato al array)
-    role:     str            # "front" | "rear" | "other"
+    role:     str            # "front" | "rear" | "other" (solo subs entran a front/rear)
     src:      object = None  # ref a la OmniSource (para leer delay/polaridad)
+    at_front: bool = False   # pegada a la pared minima del eje (CUALQUIER tipo)
+    at_rear:  bool = False   # pegada a la pared maxima del eje (CUALQUIER tipo)
 
 
 def classify_sources(sources, dims, origin, axis: int,
@@ -73,14 +75,19 @@ def classify_sources(sources, dims, origin, axis: int,
         stype = getattr(s, "source_type", "generic")
         is_sub = stype in SUBWOOFER_TYPES
         u = pos_box[axis]
-        if is_sub and u <= wall_tol:
+        # Membresia de pared para CUALQUIER tipo de fuente (para CABS, donde el
+        # frente puede ser Full Range). El rol front/rear se reserva a los SUBS.
+        at_front = u <= wall_tol
+        at_rear = u >= L - wall_tol
+        if is_sub and at_front:
             role = "front"
-        elif is_sub and u >= L - wall_tol:
+        elif is_sub and at_rear:
             role = "rear"
         else:
             role = "other"
         roles.append(SourceRole(i, getattr(s, "label", "") or f"S{i+1}",
-                                stype, pos_box, is_sub, role, src=s))
+                                stype, pos_box, is_sub, role, src=s,
+                                at_front=at_front, at_rear=at_rear))
     return roles
 
 
@@ -105,34 +112,37 @@ def best_axis(sources, dims, origin=(0.0, 0.0, 0.0), c: float = C0) -> int:
 
 
 def cabs_feasibility(sources, dims, origin=(0.0, 0.0, 0.0),
-                     axis: Optional[int] = None, c: float = C0):
+                     axis: Optional[int] = None, c: float = C0,
+                     criterion: str = "dba"):
     """Chequeo estructural BARATO (sin computar respuesta) de si la config PUEDE
-    satisfacer CABS. Estas condiciones son INVARIANTES bajo la optimizacion: mover
-    fuentes libres dentro de su pared no crea arrays enfrentados, no cambia el tipo
-    de fuente ni despega una fuente de su pared (el eje de enfrentamiento queda
-    fijo). Por eso sirven de PRE-CHEQUEO antes de optimizar: si fallan aca, van a
-    seguir fallando despues de optimizar. Devuelve (feasible, reasons, axis)."""
+    satisfacer el criterio elegido. Estas condiciones son INVARIANTES bajo la
+    optimizacion (mover fuentes libres dentro de su pared no cambia el tipo ni las
+    despega), asi que sirven de PRE-CHEQUEO: si fallan aca, van a seguir fallando
+    despues de optimizar. Reglas (spec del usuario):
+      dba  -> >=2 subs ADELANTE y >=2 subs ATRAS.
+      cabs -> >=2 subs ATRAS + una fuente ADELANTE de cualquier tipo (Full Range OK).
+    Devuelve (feasible, reasons, axis)."""
     active = [s for s in sources if getattr(s, "active", True)]
     if axis is None:
         axis = best_axis(active, dims, origin, c) if active else int(np.argmax(dims))
     roles = classify_sources(sources, dims, origin, axis)
-    subs = [r for r in roles if r.is_sub]
     fronts = [r for r in roles if r.role == "front"]
     rears = [r for r in roles if r.role == "rear"]
-    off = [r for r in subs if r.role == "other"]
+    n_front_any = sum(1 for r in roles if r.at_front)
     axis_name = ["X (ancho)", "Y (largo)", "Z (alto)"][axis]
     reasons = []
-    if not subs:
-        reasons.append("Ninguna fuente esta marcada como Sub-Woofer/Woofer: sin "
-                       "subs no hay array CABS. Asignales el Tipo a tus subs.")
-    elif not (fronts and rears):
-        reasons.append(f"Los subs no forman arrays enfrentados en {axis_name} "
-                       f"(frente: {len(fronts)}, atras: {len(rears)}). CABS "
-                       "necesita subs en las DOS paredes del eje.")
-    if off and (fronts or rears):
-        reasons.append(f"{len(off)} sub(s) no estan sobre una pared del eje "
-                       "(quedan fuera del array; mover su posicion no las lleva a "
-                       "la pared).")
+    if criterion == "cabs":
+        if len(rears) < 2:
+            reasons.append(f"CABS necesita >=2 subs ATRAS en {axis_name} "
+                           f"(hay {len(rears)}). Asignales Tipo Sub-Woofer/Woofer.")
+        if n_front_any < 1:
+            reasons.append(f"CABS necesita una fuente ADELANTE en {axis_name} "
+                           "(cualquier tipo, puede ser Full Range).")
+    else:
+        if len(fronts) < 2 or len(rears) < 2:
+            reasons.append(f"DBA necesita >=2 subs ADELANTE y >=2 ATRAS en "
+                           f"{axis_name} (hay {len(fronts)}+{len(rears)}). "
+                           "Asignales Tipo Sub-Woofer/Woofer a los cuatro.")
     return len(reasons) == 0, reasons, axis
 
 
@@ -434,17 +444,31 @@ def _build_checklist(roles, fronts, rears, dims, axis, L, band_hi, fmax, c,
     items = []
     axis_name = ["X (ancho)", "Y (largo)", "Z (alto)"][axis]
 
-    items.append({
-        "key": "opposing",
-        "ok": len(fronts) >= 1 and len(rears) >= 1,
-        "critical": True,
-        "text": (f"Arrays enfrentados en {axis_name}: "
-                 f"{len(fronts)} sub(s) al frente, {len(rears)} atras."
-                 if fronts and rears else
-                 f"Falta un array enfrentado en {axis_name} "
-                 f"({len(fronts)} front, {len(rears)} rear). "
-                 "CABS necesita subs en las DOS paredes del eje."),
-    })
+    # Reglas de array por criterio (spec del usuario, 9 Sep 2026):
+    #   DBA  = >=2 subs ADELANTE y >=2 subs ATRAS (minimo 4, 2+2, todos subs).
+    #   CABS = >=2 subs ATRAS + una fuente ADELANTE de cualquier tipo (puede ser
+    #          Full Range). Asi: FR atras -> ninguno pasa; FR adelante -> solo CABS.
+    n_front_subs = len(fronts)
+    n_rear_subs = len(rears)
+    n_front_any = sum(1 for r in roles if r.at_front)
+    if criterion == "cabs":
+        ok_arr = n_rear_subs >= 2 and n_front_any >= 1
+        arr_txt = (
+            f"CABS en {axis_name}: {n_rear_subs} sub(s) atras (min. 2) + "
+            f"{n_front_any} fuente(s) adelante (puede ser Full Range)."
+            if ok_arr else
+            f"CABS necesita >=2 subs ATRAS ({n_rear_subs}) y una fuente ADELANTE "
+            f"({n_front_any}, cualquier tipo) en {axis_name}.")
+    else:  # dba
+        ok_arr = n_front_subs >= 2 and n_rear_subs >= 2
+        arr_txt = (
+            f"DBA en {axis_name}: {n_front_subs} subs adelante + {n_rear_subs} "
+            f"atras (min. 2+2)."
+            if ok_arr else
+            f"DBA necesita >=2 subs ADELANTE ({n_front_subs}) y >=2 ATRAS "
+            f"({n_rear_subs}) en {axis_name}.")
+    items.append({"key": "opposing", "ok": bool(ok_arr), "critical": True,
+                  "text": arr_txt})
 
     tau_ideal = L / c
     ok_drive, drive_txt = _check_rear_drive(rears, tau_ideal)
@@ -471,12 +495,14 @@ def _build_checklist(roles, fronts, rears, dims, axis, L, band_hi, fmax, c,
     items.append({"key": "spacing", "ok": bool(ok_alias), "critical": False,
                   "text": alias_txt})
 
-    ok_count = len(fronts) >= 2 and len(rears) >= 2
+    n_front_fr = sum(1 for r in roles if r.at_front and not r.is_sub)
+    ok_count = (len(fronts) + len(rears)) >= 4
+    fr_txt = (f" + {n_front_fr} full-range adelante" if n_front_fr else "")
     items.append({
         "key": "count", "ok": ok_count, "critical": False,
-        "text": (f"{len(fronts)}+{len(rears)} subs: "
-                 + ("suficientes para un array 2D." if ok_count else
-                    "un array denso (≥2 por pared) controla mejor la onda plana.")),
+        "text": (f"{len(fronts)}+{len(rears)} subs{fr_txt}: "
+                 + ("array denso." if ok_count else
+                    "un array más denso (≥2 por pared) controla mejor la onda plana.")),
     })
 
     items.append({

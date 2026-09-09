@@ -84,6 +84,7 @@ class DBADialog(QDialog):
         # Modo: diseñar el array ideal (histórico) vs evaluar las fuentes que el
         # usuario ya cargó contra el criterio CABS (respuesta total = SBIR+modos).
         self.combo_mode = None
+        self.combo_criterion = None
         if self._eval_ctx is not None:
             mrow = QHBoxLayout()
             mrow.addWidget(QLabel("Modo:"))
@@ -93,6 +94,29 @@ class DBADialog(QDialog):
             self.combo_mode.currentIndexChanged.connect(self._on_mode_changed)
             mrow.addWidget(self.combo_mode, 1)
             lay.addLayout(mrow)
+
+            # Criterio (solo modo evaluar): DBA (drive canónico fijado) vs CABS
+            # (trasero manejado). El MISMO criterio se usa para evaluar Y para
+            # optimizar, así concuerdan por construcción (cierra el bug del delay
+            # 2x). Oculto hasta entrar en modo evaluar.
+            crow = QHBoxLayout()
+            self.lbl_criterion = QLabel("Criterio:")
+            crow.addWidget(self.lbl_criterion)
+            self.combo_criterion = QComboBox()
+            self.combo_criterion.addItem("DBA (subs adelante y atrás)", "dba")
+            self.combo_criterion.addItem("CABS (trasero manejado)", "cabs")
+            self.combo_criterion.setToolTip(
+                "DBA: el trasero reproduce el frente retardado L/c e invertido "
+                "(drive canónico; al «Optimizar fuentes libres» se fija ese drive, "
+                "no un delay libre). CABS: el trasero es manejado, su drive queda "
+                "libre y se juzga por el colapso de la respuesta, no por el retardo "
+                "L/c. El mismo criterio se usa para evaluar y para optimizar.")
+            self.combo_criterion.currentIndexChanged.connect(
+                self._on_criterion_changed)
+            crow.addWidget(self.combo_criterion, 1)
+            lay.addLayout(crow)
+            self.lbl_criterion.setVisible(False)
+            self.combo_criterion.setVisible(False)
 
         grp = QGroupBox("Configuración")
         fl = QFormLayout(grp)
@@ -201,6 +225,11 @@ class DBADialog(QDialog):
     def _mode(self):
         return self.combo_mode.currentData() if self.combo_mode else "design"
 
+    def _criterion(self):
+        """Criterio elegido (dba|cabs); el MISMO va a evaluar y a optimizar."""
+        return (self.combo_criterion.currentData()
+                if self.combo_criterion is not None else "dba")
+
     def _on_mode_changed(self):
         """Habilita/deshabilita controles segun el modo. Los subs/pared y el drive
         son solo para DISEÑAR; en modo evaluar el array se toma de las fuentes."""
@@ -212,6 +241,9 @@ class DBADialog(QDialog):
             self.btn_apply.setVisible(not ev)
         if self.btn_opt is not None:
             self.btn_opt.setVisible(ev)
+        if self.combo_criterion is not None:
+            self.combo_criterion.setVisible(ev)
+            self.lbl_criterion.setVisible(ev)
         if ev:
             # Auto-detectar el eje donde las fuentes se enfrentan (no depender del
             # default = eje mas largo). El usuario lo puede cambiar despues.
@@ -231,10 +263,21 @@ class DBADialog(QDialog):
         if not ev:
             self.lbl_res.setText("Elegí la configuración y tocá «Calcular».")
             return
-        # Heads-up de factibilidad CABS apenas se entra al modo (barato, sin
-        # computar respuesta), para que el diagnóstico salga antes de tocar nada.
-        head = ("Tocá «Evaluar» para analizar las fuentes que cargaste, o "
-                "«Optimizar fuentes libres» para reacomodar las que marcaste.")
+        self._refresh_feasibility_head()
+
+    def _on_criterion_changed(self):
+        """Al cambiar el criterio en modo evaluar, refresca el aviso (el criterio
+        cambia las condiciones: DBA pide subs 2+2, CABS 2 atras + fuente adelante)."""
+        if self._mode() == "eval":
+            self._refresh_feasibility_head()
+
+    def _refresh_feasibility_head(self):
+        """Heads-up de factibilidad del CRITERIO elegido, apenas se entra al modo o
+        se cambia de criterio (barato, sin computar respuesta)."""
+        crit = self._criterion()
+        head = (f"Criterio <b>{crit.upper()}</b>. Tocá «Evaluar» para analizar las "
+                "fuentes cargadas, o «Optimizar fuentes libres» para reacomodar las "
+                "que marcaste.")
         try:
             import dba_evaluate as dev
             ctx = self._eval_ctx or {}
@@ -243,10 +286,12 @@ class DBADialog(QDialog):
             if srcs:
                 feasible, reasons, _ax = dev.cabs_feasibility(
                     srcs, self._dims, origin=ctx.get("origin", (0.0, 0.0, 0.0)),
-                    axis=int(self.combo_axis.currentData()))
+                    axis=int(self.combo_axis.currentData()),
+                    criterion=crit)
                 if not feasible:
-                    head = ("<span style='color:#b45309;'><b>Aviso:</b> esta "
-                            "configuración no puede satisfacer CABS:</span><br>"
+                    head = (f"<span style='color:#b45309;'><b>Aviso:</b> esta "
+                            f"configuración no puede satisfacer {crit.upper()}:"
+                            "</span><br>"
                             + "<br>".join(f"• {x}" for x in reasons)
                             + "<br>Podés evaluarla igual (uniformidad general) o "
                             "arreglar la config.")
@@ -281,7 +326,7 @@ class DBADialog(QDialog):
                 origin=ctx.get("origin", (0.0, 0.0, 0.0)),
                 walls=ctx.get("walls_fn"), axis=axis,
                 fmin=20.0, fmax=self.sb_fmax.value(), xi=self.sb_xi.value(),
-                f_schroeder=ctx.get("f_schroeder"))
+                f_schroeder=ctx.get("f_schroeder"), criterion=self._criterion())
         except Exception as e:
             self.lbl_res.setText(f"<span style='color:#b00'>Error: {e}</span>")
             return
@@ -315,7 +360,7 @@ class DBADialog(QDialog):
         import dba_evaluate as _dev
         feasible, reasons, _ax = _dev.cabs_feasibility(
             sources, self._dims, origin=ctx.get("origin", (0.0, 0.0, 0.0)),
-            axis=axis)
+            axis=axis, criterion=self._criterion())
         if not feasible:
             msg = ("<b>Con esta configuración no se puede lograr CABS aunque "
                    "optimice:</b><br>"
@@ -344,7 +389,7 @@ class DBADialog(QDialog):
                 origin=ctx.get("origin", (0.0, 0.0, 0.0)),
                 walls=ctx.get("walls_fn"), axis=axis,
                 fmin=20.0, fmax=self.sb_fmax.value(), xi=self.sb_xi.value(),
-                f_schroeder=ctx.get("f_schroeder"))
+                f_schroeder=ctx.get("f_schroeder"), criterion=self._criterion())
         except Exception as e:
             self.lbl_res.setText(f"<span style='color:#b00'>Error: {e}</span>")
             return
@@ -384,15 +429,23 @@ class DBADialog(QDialog):
         verdict = ("<span style='color:#2e7d32;'><b>PASA</b></span>" if r["passed"]
                    else "<span style='color:#b00;'><b>NO cumple CABS</b></span>")
         na, nb = r["ideal_grid"]
-        lines = [f"<b>Veredicto CABS:</b> {verdict} "
+        crit = str(r.get("criterion", "dba")).upper()
+        lines = [f"<b>Veredicto {crit}:</b> {verdict} "
                  f"(eje {_AXIS_NAMES[r['axis']]}, {r['n_modes']} modos)"]
-        # clasificacion
+        # clasificacion, con la POLARIDAD de cada fuente: el calculo la usa, el
+        # cartel ahora la muestra ("[180°]" = invertida, "[0°]" = normal).
         roles = r["roles"]
-        fr = [ro.label for ro in roles if ro.role == "front"]
-        re = [ro.label for ro in roles if ro.role == "rear"]
-        ot = [ro.label for ro in roles if ro.role == "other"]
+
+        def _lab(ro):
+            pol = int(getattr(getattr(ro, "src", None), "polarity", 1) or 1)
+            return ro.label + (" [180°]" if pol < 0 else " [0°]")
+
+        fr = [_lab(ro) for ro in roles if ro.role == "front"]
+        re = [_lab(ro) for ro in roles if ro.role == "rear"]
+        ot = [_lab(ro) for ro in roles if ro.role == "other"]
         lines.append(
-            f"<b>Clasificación:</b> front: {', '.join(fr) or '—'} · "
+            f"<b>Clasificación</b> (con polaridad)<b>:</b> "
+            f"front: {', '.join(fr) or '—'} · "
             f"rear: {', '.join(re) or '—'} · otras: {', '.join(ot) or '—'}")
         lines.append("<b>Condiciones:</b>")
         for it in r["checklist"]:
@@ -416,7 +469,8 @@ class DBADialog(QDialog):
         self._ax.plot(fa, real, "-", color="#1f77b4", lw=1.5,
                       label="tus fuentes (total)")
         if r["band_hi"] < fa[-1] and np.isfinite(r["f_max"]):
-            self._ax.axvspan(r["band_hi"], fa[-1], color="#f2c14e", alpha=0.15)
+            self._ax.axvspan(r["band_hi"], fa[-1], color="#f2c14e", alpha=0.15,
+                             label=f"aliasing espacial (> f_max = {r['f_max']:.0f} Hz)")
             self._ax.axvline(r["band_hi"], color="#b45309", ls=":", lw=1.0)
         if r.get("f_schroeder"):
             self._ax.axvline(r["f_schroeder"], color="#444", ls="-.", lw=0.8,
@@ -537,7 +591,8 @@ class DBADialog(QDialog):
                       color="#1f77b4", lw=1.5, label="CABS on")
         # marca f_max y sombrea la región de aliasing
         if r["band_hi"] < fa[-1]:
-            self._ax.axvspan(r["band_hi"], fa[-1], color="#f2c14e", alpha=0.15)
+            self._ax.axvspan(r["band_hi"], fa[-1], color="#f2c14e", alpha=0.15,
+                             label=f"aliasing espacial (> f_max = {r['f_max']:.0f} Hz)")
             self._ax.axvline(r["band_hi"], color="#b45309", ls=":", lw=1.0)
             self._ax.text(r["band_hi"], self._ax.get_ylim()[1],
                           " f_max (aliasing →)", color="#b45309",

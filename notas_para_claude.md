@@ -3093,6 +3093,25 @@ bien.
      exponer a UI). **NO MANUAL** todavía (el changelog de usuario va con el incremento GUI). NO zips
      ni PDF (sin cambio funcional visible en la app). Ver memoria [[backlog-charla-sep]].
 
+- **9 Sep 2026 (cont.) — paso 2 GUI + refinamientos del criterio (v2.38, test visual PASÓ).**
+  Remate GUI del paso 2 (grupo A), ya expuesto al usuario:
+  1. **Selector «Criterio:» (DBA | CABS) en `DBADialog`** (solo modo evaluar), pasado a
+     `evaluate_cabs` y `optimize_cabs`; default dba. Al cambiar de criterio se refresca el aviso de
+     factibilidad (`_on_criterion_changed` → `_refresh_feasibility_head`).
+  2. **Reglas de array por criterio (spec del usuario):** DBA = ≥2 subs adelante Y ≥2 atrás;
+     CABS = ≥2 subs atrás + una fuente adelante de CUALQUIER tipo (puede ser Full Range). En
+     `dba_evaluate`: `SourceRole.at_front/at_rear` (membresía de pared para cualquier tipo, no solo
+     subs), `classify_sources`, checklist `opposing` criterion-aware, `cabs_feasibility(criterion)`.
+     Consecuencia: 4 subs → ambos pasan; Full Range atrás → ninguno; Full Range adelante → solo CABS.
+  3. **Polaridad en el cartel** (`_show_eval`): la clasificación muestra `[0°]`/`[180°]` por fuente.
+  4. **Zona de aliasing en el legend** de los dos plots del diálogo (`_draw_eval`/`_draw`).
+  Benches: `bench_cabs_criterion` **14/14** (G5/G6/G7 = reglas de array nuevas), `bench_cabs_optimize`
+  12/12, `bench_dba_evaluate` 13/13 (intacto), `smoke_test_dba_dialog` verde. Test visual PASÓ.
+  **Recap: MANUAL v2.38 + notas (esta entrada) + `auditor_contexto.md` + commit/push. SIN dist-exe
+  ni win.zip** (pedido del usuario; sin regenerar el bundle Windows). Falta del grupo A: Fase 2
+  (rutear FRF/SBIR/CABS por `composed_response` + overlay de corregibilidad) y Fase 3 (Predicción).
+  Ver [[backlog-charla-sep]].
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.

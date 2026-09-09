@@ -6,7 +6,7 @@
 > cada cosa contra la fuente física, un oráculo, o una cuenta propia. Que este archivo
 > diga "resuelto/PASA" no prueba nada; es un puntero a qué mirar.
 
-**Última actualización:** 2026-09-08.
+**Última actualización:** 2026-09-09.
 
 ## Estado del proyecto
 
@@ -85,6 +85,10 @@ VERIFICAR):**
   response.py` C4 lo chequea contra el monopolo analítico). ¿Hay escalón de nivel en f_S?
 - `dba_evaluate.evaluate_cabs(criterion=...)` y `cabs_optimize.optimize_cabs(criterion=...)` —
   bajo "dba" el drive del array (front 0/+1, rear L/c/−1) lo fija el criterio y sale de los DOFs;
-  bajo "cabs" queda libre. A auditar: ¿`tau_ideal=L/c` es el delay DBA correcto cuando los subs
-  están inset de la pared (vs distancia frente→trasero real)? El tol_rel 0.35 lo tapa, pero es una
-  aproximación. `bench_cabs_criterion.py` 8/8.
+  bajo "cabs" queda libre. **Ya cableado a la GUI (v2.38): selector «Criterio» en `DBADialog`.**
+  Reglas de array (spec del usuario): DBA = ≥2 subs adelante y ≥2 atrás; CABS = ≥2 subs atrás +
+  fuente adelante de cualquier tipo (Full Range OK). `SourceRole.at_front/at_rear` = membresía de
+  pared para cualquier tipo. A auditar: (1) ¿`tau_ideal=L/c` es el delay DBA correcto cuando los
+  subs están inset de la pared (vs distancia frente→trasero real)? El tol_rel 0.35 lo tapa, pero es
+  aproximación. (2) ¿El gate front/rear por `wall_tol=0.6 m` clasifica bien en salas chicas?
+  `bench_cabs_criterion.py` 14/14 (incluye las reglas de array por criterio).

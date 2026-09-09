@@ -111,6 +111,46 @@ check("G4a DBA canonico PASA en dba", e_c_dba["passed"])
 check("G4b DBA canonico PASA en cabs", e_c_cabs["passed"])
 
 
+# ---------------------------------------------------------------------------
+# Reglas de array por criterio (spec del usuario 9 Sep 2026):
+#   DBA  = >=2 subs adelante Y >=2 atras.
+#   CABS = >=2 subs atras + fuente adelante de cualquier tipo (Full Range OK).
+# -> 4 subs: ambos PASAN · FR atras: ninguno · FR adelante: solo CABS.
+def _cfg(front_type, rear_type):
+    """2 fuentes adelante (front_type) + 2 atras (rear_type, drive DBA canonico)."""
+    return [
+        OmniSource((1.5, 0.10, 1.0), label="F1", source_type=front_type),
+        OmniSource((3.5, 0.10, 1.0), label="F2", source_type=front_type),
+        OmniSource((1.5, L - 0.10, 1.0), label="R1", source_type=rear_type,
+                   delay_s=TAU, polarity=-1),
+        OmniSource((3.5, L - 0.10, 1.0), label="R2", source_type=rear_type,
+                   delay_s=TAU, polarity=-1),
+    ]
+
+
+def _passed(cfg, crit):
+    return dev.evaluate_cabs(cfg, DIMS, RX, axis=AXIS, fmax=FMAX,
+                             criterion=crit)["passed"]
+
+
+print("\nG5  4 subs (2 adelante + 2 atras): PASAN los DOS criterios")
+c4 = _cfg("subwoofer", "subwoofer")
+check("G5a 4 subs PASA en dba", _passed(c4, "dba"))
+check("G5b 4 subs PASA en cabs", _passed(c4, "cabs"))
+
+print("\nG6  Full Range ATRAS (no hay subs atras): NINGUN criterio pasa")
+c_fr_rear = _cfg("subwoofer", "fullrange")
+check("G6a FR atras NO pasa en dba", not _passed(c_fr_rear, "dba"))
+check("G6b FR atras NO pasa en cabs", not _passed(c_fr_rear, "cabs"))
+
+print("\nG7  Full Range ADELANTE (subs solo atras): SOLO CABS pasa")
+c_fr_front = _cfg("fullrange", "subwoofer")
+check("G7a FR adelante NO pasa en dba (faltan subs adelante)",
+      not _passed(c_fr_front, "dba"))
+check("G7b FR adelante SI pasa en cabs (adelante puede ser Full Range)",
+      _passed(c_fr_front, "cabs"))
+
+
 print()
 print("=" * 70)
 print(f" RESULTADO: {_ok}/{_n} checks OK")
