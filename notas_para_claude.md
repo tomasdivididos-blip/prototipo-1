@@ -3156,6 +3156,23 @@ bien.
   cerradas; Fase 3 cubierta por diseño. Quedan del backlog: iv (validación de criterios), v (curva α
   en hover), vi (ampliar categorías de impedancia). Ver [[backlog-charla-sep]].
 
+- **9 Sep 2026 (cont.) — item v: curva de α en mini-ventana al hover (v2.41, test visual PASÓ).**
+  En `MaterialsDialog` (`face_materials.py`), una mini-ventana FLOTANTE (`QWidget` con `Qt.ToolTip` +
+  canvas matplotlib) muestra la curva α(f) del material SOLO cuando el mouse está sobre el NOMBRE:
+  - **combo cerrado** (celda «Material» de la fila): `combo.installEventFilter(self)` → en el
+    `eventFilter` los `QEvent.Enter`/`Leave` del `QComboBox` muestran/ocultan (cellEntered NO sirve
+    porque el widget del combo tapa la celda). También `cellEntered(row, col)` con `col==5`.
+  - **catálogo abierto**: `combo.highlighted[int]` → `_show_alpha_popup` para `combo.itemText(idx)`;
+    `combo.view().installEventFilter(self)` + `QEvent.Hide` sobre `QAbstractItemView` la oculta al
+    cerrar el desplegable. `done()` la oculta al cerrar el diálogo.
+  - Helpers: `_material_by_name`, `_material_for_row`, `_draw_alpha_popup`, `_show/_hide_alpha_popup`.
+  - Iteración: primero se hizo un PANEL FIJO abajo de la tabla; el usuario pidió que fuera una
+    mini-ventana que aparezca SOLO sobre el nombre → se reescribió al popup flotante.
+  Best-effort (sin matplotlib no aparece). Verificado headless (aparece sobre col Material y sobre
+  el highlight del catálogo; se oculta fuera).
+  **Recap: MANUAL v2.41 + notas + commit/push. SIN dist-exe ni win.zip.** Backlog del profesor: queda
+  iv (validación de criterios) y vi (ampliar categorías de impedancia). Ver [[backlog-charla-sep]].
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.

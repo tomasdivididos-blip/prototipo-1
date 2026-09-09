@@ -1330,6 +1330,30 @@ if _HAS_QT:
             self._hover_row = -1
             v.addWidget(self.table, 1)
 
+            # Item v: mini-ventana FLOTANTE con la curva de α, que aparece SOLO
+            # cuando el mouse está sobre el NOMBRE de un material (la celda
+            # «Material» de una fila, o un nombre del desplegable del catálogo). No
+            # es un panel fijo. Best-effort: sin matplotlib no aparece.
+            self._alpha_popup = None
+            self._alpha_pfig = self._alpha_pax = self._alpha_pcanvas = None
+            try:
+                from matplotlib.backends.backend_qt5agg import (
+                    FigureCanvasQTAgg as _AlphaCanvas)
+                import matplotlib.pyplot as _plt
+                pop = QWidget(self, Qt.ToolTip)
+                pl = QVBoxLayout(pop)
+                pl.setContentsMargins(3, 3, 3, 3)
+                self._alpha_pfig, self._alpha_pax = _plt.subplots(
+                    figsize=(3.1, 1.6), dpi=90)
+                self._alpha_pfig.patch.set_facecolor('#ffffff')
+                self._alpha_pax.set_facecolor('#ffffff')
+                self._alpha_pcanvas = _AlphaCanvas(self._alpha_pfig)
+                self._alpha_pcanvas.setFixedSize(300, 160)
+                pl.addWidget(self._alpha_pcanvas)
+                self._alpha_popup = pop
+            except Exception:
+                self._alpha_popup = None
+
             # Resumen
             grp = QGroupBox("Resumen")
             f = QFormLayout(grp)
@@ -1403,24 +1427,105 @@ if _HAS_QT:
         # ------------------------------------------------------------------
         # Hover fila -> resaltado 3D
         # ------------------------------------------------------------------
-        def _on_cell_entered(self, row, _col):
-            if row == self._hover_row:
+        def _on_cell_entered(self, row, col):
+            if row != self._hover_row:
+                self._hover_row = row
+                obj = self._row_map[row][1] if 0 <= row < len(self._row_map) else None
+                self.hovered.emit(obj)                 # resaltado 3D
+            # Item v: la mini-ventana de α aparece SOLO sobre la columna "Material"
+            # (el nombre del material de la fila). Fuera de esa columna, se oculta.
+            if col == 5:
+                from PyQt5.QtGui import QCursor
+                self._show_alpha_popup(self._material_for_row(row), QCursor.pos())
+            else:
+                self._hide_alpha_popup()
+
+        def _material_by_name(self, name):
+            if not name:
+                return None
+            try:
+                names = self._mat_lib.names
+                if name in names:
+                    return self._mat_lib[names.index(name)]
+            except Exception:
+                pass
+            return None
+
+        def _material_for_row(self, row):
+            """Material asignado a la fila (lee el combo de la columna Material)."""
+            if not (0 <= row < self.table.rowCount()):
+                return None
+            w = self.table.cellWidget(row, 5)
+            name = w.currentText() if isinstance(w, QComboBox) else None
+            return self._material_by_name(name)
+
+        def _on_combo_highlighted(self, combo, idx):
+            """El usuario abrió el selector de material y está sobre un NOMBRE del
+            catálogo -> mini-ventana con la curva de α de ese material (item v)."""
+            from PyQt5.QtGui import QCursor
+            self._show_alpha_popup(self._material_by_name(combo.itemText(idx)),
+                                   QCursor.pos())
+
+        def _draw_alpha_popup(self, mat):
+            ax = self._alpha_pax
+            ax.clear()
+            fa = np.array([40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400,
+                           500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150,
+                           4000, 5000, 6300, 8000], dtype=float)
+            a = np.array([float(mat.alpha(float(x))) for x in fa])
+            ax.plot(fa, a, '-o', color='#1f6fbf', markersize=3, linewidth=1.4)
+            ax.set_title(f"α — {mat.name}", fontsize=8)
+            ax.set_xscale('log')
+            ax.set_xlim(40, 8000)
+            ax.set_ylim(0.0, 1.0)
+            ax.set_xlabel('Hz', fontsize=7)
+            ax.set_ylabel('α', fontsize=7)
+            ax.grid(True, alpha=0.3)
+            ax.tick_params(labelsize=6)
+            try:
+                self._alpha_pfig.tight_layout(pad=0.4)
+            except Exception:
+                pass
+            self._alpha_pcanvas.draw_idle()
+
+        def _show_alpha_popup(self, mat, global_pos):
+            if self._alpha_popup is None or mat is None:
+                self._hide_alpha_popup()
                 return
-            self._hover_row = row
-            obj = self._row_map[row][1] if 0 <= row < len(self._row_map) else None
-            self.hovered.emit(obj)
+            self._draw_alpha_popup(mat)
+            self._alpha_popup.move(int(global_pos.x()) + 18,
+                                   int(global_pos.y()) + 14)
+            self._alpha_popup.show()
+
+        def _hide_alpha_popup(self):
+            if self._alpha_popup is not None:
+                self._alpha_popup.hide()
 
         def eventFilter(self, obj, ev):
-            # El mouse salio de la tabla -> apagar el resaltado.
+            # El mouse salio de la tabla -> apagar resaltado 3D + ocultar la curva.
             if obj is self.table.viewport() and ev.type() == QEvent.Leave:
                 self._hover_row = -1
                 self.hovered.emit(None)
+                self._hide_alpha_popup()
+            # El desplegable del catálogo se cerró -> ocultar la curva.
+            elif ev.type() == QEvent.Hide and isinstance(obj, QAbstractItemView):
+                self._hide_alpha_popup()
+            # Hover sobre el combo CERRADO (el nombre del material, donde se clickea
+            # para abrir el selector): mostrar la curva; al salir, ocultarla.
+            elif isinstance(obj, QComboBox):
+                if ev.type() == QEvent.Enter:
+                    from PyQt5.QtGui import QCursor
+                    self._show_alpha_popup(
+                        self._material_by_name(obj.currentText()), QCursor.pos())
+                elif ev.type() == QEvent.Leave:
+                    self._hide_alpha_popup()
             return super().eventFilter(obj, ev)
 
         def done(self, r):
-            # Al cerrar (OK/Cancel/X), apagar el resaltado si quedo prendido.
+            # Al cerrar (OK/Cancel/X), apagar el resaltado y la curva.
             self._hover_row = -1
             self.hovered.emit(None)
+            self._hide_alpha_popup()
             return super().done(r)
 
         # ------------------------------------------------------------------
@@ -1483,6 +1588,12 @@ if _HAS_QT:
                     combo.currentTextChanged.connect(
                         lambda text, sig=g.signature: self._on_combo_changed(sig, text)
                     )
+                    # Item v: al abrir el selector y pasar por un nombre del
+                    # catálogo, mini-ventana con su curva de α; ocultarla al cerrar.
+                    combo.highlighted[int].connect(
+                        lambda i, c=combo: self._on_combo_highlighted(c, i))
+                    combo.view().installEventFilter(self)
+                    combo.installEventFilter(self)   # hover sobre el combo cerrado
                     self.table.setCellWidget(row, 5, combo)
 
             # Filas de parche (solo lectura): bajo su cara, con su material.
@@ -1530,6 +1641,10 @@ if _HAS_QT:
                     pcombo.setCurrentIndex(max(0, pidx))
                     pcombo.currentTextChanged.connect(
                         lambda text, pp=p, r=row: self._on_patch_mat_changed(pp, text, r))
+                    pcombo.highlighted[int].connect(
+                        lambda i, c=pcombo: self._on_combo_highlighted(c, i))
+                    pcombo.view().installEventFilter(self)
+                    pcombo.installEventFilter(self)   # hover sobre el combo cerrado
                     self.table.setCellWidget(row, 5, pcombo)
 
         def _locked_cell(self):

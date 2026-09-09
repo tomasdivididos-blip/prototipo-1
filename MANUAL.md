@@ -2825,3 +2825,19 @@ Nota: la predicción de ubicación ya tenía en cuenta el SBIR (además del FoM 
 ---
 
 *Manual actualizado al 9 de Septiembre de 2026 — v2.40.*
+
+---
+
+**Cambios v2.41** (9 de septiembre 2026): **vista previa de la curva de absorción α(f) al pasar el mouse sobre un material**. Un eje.
+
+### Curva de α en una mini-ventana al hover
+
+En **«Materiales…»** (diálogo «Materiales por cara»), al pasar el mouse **sobre el nombre de un material** aparece una **mini-ventana flotante** con su curva de absorción **α(f)** (eje de frecuencia en Hz, α de 0 a 1). Aparece en los dos lugares donde ves el nombre:
+- sobre el **nombre del material en la fila** (el selector cerrado, donde clickeás para cambiarlo);
+- con el **selector abierto**, al pasar por cada nombre del **catálogo** (se actualiza en vivo y el desplegable sigue abierto).
+
+La ventanita se muestra **solo** mientras el mouse está sobre un nombre, y desaparece al salir, al cerrar el desplegable o al cerrar el diálogo. Sirve para comparar de un vistazo cómo absorbe cada material antes de asignarlo, sin abrir su JSON.
+
+---
+
+*Manual actualizado al 9 de Septiembre de 2026 — v2.41.*
