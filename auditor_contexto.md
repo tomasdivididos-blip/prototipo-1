@@ -6,7 +6,7 @@
 > cada cosa contra la fuente física, un oráculo, o una cuenta propia. Que este archivo
 > diga "resuelto/PASA" no prueba nada; es un puntero a qué mirar.
 
-**Última actualización:** 2026-09-06.
+**Última actualización:** 2026-09-08.
 
 ## Estado del proyecto
 
@@ -52,3 +52,26 @@ protocolo congelado en `validation_protocol.md` (§10 = cambios post-congelamien
 `protocolo_medicion.md` — para destrabar M3/M4 con datos completos (fuente FRD, Z(f) de
 materiales, posiciones exactas, WAV de RIRs). Normas de adquisición citadas ahí (ISO 3382/18233,
 ISO 10534-2, IEC 60268-21/61260/60942). El análisis modal queda fuera del ámbito de esas normas.
+
+## Núcleo nuevo EN ALCANCE (mergeado a main 7-8 Sep 2026 — VERIFICAR, no creer)
+
+El modelo de fuente exacto para subs enfrentados (DBA/CABS) se mergeó a `main` (PR #19,
+commit ac6cd94). Suma núcleo físico/numérico que ENTRA en tu alcance de auditoría:
+
+- `dba.py` — motor analítico rectangular (arrays front/rear, drive naive y LS de Santillán,
+  cancelación polo-cero Cₘ(kₘ)=0, ley de aliasing f_max=c/d).
+- `source_coupling.py` — base modal rectangular ortonormal + acople por integral de superficie
+  Cₙ=∫_S pₙvₙ dS (fuente distribuida, Kuttruff Ec.3.6-3.7).
+- `driver.py` — driver Thiele-Small + baffle step + open-baffle gain.
+- `dba_evaluate.py` — evalúa una config real contra el ideal CABS sobre la respuesta TOTAL
+  (SBIR + modos, crossfade en f_S).
+- `cabs_optimize.py` — optimización parcial (differential_evolution + polaridad binaria).
+- Dipolo = dos monopolos opuestos acoplado a d·∇φₙ en `acoustic_fem._source_modal_coupling`.
+
+Dónde desconfiar primero: (1) el crossfade SBIR+modos en f_S ¿doble-cuenta reflexiones?;
+(2) el drive LS es no causal → se ventanea la IR antes del Schroeder (¿sesga el decay?);
+(3) el acople dipolar por diferencia de monopolos ¿reproduce d·∇φₙ a la resolución de malla usada?
+
+**Columnas (cilíndricas/prismáticas):** PLANEADO, sin implementar (`plan_columnas.md`). El motor
+de carve rígido de `furniture.py` es el que se reusaría; lo nuevo a validar sería el agujero
+pasante piso-techo (topología de túnel).

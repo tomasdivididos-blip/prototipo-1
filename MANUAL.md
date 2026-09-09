@@ -521,6 +521,8 @@ Por eso, en modo **Automático** el tuner le pide a gmsh una malla **1.5× más 
 
 > **Nota de fondo (corregido en el ciclo v2.13–v2.14):** además del factor del peor tet, el auto-tuner tenía un segundo problema. El panel lo invoca con presupuesto de tiempo infinito (`budget = ∞`, política "validez antes que velocidad" de v2.7), y con ese infinito la estimación de tetraedros desbordaba y el panel caía **en silencio** a la densidad manual del slider — el tuner nunca corría. Hoy un guard (`np.isfinite`) lo evita y la cobertura parcial se clampea a la completa. Si una sala lofteada te daba pocos modos válidos (la validez quedaba muy por debajo de `f_S`), era esto.
 
+> **Nota de fondo (corregido en v2.23): una sola frecuencia de Schroeder.** El auto-tuner dimensiona la malla para cubrir hasta `f_Schroeder`, pero durante un tiempo la calculaba con un `α = 0.05` fijo mientras el panel mostraba, en su rótulo, una `f_S` resuelta por punto fijo con el RT real de los materiales. Eran **dos `f_S` distintas** en el mismo cálculo, y como `f_S ∝ α^(−1/2)` el error iba en los dos sentidos: una sala tratada (α alto) mallaba mucho más fino de lo necesario, y una sala viva (α bajo) mallaba **por debajo del régimen modal, en silencio**. Desde v2.23 un único helper (`_schroeder_context`) da la misma `f_S` a las dos ramas, tomada del RT por materiales; el piso físico es `α = 0.01` (el mínimo del catálogo; `α = 0` es divergencia, no cota), con un tope de `npm` acotado y, además, un clamp de la frecuencia objetivo por el presupuesto de modos (inversa de Weyl), que suele ser el cuello de botella real antes que la resolución de la malla.
+
 ---
 
 ## 8. Visualización del campo acústico

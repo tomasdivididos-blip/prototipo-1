@@ -2866,8 +2866,8 @@ bien.
     el gap A36 diferido); la herramienta DBA es analítica-rectangular, exacta
     para el caso real (CABS/DBA son cuartos rectangulares). Helpers nuevos en
     dba.py: `array_naive_coupling_fn`, `compute_dba`, `_zone_grid`, `_t_decay`.
-    FALTA: test visual humano de ambos (el smoke es offscreen). Ver
-    [[source-model-dba]], `plan_modelo_fuente.md`.
+    Test visual humano de ambos: PASÓ (usuario, confirmado 8 Sep 2026; junto con
+    el flujo evaluar-CABS v2.34-2.37). Ver [[source-model-dba]], `plan_modelo_fuente.md`.
 
 - **3 Sep 2026 — v2.31 (rama dist-exe): impedancia Z(f) por default a cada material
   (Capa 0 automática).** Pedido del usuario: el corrimiento de fₙ (reactancia) solo
@@ -3023,6 +3023,46 @@ bien.
   **Recap de esta sesión:** MANUAL.md (changelog v2.33) + notas (esta entrada) + `auditor_contexto.md`
   + perfil `.claude/agents/auditor-fisico.md` (alcance ampliado) + memoria + commit/push en `dist-exe`.
   NO se regeneraron zips/PDF (sin cambio funcional en la app; es código de investigación).
+
+- **7-8 Sep 2026 — merge evaluar-cabs, plan de columnas, reconciliación de logs, cola nueva del profesor.**
+  1. **evaluar-cabs mergeado a main** (PR #19, commit ac6cd94): items 4/6/5 (evaluar CABS +
+     optimizador parcial + modelo de fuente exacto dipolo/baffle-step) ya viven en `main`.
+     Documentado en §1e y en MANUAL v2.34–v2.37. Test visual PASÓ.
+  2. **Columnas (cilíndricas/prismáticas): PLANEADO, sin implementar.** Plan en `plan_columnas.md`,
+     opción C (rol dentro de `Furniture`; el motor de carve rígido ya existe, no es física nueva de
+     motor). Lo único nuevo a validar = el agujero pasante piso-techo (topología de túnel). NO codear
+     sin OK. Ver memoria [[columnas-plan]].
+  3. **Reconciliación de logs (pedido del usuario).** El índice `MEMORY.md` había quedado viejo
+     mientras los archivos de detalle estaban al día (capstone muebles, wiring DBA, PR #19). Se
+     corrigieron los reclamos stale de "falta test visual" en `MEMORY.md` (4 líneas),
+     `source-model-dba` / `profesor-sbir-rt60` / `mesh-autotuner-fix`, esta §13 (entrada del 2 Sep) y
+     `auditor_contexto.md` (fecha + alcance con el núcleo evaluar-cabs + nota de columnas). MANUAL
+     estaba al día hasta v2.37; se agregó solo la nota del auto-tuner v2.23 (f_S unificada) en §7.
+  4. **Cola nueva post-charla con el profesor (8 Sep, sin implementar; capturada acá y en la memoria
+     [[backlog-charla-sep]]):**
+     (i) **curvas comunes en SBIR/FRF/CABS con zonas de corregibilidad** — cada parámetro tiene en
+     cuenta a los otros: SBIR ve la respuesta modal, FRF ve SBIR+modal, DBA/CABS ve SBIR+modal.
+     (ii) **meter SBIR+modal a la optimización de fuentes de Predicción** — que la predicción se haga
+     con la FRF y que la FRF tenga en cuenta el SBIR.
+     (iii) **normalizar los pesos del objetivo de ubicación** (que las 4 sumen 100, no 120).
+     (iv) **validación de criterios**.
+     (v) **curva de α en tiempo real al pasar el mouse sobre el material**.
+     (vi) **ampliar categorías de impedancia**.
+     (vii) **mejorar la UI del panel CABS/DBA: discriminar por criterio** — DBA = subs atrás+adelante;
+     CABS = puede ser solo atrás; elegir un criterio con un botón y evaluar la config del usuario sobre
+     los puntos objetivo de ESE criterio.
+  5. **BUG confirmado (delay 2× del optimizador vs evaluar), liga con el ítem (vii).** `dba_evaluate`
+     (`_make_checklist`, `tau_ideal = L/c`) y `dba.build_dba_sources` (`delay = L/c`) usan **L/c con L =
+     dimensión completa del eje de enfrentamiento** (drive DBA canónico, físicamente correcto:
+     Santillán/Celestinos). El optimizador (`cabs_optimize`, cota de delay `(0, 1.5·max(dims)/c)`, así
+     que PUEDE alcanzar L/c) **no se restringe a esa forma**: minimiza planitud/varianza espacial en los
+     puntos objetivo y converge a ~L/(2c) → `_check_rear_drive` (tol 0.35) lo rechaza; duplicar el delay
+     a L/c hace pasar la evaluación. Son **dos criterios distintos** (planitud listener-óptima vs drive
+     DBA canónico); el 2× es consistente con una referencia de distancia media-sala vs sala completa
+     (la intuición del usuario, "punto de medición de la distancia"). Fix pendiente (sesión aparte):
+     unificar la convención de distancia y decidir si el optimizador se restringe al drive DBA o si
+     evaluar acepta el delay listener-óptimo. Esto es exactamente lo que resuelve el ítem (vii)
+     (discriminar por criterio).
 
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
