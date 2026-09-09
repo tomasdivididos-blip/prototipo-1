@@ -628,16 +628,17 @@ class PredictionPanel(QWidget):
             sl.setValue(25)
             sl.setMinimumWidth(0)
             sl.wheelEvent = lambda ev: ev.ignore()
-            val = QLabel("25")
-            val.setMinimumWidth(26)
-            sl.valueChanged.connect(
-                lambda v, k=key: self._weight_labels[k].setText(str(v)))
+            val = QLabel("25%")
+            val.setMinimumWidth(32)
+            sl.valueChanged.connect(lambda _v: self._refresh_weight_labels())
             rh.addWidget(sl, 1)
             rh.addWidget(val)
             self._weight_sliders[key] = sl
             self._weight_labels[key] = val
             fw.addRow(lbl + ":", row)
-        wnote = QLabel("Default por uso; ajustables. Se normalizan al combinar.")
+        self._refresh_weight_labels()
+        wnote = QLabel("Porcentajes normalizados (suman 100). El slider es el peso "
+                       "relativo; ajustables, default por uso.")
         wnote.setStyleSheet("color:#6c7086; font-size:8pt;")
         wnote.setWordWrap(True)
         fw.addRow(wnote)
@@ -761,7 +762,25 @@ class PredictionPanel(QWidget):
             sl.blockSignals(True)
             sl.setValue(int(round(100.0 * float(w.get(k, 0.25)))))
             sl.blockSignals(False)
-            self._weight_labels[k].setText(str(sl.value()))
+        self._refresh_weight_labels()
+
+    def _refresh_weight_labels(self):
+        """Muestra los pesos como porcentajes NORMALIZADOS que suman EXACTO 100 (el
+        slider sigue siendo el peso relativo crudo; el scorer normaliza por la suma
+        de todos modos). Reparto por mayor-resto para que las 4 cifras den 100."""
+        vals = {k: int(sl.value()) for k, sl in self._weight_sliders.items()}
+        tot = sum(vals.values())
+        if tot <= 0:
+            for k in self._weight_labels:
+                self._weight_labels[k].setText("0%")
+            return
+        raw = {k: 100.0 * v / tot for k, v in vals.items()}
+        pct = {k: int(x) for k, x in raw.items()}            # floor
+        rem = 100 - sum(pct.values())                        # 0..3
+        for k in sorted(raw, key=lambda kk: raw[kk] - pct[kk], reverse=True)[:rem]:
+            pct[k] += 1
+        for k, v in pct.items():
+            self._weight_labels[k].setText(f"{v}%")
 
     def _collect_weights(self) -> dict:
         return {k: float(sl.value()) for k, sl in self._weight_sliders.items()}

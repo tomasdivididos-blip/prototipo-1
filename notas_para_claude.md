@@ -3136,6 +3136,26 @@ bien.
   los ítems sueltos del backlog (iii pesos a 100, iv validación de criterios, v hover α, vi ampliar
   impedancia). Ver [[backlog-charla-sep]].
 
+- **9 Sep 2026 (cont.) — Fase 3 (decisión) + item iii (pesos de ubicación a 100) (v2.40).**
+  1. **Fase 3 — NO se toca el scorer (decisión del usuario, opción A).** El optimizador de ubicación
+     (`location_opt.evaluate_layout`) YA usa el SBIR (sub-score `s_sbir`, `location_opt.py:317-324`)
+     además del FoM modal y la suavidad, así que "la predicción tiene en cuenta el SBIR" (item ii) ya
+     está satisfecho. El "FoM compuesto" del plan sería **no-op en la práctica**: el contexto de
+     ubicación usa malla gruesa (`npm=2` por velocidad) → `f_max_valid ≈ 114 Hz`, y para una sala
+     típica `f_S ≈ 130-270 Hz`, así que la banda del FoM cae DEBAJO de f_S donde la compuesta = modal.
+     Implementarlo agregaría riesgo al scorer validado para cero efecto. **Documentado como cubierto
+     por diseño; el scorer queda intacto.**
+  2. **Item iii HECHO — pesos del objetivo de ubicación normalizados a 100.** El core
+     (`default_location_weights`) siempre sumó 1.0, pero la UI (`prediction_panel.py`) mostraba el
+     valor crudo de cada slider (0-100 independientes) → podían sumar 120. Fix: `_refresh_weight_labels`
+     muestra porcentajes NORMALIZADOS (mayor-resto → suman exacto 100); el slider sigue siendo el peso
+     relativo crudo y `_collect_weights` lo devuelve crudo (el scorer normaliza por wsum, sin cambio).
+     Solo UI. Verificado headless (labels suman 100 en varios estados); `bench_location_opt` TODOS OK
+     (scorer intacto). Test visual PASÓ.
+  **Recap: MANUAL v2.40 + notas + commit/push. SIN dist-exe ni win.zip.** Grupo A: Fases 1/2 + paso 2
+  cerradas; Fase 3 cubierta por diseño. Quedan del backlog: iv (validación de criterios), v (curva α
+  en hover), vi (ampliar categorías de impedancia). Ver [[backlog-charla-sep]].
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.

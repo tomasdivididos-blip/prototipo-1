@@ -2811,3 +2811,17 @@ El overlay de **corregibilidad EQ (C13/C21)** que ya tenía la FRF (zonas en **r
 ---
 
 *Manual actualizado al 9 de Septiembre de 2026 — v2.39.*
+
+---
+
+**Cambios v2.40** (9 de septiembre 2026): **los pesos del objetivo de ubicación se leen como porcentajes que suman 100**. Un eje.
+
+### Pesos de ubicación normalizados
+
+En **Predicción**, con el modo en «Ubicación de fuentes» (o «Combinado»), el grupo **«Pesos del objetivo de ubicación»** tiene cuatro sliders (Planitud, Espacial, SBIR, Suavidad modal). Antes cada uno mostraba su valor crudo (0-100) y las cuatro cifras podían sumar cualquier cosa (p. ej. 120); el scorer los normalizaba por dentro, pero la lectura confundía. Ahora **el número al lado de cada slider es el porcentaje normalizado**, y **las cuatro cifras suman siempre 100**. El slider sigue siendo el peso relativo (moverlo redistribuye los porcentajes), así que ves de un vistazo cuánto pesa cada criterio en la decisión.
+
+Nota: la predicción de ubicación ya tenía en cuenta el SBIR (además del FoM modal y la suavidad); esto es solo una mejora de lectura de los pesos.
+
+---
+
+*Manual actualizado al 9 de Septiembre de 2026 — v2.40.*
