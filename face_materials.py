@@ -315,6 +315,35 @@ def group_faces_by_planar_region(
     return raw_groups
 
 
+def remap_signatures_after_translation(
+    groups: List[FaceGroup], delta) -> Dict[str, str]:
+    """Devuelve {firma_vieja: firma_nueva} para una traslacion PURA de la malla
+    por `delta` (3,).
+
+    Motivo: `_signature` hashea el centroide ABSOLUTO (redondeado a 1 cm), asi
+    que trasladar el recinto (re-anclar el origen a la esquina, o cambiar la
+    convencion de origen) corre todos los centroides y cambia TODAS las firmas.
+    Sin remapear, el FaceMaterialMap pierde sus claves y toda cara vuelve al
+    material default. Como la traslacion no cambia la normal ni el area (solo el
+    centroide -> centroide+delta), la firma nueva se recomputa exactamente con
+    `_signature(normal, centroide+delta, area)`, sin re-agrupar la malla nueva.
+
+    Se aplica sobre los grupos ACTUALES (los de la malla vieja, que todavia
+    tienen su centroide viejo). El caller reescribe con este dict el
+    FaceMaterialMap, el mapa de construccion (Capa 0) y los parches de
+    absorcion, que tambien se keyean por firma."""
+    d = np.asarray(delta, dtype=float).reshape(3)
+    remap: Dict[str, str] = {}
+    for g in groups:
+        old_sig = g.signature
+        new_sig = _signature(np.asarray(g.normal, dtype=float),
+                             np.asarray(g.centroid, dtype=float) + d,
+                             float(g.area))
+        if new_sig != old_sig:
+            remap[old_sig] = new_sig
+    return remap
+
+
 # ---------------------------------------------------------------------------
 # Persistencia del mapeo grupo -> material
 # ---------------------------------------------------------------------------

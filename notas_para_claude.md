@@ -275,6 +275,61 @@ Rama **evaluar-cabs** (forkeada de main, PR aparte). Tres ítems del roadmap de
 
 Todo aditivo en `.room` (sin bump; defaults = comportamiento histórico).
 
+## 1f. Batch v2.42 (10 Sep 2026) — optimizador + materiales/frames + portabilidad
+
+Tres bloques, motivados por bugs reportados por el profesor (Control Ale.room) y
+pedidos de la cátedra. Todo con smoke headless (falsable). Archivos tocados:
+`cabs_optimize.py`, `sources.py`, `acoustic_panel.py`, `dba_dialog.py`,
+`main.py`, `face_materials.py`, `material_library.py`.
+
+**Optimizador de fuentes (`cabs_optimize.py` + `dba_dialog.py` + `acoustic_panel.py`):**
+- **Restricción al recinto real.** `optimize_cabs(..., inside_fn=...)`: en `_cost`
+  se penaliza +100 dB por fuente MOVIDA fuera del polígono real (el bound de caja
+  es el AABB; en recinto irregular el AABB > planta → sin esto una fuente caía
+  afuera). `inside_fn` lo arma `_open_dba` con `acoustic_mesh.points_inside_surface`
+  y viaja por el `eval_context`. El eje de enfrentamiento sigue clavado a la pared.
+- **Optimizar nivel.** `"level"` agregado a `sources.FREE_VARS`; checkbox «nivel»
+  en el panel de fuente; DOF que varía `sensitivity_dB` en `[sens−12, sens+12]`
+  acotado a `[40,130]` (recomputa Q vía `q_from_sensitivity`); writeback en
+  `_apply_cabs_optimization`. Referencia: MSO (Welti & Devantier, JAES 54, 2006).
+- **Botón «Optimizar»** (antes «Optimizar fuentes libres») + `lbl_opt_vars` que
+  lista por fuente qué se optimiza (leído de `free_vars`). Smoke: `smoke_optimize_material.py`.
+
+**Materiales vs sistema de coordenadas (bug #2, `face_materials.py` + `acoustic_panel.py` + `main.py`):**
+- CAUSA RAÍZ: `face_materials._signature` hashea el centroide ABSOLUTO → trasladar
+  el recinto (mover el origen) cambia todas las firmas y el `FaceMaterialMap` pierde
+  las claves. Confirmado en Control Ale.room: el piso resolvía «Piso de marmol» en
+  frame esquina y «Baldosas» en centro (misma cara, materiales distintos por frame).
+- FIX: `face_materials.remap_signatures_after_translation(groups, delta)` (recomputa
+  firma nueva = `_signature(normal, centroide+delta, area)`). `acoustic_panel.
+  _remap_face_materials(old_groups, delta)` reescribe material map + `_construction_map`
+  + `face_signature` de parches, con **precedencia determinista** de la cara seguida
+  sobre una firma huérfana preexistente en el frame destino. Se llama en
+  `main._reanchor_cad` (delta=−off) y en la rama origin_only de `_on_params`.
+- **Objetos siguen al recinto al importar CAD** (`_shift_scene_objects(delta,
+  include_receiver=False)` en `_open_cad_import`, con delta = el mismo que recibe el
+  receptor al recentrar). NO arregla rotaciones (caso aula.room = reubicar a mano).
+- **Al cargar**: si el CAD se re-ancla por `off≠0`, los objetos se corren `-off`
+  para seguirlo (evita drift al reabrir). `_prune_face_maps_to_geometry()` descarta
+  firmas huérfanas de otros frames (SEGURO: no toca la malla; si NINGUNA firma actual
+  matchea, no limpia). Smokes: `smoke_import_frame.py`, `smoke_load_frame.py`.
+
+**Portabilidad de materiales propios (`material_library.py` + `main.py`):**
+- `Material.to_dict()` + `MaterialLibrary.add_material(overwrite=False)` (registra en
+  memoria, add-if-missing) + `merge_folder(folder, recursive)`.
+- **Embebido**: `_serialize_acoustic_state` guarda `embedded_materials` (def completa
+  de los materiales usados por caras/default/muebles/**parches**); al cargar,
+  `_restore_acoustic_state` los registra en la biblioteca (los que falten) → `.room`
+  autocontenido.
+- **Auto-carga/pedido de carpeta**: `main._resolve_missing_materials(path)` — si faltan
+  materiales, busca carpetas junto al `.room` (dir del archivo + subdirs con «material»
+  en el nombre, ≤2 niveles) y las mergea; si aún faltan, `QFileDialog` para indicar la
+  carpeta. Incluye los materiales de PARCHES (`p.material_name`) en el set de faltantes
+  y refresca `_refresh_patches_summary` tras cargar (si no, el resumen quedaba en 1%).
+- GOTCHA de test headless: construir `MainWindow` y renderizar mallas sintéticas
+  offscreen SEGFAULTEA (pyqtgraph GL); `AcousticPanel` solo NO. Los smokes usan panel
+  o funciones puras. Smoke: `smoke_material_portability.py`.
+
 ## 2. Perfil del usuario
 
 - **Profesión**: ingeniero en acústica.

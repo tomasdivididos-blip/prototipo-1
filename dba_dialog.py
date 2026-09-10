@@ -107,7 +107,7 @@ class DBADialog(QDialog):
             self.combo_criterion.addItem("CABS (trasero manejado)", "cabs")
             self.combo_criterion.setToolTip(
                 "DBA: el trasero reproduce el frente retardado L/c e invertido "
-                "(drive canónico; al «Optimizar fuentes libres» se fija ese drive, "
+                "(drive canónico; al «Optimizar» se fija ese drive, "
                 "no un delay libre). CABS: el trasero es manejado, su drive queda "
                 "libre y se juzga por el colapso de la respuesta, no por el retardo "
                 "L/c. El mismo criterio se usa para evaluar y para optimizar.")
@@ -166,16 +166,24 @@ class DBADialog(QDialog):
         # variables liberadas (free_vars) de cada fuente para minimizar el
         # criterio CABS. Oculto hasta entrar en modo evaluar.
         self.btn_opt = None
+        self.lbl_opt_vars = None
         if self._eval_ctx is not None:
-            self.btn_opt = QPushButton("Optimizar fuentes libres")
+            self.btn_opt = QPushButton("Optimizar")
             self.btn_opt.setToolTip(
-                "Mueve las variables que marcaste como libres (Optimizar: "
-                "posición/delay/corte/filtro) en cada fuente, para minimizar la "
-                "planitud + varianza espacial CABS. Las fuentes sin nada tildado "
-                "quedan fijas.")
+                "Ajusta las variables que marcaste como libres en cada fuente "
+                "(Optimizar: posición/delay/corte/filtro/polaridad/nivel), para "
+                "minimizar la planitud + varianza espacial CABS. La posición se "
+                "restringe al recinto. Las fuentes sin nada tildado quedan fijas.")
             self.btn_opt.clicked.connect(self._optimize)
             self.btn_opt.setVisible(False)
             lay.addWidget(self.btn_opt)
+            # Indicacion de que se va a optimizar POR FUENTE (leido de los
+            # free_vars que el usuario tildo en el panel de cada fuente).
+            self.lbl_opt_vars = QLabel("")
+            self.lbl_opt_vars.setWordWrap(True)
+            self.lbl_opt_vars.setStyleSheet("color:#555; font-size:8pt;")
+            self.lbl_opt_vars.setVisible(False)
+            lay.addWidget(self.lbl_opt_vars)
 
         self.lbl_res = QLabel("Elegí la configuración y tocá «Calcular».")
         self.lbl_res.setWordWrap(True)
@@ -241,6 +249,10 @@ class DBADialog(QDialog):
             self.btn_apply.setVisible(not ev)
         if self.btn_opt is not None:
             self.btn_opt.setVisible(ev)
+        if self.lbl_opt_vars is not None:
+            self.lbl_opt_vars.setVisible(ev)
+            if ev:
+                self._refresh_opt_vars_label()
         if self.combo_criterion is not None:
             self.combo_criterion.setVisible(ev)
             self.lbl_criterion.setVisible(ev)
@@ -276,7 +288,7 @@ class DBADialog(QDialog):
         se cambia de criterio (barato, sin computar respuesta)."""
         crit = self._criterion()
         head = (f"Criterio <b>{crit.upper()}</b>. Tocá «Evaluar» para analizar las "
-                "fuentes cargadas, o «Optimizar fuentes libres» para reacomodar las "
+                "fuentes cargadas, o «Optimizar» para reacomodar las "
                 "que marcaste.")
         try:
             import dba_evaluate as dev
@@ -298,6 +310,38 @@ class DBADialog(QDialog):
         except Exception:
             pass
         self.lbl_res.setText(head)
+
+    def _refresh_opt_vars_label(self):
+        """Lista, por fuente, que variables va a tocar «Optimizar» (leidas de los
+        free_vars que el usuario tildo en «Optimizar:» del panel de cada fuente).
+        Asi el boton dice solo «Optimizar» y la indicacion vive debajo."""
+        if self.lbl_opt_vars is None:
+            return
+        _names = {"pos": "posición", "delay": "delay", "fc": "corte",
+                  "polarity": "polaridad", "filter": "filtro", "level": "nivel"}
+        ctx = self._eval_ctx or {}
+        srcs = [s for s in ctx.get("sources", lambda: [])()
+                if getattr(s, "active", True)]
+        libres, fijas = [], []
+        for i, s in enumerate(srcs):
+            label = getattr(s, "label", "") or f"S{i+1}"
+            fv = [k for k in ("pos", "delay", "fc", "polarity", "filter", "level")
+                  if k in (getattr(s, "free_vars", frozenset()) or frozenset())]
+            if fv:
+                libres.append(f"<b>{label}</b>: "
+                              + ", ".join(_names[k] for k in fv))
+            else:
+                fijas.append(label)
+        if not libres:
+            self.lbl_opt_vars.setText(
+                "Se optimizan los parámetros tildados en «Optimizar:» del panel "
+                "de cada fuente. <b>Ninguna fuente tiene variables libres</b>: "
+                "editá tus fuentes y tildá qué puede mover el optimizador.")
+            return
+        txt = "Se va a optimizar: " + " · ".join(libres)
+        if fijas:
+            txt += f"  ·  fijas: {', '.join(fijas)}"
+        self.lbl_opt_vars.setText(txt)
 
     def _on_calc(self):
         if self._mode() == "eval":
@@ -389,7 +433,8 @@ class DBADialog(QDialog):
                 origin=ctx.get("origin", (0.0, 0.0, 0.0)),
                 walls=ctx.get("walls_fn"), axis=axis,
                 fmin=20.0, fmax=self.sb_fmax.value(), xi=self.sb_xi.value(),
-                f_schroeder=ctx.get("f_schroeder"), criterion=self._criterion())
+                f_schroeder=ctx.get("f_schroeder"), criterion=self._criterion(),
+                inside_fn=ctx.get("inside_fn"))
         except Exception as e:
             self.lbl_res.setText(f"<span style='color:#b00'>Error: {e}</span>")
             return

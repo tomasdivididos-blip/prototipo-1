@@ -54,6 +54,12 @@ def _source_dofs(src, dims, origin, enf_axis):
         out.append(("fc", None, 20.0, 300.0))
     if "polarity" in fv:
         out.append(("polarity", None, 0.0, 1.0))    # binaria: 0->+1, 1->-1
+    if "level" in fv and getattr(src, "sensitivity_dB", None) is not None:
+        # Nivel = sensibilidad (dB SPL @1W/1m). Se libera +-12 dB alrededor del
+        # valor actual, acotado al rango del spinner [40,130]. El MSO (Welti &
+        # Devantier, JAES 54, 2006) optimiza ganancia ademas de delay/pos/pol.
+        s0 = float(src.sensitivity_dB)
+        out.append(("level", None, max(40.0, s0 - 12.0), min(130.0, s0 + 12.0)))
     return out
 
 
@@ -83,6 +89,10 @@ def apply_vector(sources, dofs, x):
             s.filter_fc = float(val)
         elif kind == "polarity":
             s.polarity = -1 if float(val) >= 0.5 else 1
+        elif kind == "level":
+            from sources import q_from_sensitivity
+            s.sensitivity_dB = float(val)
+            s.Q = q_from_sensitivity(float(val), s.power_W, s.f_ref)
     return out
 
 
@@ -122,12 +132,26 @@ def _apply_dba_drive(sources, dims, origin, axis, c):
 # Optimizacion
 # ---------------------------------------------------------------------------
 def _cost(x, sources, dofs, dims, origin, walls, receiver, axis, fa, xi, c, f_s,
-          basis, zone_box):
+          basis, zone_box, inside_fn=None):
     cand = apply_vector(sources, dofs, x)
     m = dev._config_metrics(cand, dims, origin, walls, receiver, axis=axis, fa=fa,
                             xi=xi, c=c, f_s=f_s, basis=basis, with_decay=False,
                             zone_box=zone_box)
-    return float(m["flat"] + m["spatial"])
+    pen = 0.0
+    # Restriccion dura: ninguna fuente MOVIDA puede quedar fuera del recinto
+    # real. Las cotas de caja son el AABB; en un recinto irregular el AABB es mas
+    # grande que la planta, asi que un movimiento transversal puede caer dentro
+    # del AABB pero fuera del poligono -> se penaliza fuerte (100 dB por fuente
+    # afuera, muy por encima de la escala del objetivo ~pocos dB).
+    if inside_fn is not None:
+        pos_idx = {i for (i, k, *_r) in dofs if k == "pos"}
+        for i in pos_idx:
+            try:
+                if not inside_fn(cand[i].position):
+                    pen += 100.0
+            except Exception:
+                pass
+    return float(m["flat"] + m["spatial"] + pen)
 
 
 def _criterion_drive_changes(orig, base, excluded) -> list:
@@ -149,7 +173,8 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
                   axis: Optional[int] = None, fmin: float = 20.0, fmax: float = 200.0,
                   xi: float = 0.03, c: float = C0, f_schroeder: Optional[float] = None,
                   n_freq: int = 70, grid=(3, 2, 3), maxiter: int = 25,
-                  popsize: int = 12, seed: int = 0, criterion: str = "dba") -> dict:
+                  popsize: int = 12, seed: int = 0, criterion: str = "dba",
+                  inside_fn=None) -> dict:
     """Optimiza las variables liberadas de las fuentes (item 6). Devuelve dict con
     la config optimizada, metricas antes/despues, los DOF y un resumen de cambios.
 
@@ -212,7 +237,7 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
     # 0.5, asi que el fallback es correcto (solo un poco menos eficiente).
     integrality = [k == "polarity" for (_i, k, _a, _lo, _hi) in dofs]
     kw = dict(args=(base, dofs, dims, origin, walls, receiver, axis, fa, xi, c,
-                    f_s, basis, zone_box),
+                    f_s, basis, zone_box, inside_fn),
               maxiter=maxiter, popsize=popsize, seed=seed, tol=1e-3,
               mutation=(0.5, 1.0), recombination=0.7, polish=True,
               updating="deferred")
@@ -254,6 +279,11 @@ def summarize_changes(before_sources, after_sources, dofs) -> list:
             _p = lambda s: "invertida" if s.polarity < 0 else "normal"
             if _p(a) != _p(b):
                 out.append(f"{label}: polaridad {_p(b)} -> {_p(a)}")
+        elif kind == "level":
+            b0 = b.sensitivity_dB if b.sensitivity_dB is not None else 0.0
+            a0 = a.sensitivity_dB if a.sensitivity_dB is not None else 0.0
+            if abs(a0 - b0) > 1e-3:
+                out.append(f"{label}: nivel {b0:.1f} -> {a0:.1f} dB SPL")
     return out
 
 

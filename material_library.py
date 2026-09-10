@@ -117,6 +117,25 @@ class Material:
     def alpha_bands(self) -> Dict[int, float]:
         return dict(self._alpha_table)
 
+    def to_dict(self) -> dict:
+        """Serializa el material a un dict JSON-compatible (mismo shape que los
+        .json de la carpeta materials/). Preserva la resolucion CRUDA de alpha y
+        scattering (tercios de octava si asi se cargo). Se usa para embeber los
+        materiales usados dentro del .room y que el archivo sea autocontenido."""
+        d = {"name": self.name}
+        if self.category:
+            d["category"] = self.category
+        if self.description:
+            d["description"] = self.description
+        if self.source:
+            d["source"] = self.source
+        if self._alpha:
+            d["alpha"] = {str(k): float(v) for k, v in sorted(self._alpha.items())}
+        if self._scat:
+            d["scattering"] = {str(k): float(v)
+                               for k, v in sorted(self._scat.items())}
+        return d
+
     @staticmethod
     def _interp(table: dict, f: float) -> float:
         bands = sorted(table.keys())
@@ -200,6 +219,36 @@ class MaterialLibrary:
         self._materials.sort(key=lambda m: _norm(m.name))
         return count
 
+    def merge_folder(self, folder: str, recursive: bool = False) -> List[str]:
+        """Carga materiales de `folder` y AGREGA los que FALTEN (por nombre) a la
+        biblioteca actual, sin borrar lo ya cargado ni escribir a disco. Devuelve
+        la lista de nombres agregados.
+
+        Sirve para resolver un .room que usa materiales propios no instalados: se
+        apunta a la carpeta del usuario y se incorporan los faltantes. No pisa un
+        material local con el mismo nombre (add-if-missing). Con recursive=True
+        recorre tambien subcarpetas (util cuando el usuario apunta a una carpeta
+        contenedora, p.ej. 'materiales ale' con un subdir 'materials')."""
+        path = Path(folder)
+        if not path.exists():
+            return []
+        files = sorted(path.rglob("*.json") if recursive else path.glob("*.json"))
+        added: List[str] = []
+        for fn in files:
+            try:
+                data = json.loads(fn.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            for entry in (data if isinstance(data, list) else [data]):
+                if not isinstance(entry, dict) or not entry.get("name"):
+                    continue
+                try:
+                    if self.add_material(Material(entry, filename=str(fn))):
+                        added.append(entry["name"])
+                except Exception:
+                    pass
+        return added
+
     def reload(self) -> int:
         """Recarga los materiales de `self._folder` EN EL SITIO (misma instancia).
 
@@ -211,6 +260,22 @@ class MaterialLibrary:
         if not self._materials:
             self._materials.append(_default_material())
         return n
+
+    def add_material(self, material: "Material", overwrite: bool = False) -> bool:
+        """Registra un Material EN MEMORIA (no escribe a disco). Mantiene la lista
+        ordenada. Devuelve True si se agrego, False si ya existia un material con
+        ese nombre y overwrite=False. Se usa al cargar un .room con materiales
+        embebidos: se registran los que falten en la biblioteca local para que las
+        asignaciones por cara resuelvan (portabilidad del .room)."""
+        existing = {m.name for m in self._materials}
+        if material.name in existing:
+            if not overwrite:
+                return False
+            self._materials = [m for m in self._materials
+                               if m.name != material.name]
+        self._materials.append(material)
+        self._materials.sort(key=lambda m: _norm(m.name))
+        return True
 
     @property
     def materials(self) -> List[Material]:

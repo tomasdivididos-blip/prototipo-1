@@ -2841,3 +2841,28 @@ La ventanita se muestra **solo** mientras el mouse está sobre un nombre, y desa
 ---
 
 *Manual actualizado al 9 de Septiembre de 2026 — v2.41.*
+
+---
+
+**Cambios v2.42** (10 de septiembre 2026): tanda de **optimizador de fuentes** y **materiales que sobreviven a mover el origen, importar y compartir**. Pedidos del profesor y de la cátedra.
+
+### Optimizador de fuentes
+
+- **El botón «Optimizar fuentes libres» pasó a llamarse «Optimizar»**, y debajo aparece una **indicación por fuente** de qué variables va a tocar (leídas de lo que tildaste en «Optimizar:» en cada fuente). Ej.: «Se va a optimizar: F: posición, nivel · R: delay · fijas: S3».
+- **La posición optimizada se restringe al recinto real.** Antes el optimizador acotaba al AABB (la caja que envuelve la sala), así que en un recinto irregular podía dejar una fuente **fuera** de la planta. Ahora se penaliza cualquier posición fuera del polígono real: las fuentes optimizadas quedan siempre adentro.
+- **Se puede optimizar el nivel de la fuente.** Nueva casilla «nivel» en «Optimizar:» de cada fuente: el optimizador ajusta la sensibilidad (dB SPL) en un rango de ±12 dB alrededor del valor actual. Sumado a posición/delay/corte/polaridad/filtro (referencia: Multi-Sub Optimizer, Welti & Devantier, JAES 54, 2006).
+
+### Materiales y sistema de coordenadas
+
+- **Al mover el origen (esquina ↔ centro ↔ auto), cada cara conserva su material.** Antes, trasladar el recinto le cambiaba la «firma» a cada cara y las asignaciones se perdían (todo volvía al material por defecto) o, si habías reasignado en varios orígenes, una misma cara terminaba con materiales distintos según el frame. Ahora los materiales (y las construcciones de pared y los parches) **siguen a la cara** al trasladar, de forma determinista.
+- **Los objetos siguen al recinto al importar un CAD.** Al importar una geometría, las fuentes, muebles y parches ya colocados se trasladan junto con el recentrado (antes solo se movía el receptor y el resto quedaba varado fuera). Nota: si el CAD viene **rotado** respecto de donde estaban los objetos, hay que reubicarlos a mano (una traslación no arregla una rotación).
+- **Limpieza al abrir.** Al cargar un `.room` se descartan las asignaciones de material «huérfanas» de otros orígenes (acumuladas por el problema anterior), conservando solo las de la geometría real. No toca la malla; si nada coincide (archivo de otra versión) no borra nada.
+
+### Materiales propios: portabilidad del `.room`
+
+- **El `.room` se abre con sus materiales propios aunque no estén instalados.** Antes el archivo guardaba solo el **nombre** del material; en otra máquina (o desde otra carpeta) esos materiales se veían como «absorción por defecto». Ahora:
+  - **Carga automática**: si el `.room` usa materiales que no están en tu biblioteca, el programa busca una **carpeta de materiales junto al `.room`** (el propio directorio del archivo y subcarpetas cuyo nombre contenga «material», hasta dos niveles) y los carga.
+  - **Si no la encuentra, te la pide**: un diálogo lista los materiales faltantes y te deja **indicar la carpeta** donde están los `.json`.
+  - **Materiales embebidos**: al **guardar**, la definición completa (α por tercio) de los materiales usados —incluidos los de los **parches**— queda guardada **dentro** del `.room`. Un archivo guardado con esta versión es **autocontenido**: se abre en cualquier máquina sin instalar nada ni indicar carpetas.
+
+*Manual actualizado al 10 de Septiembre de 2026 — v2.42.*

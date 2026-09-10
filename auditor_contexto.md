@@ -6,7 +6,7 @@
 > cada cosa contra la fuente física, un oráculo, o una cuenta propia. Que este archivo
 > diga "resuelto/PASA" no prueba nada; es un puntero a qué mirar.
 
-**Última actualización:** 2026-09-09.
+**Última actualización:** 2026-09-10.
 
 ## Estado del proyecto
 
@@ -101,3 +101,14 @@ VERIFICAR):**
   subs están inset de la pared (vs distancia frente→trasero real)? El tol_rel 0.35 lo tapa, pero es
   aproximación. (2) ¿El gate front/rear por `wall_tol=0.6 m` clasifica bien en salas chicas?
   `bench_cabs_criterion.py` 14/14 (incluye las reglas de array por criterio).
+
+**Optimizador v2.42 (10 Sep 2026, en alcance — VERIFICAR):** `cabs_optimize.optimize_cabs`
+sumó (1) restricción dura al recinto real: `_cost` penaliza +100 dB por fuente movida fuera
+del polígono (`inside_fn` = `points_inside_surface`), porque el bound de caja es el AABB y en
+recinto irregular el AABB > planta; (2) DOF de NIVEL: varía `sensitivity_dB` en `[sens−12,
+sens+12]` acotado a `[40,130]`, recomputando Q. A auditar: (a) ¿la penalización discontinua de
+100 dB distorsiona el `differential_evolution` (mínimos espurios en el borde del polígono) o el
+polish local?; (b) el nivel por fuente es un grado de libertad legítimo del MSO, pero ¿el
+objetivo `flat+spatial` con nivel libre puede degenerar (subir todas las fuentes al tope)? El
+resto del batch (remapeo de firmas de material por traslación, portabilidad/embebido de
+materiales, seguimiento de objetos al re-anclar) es IO/GUI, fuera del núcleo físico.

@@ -56,7 +56,7 @@ SUBWOOFER_TYPES = ("subwoofer", "woofer")
 # POR FUENTE. Ver plan_modelo_fuente.md item 6 (Opcion C, granular por parametro).
 # "polarity" es BINARIA (+1/-1): una inversion es una fase pi CONSTANTE en f, que un
 # delay (fase -2pi f tau, dependiente de f) no puede reproducir -> es un DOF propio.
-FREE_VARS = ("pos", "delay", "fc", "polarity", "filter")
+FREE_VARS = ("pos", "delay", "fc", "polarity", "filter", "level")
 
 
 def normalize_free_vars(value) -> frozenset:

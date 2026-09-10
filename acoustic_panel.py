@@ -144,15 +144,16 @@ class SourceEditDialog(QDialog):
         _frow = QHBoxLayout()
         for _key, _lbl in (("pos", "posición"), ("delay", "delay"),
                            ("fc", "corte"), ("polarity", "polaridad"),
-                           ("filter", "filtro")):
+                           ("filter", "filtro"), ("level", "nivel")):
             cb = QCheckBox(_lbl)
             cb.setChecked(_key in (_free or frozenset()))
             self.chk_free[_key] = cb
             _frow.addWidget(cb)
         _fw = QWidget(); _fw.setLayout(_frow)
         _fw.setToolTip(
-            "Variables que el optimizador «Optimizar fuentes libres» (DBA/CABS) "
-            "puede mover en esta fuente. Sin ninguna tildada, la fuente queda FIJA.")
+            "Variables que el optimizador «Optimizar» (DBA/CABS) puede mover en "
+            "esta fuente (posición/delay/corte/polaridad/filtro/nivel). Sin "
+            "ninguna tildada, la fuente queda FIJA.")
         layout.addRow("Optimizar:", _fw)
 
         # Posición
@@ -5689,6 +5690,11 @@ class AcousticPanel(QWidget):
                 real.filter_fc = float(opt.filter_fc)
             if "polarity" in fv:
                 real.polarity = -1 if int(opt.polarity) < 0 else 1
+            if "level" in fv and opt.sensitivity_dB is not None:
+                from sources import q_from_sensitivity
+                real.sensitivity_dB = float(opt.sensitivity_dB)
+                real.Q = q_from_sensitivity(float(opt.sensitivity_dB),
+                                            real.power_W, real.f_ref)
         self._refresh_sources_list()
         self.schedule_field_update()
         self._log("Optimización CABS aplicada a las fuentes libres.")
@@ -5707,6 +5713,16 @@ class AcousticPanel(QWidget):
             QMessageBox.warning(self, "Sin geometría",
                                 "No hay geometría para analizar.")
             return
+        # Test punto-en-recinto REAL (poligono, no AABB): el optimizador acota la
+        # posicion al recinto de verdad. En un recinto irregular el AABB es mas
+        # grande que la planta, asi que sin esto una fuente podia caer afuera.
+        _tris_arr = np.asarray(_tris, dtype=int)
+
+        def _inside_fn(p, _v=v, _t=_tris_arr):
+            from acoustic_mesh import points_inside_surface
+            return bool(points_inside_surface(
+                np.asarray(p, dtype=float).reshape(1, 3), _v, _t)[0])
+
         vmin = v.min(axis=0)
         dims = tuple((v.max(axis=0) - vmin).tolist())
         rec = tuple((np.asarray(self.receiver, dtype=float) - vmin).tolist())
@@ -5743,6 +5759,7 @@ class AcousticPanel(QWidget):
             "f_schroeder": f_s,
             "apply_optimized": self._apply_cabs_optimization,
             "eqc": eqc,
+            "inside_fn": _inside_fn,
         }
         DBADialog(dims, rec, self,
                   apply_callback=lambda specs: self._apply_dba_to_room(specs, vmin),
@@ -7255,6 +7272,106 @@ class AcousticPanel(QWidget):
         except Exception as e:
             self.lbl_mat_summary.setText(f"(error: {e})")
             self.lbl_rt60.setText("RT60 medio: — s")
+
+    def _remap_face_materials(self, old_groups, delta):
+        """Reescribe las firmas de cara por una traslacion PURA de la malla (delta).
+
+        `_signature` hashea el centroide absoluto, asi que re-anclar el origen
+        (esquina/centro) corre los centroides y rompe TODAS las claves del
+        FaceMaterialMap -> las caras volverian al material default. Este remapeo
+        traslada las claves (firma_vieja -> firma_nueva) del mapa de materiales,
+        del mapa de construccion (Capa 0) y de los parches de absorcion, para que
+        la asignacion sobreviva al re-anclaje. Se llama con los grupos VIEJOS
+        (los de la malla previa a la traslacion). Ver
+        `face_materials.remap_signatures_after_translation`."""
+        import numpy as _np
+        if old_groups is None:
+            return
+        if float(_np.linalg.norm(_np.asarray(delta, dtype=float))) < 1e-9:
+            return
+        remap = fm.remap_signatures_after_translation(old_groups, delta)
+        if not remap:
+            return
+
+        def _remap_dict(old: dict) -> dict:
+            """Remapea las claves por la traslacion. La cara ACTUAL (firma
+            remapeada) tiene PRECEDENCIA sobre una firma huerfana preexistente
+            en el frame destino: si un archivo quedo con asignaciones de varios
+            frames (bug historico: tocar el origen rompia el material y el user
+            reasignaba, acumulando entradas conflictivas por cara), al trasladar
+            gana el material de la cara que se esta siguiendo, de forma
+            determinista (antes, con un dict-comp, ganaba la ultima del orden)."""
+            new = {k: v for k, v in old.items() if k not in remap}   # no-remapeadas
+            for k, v in old.items():
+                if k in remap:
+                    new[remap[k]] = v                                # followed gana
+            return new
+
+        # Mapa de materiales (signature -> nombre).
+        try:
+            self._face_mat_map.from_dict(_remap_dict(self._face_mat_map.to_dict()))
+        except Exception:
+            pass
+        # Mapa de construccion de pared (Capa 0), keyeado por firma.
+        try:
+            cm = getattr(self, "_construction_map", None)
+            if cm:
+                self._construction_map = _remap_dict(dict(cm))
+        except Exception:
+            pass
+        # Parches de absorcion: cada parche referencia su cara por firma.
+        try:
+            for p in getattr(self, "_patches", []) or []:
+                fsig = getattr(p, "face_signature", None)
+                if fsig in remap:
+                    p.face_signature = remap[fsig]
+        except Exception:
+            pass
+        # Invalidar el cache de grupos (la geometria se movio).
+        self._face_groups_cache = None
+        self._face_groups_for_verts_id = None
+
+    def _prune_face_maps_to_geometry(self):
+        """Descarta del mapa de materiales (y del de construccion) las firmas que
+        NO corresponden a ninguna cara de la geometria ACTUAL.
+
+        Limpia las asignaciones huerfanas que quedaron acumuladas cuando se tocaba
+        el origen en versiones viejas (la firma hashea el centroide absoluto, asi
+        que una misma cara terminaba con asignaciones conflictivas de varios
+        frames). SEGURO: NO toca la malla, solo un diccionario {firma->nombre}. Si
+        NINGUNA firma actual esta en el mapa (posible archivo de otra version), NO
+        limpia nada, para no perder asignaciones validas por un mismatch de firmas.
+        Devuelve la cantidad de huerfanas descartadas."""
+        try:
+            groups, _v, _t = self._get_face_groups()
+        except Exception:
+            return 0
+        if not groups:
+            return 0
+        live = {g.signature for g in groups}
+        dropped = 0
+        try:
+            cur = self._face_mat_map.to_dict()
+            keep = {k: v for k, v in cur.items() if k in live}
+            if cur and not keep:
+                return 0                      # mismatch de version: no limpiar
+            if len(keep) != len(cur):
+                self._face_mat_map.from_dict(keep)
+                dropped = len(cur) - len(keep)
+        except Exception:
+            pass
+        try:
+            cm = getattr(self, "_construction_map", None)
+            if cm:
+                keep_c = {k: v for k, v in cm.items() if k in live}
+                if keep_c or not cm:
+                    self._construction_map = keep_c
+        except Exception:
+            pass
+        if dropped:
+            self._log(f"Materiales: {dropped} asignacion(es) huerfana(s) de "
+                      "otros frames descartada(s) al cargar.")
+        return dropped
 
     def _group_to_material_dict(self, groups):
         """Construye {signature: Material} usando el FaceMaterialMap actual."""

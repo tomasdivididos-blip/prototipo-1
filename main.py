@@ -220,12 +220,17 @@ class MainWindow(QMainWindow):
         b = {k: vv for k, vv in lp.items() if k != "origin_mode"}
         return a == b
 
-    def _shift_scene_objects(self, delta):
+    def _shift_scene_objects(self, delta, include_receiver: bool = True):
         """Traslada TODO lo anclado al recinto por `delta` (cambio de convencion
         de origen: el recinto se movio, los objetos deben moverse CON el para
         que nada cambie fisicamente): fuentes, receptor, puntos de escucha,
         MUEBLES y PARCHES de absorcion. Refresca los markers al final para que
         el visor muestre las posiciones nuevas sin depender del caller.
+
+        `include_receiver=False` traslada todo MENOS el receptor: se usa al
+        importar un CAD, donde `set_imported_geometry` ya movio el receptor al
+        centro del CAD y solo falta que el resto de los objetos reciba el MISMO
+        desplazamiento (asi no quedan varados en el frame viejo).
 
         OJO: muebles (v2.18) y parches (v2.17) se agregaron DESPUES del origen
         configurable (v2.16) y no estaban contemplados aca -> se quedaban en el
@@ -241,11 +246,12 @@ class MainWindow(QMainWindow):
             ap._refresh_sources_list()
         except Exception:
             pass
-        try:
-            r = _np.asarray(ap.receiver, dtype=float) + d
-            ap.move_receiver_to(float(r[0]), float(r[1]), float(r[2]))
-        except Exception:
-            pass
+        if include_receiver:
+            try:
+                r = _np.asarray(ap.receiver, dtype=float) + d
+                ap.move_receiver_to(float(r[0]), float(r[1]), float(r[2]))
+            except Exception:
+                pass
         try:
             for p in getattr(ap, "listen_points", []):
                 p["position"] = tuple(
@@ -282,6 +288,16 @@ class MainWindow(QMainWindow):
 
         origin_only = self._only_origin_changed(params)
         old_v = self._surface_verts
+        # Si solo cambia la convencion de origen, la malla nueva es la vieja
+        # trasladada: capturar los grupos VIEJOS (con la malla actual aun
+        # cacheada en el panel) para remapear las firmas de material por la
+        # traslacion (la firma hashea el centroide absoluto).
+        old_groups = None
+        if origin_only and hasattr(self, "acoustic") and self.acoustic is not None:
+            try:
+                old_groups = self.acoustic._get_face_groups()[0]
+            except Exception:
+                old_groups = None
 
         # Construir en el frame natural y anclar aca (no dentro de
         # build_room_geometry) para reusar el MISMO offset con las costillas
@@ -306,6 +322,12 @@ class MainWindow(QMainWindow):
             delta = v.min(axis=0) - _np.asarray(old_v).min(axis=0)
             if float(_np.linalg.norm(delta)) > 1e-9:
                 self._shift_scene_objects(delta)
+                # Remapear las firmas de material por la traslacion (si no, las
+                # caras vuelven al material default al cambiar el origen).
+                try:
+                    self.acoustic._remap_face_materials(old_groups, delta)
+                except Exception:
+                    pass
 
         # Cachear superficie actual para el panel acustico.
         self._surface_verts = v
@@ -524,7 +546,22 @@ class MainWindow(QMainWindow):
         # --- Paso 5: render + carga al panel acustico ---
         _set_progress("Renderizando geometria en el visor 3D...")
         t0 = _time.time()
+        # Trasladar los objetos ya colocados (fuentes/muebles/parches/puntos) con
+        # el MISMO desplazamiento que recibe el receptor al recentrar el CAD, para
+        # que no queden varados en el frame anterior. set_imported_geometry mueve
+        # el receptor al centro del CAD; capturamos ese delta y se lo aplicamos al
+        # resto. (No arregla diferencias de rotacion: si el CAD esta girado
+        # respecto del frame viejo, hay que reubicar los objetos a mano.)
+        import numpy as _np
+        _rcv_before = _np.asarray(self.acoustic.receiver, dtype=float)
         self.acoustic.set_imported_geometry(final_mesh)
+        try:
+            _rcv_after = _np.asarray(self.acoustic.receiver, dtype=float)
+            _delta = _rcv_after - _rcv_before
+            if float(_np.linalg.norm(_delta)) > 1e-9:
+                self._shift_scene_objects(_delta, include_receiver=False)
+        except Exception:
+            pass
         self.tabs.setCurrentIndex(1)
         self._render_imported_geometry(final_mesh)
         self._cad_cache = self._serialize_external_geometry()
@@ -623,6 +660,14 @@ class MainWindow(QMainWindow):
         import trimesh as _tm
         new_mesh = _tm.Trimesh(vertices=verts - off, faces=mesh.faces,
                                process=False)
+        # Grupos VIEJOS (malla actual, antes de trasladar): se usan para remapear
+        # las firmas de material por la traslacion (la firma hashea el centroide
+        # absoluto -> re-anclar rompe las claves y las caras volverian al default).
+        old_groups = None
+        try:
+            old_groups = ap._get_face_groups()[0]
+        except Exception:
+            old_groups = None
         # Orden critico: (1) trasladar fuentes/receptor con la malla vieja aun
         # instalada; (2) set_imported_geometry, que RECENTRA el receptor al
         # AABB (pensado para un import fresco, no para re-anclar); (3) restaurar
@@ -632,6 +677,12 @@ class MainWindow(QMainWindow):
             self._shift_scene_objects(-off)
             rcv_target = tuple(float(x) for x in ap.receiver)
         ap.set_imported_geometry(new_mesh)
+        # La malla se traslado por -off: remapear las firmas de material para que
+        # la asignacion (y construcciones/parches) sobreviva al re-anclaje.
+        try:
+            ap._remap_face_materials(old_groups, -off)
+        except Exception:
+            pass
         if rcv_target is not None:
             ap.move_receiver_to(*rcv_target)
         ap.on_geometry_changed()      # invalida modos/caches (la malla cambio)
@@ -1134,6 +1185,32 @@ class MainWindow(QMainWindow):
                 }
         except Exception:
             face_mat = {}
+        # Materiales propios EMBEBIDOS: la definicion completa (alpha por tercio)
+        # de los materiales usados, para que el .room sea AUTOCONTENIDO (se abre en
+        # cualquier maquina sin instalar los .json). Solo el .room guarda el NOMBRE;
+        # sin esto, un material propio del profe se ve como default en otra maquina.
+        embedded_materials = []
+        try:
+            lib = getattr(ap, "_mat_lib", None)
+            if lib is not None:
+                used = set(face_mat.get("assignments", {}).values())
+                used.add(face_mat.get("default", ""))
+                used.update(str(nm) for nm in
+                            (getattr(ap, "_furniture_mat_names", {}) or {}).values()
+                            if nm)
+                # Materiales de los parches de absorcion (tambien por nombre).
+                used.update(str(getattr(p, "material_name", "") or "")
+                            for p in (getattr(ap, "_patches", []) or []))
+                by_name = {m.name: m for m in lib.materials}
+                for nm in sorted(n for n in used if n):
+                    m = by_name.get(nm)
+                    if m is not None:
+                        try:
+                            embedded_materials.append(m.to_dict())
+                        except Exception:
+                            pass
+        except Exception:
+            embedded_materials = []
         return {
             "mesh_engine": ap.get_engine_override(),
             "h_target":    float(ap.sb_htarget.value()),
@@ -1149,6 +1226,9 @@ class MainWindow(QMainWindow):
                 for p in getattr(ap, "listen_points", [])
             ],
             "face_materials": face_mat,
+            # Materiales propios embebidos (autocontencion del .room). Aditivo:
+            # un .room viejo sin la clave -> se resuelve contra la biblioteca local.
+            "embedded_materials": embedded_materials,
             # v7: mobiliario (obstaculos rigidos con absorcion por cara).
             "furniture": [m.to_dict() for m in getattr(ap, "furniture", [])],
             # Material por mueble (paralelo a "furniture"; null = rigido). Aditivo:
@@ -1225,6 +1305,8 @@ class MainWindow(QMainWindow):
 
         # v3: geometria externa embebida (CAD)
         ext = data.get("external_geometry") or None
+        cad_load_off = None   # offset con que se re-anclo el CAD al cargar (si !=0,
+                              # los objetos se corren igual para seguir al recinto)
         if ext and isinstance(ext, dict) and ext.get("kind") == "embedded_mesh":
             try:
                 import numpy as _np
@@ -1251,6 +1333,8 @@ class MainWindow(QMainWindow):
                                      float(verts[:, 2].min())])
                     if float(_np.linalg.norm(off)) > 1e-9:
                         verts = verts - off
+                        cad_load_off = off   # el CAD se movio -off; los objetos
+                                             # deben seguirlo (se aplica tras restaurar)
                     mesh = _tm.Trimesh(vertices=verts, faces=faces, process=False)
                     self.acoustic.set_imported_geometry(mesh)
                     self._render_imported_geometry(mesh)
@@ -1267,6 +1351,36 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Estado acustico",
                                       f"No se pudo restaurar:\n{e}")
 
+        # Si el CAD se re-anclo al cargar (frame guardado != origin_mode guardado,
+        # o archivo legacy), el recinto se movio -cad_load_off pero los objetos se
+        # restauraron en el frame viejo -> se corren IGUAL para seguir al recinto
+        # (si no, al reabrir el recinto queda corrido respecto de fuentes/muebles).
+        # Con off=0 (archivo consistente) no hace nada.
+        if cad_load_off is not None:
+            try:
+                self._shift_scene_objects(-cad_load_off, include_receiver=True)
+            except Exception:
+                pass
+
+        # Limpieza segura del mapa de materiales: descartar asignaciones huerfanas
+        # de otros frames (bug historico del origen). No toca la malla; si nada
+        # matchea la geometria actual, no limpia (ver _prune_face_maps_to_geometry).
+        try:
+            self.acoustic._prune_face_maps_to_geometry()
+            if hasattr(self.acoustic, "_refresh_materials_summary"):
+                self.acoustic._refresh_materials_summary()
+        except Exception:
+            pass
+
+        # Materiales propios que el .room usa pero no estan en la biblioteca: se
+        # buscan en una carpeta junto al .room (auto) y, si faltan, se le pide al
+        # usuario que indique la carpeta. Asi un .room compartido con su carpeta de
+        # materiales resuelve sin instalar nada.
+        try:
+            self._resolve_missing_materials(path)
+        except Exception:
+            pass
+
         # Empezamos limpios al abrir un archivo
         self._undo.clear()
         self._redo.clear()
@@ -1278,10 +1392,163 @@ class MainWindow(QMainWindow):
         self.status.setText(f"Abierto: {Path(path).name}")
         return True
 
+    def _assigned_material_names(self):
+        """Nombres de material que el recinto USA (asignaciones por cara + default
+        + materiales de muebles). Sin vacios."""
+        ap = self.acoustic
+        names = set()
+        try:
+            mp = getattr(ap, "_face_mat_map", None)
+            if mp is not None:
+                names.update(mp.to_dict().values())
+                if mp.default:
+                    names.add(mp.default)
+        except Exception:
+            pass
+        try:
+            names.update(str(n) for n in
+                         (getattr(ap, "_furniture_mat_names", {}) or {}).values() if n)
+        except Exception:
+            pass
+        try:
+            names.update(str(getattr(p, "material_name", "") or "")
+                         for p in (getattr(ap, "_patches", []) or []))
+        except Exception:
+            pass
+        return {n for n in names if n}
+
+    def _missing_material_names(self):
+        """Materiales usados por el recinto que NO estan en la biblioteca (no
+        resolverian -> se verian con absorcion ~default)."""
+        ap = self.acoustic
+        try:
+            have = set(ap._mat_lib.names)
+        except Exception:
+            return set()
+        return {n for n in self._assigned_material_names() if n not in have}
+
+    def _material_folder_candidates(self, room_dir: str):
+        """Carpetas candidatas a contener los .json de materiales, JUNTO al .room:
+        el propio directorio del .room, y subcarpetas (hasta 2 niveles) cuyo nombre
+        contenga 'material' (cubre 'materials', 'materiales', 'materiales ale',
+        'materials_ale/materials'). Acotado a proposito para NO recorrer todo el
+        arbol (p.ej. Descargas entera)."""
+        import os as _os
+        cands = []
+        room_dir = str(room_dir)
+        if not _os.path.isdir(room_dir):
+            return cands
+        cands.append((room_dir, False))          # solo *.json directo al lado
+        def _matching_subdirs(base):
+            out = []
+            try:
+                for e in _os.scandir(base):
+                    if e.is_dir() and "material" in e.name.lower():
+                        out.append(e.path)
+            except Exception:
+                pass
+            return out
+        for d1 in _matching_subdirs(room_dir):
+            cands.append((d1, True))              # carpeta de materiales -> recursivo
+            for d2 in _matching_subdirs(d1):
+                cands.append((d2, True))
+        return cands
+
+    def _resolve_missing_materials(self, room_path: str):
+        """Si el .room usa materiales que faltan en la biblioteca, intenta cargarlos
+        de una carpeta JUNTO al .room (auto); si aun faltan, le pide al usuario que
+        indique la carpeta. Registra los faltantes en la biblioteca en memoria."""
+        import os as _os
+        ap = self.acoustic
+        missing = self._missing_material_names()
+        if not missing:
+            return
+        room_dir = _os.path.dirname(_os.path.abspath(str(room_path)))
+        added_total = []
+
+        # (1) AUTO: carpetas de materiales junto al .room.
+        for folder, rec in self._material_folder_candidates(room_dir):
+            if not missing:
+                break
+            try:
+                added = ap._mat_lib.merge_folder(folder, recursive=rec)
+            except Exception:
+                added = []
+            if added:
+                added_total += added
+                missing = self._missing_material_names()
+
+        # (2) Si aun faltan, PEDIR la carpeta al usuario (una vez).
+        if missing:
+            lst = ", ".join(sorted(missing)[:6]) + (" ..." if len(missing) > 6 else "")
+            ask = QMessageBox.question(
+                self, "Materiales del recinto no encontrados",
+                f"El recinto usa {len(missing)} material(es) que no estan en tu "
+                f"biblioteca:\n\n{lst}\n\n¿Queres indicar la carpeta donde estan "
+                "los materiales (los .json)?",
+                QMessageBox.Yes | QMessageBox.No)
+            if ask == QMessageBox.Yes:
+                folder = QFileDialog.getExistingDirectory(
+                    self, "Carpeta de materiales del recinto", room_dir)
+                if folder:
+                    try:
+                        added = ap._mat_lib.merge_folder(folder, recursive=True)
+                    except Exception:
+                        added = []
+                    if added:
+                        added_total += added
+                        missing = self._missing_material_names()
+
+        # Refrescar: la biblioteca cambio -> re-resolver materiales/xi/resumen.
+        if added_total:
+            try:
+                ap._xi_per_mode = None
+            except Exception:
+                pass
+            # Refrescar TODO lo que depende del material (la biblioteca cambio):
+            # resumen de materiales, combos, y el resumen de PARCHES (su alpha se
+            # resuelve por nombre; el restore lo dibujo antes de cargar la carpeta,
+            # asi que quedaba en "Absorcion 1%" hasta este refresco).
+            for _m in ("_refresh_material_combos", "_refresh_materials_summary",
+                       "_refresh_patches_summary"):
+                try:
+                    getattr(ap, _m)()
+                except Exception:
+                    pass
+            self.status.setText(
+                f"Materiales cargados desde la carpeta del recinto: "
+                f"{len(set(added_total))}.")
+        if missing:
+            QMessageBox.information(
+                self, "Materiales faltantes",
+                f"Quedan {len(missing)} material(es) sin encontrar; esas caras "
+                "usan la absorcion por defecto hasta que cargues su carpeta.")
+
     def _restore_acoustic_state(self, ac: dict):
         """Restaura fuentes, receptor, override de motor desde un .room v3."""
         from sources import OmniSource
         ap = self.acoustic
+        # Materiales propios EMBEBIDOS: registrarlos en la biblioteca local (los
+        # que falten) ANTES de resolver las asignaciones por cara, para que un
+        # material propio del profe resuelva aunque no este instalado en esta
+        # maquina. No pisa un material local con el mismo nombre.
+        try:
+            lib = getattr(ap, "_mat_lib", None)
+            emb = ac.get("embedded_materials") or []
+            if lib is not None and emb:
+                from material_library import Material
+                added = 0
+                for md in emb:
+                    try:
+                        if lib.add_material(Material(md)):
+                            added += 1
+                    except Exception:
+                        pass
+                if added:
+                    self.status.setText(
+                        f"Materiales propios embebidos cargados: {added}")
+        except Exception:
+            pass
         # Override de motor (combo del panel)
         engine = (ac.get("mesh_engine") or "auto").lower()
         ap.set_engine_override(engine)
