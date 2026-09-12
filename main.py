@@ -703,6 +703,21 @@ class MainWindow(QMainWindow):
 
     # ---------- Acceso a geometria para el panel acustico ----------
     def _get_current_surface(self):
+        # Con un CAD importado la geometria ACTIVA es el CAD (re-anclado al frame
+        # de render), NO la caja parametrica: `_on_params` retorna temprano con
+        # CAD activo y no actualiza `_surface_verts`, asi que esa cache es la caja
+        # vieja. El panel acustico expone la geometria activa (CAD si lo hay).
+        # Sin esto, la prediccion de ubicacion corria el FEM/inside_fn sobre la
+        # caja de los sliders mientras las fuentes viven sobre el CAD -> fuentes
+        # "afuera" solo con CAD.
+        ap = getattr(self, "acoustic", None)
+        if ap is not None and getattr(ap, "_is_imported_cad", False):
+            try:
+                v, t = ap.get_surface()
+                if v is not None and len(v) > 0:
+                    return _np.asarray(v), _np.asarray(t)
+            except Exception:
+                pass
         if self._surface_verts is None:
             v, t, _e, _n = build_room_geometry(self.controls.get_params())
             self._surface_verts, self._surface_tris = v, t

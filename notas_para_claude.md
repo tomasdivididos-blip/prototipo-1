@@ -429,6 +429,18 @@ no-estanqueidad (Opción C) NO se dispara; alcanzó con el fix de frame (Opción
   layout con una fuente fuera; cierra el fallback `(seeds_ok or seeds)` que podía devolver
   semillas crudas del AABB). Con `inside_fn=None` (caja: bbox==sala) no filtra nada.
 
+**Sub-fix CAD (mismo batch, tras probar el usuario: paramétrico PASÓ, CAD NO):**
+`main._get_current_surface` (el callback `get_surface` del panel de Predicción)
+devolvía SIEMPRE `_surface_verts` = la caja paramétrica cacheada. Con CAD activo,
+`_on_params` retorna temprano (`_reanchor_cad`) y NUNCA actualiza `_surface_verts`,
+así que Predicción recibía la caja de sliders (p.ej. la 6×8×3 default), no el CAD →
+FEM/inside_fn sobre la caja mientras las fuentes viven sobre el CAD → fuentes afuera
+solo con CAD. FIX: `_get_current_surface` ahora, si `acoustic._is_imported_cad`,
+devuelve `acoustic.get_surface()` (el CAD re-anclado, mismo frame que las fuentes).
+Repro headless (scratchpad): caja CAD estanca y con agujero → ambas DENTRO
+(points_inside_surface aguanta un CAD razonable; el gate watertight de v2.43 solo
+hace falta para CAD groseramente rotos, no para este bug).
+
 **Verificación:** `bench_predict_location.py` verde con 2 tests nuevos
 (`predict_location_corner_frame_box`, `predict_location_cad_box_params`);
 `bench_location_opt.py`, smoke `location_opt.py`, `bench_origin_mode.py` (18/18) verdes.
