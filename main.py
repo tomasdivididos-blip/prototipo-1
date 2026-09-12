@@ -357,18 +357,23 @@ class MainWindow(QMainWindow):
         importar otro) sin obligar a re-importar el archivo crudo. Si NO hay CAD,
         pide importar uno (la importacion es la puerta necesaria solo cuando no
         hay nada cargado)."""
+        # El panel se abre SIEMPRE: si hay un CAD activo, sobre ese (para curarlo
+        # mas o exportarlo); si no, en estado VACIO con «Importar CAD…» como unica
+        # accion. Importar es una opcion mas del panel, no la unica puerta.
         ap = getattr(self, "acoustic", None)
-        if (ap is not None and getattr(ap, "_is_imported_cad", False)
-                and getattr(ap, "_imported_mesh", None) is not None):
-            if self._config_active_cad():
-                return          # manejado (curado/exportado/cancelado)
-            # _config_active_cad devolvio False -> el usuario pidio importar otro
+        active = (ap is not None and getattr(ap, "_is_imported_cad", False)
+                  and getattr(ap, "_imported_mesh", None) is not None)
+        mesh = ap._imported_mesh if active else None
+        if self._open_cad_panel(mesh):
+            return              # manejado (aplicado / cancelado)
+        # _open_cad_panel devolvio False -> el usuario pidio importar un archivo.
         self._import_cad_fresh()
 
-    def _config_active_cad(self) -> bool:
-        """Abre el panel de configuración sobre el CAD ACTIVO (sin re-importar).
-        Devuelve True si quedo manejado (aplicado o cancelado), False si el
-        usuario pidio importar OTRO CAD (el caller corre la importacion)."""
+    def _open_cad_panel(self, mesh) -> bool:
+        """Abre el panel «Configuración de CAD». `mesh`=None -> estado vacio (solo
+        importar); `mesh`!=None -> sobre ese CAD activo (curar mas / exportar), sin
+        re-importar. Devuelve True si quedo manejado (aplicado o cancelado), False
+        si el usuario pidio importar un archivo (el caller corre la importacion)."""
         try:
             import geom_import as gi
             from geom_repair_dialog import MeshImportDialog
@@ -376,24 +381,27 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Falta dependencia",
                                  f"No se pudo importar el modulo: {e}")
             return True
-        mesh = self.acoustic._imported_mesh
         path = getattr(self, "_cad_path", "") or ""
-        prog = QProgressDialog("Diagnosticando malla...", None, 0, 0, self)
-        apply_dialog_theme(prog)
-        prog.setWindowTitle("Configuración de CAD")
-        prog.setMinimumDuration(200)
-        prog.setWindowModality(Qt.WindowModal)
-        QApplication.processEvents()
-        try:
-            qs = gi.quick_stats(mesh)
-            too_broken = int(qs.get("n_open_edges", 0)) > 500
-            diag = gi.diagnose(mesh, skip_holes=too_broken)
-        except Exception as e:
+        diag = None
+        if mesh is not None:
+            prog = QProgressDialog("Diagnosticando malla...", None, 0, 0, self)
+            apply_dialog_theme(prog)
+            prog.setWindowTitle("Configuración de CAD")
+            prog.setMinimumDuration(200)
+            prog.setWindowModality(Qt.WindowModal)
+            QApplication.processEvents()
+            try:
+                qs = gi.quick_stats(mesh)
+                too_broken = int(qs.get("n_open_edges", 0)) > 500
+                diag = gi.diagnose(mesh, skip_holes=too_broken)
+            except Exception as e:
+                prog.close()
+                QMessageBox.critical(self, "Error al diagnosticar",
+                                     f"No se pudo diagnosticar la malla:\n{e}")
+                return True
             prog.close()
-            QMessageBox.critical(self, "Error al diagnosticar",
-                                 f"No se pudo diagnosticar la malla:\n{e}")
-            return True
-        prog.close()
+        else:
+            path = ""
         if getattr(self, "_repair_dlg", None) is None:
             self._repair_dlg = MeshImportDialog(mesh, diag, path=path, parent=self)
         else:
@@ -402,11 +410,11 @@ class MainWindow(QMainWindow):
         accepted = dlg.exec_() == QDialog.Accepted
         if getattr(dlg, "_import_requested", False):
             return False        # el caller corre _import_cad_fresh()
-        if not accepted:
+        if not accepted or mesh is None:
             self.status.setText("Configuración de CAD cerrada (sin cambios).")
             return True
         # Aplicar la malla curada SIN re-centrar: ya vive en el frame de render
-        # actual (curar no cambia el frame). Re-centrar la correria del origen.
+        # actual (curar no cambia el frame).
         final_mesh = dlg.result_mesh
         self._apply_cad_mesh(final_mesh, path, center=False)
         self.status.setText(

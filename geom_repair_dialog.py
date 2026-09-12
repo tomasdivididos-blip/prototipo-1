@@ -203,6 +203,20 @@ class _MeshPreview(gl.GLViewWidget):
             self.removeItem(it)
         self._highlight_items = []
 
+    def clear_mesh(self):
+        """Vacia el preview (estado sin CAD): saca malla, wireframe y highlights."""
+        self.clear_highlights()
+        for attr in ("_mesh_item", "_edge_item"):
+            it = getattr(self, attr, None)
+            if it is not None:
+                try:
+                    self.removeItem(it)
+                except Exception:
+                    pass
+                setattr(self, attr, None)
+        self._pick_faces = None
+        self._pick_centroids = None
+
     def highlight_hole(self, mesh, hole):
         """Resalta el ciclo del hueco en rojo grueso + esferita en el centroide."""
         self.clear_highlights()
@@ -321,7 +335,7 @@ class MeshImportDialog(QDialog):
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Configuración de CAD — diagnóstico, curado, exportar")
         self.resize(1180, 680)         # +100 px para acomodar el panel izq
-        self._mesh = mesh.copy()
+        self._mesh = mesh.copy() if mesh is not None else None
         self._diag = diagnosis
         self._current_hole_idx = 0
         self._path = path
@@ -341,7 +355,7 @@ class MeshImportDialog(QDialog):
         (y su unico visor GL). Crear/destruir un GLViewWidget por importacion hace
         que en Windows el contexto OpenGL se pelee con el visor principal ->
         pantalla negra. Reusando, hay un solo contexto para toda la vida de la app."""
-        self._mesh = mesh.copy()
+        self._mesh = mesh.copy() if mesh is not None else None
         self._diag = diagnosis
         self._current_hole_idx = 0
         self._path = path
@@ -629,6 +643,7 @@ class MeshImportDialog(QDialog):
         left_scroll.setFrameShape(QFrame.NoFrame)
         left_scroll.setWidget(left)
         left_scroll.setMinimumWidth(465)     # left(440) + barra
+        self._left_scroll = left_scroll      # para deshabilitar en estado vacio
         split.addWidget(left_scroll)
 
         # === Derecha: preview 3D ===
@@ -651,11 +666,11 @@ class MeshImportDialog(QDialog):
 
         # === Footer ===
         foot = QHBoxLayout()
-        self.btn_import_other = QPushButton("Importar otro CAD…")
+        self.btn_import_other = QPushButton("Importar CAD…")
         self.btn_import_other.setToolTip(
-            "Carga un archivo CAD distinto (reemplaza el que estás viendo). "
-            "Importar es una opción más: no hace falta re-importar para curar o "
-            "exportar el CAD que ya tenés cargado.")
+            "Carga un archivo CAD (reemplaza el que estás viendo, si hay). "
+            "Importar es una opción más del panel: no hace falta re-importar para "
+            "curar o exportar el CAD que ya tenés cargado.")
         self.btn_import_other.clicked.connect(self._request_import)
         foot.addWidget(self.btn_import_other)
         self.btn_export = QPushButton("Exportar CAD curado…")
@@ -681,7 +696,43 @@ class MeshImportDialog(QDialog):
     # -----------------------------------------------------------------------
     # Refresh
     # -----------------------------------------------------------------------
+    def _set_tools_enabled(self, on: bool):
+        """Habilita/deshabilita las herramientas de curado y el Aceptar/Exportar.
+        En estado vacio (sin CAD) solo quedan «Importar CAD…» y «Cancelar»."""
+        try:
+            self._left_scroll.setEnabled(on)
+        except Exception:
+            pass
+        for name in ("btn_export",):
+            b = getattr(self, name, None)
+            if b is not None:
+                b.setEnabled(on)
+        try:
+            self.btns_main.button(QDialogButtonBox.Ok).setEnabled(on)
+        except Exception:
+            pass
+
     def _refresh_all(self):
+        # Estado VACIO: el panel se abrio sin CAD cargado. Mostramos el aviso y
+        # dejamos solo «Importar CAD…» (+ Cancelar) activos; el resto se habilita
+        # cuando entra una malla.
+        if self._mesh is None:
+            self._set_tools_enabled(False)
+            try:
+                self.txt_summary.setPlainText(
+                    "No hay ningún CAD cargado.\n\nUsá «Importar CAD…» para cargar "
+                    "un archivo (STL, OBJ, PLY, STEP, IGES, glTF...). Después vas a "
+                    "poder diagnosticar, curar y exportar la malla desde este panel.")
+                self.lbl_status.setText(
+                    "<span style='color:#b45309;font-weight:600'>"
+                    "Sin CAD cargado. Importá uno para empezar.</span>")
+                self.list_holes.clear()
+                self.lbl_path.setText("<b>Archivo:</b> (ninguno)")
+                self.preview.clear_mesh()
+            except Exception:
+                pass
+            return
+        self._set_tools_enabled(True)
         # Gate barato: si la malla esta MUY rota (miles de aristas abiertas), NO
         # correr find_holes ni armar la lista de huecos en cada refresco (congela
         # la UI). Se muestra el diagnostico numerico y se invita a «Curar todo».
