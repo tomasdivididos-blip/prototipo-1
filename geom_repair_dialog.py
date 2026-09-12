@@ -32,7 +32,7 @@ from PyQt5.QtWidgets import (
     QListWidget, QListWidgetItem, QPlainTextEdit, QSplitter,
     QGroupBox, QFormLayout, QDoubleSpinBox, QDialogButtonBox,
     QMessageBox, QSizePolicy, QWidget, QScrollArea, QFrame,
-    QSpinBox, QApplication,
+    QSpinBox, QApplication, QFileDialog,
 )
 
 import geom_import as gi
@@ -649,6 +649,12 @@ class MeshImportDialog(QDialog):
 
         # === Footer ===
         foot = QHBoxLayout()
+        self.btn_export = QPushButton("Exportar CAD curado…")
+        self.btn_export.setToolTip(
+            "Guarda la malla ACTUAL (ya curada) a un archivo .obj/.stl/.ply para "
+            "reusarla o compartirla. Exportá recién cuando sea estanca.")
+        self.btn_export.clicked.connect(self._export_cured)
+        foot.addWidget(self.btn_export)
         foot.addStretch()
         self.btns_main = QDialogButtonBox(QDialogButtonBox.Ok |
                                             QDialogButtonBox.Cancel)
@@ -1027,3 +1033,42 @@ class MeshImportDialog(QDialog):
         box.setText(html)
         box.setStandardButtons(QMessageBox.Ok)
         box.exec_()
+
+    def _export_cured(self):
+        """Exporta la malla ACTUAL (ya curada) a .obj/.stl/.ply para reusarla o
+        compartirla, sin tener que guardar un .room. Avisa si todavia no es
+        estanca (se puede exportar igual, pero el interior no estara definido)."""
+        import os
+        try:
+            wt = bool(self._mesh.is_watertight)
+        except Exception:
+            wt = False
+        if not wt:
+            ret = QMessageBox.question(
+                self, "La malla no es estanca",
+                "La malla ACTUAL todavía NO es un sólido cerrado (watertight). "
+                "Podés exportarla igual, pero para simular/optimizar bien conviene "
+                "curarla hasta que sea estanca.\n\n¿Exportar de todas formas?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if ret != QMessageBox.Yes:
+                return
+        base = os.path.splitext(os.path.basename(self._path or "recinto"))[0]
+        suggested = os.path.join(
+            os.path.dirname(self._path) if self._path else "",
+            f"{base}_curado.obj")
+        path, _flt = QFileDialog.getSaveFileName(
+            self, "Exportar CAD curado", suggested,
+            "Wavefront OBJ (*.obj);;STL (*.stl);;PLY (*.ply)")
+        if not path:
+            return
+        try:
+            self._mesh.export(path)          # trimesh elige el formato por extension
+        except Exception as e:
+            QMessageBox.critical(self, "Error al exportar",
+                                 f"No se pudo exportar la malla:\n{e}")
+            return
+        QMessageBox.information(
+            self, "Exportado",
+            f"Malla curada exportada a:\n{path}\n\n"
+            f"({len(self._mesh.vertices)} vértices, {len(self._mesh.faces)} caras, "
+            f"{'estanca' if wt else 'NO estanca'})")

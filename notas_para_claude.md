@@ -441,6 +441,26 @@ Repro headless (scratchpad): caja CAD estanca y con agujero → ambas DENTRO
 (points_inside_surface aguanta un CAD razonable; el gate watertight de v2.43 solo
 hace falta para CAD groseramente rotos, no para este bug).
 
+**Confirmación con CAD real (aula):** reproducido de raíz. `PLANO AULA.obj` crudo NO
+es estanco (32 cuerpos) → Predecir da `contains=False` (afuera de verdad); la geom
+embebida en `aula.room` tampoco (173 cuerpos). Sobre un CAD no estanco `points_inside_
+surface` es poco confiable (56-63% del AABB "adentro") → el optimizador puede caer
+afuera; es el límite documentado en [[curado-cad-v243]] (no se arregla con mejor test,
+hay que CURAR a estanco). Con `curado.room` (el usuario cerró el aula: watertight=True,
+2 cuerpos = recinto+columna) Predecir cae DENTRO en auto/center/corner → el fix de frame
+funciona sobre un CAD estanco. Moraleja: el fix de frame era necesario pero no suficiente;
+la condición dura es CAD estanco.
+
+**Export CAD curado (mismo batch, pedido del usuario):** botón «Exportar CAD curado…»
+en `geom_repair_dialog.MeshImportDialog` (footer) → `self._mesh.export(path)` a
+.obj/.stl/.ply. Default .obj (STL duplica vértices → re-lee no estanco; OBJ/PLY conservan
+el sólido). Avisa si la malla aún no es estanca. Así el usuario reusa/comparte el CAD
+curado sin depender del .room embebido.
+
+**Pendiente OPCIONAL (ofrecido, no implementado):** guarda en la solapa Predicción que
+avise cuando el CAD activo no es estanco (hoy solo avisa el FEM de Acústica vía
+`_confirm_nonsolid_cad`); evitaría el "afuera silencioso" que confundió al usuario.
+
 **Verificación:** `bench_predict_location.py` verde con 2 tests nuevos
 (`predict_location_corner_frame_box`, `predict_location_cad_box_params`);
 `bench_location_opt.py`, smoke `location_opt.py`, `bench_origin_mode.py` (18/18) verdes.

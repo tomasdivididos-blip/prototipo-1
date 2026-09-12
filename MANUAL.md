@@ -2917,4 +2917,10 @@ El cálculo de ubicación reconstruía el recinto **centrado en el origen** cuan
 
 No hay cambios de uso: es transparente. Si antes evitabas «Esquina Inf.» por este problema, ya podés usar cualquiera de los dos modos.
 
+**Importante (CAD):** para que la ubicación de fuentes se acote bien, el CAD tiene que ser un **sólido cerrado (watertight)**. Sobre un CAD no estanco el «adentro» del recinto no está definido y las posiciones pueden salir mal, igual que con la simulación (curá el CAD en «Importar CAD → Curar CAD roto» hasta que sea estanco).
+
+### Exportar el CAD curado
+
+En el diálogo de «Importar CAD» hay un botón nuevo **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
+
 *Manual actualizado al 12 de Septiembre de 2026 — v2.44.*
