@@ -378,6 +378,58 @@ def test_predict_location_pentagon_all_seeds_outside():
                f"semillas crudas fuera={n_bad}/6, preds={len(preds)}")
 
 
+def test_predict_location_corner_frame_box():
+    """Regresion (bug del profesor, 12 Sep 2026): CAJA parametrica con
+    origin_mode='corner'. El panel ahora pasa SIEMPRE la malla real -> el FEM,
+    el inside_fn y las fuentes comparten frame. Antes, sin surface, el FEM se
+    reconstruia con make_room (centrado) y las posiciones sugeridas salian en
+    [-W/2,W/2]; aplicadas a la sala en [0,L] caian fuera. Debe dar DENTRO en
+    corner y center."""
+    from geometry import build_room_geometry
+    from acoustic_mesh import points_inside_surface
+    ok = True
+    box = dict(_PARAMS, width=4.0, length=6.0, height=3.0)
+    for mode in ("corner", "center"):
+        p = dict(box, origin_mode=mode)
+        v, t, _e, _n = build_room_geometry(p)
+        v = np.asarray(v, float); ti = np.asarray(t, int)
+        fixed = pr.fixed_room_from_design(p, surface=(v, t))
+        preds = pr.predict_axis(_inputs(), mode="location", fixed_candidate=fixed,
+                                surface=(v, t), progress=lambda m: None)
+        all_in = all(bool(np.all(points_inside_surface(
+            np.atleast_2d(np.asarray(pp.layout.positions, float)), v, ti)))
+            for pp in preds)
+        ok &= _ok(f"caja origin={mode}: recomendaciones dentro del recinto real",
+                  len(preds) >= 1 and all_in,
+                  f"preds={len(preds)}")
+    return ok
+
+
+def test_predict_location_cad_box_params():
+    """Regresion CAD: los params son la caja default de los sliders (el CAD no
+    escribe base_polygon) pero la geometria real (surface) esta en otro frame
+    ([0,L], no centrada). Con el fix el panel pasa esa malla real -> el FEM y
+    el inside_fn usan la geometria/frame del CAD y las posiciones caen dentro.
+    is_irregular_shape sigue siendo False (es lo que rompia el gate viejo)."""
+    from geometry import build_room_geometry
+    from acoustic_mesh import points_inside_surface
+    box = dict(_PARAMS, width=4.0, length=6.0, height=3.0)
+    # Malla real del "CAD": la caja en [0,L] (corner). Params = caja 'auto'.
+    v, t, _e, _n = build_room_geometry(dict(box, origin_mode="corner"))
+    v = np.asarray(v, float); ti = np.asarray(t, int)
+    cad_params = dict(box, origin_mode="auto")
+    not_irregular = not pr.is_irregular_shape(cad_params)
+    fixed = pr.fixed_room_from_design(cad_params, surface=(v, t))
+    preds = pr.predict_axis(_inputs(), mode="location", fixed_candidate=fixed,
+                            surface=(v, t), progress=lambda m: None)
+    all_in = all(bool(np.all(points_inside_surface(
+        np.atleast_2d(np.asarray(pp.layout.positions, float)), v, ti)))
+        for pp in preds)
+    return _ok("CAD (params caja, malla en [0,L]) -> recomendaciones dentro",
+               not_irregular and len(preds) >= 1 and all_in,
+               f"irregular={not not_irregular} preds={len(preds)}")
+
+
 def test_location_perturbation_damping():
     """Etapa 2c: el FEM de ubicacion usa xi POR MODO (perturbacion) en vez del
     1.1/(f_n·RT) uniforme, cuando damping_model='perturbation' y hay materiales
@@ -457,6 +509,8 @@ def main():
         ("predict_location_irregular_real_mesh", test_predict_location_irregular_real_mesh),
         ("predict_location_irregular_sources_inside", test_predict_location_irregular_sources_inside),
         ("predict_location_pentagon_all_seeds_outside", test_predict_location_pentagon_all_seeds_outside),
+        ("predict_location_corner_frame_box", test_predict_location_corner_frame_box),
+        ("predict_location_cad_box_params", test_predict_location_cad_box_params),
         ("location_perturbation_damping", test_location_perturbation_damping),
     ]
     all_ok = True

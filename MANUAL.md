@@ -2894,4 +2894,27 @@ Un grupo nuevo de herramientas, con **lectura en vivo** (cuerpos · aristas abie
 
 Si el CAD importado **no es un sólido cerrado**, al calcular los modos el soft **avisa y te deja cancelar** (con una estimación del tamaño del mallado) en vez de arrancar un cálculo que puede colgarse. Curá la malla hasta que sea estanca, o cerrala en tu 3D, y el aviso desaparece.
 
-*Manual actualizado al 12 de Septiembre de 2026 — v2.43.*
+---
+
+**Cambios v2.44** (12 de septiembre 2026): **el optimizador y la evaluación de ubicación de fuentes (pestaña Predicción) ya no ponen fuentes «afuera del recinto»** con un CAD importado o un recinto paramétrico, y dejan de dar el falso aviso «las fuentes no caen dentro del recinto» según el modo de origen. Pedido del profesor.
+
+### Qué pasaba
+
+En la pestaña Predicción, al **optimizar** la ubicación de las fuentes o al **evaluar tu diseño** por criterio Ubicación:
+
+- Con el origen en **«Esquina Inf.»** (pestaña Geometría) salía un aviso falso de que las fuentes estaban afuera y no dejaba evaluar; con **«Centro de planta»** funcionaba.
+- El optimizador colocaba fuentes **fuera del recinto**, tanto con un CAD importado como con un recinto dibujado o paramétrico.
+
+### Por qué
+
+El cálculo de ubicación reconstruía el recinto **centrado en el origen** cuando la forma no era una planta dibujada (es decir: cualquier CAD, y cualquier caja o polígono hecho con los sliders). Pero tus fuentes viven en el sistema de coordenadas que elegiste con el **modo de origen**. En «Centro de planta» los dos coinciden; en «Esquina Inf.» no, y por ese corrimiento las fuentes «se veían» afuera y las posiciones sugeridas caían fuera del recinto real. Además, con un CAD, se usaban las dimensiones de los sliders en vez de la geometría real del CAD.
+
+### Qué cambió
+
+- La ubicación de fuentes (optimizar y evaluar) corre **siempre sobre la malla real** que ves en el visor, en tu mismo sistema de coordenadas y con la geometría real (el CAD, no la caja de los sliders). Vale para cualquier forma y cualquier modo de origen.
+- El test de «adentro del recinto» usa el **polígono real** del recinto (no su caja envolvente), así que el optimizador **nunca** sugiere una posición fuera del recinto.
+- El aviso «las fuentes no caen dentro del recinto» solo aparece ahora cuando la fuente está **realmente** afuera (por ejemplo, si moviste la geometría después de colocarla), no por el modo de origen.
+
+No hay cambios de uso: es transparente. Si antes evitabas «Esquina Inf.» por este problema, ya podés usar cualquiera de los dos modos.
+
+*Manual actualizado al 12 de Septiembre de 2026 — v2.44.*

@@ -495,6 +495,28 @@ def optimize_layout(ctx: LocationContext,
                           for t in trials if ctx.layout_inside(t))
         scored.sort(key=lambda r: r.score_total, reverse=True)
 
+    # Guarda dura "nunca afuera": ningun layout devuelto puede tener una fuente
+    # fuera del recinto real. Un candidato afuera se REPARA (biseccion al
+    # interior preservando la estrategia) y se re-evalua; si no se puede reparar,
+    # se descarta. Cierra el hueco del fallback `(seeds_ok or seeds)` (que podia
+    # scorear semillas crudas del AABB) y de cualquier trial de refinamiento que
+    # se colara. Con inside_fn=None (recinto caja: bbox == sala) no filtra nada.
+    def _inside_or_repaired(r: LayoutScore) -> Optional[LayoutScore]:
+        if ctx.layout_inside(r.layout):
+            return r
+        rep = ctx.repair_layout(r.layout)
+        if rep is None or not ctx.layout_inside(rep):
+            return None
+        return evaluate_layout(ctx, rep, weights)
+
+    guarded: List[LayoutScore] = []
+    for r in scored:
+        g = _inside_or_repaired(r)
+        if g is not None:
+            guarded.append(g)
+    guarded.sort(key=lambda r: r.score_total, reverse=True)
+    scored = guarded or scored          # ultimo recurso: no dejar sin salida
+
     # Seleccion con diversidad: a lo sumo un representante (el mejor) por
     # 'estrategia' (nro de fuentes + montaje + celda de centroide).
     out: List[LayoutScore] = []

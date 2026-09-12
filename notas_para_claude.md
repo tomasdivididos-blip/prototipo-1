@@ -392,6 +392,55 @@ no-manifold; la guarda lo frena.
   de items en la lista congela la UI → gate por `quick_stats` (skip_holes si >500 aristas
   abiertas).
 
+## 1h. Batch v2.44 (12 Sep 2026) — fix frame del optimizador/evaluador de ubicación (Predicción)
+
+Bug del profesor (cadena de v2.42/v2.43): en la pestaña Predicción, al optimizar
+o evaluar la UBICACIÓN de fuentes, las fuentes caían/salían AFUERA del recinto, y
+salía un falso aviso "las fuentes no caen dentro del recinto" en `origin_mode=corner`
+(andaba en `center`). Afectaba CAD importado y recinto paramétrico (caja o N-gono);
+el recinto DIBUJADO (base_polygon) no fallaba.
+
+**Causa raíz (mismo tipo de bug de frame que v2.42):** `prediction_panel` solo pasaba
+la malla real (`surface`) cuando `is_irregular_shape(params)` (o sea, con `base_polygon`
+/`wall_profiles`). Sin `surface`, `_build_location_context` reconstruía el recinto con
+`_build_surface_mesh(cand)` = `make_room(...)`, que **centra en el origen e ignora
+`origin_mode`**. Las fuentes reales viven en el frame de render (`build_room_geometry`
+→ `anchor_vertices`, respeta `origin_mode`). En `center` los frames coinciden; en
+`corner` difieren por `origin_offset=(xmin,ymin)`. Consecuencias: `_assert_sources_inside`
+comparaba fuentes ([0,L]) contra bbox centrado → falso "afuera"; `optimize_layout`
+generaba posiciones en frame centrado → aplicadas al recinto real → afuera. Además con
+`surface=None` el `inside_fn` quedaba en None (sin restricción al polígono).
+
+**Repro headless (scratchpad, decidió B vs C):** caja corner=AFUERA, caja center=DENTRO,
+dibujado L (no convexo) corner/center=DENTRO. El dibujado NO falla porque ahí sí se pasa
+`surface` y `points_inside_surface` restringe bien aún en planta no convexa → la vía de
+no-estanqueidad (Opción C) NO se dispara; alcanzó con el fix de frame (Opción B).
+
+**Fix (Opción B, aditivo):**
+- `prediction_panel._on_predict`/`_on_evaluate`: pasar SIEMPRE la malla real
+  (`_get_current_surface`) en ubicación/combinado, sin gate por `is_irregular_shape`.
+- `prediction.fixed_room_from_design` y `evaluate_design`: dims del candidato desde el
+  AABB de la malla real cuando hay `surface` (corrige volumen/RT60 del CAD; no-op en caja).
+- `prediction._build_location_context`: `inside_fn` SIEMPRE presente, contra la misma
+  malla (v,t) del FEM (mismo frame que las fuentes).
+- `prediction._assert_sources_inside`: test contra `inside_fn` (polígono real) con el AABB
+  como respaldo tolerante al borde; solo avisa si falla por AMBOS (desajuste de frame real).
+- `location_opt.optimize_layout`: guarda dura final "nunca afuera" (repara o descarta todo
+  layout con una fuente fuera; cierra el fallback `(seeds_ok or seeds)` que podía devolver
+  semillas crudas del AABB). Con `inside_fn=None` (caja: bbox==sala) no filtra nada.
+
+**Verificación:** `bench_predict_location.py` verde con 2 tests nuevos
+(`predict_location_corner_frame_box`, `predict_location_cad_box_params`);
+`bench_location_opt.py`, smoke `location_opt.py`, `bench_origin_mode.py` (18/18) verdes.
+
+**No tocado:** el optimizador DBA/CABS (`dba_dialog`/`cabs_optimize`) es otro flujo y ya
+trabaja en frame mundo consistente (`origin=vmin`, fuentes/receptor/`inside_fn` mundo).
+Pendiente menor de doc: modo "combined" en Predecir genera geometrías nuevas y al aplicar
+re-ancla la geometría pero no las fuentes (no reportado; latente si `origin_mode!=center`).
+FALTA: test visual GUI (checklist).
+
+---
+
 ## 2. Perfil del usuario
 
 - **Profesión**: ingeniero en acústica.

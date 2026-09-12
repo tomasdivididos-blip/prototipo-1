@@ -1076,14 +1076,18 @@ class PredictionPanel(QWidget):
         if mode == "location" and self._get_design_params is not None:
             try:
                 params = self._get_design_params()
-                # Forma irregular -> el FEM de ubicacion corre sobre la malla
-                # REAL renderizada (Camino B, como "Evaluar mi diseño"): mismos
-                # modos y mismo sistema de coordenadas que la pestaña Geometria.
-                # El candidato aporta ademas el volumen/areas (AABB) para el RT60.
-                if pr.is_irregular_shape(params) and self._get_surface is not None:
+                # El FEM de ubicacion corre SIEMPRE sobre la malla REAL
+                # renderizada (Camino B), no solo en forma irregular: garantiza
+                # que el FEM, el test de "adentro" (inside_fn) y las fuentes
+                # reales compartan el MISMO frame (respeta origin_mode) y la
+                # MISMA geometria (importa para CAD, cuyos params son la caja
+                # default de los sliders). Sin esto, en origin_mode!=center o con
+                # un CAD las posiciones sugeridas caian fuera del recinto.
+                if self._get_surface is not None:
                     surface = self._get_surface()
-                    print(f"[Prediccion] forma irregular: FEM de ubicacion "
-                          f"sobre la malla real ({len(surface[0])} vertices)")
+                    if pr.is_irregular_shape(params):
+                        print(f"[Prediccion] forma irregular: FEM de ubicacion "
+                              f"sobre la malla real ({len(surface[0])} vertices)")
                 fixed = pr.fixed_room_from_design(params, surface=surface)
             except Exception:
                 import traceback
@@ -1232,18 +1236,26 @@ class PredictionPanel(QWidget):
 
         weights = self._collect_weights() if mode != "geometry" else None
 
-        # --- Forma irregular: FEM sobre la malla REAL renderizada ---
+        # --- Malla real para el FEM ---
+        # Ubicacion/Combinado evaluan TUS fuentes reales: el FEM debe correr
+        # sobre la malla REAL renderizada SIEMPRE (mismo frame que las fuentes;
+        # respeta origin_mode; usa la geometria real del CAD, no la caja de los
+        # sliders). Geometria pura solo necesita la malla real si la forma es
+        # irregular. Sin esto, en origin_mode!=center o con CAD las fuentes se
+        # veian "afuera del recinto" (falso) por desajuste de coordenadas.
         surface = None
         shape_mode = "exact"
-        if pr.is_irregular_shape(params):
-            surface = (self._get_surface()
-                       if self._get_surface is not None else None)
-            if surface is None:
-                QMessageBox.warning(
-                    self, "Sin malla",
-                    "El diseño tiene una forma personalizada pero no puedo "
-                    "obtener la malla renderizada para evaluarla.")
-                return
+        irregular = pr.is_irregular_shape(params)
+        need_surface = irregular or mode in ("location", "combined")
+        if need_surface and self._get_surface is not None:
+            surface = self._get_surface()
+        if surface is None and irregular:
+            QMessageBox.warning(
+                self, "Sin malla",
+                "El diseño tiene una forma personalizada pero no puedo "
+                "obtener la malla renderizada para evaluarla.")
+            return
+        if irregular:
             if mode in ("geometry", "combined"):
                 # La geometría se pondera -> que el usuario elija cómo.
                 if not self._ask_irregular_shape():

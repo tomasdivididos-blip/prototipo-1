@@ -6,7 +6,7 @@
 > cada cosa contra la fuente física, un oráculo, o una cuenta propia. Que este archivo
 > diga "resuelto/PASA" no prueba nada; es un puntero a qué mirar.
 
-**Última actualización:** 2026-09-12.
+**Última actualización:** 2026-09-12 (v2.44).
 
 ## Estado del proyecto
 
@@ -101,6 +101,22 @@ VERIFICAR):**
   subs están inset de la pared (vs distancia frente→trasero real)? El tol_rel 0.35 lo tapa, pero es
   aproximación. (2) ¿El gate front/rear por `wall_tol=0.6 m` clasifica bien en salas chicas?
   `bench_cabs_criterion.py` 14/14 (incluye las reglas de array por criterio).
+
+**Fix frame ubicación v2.44 (12 Sep 2026, en alcance — VERIFICAR):** el optimizador/
+evaluador de ubicación de la pestaña Predicción ponía fuentes AFUERA del recinto (y daba
+falso "afuera") con `origin_mode=corner` en CAD y recinto paramétrico. Causa afirmada: el
+FEM de ubicación se reconstruía centrado (`make_room`, ignora `origin_mode`) cuando no se
+pasaba la malla real (solo se pasaba si `is_irregular_shape`); las fuentes viven en el frame
+de render. Fix: pasar SIEMPRE la malla real → FEM, `inside_fn` (polígono real) y fuentes en
+un mismo frame; guarda dura "nunca afuera" en `location_opt.optimize_layout`. A auditar:
+(1) ¿el FEM sobre la malla real en frame `corner` da los MISMOS modos/ξ que en `center`
+(invariancia por traslación del solver)? verificar que trasladar el recinto no mueve fₙ;
+(2) `points_inside_surface` como `inside_fn` es el mismo test ray-parity 1-dir de v2.43:
+para el recinto DIBUJADO no convexo dio DENTRO en el repro, pero para un CAD curado
+apenas-estanco puede tener falsos "adentro" (la guarda solo garantiza lo que ese test
+afirma); (3) `evaluate_design`/`fixed_room_from_design` ahora toman dims del AABB de la
+malla real (no de sliders) → para un N-gono el RT60 usa `_shoebox_areas` del AABB (área
+sobrestimada). Repro headless en scratchpad; `bench_predict_location.py` +2 tests.
 
 **Optimizador v2.42 (10 Sep 2026, en alcance — VERIFICAR):** `cabs_optimize.optimize_cabs`
 sumó (1) restricción dura al recinto real: `_cost` penaliza +100 dB por fuente movida fuera

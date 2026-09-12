@@ -1375,21 +1375,27 @@ def candidate_from_params(params: dict, name: str = "Tu diseño actual",
 def fixed_room_from_design(params: dict, surface=None) -> Candidate:
     """Candidate del recinto ACTUAL para el eje de UBICACION (recinto fijo).
 
-    Si la forma es irregular (planta dibujada / cortes laterales) y tenemos la
-    malla real renderizada (`surface` = (v, t)), reconstruye la CAJA ENVOLVENTE
-    (AABB) de esa malla en vez de tomar las dimensiones crudas de los sliders:
-    asi el FEM de ubicacion corre sobre una caja que ENVUELVE al recinto real
-    (mismas extensiones en planta y alto) y las posiciones de fuente generadas
-    caen dentro de ese volumen. Si la forma es regular —o no hay malla— usa los
-    params tal cual.
+    Si tenemos la malla real renderizada (`surface` = (v, t)), reconstruye la
+    CAJA ENVOLVENTE (AABB) de esa malla en vez de tomar las dimensiones crudas
+    de los sliders. Esto vale para TODA forma con malla real, no solo la
+    irregular:
+      - forma irregular (planta dibujada / cortes laterales): el AABB envuelve
+        el recinto real (mismas extensiones en planta y alto);
+      - CAD importado: los params siguen siendo la caja default de los sliders,
+        pero la geometria real es el CAD -> el AABB del CAD es el volumen/areas
+        correctos para el RT60 (antes se tomaban los sliders, mal);
+      - caja parametrica: el AABB coincide con los sliders (no-op numerico), y
+        de paso el candidato queda en el MISMO frame que la malla real.
+    Sin malla usa los params tal cual.
 
     Es el analogo, para el flujo "Predecir ubicacion", del shape_mode="aabb" de
     evaluate_design ("Evaluar mi diseño"): el score de ubicacion no depende del
     detalle fino de la forma (Bolt/ratios), pero SI del volumen y las paredes,
     que la caja envolvente aproxima."""
-    if is_irregular_shape(params) and surface is not None:
-        return candidate_from_params(params, name="Recinto (caja env.)",
-                                     aabb=_aabb_dims(surface))
+    if surface is not None:
+        name = ("Recinto (caja env.)" if is_irregular_shape(params)
+                else "Tu diseño actual")
+        return candidate_from_params(params, name=name, aabb=_aabb_dims(surface))
     return candidate_from_params(params)
 
 
@@ -1575,16 +1581,17 @@ def _build_location_context(cand: Candidate, inputs: PredictInputs,
     if damping is None:
         rt = max(float(effective_rt60(inputs, cand)), 1e-3)
         damping = 1.1 / (np.maximum(np.asarray(mr.freqs, float), 1e-6) * rt)
-    # Forma irregular: el AABB incluye zonas fuera de la sala (pared inclinada,
-    # planta no rectangular). inside_fn testea contra la superficie REAL para
-    # que el optimizador no recomiende fuentes fuera del recinto.
-    inside_fn = None
-    if surface is not None:
-        from acoustic_mesh import points_inside_surface
-        sv = np.asarray(v, dtype=float)
-        st = np.asarray(t, dtype=int)
-        inside_fn = lambda pts: points_inside_surface(
-            np.asarray(pts, dtype=float), sv, st)
+    # inside_fn: test de pertenencia al recinto REAL (poligono, no AABB). Se arma
+    # SIEMPRE, contra la MISMA malla (v, t) que alimenta el FEM -> el optimizador
+    # nunca recomienda fuentes fuera del recinto, y en el mismo frame que las
+    # fuentes reales (respeta origin_mode). Sin esto (inside_fn=None) el espacio
+    # de busqueda era el AABB: en planta no rectangular incluye zonas fuera de la
+    # sala, y en caja con origin_mode!=center el frame no coincidia con el render.
+    from acoustic_mesh import points_inside_surface
+    sv = np.asarray(v, dtype=float)
+    st = np.asarray(t, dtype=int)
+    inside_fn = lambda pts: points_inside_surface(
+        np.asarray(pts, dtype=float), sv, st)
     return lo.LocationContext.from_modal(mr, walls, use=inputs.use,
                                          damping=damping, f_max_valid=f_max,
                                          inside_fn=inside_fn)
@@ -1713,13 +1720,24 @@ def _layout_from_sources(sources, label: str = "actual"):
 
 
 def _assert_sources_inside(ctx, layout):
-    """Las fuentes reales viven en coords del recinto de Acustica; el ctx se
-    re-malla con make_room (centrado en origen). Si no coinciden (CAD con
-    offset, o sliders movidos tras colocar las fuentes) avisamos en vez de
-    scorear basura."""
+    """Las fuentes reales viven en el frame de render (respeta origin_mode). El
+    ctx corre el FEM sobre la MISMA malla real y arma `inside_fn` en ese frame,
+    asi que el test primario es contra el poligono real. El AABB queda como
+    respaldo tolerante (una fuente pegada a la pared podria fallar el ray-parity
+    por el borde) para no dar un falso 'afuera'. Solo se avisa si la fuente cae
+    fuera por AMBOS tests: ahi el frame no coincide (bug de coords), no un caso
+    de borde."""
     mn, mx = ctx.room_bbox()
     pos = np.atleast_2d(layout.positions)
-    inside = np.all((pos >= mn - 0.10) & (pos <= mx + 0.10), axis=1)
+    in_bbox = np.all((pos >= mn - 0.10) & (pos <= mx + 0.10), axis=1)
+    in_poly = in_bbox
+    if getattr(ctx, "inside_fn", None) is not None:
+        try:
+            in_poly = np.asarray(ctx.inside_fn(pos), dtype=bool)
+        except Exception:
+            in_poly = in_bbox
+    # Dentro si pasa el poligono O el AABB (respaldo tolerante al borde).
+    inside = in_poly | in_bbox
     if not bool(inside.all()):
         raise ValueError(
             "Las fuentes no caen dentro del recinto reconstruido para la "
@@ -1755,11 +1773,14 @@ def evaluate_design(params: dict, inputs: PredictInputs,
     import location_opt as lo
     m = (mode or "geometry").lower()
 
-    # Candidate: caja envolvente (AABB) si la forma es irregular y se eligio
-    # aproximar; si no, las dimensiones de los sliders.
-    if shape_mode == "aabb" and surface is not None:
-        cand = candidate_from_params(params, name="Tu diseño actual (caja env.)",
-                                     aabb=_aabb_dims(surface))
+    # Candidate: cuando hay malla real (v, t) las dimensiones salen de su caja
+    # envolvente (AABB), no de los sliders. Importa para el CAD (params = caja
+    # default; la geometria real es el CAD) y es no-op numerico en una caja
+    # parametrica. Sin malla, los sliders.
+    if surface is not None:
+        nm = ("Tu diseño actual (caja env.)" if shape_mode != "exact"
+              else "Tu diseño actual")
+        cand = candidate_from_params(params, name=nm, aabb=_aabb_dims(surface))
     else:
         cand = candidate_from_params(params)
     geom_ponderable = (shape_mode != "none")
