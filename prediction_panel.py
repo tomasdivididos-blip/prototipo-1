@@ -1061,6 +1061,35 @@ class PredictionPanel(QWidget):
         except Exception:
             return "sabine"
 
+    def _proceed_if_solid(self, surface) -> bool:
+        """Guarda para la ubicacion de fuentes: si la geometria es un CAD NO
+        estanco, el «adentro» del recinto no esta bien definido (el test de
+        pertenencia es poco confiable) y el optimizador puede sugerir/aplicar
+        fuentes FUERA del recinto. Avisa y deja cancelar. Watertight (o forma
+        parametrica/dibujada, siempre estancas) -> True sin preguntar."""
+        if surface is None:
+            return True
+        try:
+            import trimesh as _tm
+            v, t = surface
+            m = _tm.Trimesh(vertices=np.asarray(v, float),
+                            faces=np.asarray(t, int), process=False)
+            if bool(m.is_watertight):
+                return True
+        except Exception:
+            return True          # ante la duda, no bloquear
+        ret = QMessageBox.warning(
+            self, "CAD no es un sólido cerrado",
+            "La geometría es un CAD que NO es un sólido cerrado (no estanco).\n\n"
+            "Sin un recinto cerrado, el «adentro» no está bien definido: la "
+            "ubicación de fuentes puede caer FUERA del recinto (aunque el número "
+            "salga, no es confiable).\n\n"
+            "Recomendado: cerrá el CAD a estanco en «Configuración de CAD» "
+            "(soldar + borrar el paño de volumen ~0, o cerralo en tu 3D) y "
+            "reintentá.\n\n¿Predecir igual bajo tu responsabilidad?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        return ret == QMessageBox.Yes
+
     def _on_predict(self):
         # Gate de materiales: si no eligio absorcion, primero HEREDAR la de la
         # Acustica (puente bidireccional); solo si no hay, preguntar.
@@ -1096,6 +1125,9 @@ class PredictionPanel(QWidget):
                 traceback.print_exc()
                 fixed = None
                 surface = None
+        # Guarda de CAD no estanco (la ubicacion no se puede acotar bien).
+        if mode == "location" and not self._proceed_if_solid(surface):
+            return
 
         # ProgressDialog mientras corre el FEM lite paralelo
         prog = QProgressDialog("Generando candidatos...", "Cancelar", 0, 0, self)
@@ -1271,6 +1303,11 @@ class PredictionPanel(QWidget):
                     return
             else:
                 shape_mode = "none"             # location: la forma no se pondera
+
+        # Guarda de CAD no estanco para ubicacion/combinado (usan las fuentes
+        # reales; el «adentro» debe estar definido).
+        if mode in ("location", "combined") and not self._proceed_if_solid(surface):
+            return
 
         self._eval_timer.start()
         prog = QProgressDialog("Evaluando tu diseño actual...",

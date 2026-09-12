@@ -2917,7 +2917,7 @@ El cálculo de ubicación reconstruía el recinto **centrado en el origen** cuan
 
 No hay cambios de uso: es transparente. Si antes evitabas «Esquina Inf.» por este problema, ya podés usar cualquiera de los dos modos.
 
-**Importante (CAD):** para que la ubicación de fuentes se acote bien, el CAD tiene que ser un **sólido cerrado (watertight)**. Sobre un CAD no estanco el «adentro» del recinto no está definido y las posiciones pueden salir mal, igual que con la simulación (curá el CAD en «Importar CAD → Curar CAD roto» hasta que sea estanco).
+**Importante (CAD):** para que la ubicación de fuentes se acote bien, el CAD tiene que ser un **sólido cerrado (watertight)**. Sobre un CAD no estanco el «adentro» del recinto no está definido y las posiciones pueden salir mal, igual que con la simulación. Ahora Predicción **avisa** si el CAD no es estanco antes de predecir/evaluar la ubicación; curalo en «Configuración de CAD» (soldar + borrar el paño de volumen ~0, o cerralo en tu 3D) hasta que sea estanco.
 
 ### Panel «Configuración de CAD»
 

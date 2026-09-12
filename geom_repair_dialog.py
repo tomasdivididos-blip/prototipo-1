@@ -330,7 +330,8 @@ class MeshImportDialog(QDialog):
             mesh_final = dlg.result_mesh
     """
 
-    def __init__(self, mesh, diagnosis, path: str = "", parent=None):
+    def __init__(self, mesh, diagnosis, path: str = "", parent=None,
+                 on_import=None):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Configuración de CAD — diagnóstico, curado, exportar")
@@ -341,7 +342,12 @@ class MeshImportDialog(QDialog):
         self._path = path
         self._undo_stack = []          # estados de malla previos (curado)
         self._sel_faces = set()        # caras seleccionadas para borrar (A+)
-        self._import_requested = False # el usuario pidio importar OTRO CAD
+        self._import_requested = False # fallback si no hay callback de importacion
+        self._fresh_import = mesh is None  # el mesh actual vino de importar archivo
+        # Callback de importacion IN-PLACE: fn(dialog) -> (mesh, diag, path) | None.
+        # Importar sin cerrar/reabrir el dialogo evita que el visor GL se rompa al
+        # re-crear el contexto (pantalla negra / render roto en Windows, v2.43).
+        self._on_import = on_import
 
         self._build_ui()
         self._refresh_all()
@@ -350,11 +356,13 @@ class MeshImportDialog(QDialog):
     def result_mesh(self):
         return self._mesh
 
-    def reset(self, mesh, diagnosis, path: str = ""):
-        """Reinicia el dialogo para una NUEVA importacion, REUSANDO la instancia
-        (y su unico visor GL). Crear/destruir un GLViewWidget por importacion hace
-        que en Windows el contexto OpenGL se pelee con el visor principal ->
-        pantalla negra. Reusando, hay un solo contexto para toda la vida de la app."""
+    def reset(self, mesh, diagnosis, path: str = "", fresh: bool = False):
+        """Reinicia el dialogo para una NUEVA malla, REUSANDO la instancia (y su
+        unico visor GL). Crear/destruir un GLViewWidget por importacion hace que en
+        Windows el contexto OpenGL se pelee con el visor principal -> pantalla
+        negra. Reusando, hay un solo contexto para toda la vida de la app.
+        `fresh`=True marca que la malla vino de importar un archivo (el caller la
+        centra al aplicar)."""
         self._mesh = mesh.copy() if mesh is not None else None
         self._diag = diagnosis
         self._current_hole_idx = 0
@@ -362,6 +370,7 @@ class MeshImportDialog(QDialog):
         self._undo_stack = []
         self._sel_faces = set()
         self._import_requested = False
+        self._fresh_import = fresh or (mesh is None)
         try:
             self.lbl_path.setText(f"<b>Archivo:</b> {path or '(en memoria)'}")
         except Exception:
@@ -1095,12 +1104,24 @@ class MeshImportDialog(QDialog):
         box.exec_()
 
     def _request_import(self):
-        """El usuario quiere importar OTRO CAD desde adentro del panel. Se cierra
-        el diálogo marcando el pedido; el main corre el flujo de importación (file
-        dialog + escala + diagnóstico) y reabre el panel sobre la malla nueva.
-        Así 'Importar' es una opción más del panel, no la única puerta de entrada."""
-        self._import_requested = True
-        self.reject()          # cierra sin aplicar; el main mira _import_requested
+        """Importar un CAD desde adentro del panel. IN-PLACE: pide la malla al
+        callback (file dialog + escala + diagnóstico, en el main) y la carga en
+        ESTE mismo diálogo con reset(), sin cerrar/reabrir (evita romper el visor
+        GL en Windows). Si no hay callback, cae al modo viejo (cierra y avisa)."""
+        if self._on_import is None:
+            self._import_requested = True
+            self.reject()
+            return
+        try:
+            res = self._on_import(self)     # -> (mesh, diag, path) | None
+        except Exception as e:
+            QMessageBox.critical(self, "Error al importar",
+                                 f"No se pudo importar el CAD:\n{e}")
+            return
+        if res is None:
+            return                           # el usuario cancelo el file dialog
+        mesh, diag, path = res
+        self.reset(mesh, diag, path, fresh=True)
 
     def _export_cured(self):
         """Exporta la malla ACTUAL (ya curada) a .obj/.stl/.ply para reusarla o

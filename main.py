@@ -364,23 +364,22 @@ class MainWindow(QMainWindow):
         active = (ap is not None and getattr(ap, "_is_imported_cad", False)
                   and getattr(ap, "_imported_mesh", None) is not None)
         mesh = ap._imported_mesh if active else None
-        if self._open_cad_panel(mesh):
-            return              # manejado (aplicado / cancelado)
-        # _open_cad_panel devolvio False -> el usuario pidio importar un archivo.
-        self._import_cad_fresh()
+        self._open_cad_panel(mesh)
 
-    def _open_cad_panel(self, mesh) -> bool:
+    def _open_cad_panel(self, mesh):
         """Abre el panel «Configuración de CAD». `mesh`=None -> estado vacio (solo
         importar); `mesh`!=None -> sobre ese CAD activo (curar mas / exportar), sin
-        re-importar. Devuelve True si quedo manejado (aplicado o cancelado), False
-        si el usuario pidio importar un archivo (el caller corre la importacion)."""
+        re-importar. La importacion se hace IN-PLACE (callback `_load_cad_for_dialog`),
+        sin cerrar/reabrir el visor GL. Al aceptar aplica la malla: si vino de un
+        archivo importado se CENTRA sobre la grilla; si es el CAD activo curado, no
+        (ya vive en el frame de render)."""
         try:
             import geom_import as gi
             from geom_repair_dialog import MeshImportDialog
         except ImportError as e:
             QMessageBox.critical(self, "Falta dependencia",
                                  f"No se pudo importar el modulo: {e}")
-            return True
+            return
         path = getattr(self, "_cad_path", "") or ""
         diag = None
         if mesh is not None:
@@ -398,29 +397,31 @@ class MainWindow(QMainWindow):
                 prog.close()
                 QMessageBox.critical(self, "Error al diagnosticar",
                                      f"No se pudo diagnosticar la malla:\n{e}")
-                return True
+                return
             prog.close()
         else:
             path = ""
         if getattr(self, "_repair_dlg", None) is None:
-            self._repair_dlg = MeshImportDialog(mesh, diag, path=path, parent=self)
+            self._repair_dlg = MeshImportDialog(
+                mesh, diag, path=path, parent=self,
+                on_import=self._load_cad_for_dialog)
         else:
             self._repair_dlg.reset(mesh, diag, path)
         dlg = self._repair_dlg
+        dlg._on_import = self._load_cad_for_dialog   # asegurar callback tras reset
         accepted = dlg.exec_() == QDialog.Accepted
-        if getattr(dlg, "_import_requested", False):
-            return False        # el caller corre _import_cad_fresh()
-        if not accepted or mesh is None:
+        final_mesh = dlg.result_mesh if accepted else None
+        if final_mesh is None:
             self.status.setText("Configuración de CAD cerrada (sin cambios).")
-            return True
-        # Aplicar la malla curada SIN re-centrar: ya vive en el frame de render
-        # actual (curar no cambia el frame).
-        final_mesh = dlg.result_mesh
-        self._apply_cad_mesh(final_mesh, path, center=False)
+            return
+        # Centrar solo si la malla vino de importar un archivo (frame crudo del
+        # CAD); si es el CAD activo curado, ya esta en el frame de render.
+        center = bool(getattr(dlg, "_fresh_import", False))
+        self._apply_cad_mesh(final_mesh, getattr(dlg, "_path", path) or path,
+                             center=center)
         self.status.setText(
-            f"CAD actualizado: {len(final_mesh.vertices)} verts, "
+            f"CAD aplicado: {len(final_mesh.vertices)} verts, "
             f"{len(final_mesh.faces)} tris.")
-        return True
 
     def _apply_cad_mesh(self, final_mesh, path, center: bool = True):
         """Carga `final_mesh` como geometria activa: (opcional) centra sobre la
@@ -460,15 +461,16 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-    def _import_cad_fresh(self):
-        """Importa un CAD nuevo desde archivo (file dialog + escala + diagnostico
-        + panel de curado). Flujo con feedback en vivo via QProgressDialog.
-          - Saltea el QMessageBox de confirmacion para mallas limpias.
-          - Reporta cuanto tarda cada fase en el panel de estado.
-        """
+    def _load_cad_for_dialog(self, dlg=None):
+        """Carga un CAD desde archivo (file dialog + escala/orientacion +
+        diagnostico) y devuelve (mesh, diag, path), o None si el usuario cancela.
+        NO abre el panel, NO centra, NO aplica: eso lo hace el panel «Configuración
+        de CAD» (importacion IN-PLACE, sin cerrar/reabrir el visor GL). `dlg` es el
+        diálogo que pide la importacion (para parentar los modales); si es None se
+        usa `self`."""
+        parent = dlg if dlg is not None else self
         try:
             import geom_import as gi
-            from geom_repair_dialog import MeshImportDialog
             import app_settings
         except ImportError as e:
             QMessageBox.critical(self, "Falta dependencia",
@@ -477,11 +479,11 @@ class MainWindow(QMainWindow):
 
         last_dir = app_settings.get("cad_last_dir", DEFAULT_DIR) or DEFAULT_DIR
         path, _ = QFileDialog.getOpenFileName(
-            self, "Importar geometria CAD",
+            parent, "Importar geometria CAD",
             last_dir, gi.file_filter(),
         )
         if not path:
-            return
+            return None
 
         # Arrancar cronometro de la leyenda bajo el boton "Importar CAD".
         try:
@@ -493,7 +495,7 @@ class MainWindow(QMainWindow):
         timings: dict = {}
         # ProgressDialog: visible solo si la importacion tarda > 200 ms.
         prog = QProgressDialog(
-            "Cargando geometria CAD...", "Cancelar", 0, 0, self
+            "Cargando geometria CAD...", "Cancelar", 0, 0, parent
         )
         apply_dialog_theme(prog)  # tema claro (fondo blanco)
         prog.setWindowTitle("Importacion CAD")
@@ -541,7 +543,7 @@ class MainWindow(QMainWindow):
             # impresion de que la app se cuelga.
             prog.close()
             sdlg = ImportScaleDialog(mesh, suggestion,
-                                      suggested_up=suggested_up, parent=self)
+                                      suggested_up=suggested_up, parent=parent)
             if sdlg.exec_() == QDialog.Accepted:
                 # Aceptado: aplicar escala (factor 1.0 si eligio "No escalar"
                 # -> apply_scale se saltea por el chequeo abs(... -1) > 1e-9).
@@ -565,7 +567,7 @@ class MainWindow(QMainWindow):
         # espontanea. _set_progress() captura `prog` por nombre, asi que
         # apunta automaticamente a la nueva instancia.
         prog = QProgressDialog(
-            "Diagnosticando malla...", "Cancelar", 0, 0, self
+            "Diagnosticando malla...", "Cancelar", 0, 0, parent
         )
         apply_dialog_theme(prog)  # tema claro (fondo blanco)
         prog.setWindowTitle("Importacion CAD")
@@ -600,128 +602,20 @@ class MainWindow(QMainWindow):
             except Exception: pass
             return
 
-        # --- Paso 3: reparacion (solo si hace falta) ---
-        # Cambio respecto a la version anterior: si la malla esta limpia,
-        # se IMPORTA DIRECTAMENTE sin pedir confirmacion. Antes salia un
-        # QMessageBox "Yes/No" que el usuario siempre aceptaba.
-        if diag.ok:
-            # Cerramos el prog del diagnostico — no hay mas fases con
-            # progress feedback (el centrado/poblado del visor es <50ms).
-            prog.close()
-            timings["repair"] = 0.0
-            final_mesh = mesh
-        else:
-            # Mismo cuidado que con el dialogo de escala: cerrar prog para
-            # cancelar su forceTimer y que no reaparezca encima del modal
-            # de reparacion.
-            prog.close()
-            # REUSAR una sola instancia del dialogo (y su unico visor GL): crear/
-            # destruir un GLViewWidget por importacion hace que en Windows el
-            # contexto OpenGL se pelee con el visor principal -> el panel CAD queda
-            # en NEGRO al reimportar. Con una sola instancia hay un solo contexto.
-            if getattr(self, "_repair_dlg", None) is None:
-                self._repair_dlg = MeshImportDialog(mesh, diag, path=path, parent=self)
-            else:
-                self._repair_dlg.reset(mesh, diag, path)
-            dlg = self._repair_dlg
-            t0 = _time.time()
-            accepted = dlg.exec_() == QDialog.Accepted
-            if getattr(dlg, "_import_requested", False):
-                # El usuario pidio importar OTRO CAD desde el panel -> reiniciar
-                # el flujo de importacion con un archivo nuevo.
-                return self._import_cad_fresh()
-            final_mesh = dlg.result_mesh if accepted else None
-            if not accepted:
-                self.status.setText("Importacion cancelada.")
-                try: self.acoustic._cad_timer.fail("cancelado")
-                except Exception: pass
-                return
-            timings["repair"] = _time.time() - t0
-
-        # --- Paso 4: centrar la malla sobre la grilla ---
-        # El CAD viene en sus coordenadas originales (que pueden estar muy
-        # lejos del origen si el archivo se exporto desde un BIM con
-        # coordenadas globales). Lo trasladamos para que:
-        #   - el centroide XY caiga en (0, 0)
-        #   - el zmin (piso del recinto) quede sobre el plano de la grilla z=0
-        # Asi la geometria aparece centrada en el visor y "apoyada" en la grilla.
-        try:
-            import numpy as _np
-            verts = _np.asarray(final_mesh.vertices, dtype=float)
-            cx = float(0.5 * (verts[:, 0].min() + verts[:, 0].max()))
-            cy = float(0.5 * (verts[:, 1].min() + verts[:, 1].max()))
-            zmin = float(verts[:, 2].min())
-            offset = _np.array([cx, cy, zmin])
-            if _np.linalg.norm(offset) > 1e-6:
-                import trimesh as _tm
-                centered_verts = verts - offset
-                final_mesh = _tm.Trimesh(
-                    vertices=centered_verts, faces=final_mesh.faces,
-                    process=False,
-                )
-        except Exception:
-            # Si el centrado falla, seguimos con la malla original
-            pass
-
-        # --- Paso 5: render + carga al panel acustico ---
-        _set_progress("Renderizando geometria en el visor 3D...")
-        t0 = _time.time()
-        # Trasladar los objetos ya colocados (fuentes/muebles/parches/puntos) con
-        # el MISMO desplazamiento que recibe el receptor al recentrar el CAD, para
-        # que no queden varados en el frame anterior. set_imported_geometry mueve
-        # el receptor al centro del CAD; capturamos ese delta y se lo aplicamos al
-        # resto. (No arregla diferencias de rotacion: si el CAD esta girado
-        # respecto del frame viejo, hay que reubicar los objetos a mano.)
-        import numpy as _np
-        _rcv_before = _np.asarray(self.acoustic.receiver, dtype=float)
-        self.acoustic.set_imported_geometry(final_mesh)
-        try:
-            _rcv_after = _np.asarray(self.acoustic.receiver, dtype=float)
-            _delta = _rcv_after - _rcv_before
-            if float(_np.linalg.norm(_delta)) > 1e-9:
-                self._shift_scene_objects(_delta, include_receiver=False)
-        except Exception:
-            pass
-        self.tabs.setCurrentIndex(1)
-        self._render_imported_geometry(final_mesh)
-        self._cad_cache = self._serialize_external_geometry()
-        self._maybe_snapshot(force=True)
-        # Ajustar el tamano de la grilla al AABB del CAD recien centrado
-        try:
-            verts = _np.asarray(final_mesh.vertices, dtype=float)
-            if hasattr(self.viewer, 'fit_grid_to_aabb'):
-                self.viewer.fit_grid_to_aabb(verts.min(axis=0), verts.max(axis=0))
-        except Exception:
-            pass
-        timings["render"] = _time.time() - t0
-
-        # Guardar path como reciente + recordarlo para el panel de config.
+        # Diagnostico listo: devolver (mesh, diag, path). El panel de curado y el
+        # centrado/aplicado los maneja el caller (_open_cad_panel), con importacion
+        # IN-PLACE (sin cerrar/reabrir el visor GL).
+        prog.close()
         self._cad_path = path
         try:
             app_settings.add_recent_file(path)
         except Exception:
             pass
-
-        prog.close()
-
-        # Resumen de tiempos en la barra de estado (uno se entera de donde
-        # se va el tiempo de importacion, util para diagnosticar lentitud).
-        t_total = sum(timings.values())
-        phases = "  ·  ".join(
-            f"{k} {v*1000:.0f} ms" for k, v in timings.items() if v > 0.005
-        )
-        self.status.setText(
-            f"CAD importado: {Path(path).name}  ·  "
-            f"{len(final_mesh.vertices)} verts, {len(final_mesh.faces)} tris  "
-            f"·  total {t_total*1000:.0f} ms   ({phases})"
-        )
-        # Detener cronometro de la leyenda
         try:
-            self.acoustic._cad_timer.stop(
-                f"{len(final_mesh.vertices)} verts"
-            )
+            self.acoustic._cad_timer.stop(f"{len(mesh.vertices)} verts")
         except Exception:
             pass
+        return (mesh, diag, path)
 
     def _clear_cad_import(self):
         """Slot: usuario pidio volver a geometria parametrica."""

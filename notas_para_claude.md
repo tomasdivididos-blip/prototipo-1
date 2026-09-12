@@ -475,6 +475,23 @@ BUG previo (esta iteración): el dispatcher solo abría el panel si había CAD a
 saltaba directo al explorador, que no era lo pedido. Verificado headless offscreen: estados
 vacío/poblado y round-trip de reset OK.
 
+**Import IN-PLACE + guarda de estanco en Predicción (feedback: preview roto + predicción
+seguía mal):**
+- Preview mal renderizado al importar: venía del ciclo abrir(vacío)→cerrar(reject)→
+  reabrir(poblado) del MISMO visor GL (gotcha Windows v2.43). Fix: importar IN-PLACE. El
+  diálogo tiene `on_import` callback (`main._load_cad_for_dialog`, que hace file dialog +
+  escala + diagnóstico y DEVUELVE `(mesh, diag, path)`); `_request_import` lo llama y hace
+  `reset(fresh=True)` sin cerrar. `_import_cad_fresh` se ELIMINÓ (su pipeline vive en
+  `_load_cad_for_dialog`; el centrado/aplicado en `_apply_cad_mesh` + `_open_cad_panel`).
+  `_open_cad_panel` centra al aplicar solo si `dlg._fresh_import` (malla importada de
+  archivo); el CAD activo curado no se re-centra. Verificado headless: vacío→import in-place
+  repobla (tools on, fresh=True), sin reject.
+- Predicción seguía poniendo afuera con CAD: la causa de fondo es CAD NO estanco (headless
+  con `curado.room` estanco cae DENTRO). Agregada guarda `prediction_panel._proceed_if_solid`
+  (trimesh `is_watertight` sobre la surface): en ubicación/combinado avisa y deja cancelar si
+  el CAD no es estanco. Parametrico/dibujado son siempre estancos → no molesta. Si el CAD ES
+  estanco y aún falla, es bug real a aislar (la guarda no dispararía).
+
 **Pendiente OPCIONAL (ofrecido, no implementado):** guarda en la solapa Predicción que
 avise cuando el CAD activo no es estanco (hoy solo avisa el FEM de Acústica vía
 `_confirm_nonsolid_cad`); evitaría el "afuera silencioso" que confundió al usuario.
