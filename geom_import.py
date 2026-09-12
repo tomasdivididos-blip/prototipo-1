@@ -239,8 +239,13 @@ class MeshDiagnosis:
         return "\n".join(lines)
 
 
-def diagnose(mesh: "trimesh.Trimesh") -> MeshDiagnosis:
-    """Diagnostico completo de la malla."""
+def diagnose(mesh: "trimesh.Trimesh", skip_holes: bool = False) -> MeshDiagnosis:
+    """Diagnostico completo de la malla.
+
+    `skip_holes=True` omite `find_holes` (que arma un Hole con SVD por cada ciclo
+    de borde): en una malla MUY rota (miles de aristas abiertas) eso es carisimo y
+    congela la UI si se re-corre en cada refresco. El diagnostico numerico (conteos,
+    watertight) es barato y se calcula igual."""
     verts = np.asarray(mesh.vertices, dtype=float)
     faces = np.asarray(mesh.faces, dtype=int)
 
@@ -294,8 +299,9 @@ def diagnose(mesh: "trimesh.Trimesh") -> MeshDiagnosis:
     _, counts = np.unique(keys, return_counts=True)
     n_non_manifold = int(np.count_nonzero(counts > 2))
 
-    # Huecos: aristas de borde -> ciclos.
-    holes = find_holes(mesh)
+    # Huecos: aristas de borde -> ciclos. Se omite si la malla esta muy rota
+    # (skip_holes) para no congelar la UI armando miles de Hole con SVD.
+    holes = [] if skip_holes else find_holes(mesh)
 
     return MeshDiagnosis(
         n_vertices=int(len(verts)),
@@ -616,6 +622,236 @@ def normalize_mesh(mesh: "trimesh.Trimesh") -> "trimesh.Trimesh":
     except Exception:
         pass
     return m
+
+
+# ---------------------------------------------------------------------------
+# Curado de CAD roto (paños sueltos, vertices duplicados, caras basura)
+# ---------------------------------------------------------------------------
+def quick_stats(mesh: "trimesh.Trimesh") -> dict:
+    """Estadisticas BARATAS para lectura EN VIVO durante el curado (sin
+    find_holes, que es lo caro de diagnose): vertices, caras, cuerpos
+    disconexos, aristas de borde (huecos) y no-manifold, y si es estanco."""
+    faces = np.asarray(mesh.faces, dtype=np.int64)
+    if len(faces):
+        edges = np.sort(np.concatenate(
+            [faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]], axis=0), axis=1)
+        _, counts = np.unique(edges, axis=0, return_counts=True)
+        open_edges = int(np.count_nonzero(counts == 1))
+        non_manifold = int(np.count_nonzero(counts > 2))
+    else:
+        open_edges = non_manifold = 0
+    try:
+        ncomp = len(mesh.split(only_watertight=False))
+    except Exception:
+        ncomp = 1
+    try:
+        wt = bool(mesh.is_watertight)
+    except Exception:
+        wt = False
+    return {"n_vertices": int(len(mesh.vertices)), "n_faces": int(len(faces)),
+            "n_components": int(ncomp), "n_open_edges": open_edges,
+            "n_non_manifold": non_manifold, "watertight": wt}
+
+
+def split_components(mesh: "trimesh.Trimesh") -> list:
+    """Cuerpos conexos (comparten aristas), el mas grande primero (por caras)."""
+    try:
+        comps = list(mesh.split(only_watertight=False))
+    except Exception:
+        comps = [mesh]
+    return sorted(comps, key=lambda c: len(c.faces), reverse=True)
+
+
+def face_component_labels(mesh: "trimesh.Trimesh") -> np.ndarray:
+    """Etiqueta de cuerpo conexo por CARA (mismo indexado que mesh.faces), para
+    poder previsualizar en el visor que caras se conservan / descartan."""
+    try:
+        labels = trimesh.graph.connected_component_labels(
+            mesh.face_adjacency, node_count=len(mesh.faces))
+        return np.asarray(labels, dtype=np.int64)
+    except Exception:
+        return np.zeros(len(mesh.faces), dtype=np.int64)
+
+
+def largest_component_faces(mesh: "trimesh.Trimesh"):
+    """Devuelve (indices_cara_del_cuerpo_mas_grande, indices_cara_a_descartar).
+    'Mas grande' = mayor diagonal de AABB (tamano fisico), igual criterio que
+    keep_largest_component. Sirve para el preview antes de aplicar."""
+    faces = np.asarray(mesh.faces, dtype=np.int64)
+    verts = np.asarray(mesh.vertices, dtype=float)
+    labels = face_component_labels(mesh)
+    uniq = np.unique(labels)
+    if len(uniq) <= 1:
+        return np.arange(len(faces)), np.empty(0, dtype=np.int64)
+    best_lab, best_diag = uniq[0], -1.0
+    for lab in uniq:
+        fm = faces[labels == lab]
+        vv = verts[np.unique(fm)]
+        diag = float(np.linalg.norm(vv.max(0) - vv.min(0))) if len(vv) else 0.0
+        if diag > best_diag:
+            best_diag, best_lab = diag, lab
+    keep = np.where(labels == best_lab)[0]
+    drop = np.where(labels != best_lab)[0]
+    return keep, drop
+
+
+def _component_volume(sub: "trimesh.Trimesh") -> float:
+    """Volumen de un cuerpo: |volume| si es cerrado; si no, volumen del AABB
+    (proxy, para NO confundir un shell abierto grande con un pano plano basura)."""
+    try:
+        if bool(sub.is_watertight):
+            return abs(float(sub.volume))
+    except Exception:
+        pass
+    try:
+        b = sub.bounds
+        return float(np.prod(b[1] - b[0]))
+    except Exception:
+        return 0.0
+
+
+def component_face_groups(mesh: "trimesh.Trimesh"):
+    """[(indices_de_cara, volumen), ...] por cuerpo conexo (mismo indexado que
+    mesh.faces). Sirve para previsualizar y para borrar por volumen."""
+    labels = face_component_labels(mesh)
+    faces = np.asarray(mesh.faces, dtype=np.int64)
+    verts = np.asarray(mesh.vertices, dtype=float)
+    groups = []
+    for lab in np.unique(labels):
+        idx = np.where(labels == lab)[0]
+        try:
+            sub = trimesh.Trimesh(vertices=verts, faces=faces[idx], process=True)
+            vol = _component_volume(sub)
+        except Exception:
+            vol = 0.0
+        groups.append((idx, float(vol)))
+    return groups
+
+
+def low_volume_faces(mesh: "trimesh.Trimesh", max_volume: float):
+    """(keep_faces, drop_faces, vols_descartados): las caras de los cuerpos con
+    volumen <= max_volume se descartan. Para el preview antes de aplicar."""
+    groups = component_face_groups(mesh)
+    keep = [g[0] for g in groups if g[1] > max_volume]
+    dropg = [g for g in groups if g[1] <= max_volume]
+    drop = [g[0] for g in dropg]
+    keep_f = np.concatenate(keep) if keep else np.empty(0, dtype=np.int64)
+    drop_f = np.concatenate(drop) if drop else np.empty(0, dtype=np.int64)
+    return keep_f, drop_f, sorted(g[1] for g in dropg)
+
+
+def remove_low_volume_components(mesh: "trimesh.Trimesh",
+                                 max_volume: float):
+    """Elimina los cuerpos con volumen <= max_volume (panos degenerados, basura).
+    Devuelve (malla, n_quitados). Si quedaria vacia, no toca nada."""
+    keep_f, drop_f, _vols = low_volume_faces(mesh, max_volume)
+    if len(drop_f) == 0:
+        return mesh.copy(), 0
+    if len(keep_f) == 0:
+        return mesh.copy(), 0            # no dejar la malla vacia
+    faces = np.asarray(mesh.faces, dtype=np.int64)[keep_f]
+    out = trimesh.Trimesh(vertices=np.asarray(mesh.vertices, dtype=float),
+                          faces=faces, process=False)
+    try:
+        out.remove_unreferenced_vertices()
+    except Exception:
+        pass
+    # cuantos CUERPOS se quitaron (no caras)
+    n_removed = len([g for g in component_face_groups(mesh) if g[1] <= max_volume])
+    return out, int(n_removed)
+
+
+def keep_largest_component(mesh: "trimesh.Trimesh") -> "trimesh.Trimesh":
+    """Descarta todo menos el cuerpo fisicamente MAS GRANDE (diagonal del AABB).
+
+    Se rankea por tamano fisico, no por nº de caras: un shell de recinto puede
+    tener POCAS caras grandes, mientras que un objeto de detalle (una silla) tiene
+    muchas chicas. Por nº de caras se elegiria el objeto equivocado."""
+    comps = split_components(mesh)
+    if not comps:
+        return mesh.copy()
+    def _diag(c):
+        try:
+            b = c.bounds
+            return float(np.linalg.norm(b[1] - b[0]))
+        except Exception:
+            return 0.0
+    return max(comps, key=_diag).copy()
+
+
+def remove_small_components(mesh: "trimesh.Trimesh",
+                            min_faces: int) -> Tuple["trimesh.Trimesh", int]:
+    """Elimina los cuerpos con MENOS de `min_faces` caras (paños basura sueltos).
+    Devuelve (malla, cuantos_cuerpos_quitados). Si quedaria vacia, no toca nada."""
+    comps = split_components(mesh)
+    keep = [c for c in comps if len(c.faces) >= int(min_faces)]
+    removed = len(comps) - len(keep)
+    if not keep:
+        return mesh.copy(), 0
+    out = trimesh.util.concatenate(keep) if len(keep) > 1 else keep[0].copy()
+    return out, int(removed)
+
+
+def drop_faces(mesh: "trimesh.Trimesh", face_indices) -> "trimesh.Trimesh":
+    """Elimina las caras cuyos indices estan en `face_indices` (caras sueltas /
+    dobles que el auto no saca). Devuelve una malla nueva sin vertices sueltos."""
+    faces = np.asarray(mesh.faces, dtype=np.int64)
+    if len(faces) == 0:
+        return mesh.copy()
+    idx = np.asarray(list(face_indices), dtype=np.int64)
+    idx = idx[(idx >= 0) & (idx < len(faces))]
+    mask = np.ones(len(faces), dtype=bool)
+    mask[idx] = False
+    m = trimesh.Trimesh(vertices=np.asarray(mesh.vertices, dtype=float),
+                        faces=faces[mask], process=False)
+    try:
+        m.remove_unreferenced_vertices()
+    except Exception:
+        pass
+    return m
+
+
+def cure_auto(mesh: "trimesh.Trimesh", weld_tol: float = 0.02,
+              min_faces: int = 4, progress=None) -> Tuple["trimesh.Trimesh", dict]:
+    """Pipeline de curado automatico de un CAD roto, en orden:
+      1. soldar vertices por distancia (une paños con vertices duplicados;
+         el gran arreglo: un aula tipica pasa de decenas de cuerpos a unos pocos),
+      2. tirar los cuerpos sueltos chicos (< min_faces caras),
+      3. tapar huecos planos,
+      4. normalizar (winding + normales).
+    Devuelve (malla, reporte) con stats antes/despues. NO garantiza estanco: si
+    la malla tiene aberturas reales (superficies faltantes) hay que cerrarlas a
+    mano; el reporte lo deja ver (n_open_edges > 0)."""
+    def _p(msg):
+        if progress:
+            try:
+                progress(msg)
+            except Exception:
+                pass
+    before = quick_stats(mesh)
+    m = mesh.copy()
+    _p("Soldando vertices cercanos...")
+    try:
+        m = merge_close_vertices(m, max(1e-6, float(weld_tol)))
+    except Exception:
+        pass
+    _p("Quitando cuerpos sueltos chicos...")
+    m, removed = remove_small_components(m, min_faces)
+    _p("Tapando huecos...")
+    try:
+        m = fill_all_holes_auto(m)
+    except Exception:
+        pass
+    _p("Normalizando (winding/normales)...")
+    try:
+        m = normalize_mesh(m)
+    except Exception:
+        pass
+    after = quick_stats(m)
+    # NOTA: NO se descartan cuerpos grandes (p.ej. una columna interior) de forma
+    # automatica. Quedarse con el cuerpo mas grande es una accion SEPARADA y
+    # EXPLICITA (con preview) en el dialogo; aca solo se hace lo no destructivo.
+    return m, {"before": before, "after": after, "removed_components": removed}
 
 
 # ---------------------------------------------------------------------------

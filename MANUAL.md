@@ -2866,3 +2866,32 @@ La ventanita se muestra **solo** mientras el mouse está sobre un nombre, y desa
   - **Materiales embebidos**: al **guardar**, la definición completa (α por tercio) de los materiales usados —incluidos los de los **parches**— queda guardada **dentro** del `.room`. Un archivo guardado con esta versión es **autocontenido**: se abre en cualquier máquina sin instalar nada ni indicar carpetas.
 
 *Manual actualizado al 10 de Septiembre de 2026 — v2.42.*
+
+---
+
+**Cambios v2.43** (12 de septiembre 2026): **herramientas para «curar» un CAD roto** dentro del soft, más una guarda que evita que el cálculo se cuelgue con geometrías no cerradas. Motivado por CAD de aula exportados de EASE (paños de superficie sueltos, no un sólido).
+
+### Por qué
+
+Un CAD sirve para simular solo si es un **sólido cerrado (watertight)**: sin aristas abiertas, con las caras bien unidas. Los export de EASE/SketchUp suelen venir como decenas o miles de **paños sueltos** con vértices duplicados; para una malla así **no existe un «adentro» definido**, así que ni la simulación, ni la ubicación de fuentes, ni el optimizador pueden saber qué está dentro del recinto (por eso a veces ponían fuentes «afuera» o el mallado se colgaba).
+
+### «Curar CAD roto» (en «Importar CAD» → diálogo de reparación)
+
+Un grupo nuevo de herramientas, con **lectura en vivo** (cuerpos · aristas abiertas · no-manifold · estanco sí/NO · volúmenes por cuerpo) y **Deshacer**:
+
+- **Curar todo (auto)**: soldar por distancia (une paños con vértices duplicados: un aula típica pasa de decenas de cuerpos a unos pocos) + tirar cuerpos sueltos chicos + tapar huecos + normalizar. No descarta cuerpos grandes (no te borra una columna interior).
+- **Soldar (unir paños)** con tolerancia ajustable.
+- **Borrar cuerpos con menos de N caras** (basura suelta).
+- **Borrar cuerpos de volumen ≤ umbral** (ajustable): saca paños degenerados de espesor cero sin tocar el recinto ni las columnas. Muestra en ROJO qué borraría y pide confirmar.
+- **Seleccionar caras a borrar (click)**: marcás caras basura en el preview 3D (rojo) y las eliminás.
+- En **Acciones globales**, **«Quedarme con el cuerpo más grande…»**: descarta todo menos el cuerpo físicamente más grande (el shell del recinto). Es destructivo, así que **muestra en ROJO qué se borraría y pide confirmar** (puede borrar objetos interiores válidos, como una columna).
+- **«Reparar TODO automáticamente»** ahora corre el curado completo (no solo tapar huecos).
+- **«Cómo cerrar mi CAD…»**: guía con pasos por software (Blender, SketchUp, Rhino, FreeCAD) para cuando faltan superficies reales que el soft no puede inventar.
+
+**Recinto con columna**: si el CAD trae una columna interior, después de curar quedan el recinto + la columna como dos sólidos cerrados. Borrando solo el paño basura (por volumen) queda un conjunto **estanco** y el simulador **talla la columna** como obstáculo. (Alternativa: quedarse con el recinto y agregar la columna como mueble.)
+
+### Guarda antes del FEM
+
+Si el CAD importado **no es un sólido cerrado**, al calcular los modos el soft **avisa y te deja cancelar** (con una estimación del tamaño del mallado) en vez de arrancar un cálculo que puede colgarse. Curá la malla hasta que sea estanca, o cerrala en tu 3D, y el aviso desaparece.
+
+*Manual actualizado al 12 de Septiembre de 2026 — v2.43.*

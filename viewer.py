@@ -1172,25 +1172,38 @@ class IsoViewer(gl.GLViewWidget):
         if self._vertices is None:
             return
         v, t, e = self._vertices, self._triangles, self._edges
+        # Robustez: vertices no finitos (NaN/inf, p.ej. tras curar un CAD roto)
+        # rompen el shader "shaded" -> "Error while drawing item GLMeshItem" y
+        # el panel entero queda en NEGRO. Se sanean y el fill va en try (si falla,
+        # al menos quedan las aristas).
+        v = np.asarray(v, dtype=float)
+        if v.size and not np.all(np.isfinite(v)):
+            v = np.nan_to_num(v, nan=0.0, posinf=0.0, neginf=0.0)
         if self._view_mode == "aristas":
-            self.mesh_item = gl.GLMeshItem(
-                meshdata=gl.MeshData(vertexes=v, faces=t),
-                smooth=True, color=(0.54, 0.72, 0.98, 0.32),
-                shader="shaded", glOptions="translucent",
-            )
-            self.addItem(self.mesh_item)
+            try:
+                self.mesh_item = gl.GLMeshItem(
+                    meshdata=gl.MeshData(vertexes=v, faces=t),
+                    smooth=True, color=(0.54, 0.72, 0.98, 0.32),
+                    shader="shaded", glOptions="translucent",
+                )
+                self.addItem(self.mesh_item)
+            except Exception:
+                self.mesh_item = None
             self.edge_item = gl.GLLinePlotItem(
                 pos=v[e.flatten()].astype(np.float32),
                 color=EDGE_COLOR, width=2.2, antialias=True, mode="lines",
             )
             self.addItem(self.edge_item)
         elif self._view_mode == "externa":
-            self.mesh_item = gl.GLMeshItem(
-                meshdata=gl.MeshData(vertexes=v, faces=t),
-                smooth=True, color=(0.82, 0.84, 0.88, 1.0),
-                shader="shaded", glOptions="opaque",
-            )
-            self.addItem(self.mesh_item)
+            try:
+                self.mesh_item = gl.GLMeshItem(
+                    meshdata=gl.MeshData(vertexes=v, faces=t),
+                    smooth=True, color=(0.82, 0.84, 0.88, 1.0),
+                    shader="shaded", glOptions="opaque",
+                )
+                self.addItem(self.mesh_item)
+            except Exception:
+                self.mesh_item = None
         elif self._view_mode == "contorno":
             self.edge_item = gl.GLLinePlotItem(
                 pos=v[e.flatten()].astype(np.float32),

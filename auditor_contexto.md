@@ -6,7 +6,7 @@
 > cada cosa contra la fuente física, un oráculo, o una cuenta propia. Que este archivo
 > diga "resuelto/PASA" no prueba nada; es un puntero a qué mirar.
 
-**Última actualización:** 2026-09-10.
+**Última actualización:** 2026-09-12.
 
 ## Estado del proyecto
 
@@ -112,3 +112,18 @@ polish local?; (b) el nivel por fuente es un grado de libertad legítimo del MSO
 objetivo `flat+spatial` con nivel libre puede degenerar (subir todas las fuentes al tope)? El
 resto del batch (remapeo de firmas de material por traslación, portabilidad/embebido de
 materiales, seguimiento de objetos al re-anclar) es IO/GUI, fuera del núcleo físico.
+
+**Curado de CAD + validez del dominio (v2.43, 12 Sep 2026 — RELEVANTE para el auditor):**
+El hallazgo importante NO es una feature sino un LÍMITE del pipeline: los CAD del aula
+(`PLANO AULA*.obj`) NO son sólidos cerrados (decenas/miles de componentes disconexos), y
+`acoustic_mesh.points_inside_surface` (ray-parity, 1 dirección) da ~96% del AABB «adentro».
+Como `build_volume_mesh` usa ese mismo test para decidir las celdas interiores, sobre un CAD
+no estanco el DOMINIO SIMULADO degenera al AABB entero (no al recinto real), en silencio. A
+auditar: (1) ¿cuánto se aparta el dominio voxelizado del recinto real cuando la malla no es
+watertight?; (2) el nuevo `acoustic_panel._confirm_nonsolid_cad` avisa antes del FEM si
+`is_watertight` es False, pero NO cuantifica el error del dominio; (3) para un recinto con
+COLUMNA interior (dos sólidos cerrados anidados, tras curar), el voxelizador debería tallar
+la columna por paridad de rayos — VERIFICAR que el interior resultante = recinto menos columna
+(no incluye el interior de la columna). Las herramientas de curado (`geom_import`) son
+geométricas (trimesh), fuera del núcleo físico, pero que la malla llegue estanca es CONDICIÓN
+NECESARIA para que el modelo modal valga.

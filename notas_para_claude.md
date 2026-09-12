@@ -330,6 +330,68 @@ pedidos de la cátedra. Todo con smoke headless (falsable). Archivos tocados:
   offscreen SEGFAULTEA (pyqtgraph GL); `AcousticPanel` solo NO. Los smokes usan panel
   o funciones puras. Smoke: `smoke_material_portability.py`.
 
+## 1g. Batch v2.43 (12 Sep 2026) — curado de CAD roto + guarda FEM
+
+Motivación (cadena de bugs del profesor): el optimizador (DBA y el de Predicción)
+ponía fuentes AFUERA del recinto, y el mallado se colgaba, sobre CAD del aula. CAUSA
+RAÍZ: `PLANO AULA.obj`/`.ease.obj` NO son sólidos cerrados (35 y 1385 componentes
+disconexos, cientos/miles de aristas de borde). Para una malla así NO hay «adentro»
+definido: `acoustic_mesh.points_inside_surface` (ray-parity 1 dir) da ~96% del AABB
+adentro; probé multi-rayo y winding number generalizado (GWN, Jacobson 2013): TODOS
+fallan (la malla no es cerrada ni orientable consistente). El voxelizador usa el mismo
+`points_inside_surface` para decidir el interior, así que sobre esos CAD la simulación
+misma tomaba el AABB entero. Conclusión: no se arregla con un test mejor; hay que
+CURAR la malla a estanca.
+
+**Núcleo (`geom_import.py`, funciones PURAS, `bench_cad_cure.py` 18/18):**
+- `quick_stats(mesh)` — barato para lectura en vivo (cuerpos, aristas de borde,
+  no-manifold, watertight) sin `find_holes` (que es lo caro de `diagnose`).
+- `merge_close_vertices(mesh, tol)` YA existía y hace el weld por grilla (snap+reindex);
+  el gran arreglo: une paños con VÉRTICES DUPLICADOS (aula 35 → 4 cuerpos con tol≥1e-3).
+  OJO: `merge_vertices(digits_vertex=...)` de trimesh NO alcanza (redondeo por dígitos, no
+  por distancia).
+- `split_components`, `keep_largest_component` (por diagonal de AABB, NO por nº de caras:
+  un shell de recinto tiene pocas caras grandes), `remove_small_components(min_faces)`,
+  `drop_faces(idx)`, `cure_auto(weld_tol, min_faces)` = weld + remove_small + fill +
+  normalize (CONSERVADOR, NO descarta cuerpos grandes; se revirtió un fallback keep_largest
+  que borraba la columna).
+- `face_component_labels`, `largest_component_faces`, `component_face_groups` (idx+volumen
+  por cuerpo), `low_volume_faces`, `remove_low_volume_components(max_vol)`. Volumen =
+  `|volume|` si el cuerpo es cerrado, si no bbox (proxy, para no confundir shell abierto
+  grande con paño plano). `diagnose(skip_holes=True)` para malla muy rota.
+
+**GUI (`geom_repair_dialog.py`):** grupo «Curar CAD roto» + acciones en «Acciones
+globales». TODO lo destructivo (keep-largest, borrar-por-volumen, borrar-caras-seleccionadas)
+tiene PREVIEW en rojo (`_MeshPreview.highlight_faces`, aristas GLLine) + confirmación.
+Picking de caras (A+): proyecta centroides a pantalla (`projectionMatrix()@viewMatrix()`),
+elige la más cercana al click. Lectura en vivo con volúmenes por cuerpo (para elegir el
+umbral). Undo. Guía externa `_show_close_help` (Blender/SketchUp/Rhino/FreeCAD).
+
+**Aula real:** cura a 3 cuerpos → recinto 113.56 m³ + columna 2.81 m³ + paño degenerado
+0 m³ (mete 24 aristas no-manifold). Borrar volumen ≤0.01 → recinto+columna ESTANCO (2
+cuerpos cerrados, is_watertight=True, el voxelizador talla la columna). El aula tiene una
+incontinuidad real → se cierra en SketchUp.
+
+**Guarda FEM (`acoustic_panel.py`):** `_confirm_nonsolid_cad()` en `_solve_fem` y
+`_ensure_modes_computed`: si el CAD no es `is_watertight`, avisa (con estimación de nodos
+caja/h³) y deja cancelar ANTES del FEM (cuya barra no tiene cancelar). Flag `_nonsolid_ack`
+por malla (reset en `set_imported_geometry`). El cuelgue real probable es gmsh sobre malla
+no-manifold; la guarda lo frena.
+
+**GOTCHAS de GL (Windows) — LEER antes de tocar el visor del diálogo:**
+- Dos `GLViewWidget` peleando por el contexto WGL en Windows → PANTALLA NEGRA en el visor
+  principal. Los contextos son independientes (no hay `AA_ShareOpenGLContexts`), así que el
+  problema es ACUMULAR/DESTRUIR: crear/destruir un GLViewWidget por importación rompe. FIX:
+  REUSAR una sola instancia del diálogo (`_repair_dlg` cacheado en main + `MeshImportDialog.
+  reset()`), un solo contexto para toda la vida de la app. NO hacer `deleteLater()` del visor
+  (lo empeora: deja el contexto sin «current»).
+- `shader="shaded"` + vértices NaN/inf (tras curar) → «Error while drawing item GLMeshItem»
+  y negro. FIX: sanear con `nan_to_num` + descartar caras degeneradas + `try` alrededor del
+  GLMeshItem (fallback wireframe), en `_MeshPreview.show_mesh` Y en `viewer._refresh_render`.
+- `find_holes` sobre malla muy rota es tolerable (0.27s en EASE, 1398 huecos) pero armar miles
+  de items en la lista congela la UI → gate por `quick_stats` (skip_holes si >500 aristas
+  abiertas).
+
 ## 2. Perfil del usuario
 
 - **Profesión**: ingeniero en acústica.

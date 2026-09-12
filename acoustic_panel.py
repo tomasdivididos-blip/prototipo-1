@@ -4701,6 +4701,8 @@ class AcousticPanel(QWidget):
         """Garantiza modal_result (calcula si hace falta). False si fallo."""
         if self.modal_result is not None:
             return True
+        if getattr(self, "_is_imported_cad", False) and not self._confirm_nonsolid_cad():
+            return False
         try:
             verts, tris = self.get_surface()
         except Exception as e:
@@ -4924,6 +4926,51 @@ class AcousticPanel(QWidget):
             return npm_used, h_used, True
         return npm_auto, h_auto, False
 
+    def _confirm_nonsolid_cad(self) -> bool:
+        """Si el CAD importado NO es estanco, avisa (una vez por malla) que el
+        interior no esta definido y que mallar puede colgarse, y deja cancelar.
+        Devuelve True para seguir, False para abortar. Malla estanca -> True sin
+        preguntar. Tambien estima el tamano del voxelizado (caja/h³) para el aviso."""
+        if getattr(self, "_nonsolid_ack", False):
+            return True
+        im = getattr(self, "_imported_mesh", None)
+        if im is None:
+            return True
+        try:
+            if bool(im.is_watertight):
+                return True
+        except Exception:
+            return True
+        # Estimacion grosera de nodos si se malla toda la caja al h actual.
+        est = ""
+        try:
+            import numpy as _np
+            v = _np.asarray(im.vertices, float)
+            box = float(_np.prod(v.max(0) - v.min(0)))
+            h = max(0.05, float(self.sb_htarget.value()))
+            n_est = int(box / (h ** 3))
+            if n_est > 0:
+                est = (f"\n\nEstimado si se malla la caja entera a h={h:.2f} m: "
+                       f"~{n_est:,} nodos"
+                       + ("  (ENORME: probable cuelgue)" if n_est > 200000 else ""))
+        except Exception:
+            pass
+        ret = QMessageBox.warning(
+            self, "CAD no es un sólido cerrado",
+            "La geometría importada NO es un sólido cerrado (no estanco): tiene "
+            "paños sueltos o aberturas, así que el interior del recinto no está "
+            "definido. El mallado toma la caja envolvente entera y puede quedar "
+            "enorme o colgar el cálculo (la barra del FEM no se puede cancelar)."
+            + est +
+            "\n\nRecomendado: cancelá y curá la malla en «Importar CAD» → «Curar "
+            "CAD roto» (o cerrala en tu 3D) hasta que sea estanca.\n\n"
+            "¿Calcular igual bajo tu responsabilidad?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if ret == QMessageBox.Yes:
+            self._nonsolid_ack = True     # no repreguntar para esta malla
+            return True
+        return False
+
     def _solve_fem(self):
         # Arrancar cronometro de la leyenda bajo el boton.
         try:
@@ -4975,6 +5022,15 @@ class AcousticPanel(QWidget):
         params_geom = self._current_params_for_router()
         override = self._ENGINE_KEYS.get(self.combo_engine.currentIndex(), "auto")
         is_cad = bool(getattr(self, "_is_imported_cad", False))
+
+        # GUARDA de CAD no-solido: si el CAD importado NO es un solido cerrado
+        # (no estanco), el interior no esta definido -> el voxelizador toma TODA la
+        # caja envolvente y la malla puede ser gigante o colgar el FEM (cuya barra
+        # no tiene cancelar). Avisar y dejar cancelar ANTES de arrancar. Curar la
+        # malla (Importar CAD -> «Curar CAD roto») cierra esto de raiz.
+        if is_cad and not self._confirm_nonsolid_cad():
+            self._fem_timer.fail("cancelado")
+            return
 
         # ---------- AUTO-DENSITY (motor=Automatico) ----------
         # Politica: SIEMPRE cobertura completa hasta f_Schroeder. La validez
@@ -5413,6 +5469,7 @@ class AcousticPanel(QWidget):
         import numpy as _np
         self._is_imported_cad = True
         self._imported_mesh = mesh
+        self._nonsolid_ack = False       # malla nueva -> re-preguntar si no es solida
         v = _np.asarray(mesh.vertices, dtype=_np.float32)
         t = _np.asarray(mesh.faces, dtype=_np.int32)
         self._imported_verts = v

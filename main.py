@@ -508,15 +508,24 @@ class MainWindow(QMainWindow):
             # cancelar su forceTimer y que no reaparezca encima del modal
             # de reparacion.
             prog.close()
-            dlg = MeshImportDialog(mesh, diag, path=path, parent=self)
+            # REUSAR una sola instancia del dialogo (y su unico visor GL): crear/
+            # destruir un GLViewWidget por importacion hace que en Windows el
+            # contexto OpenGL se pelee con el visor principal -> el panel CAD queda
+            # en NEGRO al reimportar. Con una sola instancia hay un solo contexto.
+            if getattr(self, "_repair_dlg", None) is None:
+                self._repair_dlg = MeshImportDialog(mesh, diag, path=path, parent=self)
+            else:
+                self._repair_dlg.reset(mesh, diag, path)
+            dlg = self._repair_dlg
             t0 = _time.time()
-            if dlg.exec_() != QDialog.Accepted:
+            accepted = dlg.exec_() == QDialog.Accepted
+            final_mesh = dlg.result_mesh if accepted else None
+            if not accepted:
                 self.status.setText("Importacion cancelada.")
                 try: self.acoustic._cad_timer.fail("cancelado")
                 except Exception: pass
                 return
             timings["repair"] = _time.time() - t0
-            final_mesh = dlg.result_mesh
 
         # --- Paso 4: centrar la malla sobre la grilla ---
         # El CAD viene en sus coordenadas originales (que pueden estar muy
