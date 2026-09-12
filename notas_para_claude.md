@@ -454,8 +454,19 @@ la condición dura es CAD estanco.
 **Export CAD curado (mismo batch, pedido del usuario):** botón «Exportar CAD curado…»
 en `geom_repair_dialog.MeshImportDialog` (footer) → `self._mesh.export(path)` a
 .obj/.stl/.ply. Default .obj (STL duplica vértices → re-lee no estanco; OBJ/PLY conservan
-el sólido). Avisa si la malla aún no es estanca. Así el usuario reusa/comparte el CAD
-curado sin depender del .room embebido.
+el sólido). Avisa si la malla aún no es estanca.
+
+**Panel «Configuración de CAD» (pedido del usuario: no obligar a re-importar el crudo):**
+el botón `btn_import_cad` pasó a «Configuración de CAD…» y `main._open_cad_import` ahora
+DESPACHA: si hay CAD activo (`acoustic._is_imported_cad` + `_imported_mesh`, incluye el
+traído de un .room) abre el panel SOBRE ese CAD vía `_config_active_cad` (diagnostica con
+`quick_stats`/`diagnose` y reusa `_repair_dlg`); si no, corre `_import_cad_fresh` (el flujo
+viejo, renombrado). El diálogo suma botón «Importar otro CAD…» (`_request_import` → set
+`_import_requested` + reject); el main lo detecta y reentra a `_import_cad_fresh`. Aplicar
+sobre CAD activo NO re-centra (`_apply_cad_mesh(center=False)`): la malla curada ya vive en
+el frame de render. `main._cad_path` recuerda la ruta para el label del panel. GOTCHA GL:
+se mantiene la instancia única `_repair_dlg` (reuse/reset), no crear un GLViewWidget por
+apertura (pantalla negra en Windows, ver v2.43).
 
 **Pendiente OPCIONAL (ofrecido, no implementado):** guarda en la solapa Predicción que
 avise cuando el CAD activo no es estanco (hoy solo avisa el FEM de Acústica vía

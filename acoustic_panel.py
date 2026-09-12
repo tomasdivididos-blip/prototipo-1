@@ -3778,10 +3778,12 @@ class AcousticPanel(QWidget):
         # Antes en HBoxLayout lado-a-lado; en pantallas angostas "Volver a
         # parametrica" se recortaba contra el borde derecho del panel. Los
         # dejamos en filas separadas para que cada uno use el ancho completo.
-        self.btn_import_cad = QPushButton("📂  Importar CAD...")
+        self.btn_import_cad = QPushButton("📂  Configuración de CAD...")
         self.btn_import_cad.setToolTip(
-            "Importar un archivo CAD (STL, OBJ, PLY, STEP, IGES, glTF...)\n"
-            "como geometria del recinto. Reemplaza la geometria parametrica."
+            "Panel de CAD: importar, diagnosticar, curar y exportar la geometria "
+            "del recinto.\nSi ya hay un CAD cargado, abre sobre ese (para curarlo "
+            "mas o exportarlo) sin re-importar; si no, pide importar uno.\n"
+            "Formatos: STL, OBJ, PLY, STEP, IGES, glTF..."
         )
         self.btn_import_cad.setMinimumWidth(0)
         self.btn_import_cad.clicked.connect(self.cadImportRequested.emit)

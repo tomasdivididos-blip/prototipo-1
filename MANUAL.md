@@ -2919,8 +2919,16 @@ No hay cambios de uso: es transparente. Si antes evitabas «Esquina Inf.» por e
 
 **Importante (CAD):** para que la ubicación de fuentes se acote bien, el CAD tiene que ser un **sólido cerrado (watertight)**. Sobre un CAD no estanco el «adentro» del recinto no está definido y las posiciones pueden salir mal, igual que con la simulación (curá el CAD en «Importar CAD → Curar CAD roto» hasta que sea estanco).
 
+### Panel «Configuración de CAD»
+
+El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD…»** y abre el mismo panel de diagnóstico/curado, pero ya no obliga a re-importar el archivo crudo:
+
+- **Si ya hay un CAD cargado** (importado o traído de un `.room`), el panel se abre **sobre ese CAD**, así podés curarlo más, inspeccionarlo o exportarlo sin volver a importar el `.obj` original.
+- **Si no hay ningún CAD**, el panel te pide importar uno (la importación es la puerta necesaria solo cuando no hay nada cargado).
+- Dentro del panel, **«Importar otro CAD…»** es una opción más: carga un archivo distinto en el mismo panel.
+
 ### Exportar el CAD curado
 
-En el diálogo de «Importar CAD» hay un botón nuevo **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
+Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
 *Manual actualizado al 12 de Septiembre de 2026 — v2.44.*

@@ -319,7 +319,7 @@ class MeshImportDialog(QDialog):
     def __init__(self, mesh, diagnosis, path: str = "", parent=None):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
-        self.setWindowTitle("Importar CAD — Diagnostico y reparacion")
+        self.setWindowTitle("Configuración de CAD — diagnóstico, curado, exportar")
         self.resize(1180, 680)         # +100 px para acomodar el panel izq
         self._mesh = mesh.copy()
         self._diag = diagnosis
@@ -327,6 +327,7 @@ class MeshImportDialog(QDialog):
         self._path = path
         self._undo_stack = []          # estados de malla previos (curado)
         self._sel_faces = set()        # caras seleccionadas para borrar (A+)
+        self._import_requested = False # el usuario pidio importar OTRO CAD
 
         self._build_ui()
         self._refresh_all()
@@ -346,6 +347,7 @@ class MeshImportDialog(QDialog):
         self._path = path
         self._undo_stack = []
         self._sel_faces = set()
+        self._import_requested = False
         try:
             self.lbl_path.setText(f"<b>Archivo:</b> {path or '(en memoria)'}")
         except Exception:
@@ -649,6 +651,13 @@ class MeshImportDialog(QDialog):
 
         # === Footer ===
         foot = QHBoxLayout()
+        self.btn_import_other = QPushButton("Importar otro CAD…")
+        self.btn_import_other.setToolTip(
+            "Carga un archivo CAD distinto (reemplaza el que estás viendo). "
+            "Importar es una opción más: no hace falta re-importar para curar o "
+            "exportar el CAD que ya tenés cargado.")
+        self.btn_import_other.clicked.connect(self._request_import)
+        foot.addWidget(self.btn_import_other)
         self.btn_export = QPushButton("Exportar CAD curado…")
         self.btn_export.setToolTip(
             "Guarda la malla ACTUAL (ya curada) a un archivo .obj/.stl/.ply para "
@@ -1033,6 +1042,14 @@ class MeshImportDialog(QDialog):
         box.setText(html)
         box.setStandardButtons(QMessageBox.Ok)
         box.exec_()
+
+    def _request_import(self):
+        """El usuario quiere importar OTRO CAD desde adentro del panel. Se cierra
+        el diálogo marcando el pedido; el main corre el flujo de importación (file
+        dialog + escala + diagnóstico) y reabre el panel sobre la malla nueva.
+        Así 'Importar' es una opción más del panel, no la única puerta de entrada."""
+        self._import_requested = True
+        self.reject()          # cierra sin aplicar; el main mira _import_requested
 
     def _export_cured(self):
         """Exporta la malla ACTUAL (ya curada) a .obj/.stl/.ply para reusarla o

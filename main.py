@@ -160,6 +160,7 @@ class MainWindow(QMainWindow):
         self._restoring = False          # guard de re-entrancia durante restore
         self._last_change_t = 0.0        # marca de actividad (gestos en vivo)
         self._cad_cache = None           # serializacion CAD (refrescada al cambiar)
+        self._cad_path = ""              # ruta del ultimo CAD importado (para el panel de config)
         self._current_file: str | None = None
 
         # ----- Conexiones -----
@@ -349,15 +350,113 @@ class MainWindow(QMainWindow):
 
     # ---------- Importacion de CAD ----------
     def _open_cad_import(self):
-        """Slot: usuario pidio importar CAD desde el panel acustico.
+        """Slot: usuario abrio «Configuración de CAD».
 
-        Flujo con feedback en vivo via QProgressDialog (el usuario veia
-        antes una congelacion silenciosa de varios segundos al cargar
-        archivos grandes). Tambien:
-          - Saltea el QMessageBox de confirmacion para mallas limpias
-            (siempre se aceptaban con "Si" → ruido inutil).
-          - Reporta cuanto tarda cada fase en el panel de estado, para
-            que el usuario sepa donde se va el tiempo.
+        Si YA hay un CAD activo (importado o cargado de un .room), abre el panel
+        de configuración/curado SOBRE ESE CAD (para curarlo mas, exportarlo, o
+        importar otro) sin obligar a re-importar el archivo crudo. Si NO hay CAD,
+        pide importar uno (la importacion es la puerta necesaria solo cuando no
+        hay nada cargado)."""
+        ap = getattr(self, "acoustic", None)
+        if (ap is not None and getattr(ap, "_is_imported_cad", False)
+                and getattr(ap, "_imported_mesh", None) is not None):
+            if self._config_active_cad():
+                return          # manejado (curado/exportado/cancelado)
+            # _config_active_cad devolvio False -> el usuario pidio importar otro
+        self._import_cad_fresh()
+
+    def _config_active_cad(self) -> bool:
+        """Abre el panel de configuración sobre el CAD ACTIVO (sin re-importar).
+        Devuelve True si quedo manejado (aplicado o cancelado), False si el
+        usuario pidio importar OTRO CAD (el caller corre la importacion)."""
+        try:
+            import geom_import as gi
+            from geom_repair_dialog import MeshImportDialog
+        except ImportError as e:
+            QMessageBox.critical(self, "Falta dependencia",
+                                 f"No se pudo importar el modulo: {e}")
+            return True
+        mesh = self.acoustic._imported_mesh
+        path = getattr(self, "_cad_path", "") or ""
+        prog = QProgressDialog("Diagnosticando malla...", None, 0, 0, self)
+        apply_dialog_theme(prog)
+        prog.setWindowTitle("Configuración de CAD")
+        prog.setMinimumDuration(200)
+        prog.setWindowModality(Qt.WindowModal)
+        QApplication.processEvents()
+        try:
+            qs = gi.quick_stats(mesh)
+            too_broken = int(qs.get("n_open_edges", 0)) > 500
+            diag = gi.diagnose(mesh, skip_holes=too_broken)
+        except Exception as e:
+            prog.close()
+            QMessageBox.critical(self, "Error al diagnosticar",
+                                 f"No se pudo diagnosticar la malla:\n{e}")
+            return True
+        prog.close()
+        if getattr(self, "_repair_dlg", None) is None:
+            self._repair_dlg = MeshImportDialog(mesh, diag, path=path, parent=self)
+        else:
+            self._repair_dlg.reset(mesh, diag, path)
+        dlg = self._repair_dlg
+        accepted = dlg.exec_() == QDialog.Accepted
+        if getattr(dlg, "_import_requested", False):
+            return False        # el caller corre _import_cad_fresh()
+        if not accepted:
+            self.status.setText("Configuración de CAD cerrada (sin cambios).")
+            return True
+        # Aplicar la malla curada SIN re-centrar: ya vive en el frame de render
+        # actual (curar no cambia el frame). Re-centrar la correria del origen.
+        final_mesh = dlg.result_mesh
+        self._apply_cad_mesh(final_mesh, path, center=False)
+        self.status.setText(
+            f"CAD actualizado: {len(final_mesh.vertices)} verts, "
+            f"{len(final_mesh.faces)} tris.")
+        return True
+
+    def _apply_cad_mesh(self, final_mesh, path, center: bool = True):
+        """Carga `final_mesh` como geometria activa: (opcional) centra sobre la
+        grilla, la mete al panel acustico moviendo los objetos con el receptor,
+        renderiza, cachea y snapshotea. `center=False` para el CAD ya posicionado
+        (config sobre el activo): no se re-centra para no correr el frame."""
+        import numpy as _np
+        if center:
+            try:
+                verts = _np.asarray(final_mesh.vertices, dtype=float)
+                cx = float(0.5 * (verts[:, 0].min() + verts[:, 0].max()))
+                cy = float(0.5 * (verts[:, 1].min() + verts[:, 1].max()))
+                zmin = float(verts[:, 2].min())
+                offset = _np.array([cx, cy, zmin])
+                if _np.linalg.norm(offset) > 1e-6:
+                    import trimesh as _tm
+                    final_mesh = _tm.Trimesh(vertices=verts - offset,
+                                             faces=final_mesh.faces, process=False)
+            except Exception:
+                pass
+        _rcv_before = _np.asarray(self.acoustic.receiver, dtype=float)
+        self.acoustic.set_imported_geometry(final_mesh)
+        try:
+            _delta = _np.asarray(self.acoustic.receiver, dtype=float) - _rcv_before
+            if float(_np.linalg.norm(_delta)) > 1e-9:
+                self._shift_scene_objects(_delta, include_receiver=False)
+        except Exception:
+            pass
+        self.tabs.setCurrentIndex(1)
+        self._render_imported_geometry(final_mesh)
+        self._cad_cache = self._serialize_external_geometry()
+        self._maybe_snapshot(force=True)
+        try:
+            v = _np.asarray(final_mesh.vertices, dtype=float)
+            if hasattr(self.viewer, 'fit_grid_to_aabb'):
+                self.viewer.fit_grid_to_aabb(v.min(axis=0), v.max(axis=0))
+        except Exception:
+            pass
+
+    def _import_cad_fresh(self):
+        """Importa un CAD nuevo desde archivo (file dialog + escala + diagnostico
+        + panel de curado). Flujo con feedback en vivo via QProgressDialog.
+          - Saltea el QMessageBox de confirmacion para mallas limpias.
+          - Reporta cuanto tarda cada fase en el panel de estado.
         """
         try:
             import geom_import as gi
@@ -519,6 +618,10 @@ class MainWindow(QMainWindow):
             dlg = self._repair_dlg
             t0 = _time.time()
             accepted = dlg.exec_() == QDialog.Accepted
+            if getattr(dlg, "_import_requested", False):
+                # El usuario pidio importar OTRO CAD desde el panel -> reiniciar
+                # el flujo de importacion con un archivo nuevo.
+                return self._import_cad_fresh()
             final_mesh = dlg.result_mesh if accepted else None
             if not accepted:
                 self.status.setText("Importacion cancelada.")
@@ -584,7 +687,8 @@ class MainWindow(QMainWindow):
             pass
         timings["render"] = _time.time() - t0
 
-        # Guardar path como reciente.
+        # Guardar path como reciente + recordarlo para el panel de config.
+        self._cad_path = path
         try:
             app_settings.add_recent_file(path)
         except Exception:
