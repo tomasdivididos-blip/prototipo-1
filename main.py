@@ -382,6 +382,15 @@ class MainWindow(QMainWindow):
             return
         path = getattr(self, "_cad_path", "") or ""
         diag = None
+        if mesh is None:
+            # Sin CAD cargado: avisar que primero hay que importar uno. El panel
+            # se abre igual (deseo del usuario), pero vacio hasta importar.
+            QMessageBox.warning(
+                self, "Primero importá un CAD",
+                "Todavía no hay ningún CAD cargado.\n\nEl panel de «Configuración "
+                "de CAD» se abre igual, pero para curar, previsualizar o exportar "
+                "primero tenés que importar un CAD (botón «Importar CAD…» dentro "
+                "del panel).")
         if mesh is not None:
             prog = QProgressDialog("Diagnosticando malla...", None, 0, 0, self)
             apply_dialog_theme(prog)

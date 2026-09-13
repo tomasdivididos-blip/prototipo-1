@@ -382,6 +382,27 @@ class MeshImportDialog(QDialog):
             pass
         self._refresh_all()
 
+    def showEvent(self, ev):
+        """Al hacerse visible el diálogo, re-renderizar el preview. En Windows/
+        pyqtgraph los items GL agregados ANTES de que el GLViewWidget sea visible
+        (durante __init__/reset, con el diálogo aún oculto) a veces no se pintan
+        porque el contexto no estaba «current». Re-renderizar en showEvent (ya
+        visible) garantiza que la malla aparezca."""
+        super().showEvent(ev)
+        try:
+            if self._mesh is not None:
+                self.preview.show_mesh(self._mesh)
+                if self._sel_faces:
+                    self.preview.highlight_faces(self._mesh, self._sel_faces)
+                elif self._diag is not None and getattr(self._diag, "holes", None):
+                    self.preview.highlight_hole(
+                        self._mesh, self._diag.holes[self._current_hole_idx])
+            else:
+                self.preview.clear_mesh()
+            self.preview.update()
+        except Exception:
+            pass
+
     def done(self, r):
         """Al aceptar/cancelar: liberar el visor GL y romper el ciclo del callback
         de picking (preview -> dialog). Sin esto, re-abrir el importador acumula
@@ -1122,6 +1143,16 @@ class MeshImportDialog(QDialog):
             return                           # el usuario cancelo el file dialog
         mesh, diag, path = res
         self.reset(mesh, diag, path, fresh=True)
+        # Tras los modales anidados (file/escala/progress) el diálogo puede quedar
+        # sin foco y el contexto GL sin repintar -> forzar render + foco.
+        try:
+            self.raise_()
+            self.activateWindow()
+            self.preview.show_mesh(self._mesh)
+            self.preview.update()
+            QApplication.processEvents()
+        except Exception:
+            pass
 
     def _export_cured(self):
         """Exporta la malla ACTUAL (ya curada) a .obj/.stl/.ply para reusarla o

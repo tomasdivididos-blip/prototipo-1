@@ -3794,6 +3794,11 @@ class AcousticPanel(QWidget):
         # el _TimedButtonForm para que MainWindow lo dispare.
         from timed_button import _TimedButtonForm
         self._cad_timer = _TimedButtonForm(self.btn_import_cad, ff)
+        # Leyenda persistente del estado del CAD (importá primero / cargado).
+        self.lbl_cad_hint = QLabel("Sin CAD: importá uno para curar/exportar.")
+        self.lbl_cad_hint.setWordWrap(True)
+        self.lbl_cad_hint.setStyleSheet("color: #f9a825; font-size: 8pt;")
+        ff.addRow(self.lbl_cad_hint)
 
         self.btn_clear_cad = QPushButton("✕  Volver a paramétrica")
         self.btn_clear_cad.setToolTip(
@@ -5485,6 +5490,15 @@ class AcousticPanel(QWidget):
             pass
         if hasattr(self, "btn_clear_cad"):
             self.btn_clear_cad.setEnabled(True)
+        if hasattr(self, "lbl_cad_hint"):
+            try:
+                wt = "estanco" if bool(mesh.is_watertight) else "NO estanco (curar)"
+            except Exception:
+                wt = "?"
+            self.lbl_cad_hint.setText(
+                f"CAD cargado: {len(v)} verts · {wt}. «Configuración de CAD» "
+                "para curar/exportar.")
+            self.lbl_cad_hint.setStyleSheet("color: #40a02b; font-size: 8pt;")
         # Invalidar resultados previos (la geometria cambio).
         self.modal_result = None
         self._refresh_modes_combo()
@@ -5500,6 +5514,9 @@ class AcousticPanel(QWidget):
         self._imported_tris = None
         if hasattr(self, "btn_clear_cad"):
             self.btn_clear_cad.setEnabled(False)
+        if hasattr(self, "lbl_cad_hint"):
+            self.lbl_cad_hint.setText("Sin CAD: importá uno para curar/exportar.")
+            self.lbl_cad_hint.setStyleSheet("color: #f9a825; font-size: 8pt;")
         self.modal_result = None
         self._refresh_modes_combo()
         self._refresh_badge_prediction()

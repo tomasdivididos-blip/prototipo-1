@@ -486,6 +486,15 @@ seguía mal):**
   `_open_cad_panel` centra al aplicar solo si `dlg._fresh_import` (malla importada de
   archivo); el CAD activo curado no se re-centra. Verificado headless: vacío→import in-place
   repobla (tools on, fresh=True), sin reject.
+- UX del panel CAD (pedido del usuario): al abrir sin CAD, warning «primero importá un CAD»
+  (`main._open_cad_panel`, rama mesh=None) + el panel vacío se abre igual (deseo del usuario).
+  Leyenda persistente bajo el botón `btn_import_cad` (`acoustic_panel.lbl_cad_hint`, se
+  actualiza en `set_imported_geometry`/`clear_imported_geometry`: sin CAD amarillo / cargado
+  verde con nº verts y estanco sí/no).
+- Preview no renderizaba al importar (GL Windows, contexto no «current» al agregar items con
+  el visor aún oculto / tras modales anidados): fix `MeshImportDialog.showEvent` (re-render al
+  hacerse visible) + tras el import in-place `raise_/activateWindow/show_mesh/processEvents`.
+  NO verificable headless el render real; headless confirma que los items se crean.
 - Predicción seguía poniendo afuera con CAD: la causa de fondo es CAD NO estanco (headless
   con `curado.room` estanco cae DENTRO). Agregada guarda `prediction_panel._proceed_if_solid`
   (trimesh `is_watertight` sobre la surface): en ubicación/combinado avisa y deja cancelar si

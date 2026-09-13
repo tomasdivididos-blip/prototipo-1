@@ -2924,8 +2924,8 @@ No hay cambios de uso: es transparente. Si antes evitabas «Esquina Inf.» por e
 El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD…»** y **abre siempre el panel** de diagnóstico/curado (ya no salta directo al explorador de archivos):
 
 - **Si ya hay un CAD cargado** (importado o traído de un `.room`), el panel se abre **sobre ese CAD**, así podés curarlo más, inspeccionarlo o exportarlo sin volver a importar el `.obj` original.
-- **Si no hay ningún CAD**, el panel se abre en estado vacío: las herramientas quedan deshabilitadas y la única acción activa es **«Importar CAD…»** (importar es el primer paso necesario, pero es una opción dentro del panel, no una puerta obligada antes de verlo).
-- Dentro del panel, **«Importar CAD…»** carga un archivo (reemplaza el que estés viendo, si hay).
+- **Si no hay ningún CAD**, al abrir aparece un aviso («primero importá un CAD») y el panel se abre igual en estado vacío: las herramientas quedan deshabilitadas y la única acción activa es **«Importar CAD…»**. Debajo del botón «Configuración de CAD» hay una leyenda persistente que indica el estado (sin CAD / CAD cargado, estanco o no).
+- Dentro del panel, **«Importar CAD…»** carga un archivo (reemplaza el que estés viendo, si hay) y muestra su **previsualización 3D** al instante.
 
 ### Exportar el CAD curado
 
