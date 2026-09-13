@@ -1756,6 +1756,12 @@ class MainWindow(QMainWindow):
 
 
 def main():
+    # Compartir el contexto OpenGL entre TODOS los GLViewWidget (visor principal +
+    # el preview del panel «Configuración de CAD»). Sin esto, cada GLViewWidget
+    # tiene su propio contexto WGL: los shaders compilados en uno son invalidos en
+    # el otro -> GLError 1282/1281 (glUseProgram / glGetAttribLocation) y el preview
+    # queda NEGRO en Windows. DEBE setearse ANTES de crear la QApplication.
+    QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setStyleSheet(DARK_QSS)
