@@ -727,12 +727,26 @@ class MainWindow(QMainWindow):
         # "afuera" solo con CAD.
         ap = getattr(self, "acoustic", None)
         if ap is not None and getattr(ap, "_is_imported_cad", False):
-            try:
-                v, t = ap.get_surface()
-                if v is not None and len(v) > 0:
-                    return _np.asarray(v), _np.asarray(t)
-            except Exception:
-                pass
+            # Usar la malla del CAD DIRECTAMENTE (no ap.get_surface(), que si
+            # _imported_verts quedara en None cae a _get_param_surface_callable =
+            # este mismo metodo -> recursion -> se atrapaba y devolvia la caja
+            # PARAMETRICA: la prediccion corria sobre la caja equivocada mientras
+            # el recinto real era el CAD. Preferir _imported_verts; si falta, la
+            # malla trimesh; NUNCA caer a la parametrica con un CAD activo.
+            iv = getattr(ap, "_imported_verts", None)
+            it = getattr(ap, "_imported_tris", None)
+            if iv is not None and len(iv) > 0 and it is not None:
+                return _np.asarray(iv), _np.asarray(it)
+            im = getattr(ap, "_imported_mesh", None)
+            if im is not None:
+                try:
+                    return (_np.asarray(im.vertices, float),
+                            _np.asarray(im.faces, int))
+                except Exception:
+                    pass
+            # is_cad=True sin malla: estado inconsistente. Avisar (no romper).
+            print("[WARN] _get_current_surface: is_cad=True pero sin malla CAD "
+                  "(_imported_verts/_imported_mesh None). Revisar el import.")
         if self._surface_verts is None:
             v, t, _e, _n = build_room_geometry(self.controls.get_params())
             self._surface_verts, self._surface_tris = v, t

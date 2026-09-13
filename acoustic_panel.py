@@ -3353,8 +3353,16 @@ class AcousticPanel(QWidget):
 
         Si hay CAD importado -> esa malla; si no -> la parametrica del main.
         """
-        if self._is_imported_cad and self._imported_verts is not None:
-            return self._imported_verts, self._imported_tris
+        if self._is_imported_cad:
+            if self._imported_verts is not None and self._imported_tris is not None:
+                return self._imported_verts, self._imported_tris
+            im = getattr(self, "_imported_mesh", None)
+            if im is not None:
+                import numpy as _np
+                return (_np.asarray(im.vertices, dtype=_np.float32),
+                        _np.asarray(im.faces, dtype=_np.int32))
+            # is_cad sin malla: estado inconsistente; caer al param callable (no
+            # reentra: main._get_current_surface ya no llama de vuelta a aca).
         return self._get_param_surface_callable()
 
     # -----------------------------------------------------------------------
