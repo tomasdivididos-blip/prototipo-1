@@ -681,6 +681,17 @@ class MeshImportDialog(QDialog):
         R = QVBoxLayout(right)
         R.setContentsMargins(8, 8, 8, 8)
         R.addWidget(QLabel("Preview 3D (rojo = hueco seleccionado)"))
+        # Placeholder para el estado vacio: el visor GL NO se crea/muestra hasta
+        # que hay una malla. Inicializar el GLViewWidget vacio y mostrar la malla
+        # despues dejaba el contexto WGL en mal estado en Windows (preview negro);
+        # crear/mostrar el visor recien con la malla reproduce el patron de v2.43
+        # que renderizaba bien.
+        self._preview_placeholder = QLabel(
+            "Importá un CAD para ver la previsualización 3D.")
+        self._preview_placeholder.setAlignment(Qt.AlignCenter)
+        self._preview_placeholder.setWordWrap(True)
+        self._preview_placeholder.setStyleSheet("color:#94a3b8;")
+        R.addWidget(self._preview_placeholder, 1)
         self.preview = _MeshPreview()
         R.addWidget(self.preview, 1)
         split.addWidget(right)
@@ -749,6 +760,11 @@ class MeshImportDialog(QDialog):
         if self._mesh is None:
             self._set_tools_enabled(False)
             try:
+                self.preview.hide()
+                self._preview_placeholder.show()
+            except Exception:
+                pass
+            try:
                 self.txt_summary.setPlainText(
                     "No hay ningún CAD cargado.\n\nUsá «Importar CAD…» para cargar "
                     "un archivo (STL, OBJ, PLY, STEP, IGES, glTF...). Después vas a "
@@ -763,6 +779,11 @@ class MeshImportDialog(QDialog):
                 pass
             return
         self._set_tools_enabled(True)
+        try:
+            self._preview_placeholder.hide()
+            self.preview.show()
+        except Exception:
+            pass
         # Gate barato: si la malla esta MUY rota (miles de aristas abiertas), NO
         # correr find_holes ni armar la lista de huecos en cada refresco (congela
         # la UI). Se muestra el diagnostico numerico y se invita a «Curar todo».

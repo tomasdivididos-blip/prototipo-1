@@ -491,10 +491,20 @@ seguía mal):**
   Leyenda persistente bajo el botón `btn_import_cad` (`acoustic_panel.lbl_cad_hint`, se
   actualiza en `set_imported_geometry`/`clear_imported_geometry`: sin CAD amarillo / cargado
   verde con nº verts y estanco sí/no).
-- Preview no renderizaba al importar (GL Windows, contexto no «current» al agregar items con
-  el visor aún oculto / tras modales anidados): fix `MeshImportDialog.showEvent` (re-render al
-  hacerse visible) + tras el import in-place `raise_/activateWindow/show_mesh/processEvents`.
-  NO verificable headless el render real; headless confirma que los items se crean.
+- Preview no renderizaba al importar (GL Windows): showEvent + repintado forzado NO alcanzó.
+  Fix definitivo (hipótesis): NO crear/mostrar el `_MeshPreview` (GLViewWidget) en estado
+  vacío; se muestra un `_preview_placeholder` (QLabel) y el visor recién se muestra cuando hay
+  malla (`_refresh_all` alterna visibilidad). Inicializar el contexto WGL vacío y mostrar la
+  malla después dejaba el visor negro; crear/mostrar recién con malla reproduce el patrón de
+  v2.43 que sí renderizaba. Headless confirma el toggle; el render real lo valida el usuario.
+- **BUG RAÍZ de la predicción con CAD (encontrado por traza `PROTO1_TRACE`):** `main.
+  _get_current_surface` usaba `_np` SIN `import numpy as _np` en el método → `NameError`.
+  En la versión vieja el `try/except` alrededor del return CAD lo tragaba en silencio y caía a
+  la caja PARAMÉTRICA → la predicción con CAD SIEMPRE corrió sobre la caja equivocada (fuentes
+  "afuera" del CAD real). NO era recursión ni no-estanqueidad; era el NameError enmascarado.
+  Fix: `import numpy as _np` al inicio del método + usar `_imported_verts`/`_imported_mesh`
+  directo, nunca la paramétrica con CAD activo. (numpy en main.py se importa local por método,
+  no a nivel módulo → cuidado con `_np` en métodos nuevos.)
 - Predicción seguía poniendo afuera con CAD: la causa de fondo es CAD NO estanco (headless
   con `curado.room` estanco cae DENTRO). Agregada guarda `prediction_panel._proceed_if_solid`
   (trimesh `is_watertight` sobre la surface): en ubicación/combinado avisa y deja cancelar si
