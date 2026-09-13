@@ -1157,6 +1157,20 @@ class PredictionPanel(QWidget):
             return
         prog.close()
 
+        import os as _os
+        if _os.environ.get("PROTO1_TRACE"):
+            try:
+                sb = ("None" if surface is None
+                      else f"min={np.round(np.asarray(surface[0],float).min(0),2)} "
+                           f"max={np.round(np.asarray(surface[0],float).max(0),2)}")
+                print(f"[TRACE predict] mode={mode} surface_bbox={sb}")
+                for i, p in enumerate(preds, 1):
+                    if hasattr(p, "layout"):
+                        print(f"   #{i} layout pos="
+                              f"{np.round(np.atleast_2d(p.layout.positions),2).tolist()}")
+            except Exception as e:
+                print("[TRACE predict] error:", e)
+
         self._render_results(preds)
         # Leyenda con score del ganador. En ubicacion con forma irregular
         # agrega "malla real": marcador persistente de que el FEM corrio
