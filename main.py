@@ -725,6 +725,7 @@ class MainWindow(QMainWindow):
         # Sin esto, la prediccion de ubicacion corria el FEM/inside_fn sobre la
         # caja de los sliders mientras las fuentes viven sobre el CAD -> fuentes
         # "afuera" solo con CAD.
+        import numpy as _np
         ap = getattr(self, "acoustic", None)
         if ap is not None and getattr(ap, "_is_imported_cad", False):
             # Usar la malla del CAD DIRECTAMENTE (no ap.get_surface(), que si
