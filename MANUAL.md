@@ -2925,7 +2925,9 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 - **Si ya hay un CAD cargado** (importado o traído de un `.room`), el panel se abre **sobre ese CAD**, así podés curarlo más, inspeccionarlo o exportarlo sin volver a importar el `.obj` original.
 - **Si no hay ningún CAD**, al abrir aparece un aviso («primero importá un CAD») y el panel se abre igual en estado vacío: las herramientas quedan deshabilitadas y la única acción activa es **«Importar CAD…»**. Debajo del botón «Configuración de CAD» hay una leyenda persistente que indica el estado (sin CAD / CAD cargado, estanco o no).
-- Dentro del panel, **«Importar CAD…»** carga un archivo (reemplaza el que estés viendo, si hay). El CAD queda cargado y usable aunque la previsualización 3D del panel no aparezca (problema conocido de OpenGL en algunos equipos Windows; no afecta la simulación ni la predicción, que usan la geometría real del CAD).
+- Dentro del panel, **«Importar CAD…»** carga un archivo (reemplaza el que estés viendo, si hay) y muestra su previsualización 3D.
+
+**CAD con columna (u otro hueco interior):** si el recinto tiene una columna piso-techo (dos cuerpos cerrados: sala + columna), el cálculo de modos usa automáticamente el mallador **voxel** (que talla el hueco), aun si tenías elegido gmsh: gmsh no arma volúmenes con huecos interiores. Se avisa en el estado del motor. Además, el mallado limpia solo las caras degeneradas del CAD (área ~0, típicas de tapas curvas), que antes hacían fallar a gmsh con «Singular matrix 3x3».
 
 ### Exportar el CAD curado
 

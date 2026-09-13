@@ -127,6 +127,20 @@ def _auto_clean_mesh(verts, tris,
         m.remove_unreferenced_vertices()
     except Exception:
         pass
+    # Eliminar caras DEGENERADAS (area ~0: vertices colineales/coincidentes). Un
+    # solo triangulo de area nula hace que gmsh falle en generate(3) con
+    # "Singular matrix 3x3" (no puede parametrizar/mallar ese parche). Aparecen,
+    # p.ej., en el abanico de triangulacion de una tapa curva (arco) o columna.
+    try:
+        nd = m.nondegenerate_faces()          # mascara de caras NO degeneradas
+        if nd is not None and (~np.asarray(nd)).any():
+            n_bad = int((~np.asarray(nd)).sum())
+            m.update_faces(nd)
+            m.remove_unreferenced_vertices()
+            if progress:
+                progress(f"gmsh: quitadas {n_bad} caras degeneradas (area ~0)")
+    except Exception:
+        pass
     for fn in (_tr.fix_winding, _tr.fix_normals, _tr.fix_inversion):
         try:
             fn(m)

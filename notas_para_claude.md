@@ -537,6 +537,30 @@ FALTA: test visual GUI (checklist).
 
 ---
 
+## 1i. Fix FEM sobre CAD: caras degeneradas + hueco interior (columna) (13 Sep 2026)
+
+Bug del usuario (`aula con prediccion.room`): tras predecir/aplicar fuentes sobre un CAD
+importado (aula con COLUMNA), «Calcular FEM» tiraba **"MATRIZ SINGULAR 3X3"**. Reproducido
+headless (`aa.run_fem_modal_routed(..., user_override='gmsh')`). Geometría: watertight, 2
+cuerpos (columna +2.81 m³, sala −113.56 m³ = normales invertidas), **5 caras de área 0** (el
+abanico de la tapa del arco, vértices fan 73/74).
+
+**Dos causas, dos fixes:**
+1. **"Singular matrix 3x3" (lo lanza GMSH en `mesh.generate(3)`):** caras degeneradas (área 0)
+   que gmsh no puede parametrizar. `mesh_gmsh._auto_clean_mesh` hacía merge/winding/normals/
+   fill pero NO quitaba caras degeneradas. FIX: `m.update_faces(m.nondegenerate_faces())` +
+   `remove_unreferenced_vertices` antes de fix_winding.
+2. **"Invalid boundary mesh (overlapping facets)" (gmsh, tras el fix 1):** el CAD tiene un
+   HUECO INTERIOR (columna = 2º cuerpo). gmsh arma un único surface loop y no sabe mallar
+   volúmenes con voids. El VOXELIZADOR SÍ talla el void por paridad de rayos (v2.43). FIX:
+   `mesh_router.build_mesh` detecta `_count_cad_bodies(...) >= 2` (via `trimesh.split`) y rutea
+   a voxel AUNQUE el user_override sea 'gmsh' (es límite geométrico, no preferencia), con aviso
+   en el badge/reason. CAD de UN cuerpo sigue en gmsh (verificado: caja 5×4×3, f1=34.42 ≈ c/2L).
+
+Verificado: con el .room del usuario ahora da 118 modos (f1=19.82 Hz) vía voxel. Benches
+`bench_cad`/`bench_voxel_mesh` OK. GMSH multi-loop (mallar el void en gmsh de verdad) queda
+como mejora futura; por ahora voxel es la ruta correcta para columnas.
+
 ## 2. Perfil del usuario
 
 - **Profesión**: ingeniero en acústica.

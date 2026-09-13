@@ -499,6 +499,20 @@ def choose_engine(
     )
 
 
+def _count_cad_bodies(verts, tris) -> int:
+    """Nº de cuerpos disconexos de la malla (por conectividad de caras). Un
+    recinto simple = 1; recinto + columna interior = 2. Se usa para detectar
+    huecos interiores que gmsh no sabe mallar. Si trimesh no esta, devuelve 1."""
+    try:
+        import trimesh
+        m = trimesh.Trimesh(vertices=np.asarray(verts, dtype=float),
+                            faces=np.asarray(tris, dtype=int), process=False)
+        comps = m.split(only_watertight=False)
+        return int(len(comps)) if comps is not None else 1
+    except Exception:
+        return 1
+
+
 # ---------------------------------------------------------------------------
 # Ejecucion: mallar segun la decision
 # ---------------------------------------------------------------------------
@@ -542,6 +556,28 @@ def build_mesh(
         is_imported_cad=is_imported_cad,
         user_override=user_override,
     )
+
+    # CAD con HUECO INTERIOR (p.ej. una columna dentro de la sala = 2 cuerpos
+    # estancos): gmsh arma un unico surface loop y falla ("Invalid boundary mesh
+    # / overlapping facets"); no soporta volumenes con voids con este pipeline.
+    # El voxelizador SI talla el void por paridad de rayos (v2.43). Se rutea a
+    # voxel con aviso, aunque el usuario haya elegido gmsh (es una limitacion
+    # geometrica, no una preferencia).
+    if decision.engine == "gmsh" and is_imported_cad:
+        try:
+            _bodies = _count_cad_bodies(surface_verts, surface_tris)
+        except Exception:
+            _bodies = 1
+        if _bodies >= 2:
+            if progress:
+                progress(f"AVISO: el CAD tiene {_bodies} cuerpos (hueco interior, "
+                         "p.ej. una columna). gmsh no malla voids -> voxel.")
+            decision.engine = "voxel"
+            decision.reason = (
+                f"CAD con hueco interior ({_bodies} cuerpos, p.ej. columna): "
+                "gmsh no arma volumenes con voids; se usa voxel, que talla el "
+                "hueco por paridad de rayos (error de escalera)."
+            )
 
     if progress:
         progress(f"Motor de mallado: {decision.engine} "
