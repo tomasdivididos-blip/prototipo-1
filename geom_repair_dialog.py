@@ -1164,14 +1164,9 @@ class MeshImportDialog(QDialog):
             return                           # el usuario cancelo el file dialog
         mesh, diag, path = res
         self.reset(mesh, diag, path, fresh=True)
-        # Tras los modales anidados (file/escala/progress) el diálogo puede quedar
-        # sin foco y el contexto GL sin repintar -> forzar render + foco.
         try:
             self.raise_()
             self.activateWindow()
-            self.preview.show_mesh(self._mesh)
-            self.preview.update()
-            QApplication.processEvents()
         except Exception:
             pass
 

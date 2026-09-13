@@ -505,11 +505,21 @@ seguía mal):**
   Fix: `import numpy as _np` al inicio del método + usar `_imported_verts`/`_imported_mesh`
   directo, nunca la paramétrica con CAD activo. (numpy en main.py se importa local por método,
   no a nivel módulo → cuidado con `_np` en métodos nuevos.)
-- Predicción seguía poniendo afuera con CAD: la causa de fondo es CAD NO estanco (headless
-  con `curado.room` estanco cae DENTRO). Agregada guarda `prediction_panel._proceed_if_solid`
-  (trimesh `is_watertight` sobre la surface): en ubicación/combinado avisa y deja cancelar si
-  el CAD no es estanco. Parametrico/dibujado son siempre estancos → no molesta. Si el CAD ES
-  estanco y aún falla, es bug real a aislar (la guarda no dispararía).
+- Guarda `prediction_panel._proceed_if_solid` (trimesh `is_watertight`): avisa en ubicación/
+  combinado si el CAD no es estanco. Paramétrico/dibujado siempre estancos → no molesta.
+- **CIERRE del "afuera con CAD" (CONFIRMADO por el usuario con traza):** era el `_np` NameError
+  de `_get_current_surface` (ver arriba). Traza final: `surface_bbox == _imported_verts ==
+  aula [-4.43,4.43]×[-2.48,2.48]`, fuentes DENTRO en los 3 criterios. Notar en la traza que
+  `_surface_verts(param)` seguía siendo la caja 6×8 default (por eso el bug viejo caía ahí).
+- **PENDIENTE (PAUSADO) — preview 3D del panel CAD no renderiza:** `GLError 1282/1281`
+  (glUseProgram / glGetAttribLocation a_position→-1) = CONTEXTO GL NO COMPARTIDO entre el visor
+  principal y el `_MeshPreview` (dos GLViewWidget, shaders de un contexto usados en otro; v2.43
+  ya lo anotaba). Se sacó el andamiaje de debug (traza `PROTO1_TRACE` + repintado forzado en
+  `_request_import` que disparaba el error durante el import). Fix propuesto: `QApplication.
+  setAttribute(Qt.AA_ShareOpenGLContexts)` ANTES de crear la QApplication en `main()` (o no usar
+  un 2º GLViewWidget para el preview). Cambio sensible del visor principal → hacerlo con el
+  usuario presente. El estado vacío ya muestra placeholder (no crea el visor GL hasta tener
+  malla) pero al cargar la malla el paint falla por el contexto.
 
 **Pendiente OPCIONAL (ofrecido, no implementado):** guarda en la solapa Predicción que
 avise cuando el CAD activo no es estanco (hoy solo avisa el FEM de Acústica vía

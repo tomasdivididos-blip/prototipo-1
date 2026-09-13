@@ -1061,34 +1061,6 @@ class MainWindow(QMainWindow):
         """Aplicar una prediccion de ubicacion (T8): coloca las fuentes
         recomendadas en la pestaña Acústica y va a ella."""
         ap = self.acoustic
-        import os as _os
-        if _os.environ.get("PROTO1_TRACE"):
-            try:
-                import numpy as _np
-                from acoustic_mesh import points_inside_surface as _pis
-                sv, st = self._get_current_surface()
-                sv = _np.asarray(sv, float); st = _np.asarray(st, int)
-                def _bb(a):
-                    a = _np.asarray(a, float) if a is not None else None
-                    return "None" if a is None or len(a) == 0 else \
-                        f"min={_np.round(a.min(0),2)} max={_np.round(a.max(0),2)}"
-                iv = getattr(ap, "_imported_verts", None)
-                print(f"[TRACE apply] is_cad="
-                      f"{getattr(ap,'_is_imported_cad',False)}")
-                print(f"   _get_current_surface bbox: {_bb(sv)}")
-                print(f"   _imported_verts bbox:      {_bb(iv)}")
-                print(f"   _surface_verts(param) bbox:{_bb(getattr(self,'_surface_verts',None))}")
-                print(f"   receiver={_np.round(_np.asarray(ap.receiver,float),2)}")
-                for s in source_array:
-                    p = _np.asarray(s.position, float)
-                    try:
-                        ins = bool(_pis(p.reshape(1, 3), sv, st)[0])
-                    except Exception:
-                        ins = "?"
-                    print(f"   fuente {getattr(s,'label','?')} "
-                          f"pos={_np.round(p,2)} inside_surface={ins}")
-            except Exception as e:
-                print("[TRACE apply] error:", e)
         try:
             ap.sources.sources.clear()
             for s in source_array:

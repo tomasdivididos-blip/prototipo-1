@@ -6,7 +6,7 @@
 > cada cosa contra la fuente física, un oráculo, o una cuenta propia. Que este archivo
 > diga "resuelto/PASA" no prueba nada; es un puntero a qué mirar.
 
-**Última actualización:** 2026-09-12 (v2.44).
+**Última actualización:** 2026-09-13 (v2.44).
 
 ## Estado del proyecto
 
