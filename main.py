@@ -1053,11 +1053,17 @@ class MainWindow(QMainWindow):
                 from acoustic_mesh import points_inside_surface as _pis
                 sv, st = self._get_current_surface()
                 sv = _np.asarray(sv, float); st = _np.asarray(st, int)
+                def _bb(a):
+                    a = _np.asarray(a, float) if a is not None else None
+                    return "None" if a is None or len(a) == 0 else \
+                        f"min={_np.round(a.min(0),2)} max={_np.round(a.max(0),2)}"
+                iv = getattr(ap, "_imported_verts", None)
                 print(f"[TRACE apply] is_cad="
-                      f"{getattr(ap,'_is_imported_cad',False)} "
-                      f"surface bbox min={_np.round(sv.min(0),2)} "
-                      f"max={_np.round(sv.max(0),2)}  "
-                      f"receiver={_np.round(_np.asarray(ap.receiver,float),2)}")
+                      f"{getattr(ap,'_is_imported_cad',False)}")
+                print(f"   _get_current_surface bbox: {_bb(sv)}")
+                print(f"   _imported_verts bbox:      {_bb(iv)}")
+                print(f"   _surface_verts(param) bbox:{_bb(getattr(self,'_surface_verts',None))}")
+                print(f"   receiver={_np.round(_np.asarray(ap.receiver,float),2)}")
                 for s in source_array:
                     p = _np.asarray(s.position, float)
                     try:
