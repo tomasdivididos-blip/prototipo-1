@@ -565,13 +565,20 @@ de mayor AABB como exterior y las contenidas como HUECOS: `addVolume([ext, hueco
 Verificado boundary-fitted con un hueco FLOTANTE real (caja dentro de caja, gmsh 15 modos).
 `mesh_router` ya no pre-rutea a voxel; deja que gmsh intente, y cae a voxel si falla (para
 CAD multi-cuerpo el fallback aplica aun con override=gmsh; `_count_cad_bodies`).
-**LÍMITE (columna piso-techo):** el multi-loop NO alcanza si el hueco TOCA piso/techo y el CAD
-lo modela como DOS SÓLIDOS QUE SE INTERSECAN (tapas coplanares al piso/techo) → gmsh
-"overlapping facets". Eso necesita RESTA BOOLEANA (sala − columna) → una sola superficie con
-túnel → gmsh single-loop. `trimesh.boolean` requiere backend (`manifold3d` o blender), NO
-instalado. Sin backend, la columna piso-techo cae a VOXEL (correcto, escalonado). DECISIÓN
-pendiente del usuario: instalar `manifold3d` (backend de boolean de trimesh) para columnas
-boundary-fitted, o quedarse con voxel.
+**Columna piso-techo → RESTA BOOLEANA (13 Sep, HECHO, `manifold3d` instalado):** el multi-loop
+NO alcanza si el hueco TOCA piso/techo modelado como dos sólidos que se intersecan (tapas
+coplanares → gmsh "overlapping facets"). Fix: `mesh_router._subtract_interior_bodies` resta los
+cuerpos interiores (columnas) del exterior (recinto) con `trimesh.boolean.difference`
+(backend `manifold3d`, en requirements) → una sola superficie con TÚNEL (genus>0) → gmsh
+single-loop BOUNDARY-FITTED. Verificado end-to-end: caja 6×8×3 + columna prismática piso-techo
+→ gmsh, 30 modos (f1=21.4=c/2·8). Si el boolean falta/da malla no-estanca → multi-loop → voxel.
+A futuro sirve para restar MUEBLES en alta frecuencia (pedido del usuario).
+**CAVEAT del aula del usuario (`aula con prediccion.room`):** su techo es un ARCO (superficie
+CURVA del CAD con triangulación degenerada); gmsh `classifySurfaces`/meshing falla en el arco
+("overlapping facets") INCLUSO sin columna (verificado: la sala sola falla). Es la misma
+limitación por la que el proyecto rutea techos curvos a voxel. Con arco → cae a voxel (correcto,
+escalonado). El boolean de la columna funciona; el arco es el bloqueo. Para aula boundary-fitted
+habría que remallar/suavizar el arco (pendiente, no crítico).
 
 ## 2. Perfil del usuario
 

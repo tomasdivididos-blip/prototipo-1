@@ -10,4 +10,8 @@ scipy>=1.10
 # instalacion debe traerlo para tener TODOS los formatos CAD disponibles.
 gmsh>=4.13
 trimesh>=4.0
+# Backend de boolean de mallas de trimesh (sala - columna/obstaculo -> superficie
+# con tunel para mallado gmsh boundary-fitted; a futuro, resta de muebles en alta
+# frecuencia). Es geometria (no fisica): mismo alcance que trimesh/gmsh en D0.
+manifold3d>=2.5
 matplotlib>=3.7  # graficos de FRF y RT60

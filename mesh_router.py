@@ -513,6 +513,51 @@ def _count_cad_bodies(verts, tris) -> int:
         return 1
 
 
+def _subtract_interior_bodies(verts, tris, progress=None):
+    """Resta los cuerpos INTERIORES (columnas, obstaculos) del cuerpo EXTERIOR
+    (recinto) via boolean de mallas (trimesh + backend manifold3d/blender) ->
+    una sola superficie con tunel/hueco que gmsh malla BOUNDARY-FITTED.
+
+    El exterior es el de mayor AABB; los demas se restan. Devuelve (v, t) de la
+    superficie resultante, o None si no hay backend de boolean, o si el resultado
+    no es estanco (mejor caer a multi-loop/voxel que mallar algo sucio)."""
+    try:
+        import trimesh
+    except Exception:
+        return None
+    try:
+        m = trimesh.Trimesh(vertices=np.asarray(verts, dtype=float),
+                            faces=np.asarray(tris, dtype=int), process=False)
+        comps = m.split(only_watertight=False)
+        if comps is None or len(comps) < 2:
+            return None
+        comps = sorted(comps, key=lambda c: c.bounding_box.volume)
+        outer = comps[-1]
+        inners = list(comps[:-1])
+        for c in [outer] + inners:            # normales hacia afuera (boolean sano)
+            try:
+                c.fix_normals()
+            except Exception:
+                pass
+        result = trimesh.boolean.difference([outer] + inners)
+        if result is None or len(getattr(result, "faces", [])) == 0:
+            return None
+        if not bool(result.is_watertight):
+            if progress:
+                progress("boolean: resultado no estanco; se usa multi-loop/voxel.")
+            return None
+        if progress:
+            progress(f"gmsh: resta booleana recinto - {len(inners)} cuerpo(s) "
+                     "interior(es) -> superficie con tunel (boundary-fitted)")
+        return (np.asarray(result.vertices, dtype=float),
+                np.asarray(result.faces, dtype=int))
+    except Exception as e:
+        if progress:
+            progress(f"boolean no disponible/fallo ({str(e)[:80]}); "
+                     "se usa multi-loop/voxel.")
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Ejecucion: mallar segun la decision
 # ---------------------------------------------------------------------------
@@ -557,12 +602,21 @@ def build_mesh(
         user_override=user_override,
     )
 
-    # CAD con HUECO INTERIOR (p.ej. columna piso-techo = 2 cuerpos estancos):
-    # gmsh AHORA lo malla boundary-fitted armando el volumen como exterior +
-    # huecos (ver mesh_gmsh._build_volumes_with_voids). Si gmsh fallara igual,
-    # el voxelizador es el fallback (talla el void por paridad de rayos, v2.43).
+    # CAD con HUECO INTERIOR (p.ej. columna piso-techo = 2 cuerpos estancos).
+    # Para gmsh boundary-fitted, RESTAMOS los cuerpos interiores (columnas) del
+    # exterior (recinto) via boolean de mallas -> una sola superficie con TUNEL
+    # (genus>0) que gmsh malla single-loop conforme a la geometria real. Si el
+    # boolean no esta disponible (sin backend manifold3d/blender) o falla, gmsh
+    # intenta el multi-loop (sirve para huecos FLOTANTES) y si tambien falla, cae
+    # a voxel (talla el void por paridad de rayos, v2.43 — frontera escalonada).
     _cad_bodies = (_count_cad_bodies(surface_verts, surface_tris)
                    if is_imported_cad else 1)
+    gmsh_verts, gmsh_tris = surface_verts, surface_tris
+    if decision.engine == "gmsh" and is_imported_cad and _cad_bodies >= 2:
+        cleaned = _subtract_interior_bodies(surface_verts, surface_tris,
+                                            progress=progress)
+        if cleaned is not None:
+            gmsh_verts, gmsh_tris = cleaned
 
     if progress:
         progress(f"Motor de mallado: {decision.engine} "
@@ -573,6 +627,8 @@ def build_mesh(
 
     def _build_voxel():
         if progress: progress(f"voxel: mallando (n/m={npm})...")
+        # Voxel usa la superficie ORIGINAL (multi-cuerpo): talla el void por
+        # paridad de rayos sin necesitar el boolean.
         nv, nt = acoustic_mesh.build_volume_mesh(
             surface_verts, surface_tris, n_per_meter=npm,
         )
@@ -582,8 +638,10 @@ def build_mesh(
         return nv, nt, ni
 
     def _build_gmsh():
+        # gmsh usa la superficie con el boolean ya aplicado (sala - columnas) si
+        # hubo cuerpos interiores; si no, la original.
         return mesh_gmsh.mesh_with_gmsh(
-            surface_verts, surface_tris,
+            gmsh_verts, gmsh_tris,
             h_target=h, progress=progress,
         )
 
