@@ -557,9 +557,21 @@ abanico de la tapa del arco, vértices fan 73/74).
    a voxel AUNQUE el user_override sea 'gmsh' (es límite geométrico, no preferencia), con aviso
    en el badge/reason. CAD de UN cuerpo sigue en gmsh (verificado: caja 5×4×3, f1=34.42 ≈ c/2L).
 
-Verificado: con el .room del usuario ahora da 118 modos (f1=19.82 Hz) vía voxel. Benches
-`bench_cad`/`bench_voxel_mesh` OK. GMSH multi-loop (mallar el void en gmsh de verdad) queda
-como mejora futura; por ahora voxel es la ruta correcta para columnas.
+Verificado: con el .room del usuario ahora da 118 modos (f1=19.82 Hz) vía voxel.
+
+**gmsh multi-loop (13 Sep, HECHO para huecos flotantes):** `mesh_gmsh._build_volumes_with_voids`
+agrupa las superficies reconstruidas en cáscaras (union-find por curvas compartidas), toma la
+de mayor AABB como exterior y las contenidas como HUECOS: `addVolume([ext, hueco1, ...])`.
+Verificado boundary-fitted con un hueco FLOTANTE real (caja dentro de caja, gmsh 15 modos).
+`mesh_router` ya no pre-rutea a voxel; deja que gmsh intente, y cae a voxel si falla (para
+CAD multi-cuerpo el fallback aplica aun con override=gmsh; `_count_cad_bodies`).
+**LÍMITE (columna piso-techo):** el multi-loop NO alcanza si el hueco TOCA piso/techo y el CAD
+lo modela como DOS SÓLIDOS QUE SE INTERSECAN (tapas coplanares al piso/techo) → gmsh
+"overlapping facets". Eso necesita RESTA BOOLEANA (sala − columna) → una sola superficie con
+túnel → gmsh single-loop. `trimesh.boolean` requiere backend (`manifold3d` o blender), NO
+instalado. Sin backend, la columna piso-techo cae a VOXEL (correcto, escalonado). DECISIÓN
+pendiente del usuario: instalar `manifold3d` (backend de boolean de trimesh) para columnas
+boundary-fitted, o quedarse con voxel.
 
 ## 2. Perfil del usuario
 

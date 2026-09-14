@@ -557,27 +557,12 @@ def build_mesh(
         user_override=user_override,
     )
 
-    # CAD con HUECO INTERIOR (p.ej. una columna dentro de la sala = 2 cuerpos
-    # estancos): gmsh arma un unico surface loop y falla ("Invalid boundary mesh
-    # / overlapping facets"); no soporta volumenes con voids con este pipeline.
-    # El voxelizador SI talla el void por paridad de rayos (v2.43). Se rutea a
-    # voxel con aviso, aunque el usuario haya elegido gmsh (es una limitacion
-    # geometrica, no una preferencia).
-    if decision.engine == "gmsh" and is_imported_cad:
-        try:
-            _bodies = _count_cad_bodies(surface_verts, surface_tris)
-        except Exception:
-            _bodies = 1
-        if _bodies >= 2:
-            if progress:
-                progress(f"AVISO: el CAD tiene {_bodies} cuerpos (hueco interior, "
-                         "p.ej. una columna). gmsh no malla voids -> voxel.")
-            decision.engine = "voxel"
-            decision.reason = (
-                f"CAD con hueco interior ({_bodies} cuerpos, p.ej. columna): "
-                "gmsh no arma volumenes con voids; se usa voxel, que talla el "
-                "hueco por paridad de rayos (error de escalera)."
-            )
+    # CAD con HUECO INTERIOR (p.ej. columna piso-techo = 2 cuerpos estancos):
+    # gmsh AHORA lo malla boundary-fitted armando el volumen como exterior +
+    # huecos (ver mesh_gmsh._build_volumes_with_voids). Si gmsh fallara igual,
+    # el voxelizador es el fallback (talla el void por paridad de rayos, v2.43).
+    _cad_bodies = (_count_cad_bodies(surface_verts, surface_tris)
+                   if is_imported_cad else 1)
 
     if progress:
         progress(f"Motor de mallado: {decision.engine} "
@@ -612,9 +597,11 @@ def build_mesh(
             # techo curvo parametrico, o un CAD demasiado complicado), caemos
             # a voxel con un mensaje de fallback explicito. El usuario ve un
             # badge amarillo "voxel · fallback" para entender que paso.
-            if decision.user_override == "gmsh":
-                # El usuario forzo gmsh: si falla, mejor reportar el error
-                # crudo en vez de caer silenciosamente.
+            if decision.user_override == "gmsh" and _cad_bodies < 2:
+                # El usuario forzo gmsh en un CAD de UN cuerpo: si falla, mejor
+                # reportar el error crudo en vez de caer silenciosamente. (Con
+                # hueco interior SI caemos a voxel: es un limite geometrico de
+                # gmsh, no una mala preferencia del usuario.)
                 raise
             fallback_msg = str(e).strip().splitlines()[-1][:200]
             if progress:

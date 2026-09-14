@@ -160,6 +160,94 @@ def _auto_clean_mesh(verts, tris,
             np.asarray(m.faces, dtype=int))
 
 
+def _group_surfaces_into_shells(_gmsh, surf_tags):
+    """Agrupa las superficies reconstruidas por gmsh en CASCARAS cerradas
+    (componentes conexas): dos superficies estan en la misma cascara si comparten
+    una curva de borde. Para un recinto+columna devuelve 2 grupos (paredes del
+    recinto / paredes de la columna). Devuelve lista de listas de surface tags."""
+    curve_to_surfs = {}
+    for st in surf_tags:
+        try:
+            bnd = _gmsh.model.getBoundary([(2, st)], combined=False,
+                                          oriented=False, recursive=False)
+        except Exception:
+            bnd = []
+        for (_dim, ctag) in bnd:
+            c = abs(int(ctag))
+            curve_to_surfs.setdefault(c, []).append(st)
+    parent = {st: st for st in surf_tags}
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    for surfs in curve_to_surfs.values():
+        for s in surfs[1:]:
+            union(surfs[0], s)
+    groups = {}
+    for st in surf_tags:
+        groups.setdefault(find(st), []).append(st)
+    return list(groups.values())
+
+
+def _shell_bbox(_gmsh, shell):
+    """AABB (min, max) de una cascara (union de bboxes de sus superficies)."""
+    import numpy as _np
+    lo = _np.full(3, _np.inf)
+    hi = _np.full(3, -_np.inf)
+    for st in shell:
+        try:
+            b = _gmsh.model.getBoundingBox(2, st)   # (xmin..zmin, xmax..zmax)
+        except Exception:
+            continue
+        lo = _np.minimum(lo, b[:3])
+        hi = _np.maximum(hi, b[3:])
+    return lo, hi
+
+
+def _build_volumes_with_voids(_gmsh, surf_tags, progress=None):
+    """Define el/los volumen(es) a mallar. Con una sola cascara -> un volumen
+    simple. Con varias -> la cascara exterior (mayor AABB) es la frontera y las
+    interiores CONTENIDAS en ella son huecos: addVolume([ext, hueco1, ...]).
+    Una cascara no contenida (dos recintos separados) recibe su propio volumen."""
+    import numpy as _np
+    shells = _group_surfaces_into_shells(_gmsh, surf_tags)
+    if len(shells) <= 1:
+        sl = _gmsh.model.geo.addSurfaceLoop(surf_tags)
+        _gmsh.model.geo.addVolume([sl])
+        return
+    boxes = [_shell_bbox(_gmsh, s) for s in shells]
+    # Exterior = mayor volumen de AABB.
+    vols = [float(_np.prod(_np.maximum(hi - lo, 0.0))) for (lo, hi) in boxes]
+    outer = int(_np.argmax(vols))
+    lo_o, hi_o = boxes[outer]
+
+    def _contained(lo_i, hi_i):
+        eps = 1e-6
+        return bool(_np.all(lo_i >= lo_o - eps) and _np.all(hi_i <= hi_o + eps))
+
+    loops = [_gmsh.model.geo.addSurfaceLoop(s) for s in shells]
+    holes, standalone = [], []
+    for i, (lo_i, hi_i) in enumerate(boxes):
+        if i == outer:
+            continue
+        (holes if _contained(lo_i, hi_i) else standalone).append(i)
+    if progress:
+        progress(f"gmsh: {len(shells)} cascaras -> 1 recinto con "
+                 f"{len(holes)} hueco(s) interior(es)"
+                 + (f" + {len(standalone)} cuerpo(s) aparte" if standalone else ""))
+    _gmsh.model.geo.addVolume([loops[outer]] + [loops[i] for i in holes])
+    for i in standalone:                 # recintos separados: su propio volumen
+        _gmsh.model.geo.addVolume([loops[i]])
+
+
 def mesh_with_gmsh(
     surface_verts: np.ndarray,
     surface_tris: np.ndarray,
@@ -282,14 +370,19 @@ def mesh_with_gmsh(
                 f"Mensaje original: {last_err}"
             )
 
-        # Volumen cerrado a partir del surface loop.
+        # Volumen a partir de los surface loops. Un CAD con HUECO INTERIOR (p.ej.
+        # una columna piso-techo) tiene VARIAS cascaras cerradas: la exterior
+        # (paredes del recinto) + una interior por cada hueco. gmsh malla el
+        # recinto MENOS los huecos si el volumen se define como
+        # addVolume([loop_exterior, loop_hueco1, ...]) (primer loop = frontera,
+        # los siguientes = huecos). Un unico surface loop con TODAS las
+        # superficies fallaba ("Invalid boundary mesh / overlapping facets").
         surfaces = _gmsh.model.getEntities(2)
         if not surfaces:
             _gmsh.finalize()
             raise RuntimeError("gmsh: no se reconstruyeron superficies del STL.")
         surf_tags = [e[1] for e in surfaces]
-        sl = _gmsh.model.geo.addSurfaceLoop(surf_tags)
-        _gmsh.model.geo.addVolume([sl])
+        _build_volumes_with_voids(_gmsh, surf_tags, progress=progress)
         _gmsh.model.geo.synchronize()
 
         # Control de tamano.
