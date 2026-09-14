@@ -574,11 +574,19 @@ single-loop BOUNDARY-FITTED. Verificado end-to-end: caja 6×8×3 + columna prism
 → gmsh, 30 modos (f1=21.4=c/2·8). Si el boolean falta/da malla no-estanca → multi-loop → voxel.
 A futuro sirve para restar MUEBLES en alta frecuencia (pedido del usuario).
 **CAVEAT del aula del usuario (`aula con prediccion.room`):** su techo es un ARCO (superficie
-CURVA del CAD con triangulación degenerada); gmsh `classifySurfaces`/meshing falla en el arco
-("overlapping facets") INCLUSO sin columna (verificado: la sala sola falla). Es la misma
-limitación por la que el proyecto rutea techos curvos a voxel. Con arco → cae a voxel (correcto,
-escalonado). El boolean de la columna funciona; el arco es el bloqueo. Para aula boundary-fitted
-habría que remallar/suavizar el arco (pendiente, no crítico).
+CURVA del CAD); gmsh `classifySurfaces`/`generate(3)` falla en el arco INCLUSO sin columna
+(verificado: la sala sola falla). El boolean de la columna funciona; el ARCO es el bloqueo →
+cae a voxel (correcto, escalonado). Fix de la remoción de degeneradas ahora es CONDICIONAL
+(solo si sigue estanca; borrarlas abría huecos).
+
+**Remallado del arco = Opción 2, PLANEADA (sin implementar): `plan_remallado_curvas.md`.**
+Probado y DESCARTADO (headless, 13 Sep): quitar degeneradas (abre huecos); **round-trip por
+manifold3d** (`trimesh.boolean.union([room])` deja watertight + 0 degeneradas y gmsh IGUAL
+falla → el bloqueo es la REPARAMETRIZACIÓN de la superficie curva, "overlapping facets" entre
+parches, NO las degeneradas); reparam on/off, ángulos 40/60/80. Candidatos del plan: C gmsh
+discreto sin reparam (barato, sin dep) → A reparam afinada (MeshSizeFromCurvature+tolerancias)
+→ B pymeshlab isotropic remesh (dep nueva, robusto, pide OK) → fallback voxel. Oráculo:
+comparar contra el arco PARAMÉTRICO de la app. NO codear sin OK; es un spike con gate.
 
 ## 2. Perfil del usuario
 

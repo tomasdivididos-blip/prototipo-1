@@ -6,7 +6,27 @@
 > cada cosa contra la fuente física, un oráculo, o una cuenta propia. Que este archivo
 > diga "resuelto/PASA" no prueba nada; es un puntero a qué mirar.
 
-**Última actualización:** 2026-09-13 (v2.44).
+**Última actualización:** 2026-09-13 (v2.44 + mallado CAD).
+
+## Mallado de CAD con columnas y superficies curvas (13 Sep 2026 — EN ALCANCE, VERIFICAR)
+
+Cadena de fixes al FEM sobre CAD importado (auditá contra la física del dominio):
+- `mesh_gmsh._auto_clean_mesh`: quita caras degeneradas (área ~0) SOLO si la malla sigue
+  estanca (borrarlas abría huecos → gmsh "overlapping facets"). A auditar: ¿alguna cara
+  "degenerada" real (no sliver) se pierde y cambia el dominio?
+- **Columna (hueco interior) → resta booleana:** `mesh_router._subtract_interior_bodies`
+  resta los cuerpos interiores del recinto (`trimesh.boolean.difference`, backend
+  **manifold3d** nuevo) → superficie con TÚNEL → gmsh single-loop boundary-fitted.
+  Verificado headless: caja 6×8×3 + columna prismática → gmsh, f1=21.4=c/2·8; 0 nodos dentro
+  del footprint de la columna (túnel tallado). A auditar: ¿el boolean preserva el volumen
+  acústico exacto (V_sala − V_columna) y las normales/áreas de cara para el amortiguamiento?
+- **Multi-loop gmsh** (`mesh_gmsh._build_volumes_with_voids`): para huecos FLOTANTES
+  (rodeados), `addVolume([ext, hueco…])`. Verificado con caja-en-caja.
+- **Superficies CURVAS (techo en arco importado):** gmsh NO parametriza → cae a VOXEL
+  (escalera $O(h)$ en la curva, desdobla degeneraciones). Remallado boundary-fitted =
+  PLANEADO en `plan_remallado_curvas.md` (spike). A auditar cuando se implemente: modos del
+  arco remallado vs arco paramétrico (oráculo), convergencia $O(h^2)$, tets degenerados.
+- Fallback SIEMPRE a voxel: el usuario nunca queda sin cálculo.
 
 ## Estado del proyecto
 
