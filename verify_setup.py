@@ -51,7 +51,8 @@ CRITICAL_FILES = [
     # Materiales
     "material_library.py", "face_materials.py",
     # Config
-    "requirements.txt", "run.bat",
+    "requirements.txt",
+    # (el lanzador se chequea aparte: run.bat en Windows, run.command en Mac)
 ]
 
 CRITICAL_DIRS = [
@@ -150,6 +151,13 @@ def check_files():
         else:
             print(f"    --  FALTA carpeta: {dirname}/")
             missing.append(dirname + "/")
+    # Lanzador: run.bat (Windows) o run.command (Mac). Basta con UNO (el paquete
+    # de cada plataforma trae solo el suyo).
+    if (project_dir / "run.bat").exists() or (project_dir / "run.command").exists():
+        pass
+    else:
+        print("    --  FALTA lanzador (run.bat o run.command)")
+        missing.append("run.bat/run.command")
     if missing:
         print(f"\n    FAIL — Faltan {len(missing)} elemento(s)")
         return False
