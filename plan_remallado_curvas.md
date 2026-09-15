@@ -1,8 +1,32 @@
 # Plan — remallar superficies curvas de un CAD para gmsh (Opción 2)
 
-> Estado: PLAN (sin implementar). Escrito 2026-09-13. Pedido del usuario: que un CAD
-> importado con superficies curvas (techo en arco, bóveda) se malle **boundary-fitted
-> con gmsh** en vez de caer a voxel escalonado. NO codear sin OK.
+> Estado: **IMPLEMENTADO (2026-09-13, candidato B).** Escrito 2026-09-13. Pedido del
+> usuario: que un CAD importado con superficies curvas (techo en arco, bóveda) se malle
+> **boundary-fitted con gmsh** en vez de caer a voxel escalonado.
+>
+> ## Resultado del spike + implementación (2026-09-13)
+>
+> - **C (discreto sin reparam) y A (reparam afinada): FALLARON.** El path discreto da
+>   "overlapping facets" incluso con manifold3d (0 degeneradas); A cuelga/falla. La
+>   causa NO era curvatura: el aula testigo es axis-aligned facetado con **T-junctions**
+>   (aristas partidas en los vecinos → facetas coplanares solapadas).
+> - **D (re-triangulación propia numpy): frágil**, como preveía el plan.
+> - **B (pymeshlab, con OK del usuario): FUNCIONA, combinado con el path discreto.**
+>   Receta ganadora: pymeshlab isotropic remesh → `trimesh(process=True)` (suelda
+>   duplicados → watertight) → gmsh **discreto** (`createTopology`, sin reparametrizar).
+>   GOTCHA: NO pre-limpiar (remove_duplicate_vertices) ANTES del remesh (rompe gmsh,
+>   determinista); soldar DESPUÉS con trimesh. Escribir la superficie por `_stl_from_arrays`
+>   (ASCII) rompe `createTopology`; el remesh de pymeshlab + STL de trimesh sí anda.
+> - **Validación (oráculo §5):** modos gmsh-discreto vs voxel < 0.34% (caja), convergen
+>   O(h²) al refinar; volumen aula 113.31 (exacto), sala-columna 110.58; qmin 0.32-0.38,
+>   0 tets degenerados. Arco paramétrico genuinamente curvo (454/522 caras inclinadas):
+>   remesh cierra T-junctions y gmsh-discreto malla (15124 tets, V 91.06 vs 91.13).
+> - **Cableado:** `mesh_gmsh.mesh_with_gmsh(remesh_target_len=...)` + `is_remesh_available()`
+>   + `_remesh_isotropic()`; cadena en `mesh_router.build_mesh`: reparam → remesh+discreto
+>   → voxel. `bench_remesh_curved.py` 18/18. pymeshlab OPCIONAL (requirements + .spec);
+>   si falta, degrada a voxel.
+> - **Hallazgo lateral (tarea aparte):** reparam sobre malla NO watertight puede "tener
+>   éxito" con volumen 21% incorrecto en silencio. Gate de volumen = pendiente con OK.
 
 ## 0. Objetivo y alineación (§0 del proyecto)
 

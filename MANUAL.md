@@ -942,6 +942,23 @@ Pasá el mouse sobre el badge para ver el detalle del razonamiento.
 
 El badge se actualiza automáticamente cuando cambiás la geometría: por ejemplo, al subir el slider *Altura del techo* de 0 a 1 m con techo en arco, el badge salta de verde a amarillo.
 
+### 15.2b Superficies curvas o CAD sucio: remesh + mallado discreto
+
+Los CAD reales (por ejemplo exportados de EASE) a menudo llegan con **T-junctions**: una arista larga de un triángulo aparece partida en dos en los triángulos vecinos, lo que crea facetas coplanares que se solapan. Ante eso, la reconstrucción normal de gmsh (reparametrización: `classifySurfaces` + `createGeometry`, que rearma parches B-spline) falla con `Invalid boundary mesh (overlapping facets)`. Lo mismo pasa con superficies genuinamente curvas (bóvedas, arcos) importadas: dos parches se solapan al aplanarlos al plano paramétrico.
+
+Desde 2026-09, cuando la reparametrización falla, el router intenta un **segundo camino** antes de caer a voxel:
+
+1. **Remesh isotrópico** de la superficie con **pymeshlab** (MeshLab): re-triangula todo con aristas de longitud uniforme, eliminando los T-junctions y los triángulos degenerados. Se sueldan los vértices duplicados (queda *watertight*).
+2. **Mallado discreto** de gmsh: la superficie remallada se toma como **frontera fija** (`createTopology`, sin reparametrizar) y gmsh solo llena el interior con tetraedros. El resultado es **boundary-fitted** a la superficie remallada.
+
+Cadena completa del motor gmsh: **reparametrización → remesh + discreto → voxel**. El fallback a voxel sigue existiendo: si pymeshlab no está instalado, o el remesh no cierra (por ejemplo un `h` demasiado grueso para un recinto chico), nunca te quedás sin cálculo. El badge queda azul (`gmsh · boundary-fitted`) cuando el remesh + discreto tiene éxito.
+
+**pymeshlab es una dependencia OPCIONAL** (está en `requirements.txt`). Si falta, el módulo `mesh_gmsh` reporta `is_remesh_available() == False` y la cadena se saltea el remesh.
+
+Validación (`bench_remesh_curved.py`, 18/18): los modos del mallado gmsh-discreto coinciden con los del voxel (que para un recinto *axis-aligned* es near-exacto) dentro de **0.34 %** en una caja, y convergen al refinar `h` (orden $O(h^2)$, boundary-fitted). Sobre el aula real (arco + columna) el volumen sale 110.58 m³ (sala menos columna), sin tetraedros degenerados.
+
+> **Matiz de exactitud (importante).** Un CAD *facetado en pasos axis-aligned* (caras paralelas a los ejes, como algunos "arcos" exportados groseramente) **no sufre error de escalera**: ahí el voxel ya converge a menos del 1 % en modos y menos del 0.15 % en volumen. El beneficio real del boundary-fitted aparece cuando el CAD tiene caras **genuinamente inclinadas o curvas**.
+
 ### 15.3 Importar un archivo CAD
 
 Tres formas de invocar el importador:

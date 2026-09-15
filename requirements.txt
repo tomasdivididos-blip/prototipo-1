@@ -14,4 +14,10 @@ trimesh>=4.0
 # con tunel para mallado gmsh boundary-fitted; a futuro, resta de muebles en alta
 # frecuencia). Es geometria (no fisica): mismo alcance que trimesh/gmsh en D0.
 manifold3d>=2.5
+# Remesh isotropico (MeshLab) para superficies CURVAS importadas o CAD sucio
+# (EASE) donde la reparametrizacion de gmsh falla ("overlapping facets"). Se
+# remalla uniforme -> gmsh malla el volumen con esa frontera DISCRETA fija
+# (boundary-fitted). Es geometria/IO (no fisica): mismo alcance D0 que gmsh.
+# OPCIONAL: si falta, el router degrada a voxel (nunca deja sin malla).
+pymeshlab>=2023.12
 matplotlib>=3.7  # graficos de FRF y RT60

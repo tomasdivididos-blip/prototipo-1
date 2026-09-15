@@ -579,14 +579,32 @@ CURVA del CAD); gmsh `classifySurfaces`/`generate(3)` falla en el arco INCLUSO s
 cae a voxel (correcto, escalonado). Fix de la remoción de degeneradas ahora es CONDICIONAL
 (solo si sigue estanca; borrarlas abría huecos).
 
-**Remallado del arco = Opción 2, PLANEADA (sin implementar): `plan_remallado_curvas.md`.**
-Probado y DESCARTADO (headless, 13 Sep): quitar degeneradas (abre huecos); **round-trip por
-manifold3d** (`trimesh.boolean.union([room])` deja watertight + 0 degeneradas y gmsh IGUAL
-falla → el bloqueo es la REPARAMETRIZACIÓN de la superficie curva, "overlapping facets" entre
-parches, NO las degeneradas); reparam on/off, ángulos 40/60/80. Candidatos del plan: C gmsh
-discreto sin reparam (barato, sin dep) → A reparam afinada (MeshSizeFromCurvature+tolerancias)
-→ B pymeshlab isotropic remesh (dep nueva, robusto, pide OK) → fallback voxel. Oráculo:
-comparar contra el arco PARAMÉTRICO de la app. NO codear sin OK; es un spike con gate.
+**Remallado del arco = Opción 2, IMPLEMENTADO (13 Sep, candidato B): `plan_remallado_curvas.md`.**
+Spike con gate: C (discreto sin reparam) y A (reparam afinada) FALLARON; D (retri propia) frágil;
+**B (pymeshlab, con OK del usuario) FUNCIONA combinado con el path discreto.** Diagnóstico real:
+el aula testigo NO es curva sino axis-aligned FACETADA con T-junctions (aristas partidas en los
+vecinos → facetas coplanares solapadas → "overlapping facets"), y voxel ahí ya es near-exacto
+(<0.15% volumen, modos <1%). Receta ganadora: pymeshlab isotropic remesh → `trimesh(process=True)`
+(suelda duplicados → watertight) → gmsh `createTopology` (frontera DISCRETA fija, sin
+reparametrizar). Código: `mesh_gmsh._remesh_isotropic` + `mesh_with_gmsh(remesh_target_len=...)`;
+cadena en `mesh_router.build_mesh` = reparam→remesh+discreto→voxel. `bench_remesh_curved.py` 18/18.
+pymeshlab OPCIONAL (requirements.txt + Prototipo1.spec con try/except); si falta, degrada a voxel.
+GOTCHAS (deterministas, verificados): (1) NO pre-limpiar (remove_duplicate_vertices) ANTES del
+remesh → rompe gmsh "overlapping facets"; soldar DESPUÉS con trimesh. (2) escribir el STL con
+`_stl_from_arrays` (ASCII) rompe `createTopology` ("dangling GEdge"); el STL binario de trimesh
+que usa la vía interna sí anda. (3) `createTopology` SOLO, sin `classifySurfaces` previo (éste
+parte la superficie en parches solapados). (4) a h muy grueso (arco 6×4×3 a h=0.40) el discreto
+da "sin tets" → router cae a voxel. (5) **CRÍTICO — pymeshlab trae su PROPIO Qt5** (Qt5Core.dll…
++ `platforms/qwindows.dll`) y al importarse SETEA `QT_PLUGIN_PATH` a su carpeta. Si se importa
+ANTES del `QApplication` de PyQt5, tapa el plugin "windows" y la GUI NO arranca ("Could not load
+the Qt platform plugin 'windows'", exit −1073740791). Por eso el import es PEREZOSO (dentro de
+`_remesh_isotropic`, NO a nivel de módulo) y `is_remesh_available()` usa `find_spec` sin importar;
+además se guarda/restaura `QT_PLUGIN_PATH` alrededor del import para no romper plugins Qt on-demand
+posteriores. Verificado: cadena de arranque `main→acoustic_panel→mesh_router→mesh_gmsh` NO carga
+pymeshlab; smoke test QApplication+remesh en el mismo proceso sobrevive. Oráculo (§5): modos gmsh-discreto vs voxel <0.34% (caja),
+O(h²) al refinar; volumen aula 113.31 exacto, sala-columna 110.58. PENDIENTE (tarea aparte, con
+OK): reparam sobre malla NO watertight puede completar con volumen 21% incorrecto en silencio
+(arco paramétrico como CAD: 72 vs 91) → falta gate de plausibilidad de volumen.
 
 ## 2. Perfil del usuario
 

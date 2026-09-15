@@ -639,10 +639,21 @@ def build_mesh(
 
     def _build_gmsh():
         # gmsh usa la superficie con el boolean ya aplicado (sala - columnas) si
-        # hubo cuerpos interiores; si no, la original.
+        # hubo cuerpos interiores; si no, la original. Camino REPARAMETRIZACION.
         return mesh_gmsh.mesh_with_gmsh(
             gmsh_verts, gmsh_tris,
             h_target=h, progress=progress,
+        )
+
+    def _build_gmsh_remesh():
+        # Camino REMESH + DISCRETO (pymeshlab): para superficies curvas o CAD
+        # sucio donde la reparametrizacion falla ("overlapping facets"). Remalla
+        # isotropico la superficie -> uniforme sin T-junctions -> gmsh malla el
+        # volumen con esa frontera discreta fija. Boundary-fitted a la curva.
+        return mesh_gmsh.mesh_with_gmsh(
+            gmsh_verts, gmsh_tris,
+            h_target=h, progress=progress,
+            remesh_target_len=h,
         )
 
     if decision.engine == "gmsh":
@@ -651,28 +662,47 @@ def build_mesh(
         try:
             nodes, tets, info = _build_gmsh()
         except Exception as e:
-            # BEST-EFFORT: si gmsh falla (tipico: malla con T-junctions del
-            # techo curvo parametrico, o un CAD demasiado complicado), caemos
-            # a voxel con un mensaje de fallback explicito. El usuario ve un
-            # badge amarillo "voxel · fallback" para entender que paso.
-            if decision.user_override == "gmsh" and _cad_bodies < 2:
-                # El usuario forzo gmsh en un CAD de UN cuerpo: si falla, mejor
-                # reportar el error crudo en vez de caer silenciosamente. (Con
-                # hueco interior SI caemos a voxel: es un limite geometrico de
-                # gmsh, no una mala preferencia del usuario.)
-                raise
-            fallback_msg = str(e).strip().splitlines()[-1][:200]
-            if progress:
-                progress(f"AVISO: gmsh fallo ({fallback_msg!r}). "
-                         "Cayendo a voxel como fallback.")
-            nodes, tets, info = _build_voxel()
-            decision.engine = "voxel"
-            decision.fallback_reason = fallback_msg
-            decision.reason = (
-                "Gmsh era preferible pero fallo al mallar esta geometria. "
-                "Cayendo a voxel con error de escalera. "
-                f"Razon de gmsh: {fallback_msg}"
-            )
+            reparam_msg = str(e).strip().splitlines()[-1][:200]
+            # PASO 2 de la cadena: antes de caer a voxel, intentar el remesh
+            # isotropico + mallado discreto (pymeshlab). Es el que destraba las
+            # superficies CURVAS importadas. Solo si pymeshlab esta disponible.
+            nodes = tets = info = None
+            if mesh_gmsh.is_remesh_available():
+                if progress:
+                    progress(f"gmsh reparam fallo ({reparam_msg!r}); "
+                             "intentando remesh isotropico + discreto...")
+                try:
+                    nodes, tets, info = _build_gmsh_remesh()
+                    decision.reason = (
+                        (decision.reason or "") +
+                        " Reparametrizacion fallo; se uso remesh isotropico + "
+                        "mallado discreto (boundary-fitted a la superficie "
+                        "remallada).")
+                except Exception as e2:
+                    if progress:
+                        progress("remesh+discreto tambien fallo "
+                                 f"({str(e2).splitlines()[-1][:120]!r}).")
+                    nodes = tets = info = None
+            if info is not None:
+                pass   # exito por remesh+discreto
+            else:
+                # PASO 3: fallback a voxel con mensaje explicito (badge amarillo).
+                if decision.user_override == "gmsh" and _cad_bodies < 2:
+                    # El usuario forzo gmsh en un CAD de UN cuerpo: reportar el
+                    # error crudo en vez de caer silenciosamente. (Con hueco
+                    # interior SI caemos a voxel: es un limite geometrico.)
+                    raise
+                if progress:
+                    progress(f"AVISO: gmsh fallo ({reparam_msg!r}). "
+                             "Cayendo a voxel como fallback.")
+                nodes, tets, info = _build_voxel()
+                decision.engine = "voxel"
+                decision.fallback_reason = reparam_msg
+                decision.reason = (
+                    "Gmsh era preferible pero fallo al mallar esta geometria. "
+                    "Cayendo a voxel con error de escalera. "
+                    f"Razon de gmsh: {reparam_msg}"
+                )
     else:
         nodes, tets, info = _build_voxel()
 

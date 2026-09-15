@@ -16,6 +16,13 @@ tmp_ret = collect_all('trimesh')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('gmsh')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+# pymeshlab: remesh isotropico (opcional). collect_all falla si no esta instalado;
+# lo envolvemos para que el build siga funcionando sin pymeshlab.
+try:
+    tmp_ret = collect_all('pymeshlab')
+    datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+except Exception:
+    pass
 
 # v2.29: PyQt5 de CONDA. El hook de PyInstaller busca los DLLs de Qt en el
 # layout de pip (PyQt5/Qt5/bin); en Anaconda viven en <prefix>/Library/bin y

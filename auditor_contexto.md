@@ -6,7 +6,7 @@
 > cada cosa contra la fuente física, un oráculo, o una cuenta propia. Que este archivo
 > diga "resuelto/PASA" no prueba nada; es un puntero a qué mirar.
 
-**Última actualización:** 2026-09-13 (v2.44 + mallado CAD).
+**Última actualización:** 2026-09-13 (v2.44 + mallado CAD + remesh curvo/pymeshlab).
 
 ## Mallado de CAD con columnas y superficies curvas (13 Sep 2026 — EN ALCANCE, VERIFICAR)
 
@@ -22,10 +22,31 @@ Cadena de fixes al FEM sobre CAD importado (auditá contra la física del domini
   acústico exacto (V_sala − V_columna) y las normales/áreas de cara para el amortiguamiento?
 - **Multi-loop gmsh** (`mesh_gmsh._build_volumes_with_voids`): para huecos FLOTANTES
   (rodeados), `addVolume([ext, hueco…])`. Verificado con caja-en-caja.
-- **Superficies CURVAS (techo en arco importado):** gmsh NO parametriza → cae a VOXEL
-  (escalera $O(h)$ en la curva, desdobla degeneraciones). Remallado boundary-fitted =
-  PLANEADO en `plan_remallado_curvas.md` (spike). A auditar cuando se implemente: modos del
-  arco remallado vs arco paramétrico (oráculo), convergencia $O(h^2)$, tets degenerados.
+- **Superficies CURVAS / CAD sucio (techo en arco importado) — IMPLEMENTADO 13 Sep 2026,
+  VERIFICAR:** cuando la reparametrización de gmsh falla ("overlapping facets"), el router
+  ahora intenta REMESH ISOTRÓPICO (pymeshlab) + MALLADO DISCRETO antes de caer a voxel.
+  Receta: pymeshlab isotropic remesh → `trimesh(process=True)` (suelda duplicados →
+  watertight) → gmsh `createTopology` (frontera discreta fija, sin reparametrizar). Código:
+  `mesh_gmsh._remesh_isotropic` + `mesh_with_gmsh(remesh_target_len=...)` (path discreto);
+  cadena en `mesh_router.build_mesh` reparam→remesh+discreto→voxel. `bench_remesh_curved.py`
+  18/18. A auditar con dureza (afirmaciones del autor, no evidencia):
+  (1) **¿el remesh CAMBIA la geometría acústica?** pymeshlab mueve los vértices a una malla
+  uniforme; el volumen se conserva <0.2% (afirmado) pero la FRONTERA se re-muestrea. ¿Los
+  modos del recinto remallado son los del recinto REAL o los de una versión suavizada?
+  Oráculo usado = voxel (que para el aula axis-aligned es near-exacto): coincidencia <0.34%
+  en 5 modos de una caja, pero eso NO prueba el caso curvo genuino (ahí no hay oráculo
+  analítico, ver §5 del plan). (2) **hallazgo clave del spike:** el aula testigo es
+  axis-aligned FACETADO (todas las normales ±x/±y/±z), NO curvo → voxel ya converge <1% y
+  <0.15% en volumen; la escalera $O(h)$ que motivaba el remesh casi no aplica ahí. El pago
+  del boundary-fitted es real solo para CAD genuinamente inclinado/curvo. (3) convergencia
+  O(h²) afirmada (err volumen 0.07%→0.03% al refinar) pero medida sobre pocos puntos.
+  (4) el remesh puede NO cerrar a h grueso (arco chico a h=0.40 dio "sin tets" → router cae
+  a voxel): verificar que el fallback nunca deja resultado inválido. (5) GOTCHA determinista:
+  pre-limpiar (remove_duplicate_vertices) ANTES del remesh rompe gmsh; se suelda DESPUÉS.
+- **Hallazgo lateral SIN corregir (tarea pendiente, con OK):** gmsh reparam sobre malla NO
+  watertight puede completar sin excepción pero con volumen ~21% incorrecto (arco paramétrico
+  como CAD: V=72 vs 91). El router solo prueba remesh si reparam LEVANTA excepción → este
+  caso pasa silencioso. Propuesto: gate de plausibilidad de volumen. Viola exactitud (norte).
 - Fallback SIEMPRE a voxel: el usuario nunca queda sin cálculo.
 
 ## Estado del proyecto
