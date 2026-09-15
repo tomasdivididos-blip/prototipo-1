@@ -47,6 +47,8 @@ ARCHIVOS DE LA CARPETA
 - main.py + *.py     -> codigo del programa.
 - materials/         -> base de materiales acusticos (19 archivos).
 - requirements.txt   -> lista de librerias (las instala run.command solo).
-- ejemplo.room       -> sala de ejemplo para abrir (menu Abrir).
+- aula con prediccion.room -> sala de ejemplo para abrir (menu Abrir): un CAD
+                        del aula con techo en arco y una columna. Al calcular
+                        modos, la malla se ajusta a la geometria (boundary-fitted).
 - MANUAL.pdf         -> manual de usuario.
 - verify_setup.py    -> diagnostico opcional de la instalacion.

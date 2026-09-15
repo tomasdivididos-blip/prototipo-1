@@ -41,8 +41,14 @@ if [ ! -d ".venv_mac" ]; then
   ./.venv_mac/bin/python -m pip install "PyQt5>=5.15" "pyqtgraph>=0.13.3" "PyOpenGL>=3.1.6" "numpy>=1.24" "scipy>=1.10" "matplotlib>=3.7" \
     || { echo "Error instalando librerias principales."; read -p "Enter para cerrar..."; exit 1; }
   echo "==> Instalando soporte CAD (opcional)..."
-  ./.venv_mac/bin/python -m pip install "gmsh>=4.13" "trimesh>=4.0" \
-    || echo "Aviso: no se pudo instalar gmsh/trimesh (importar CAD no estara disponible; el resto de la app funciona)."
+  ./.venv_mac/bin/python -m pip install "gmsh>=4.13" "trimesh>=4.0" "manifold3d>=2.5" \
+    || echo "Aviso: no se pudo instalar gmsh/trimesh/manifold3d (importar CAD no estara disponible; el resto de la app funciona)."
+  # Remesh de superficies curvas / CAD sucio (pymeshlab). Best-effort e AISLADO:
+  # si no hay wheel para este Python, la app igual arranca (cae a voxel). No debe
+  # bloquear la instalacion.
+  echo "==> Instalando remesh de CAD curvo (opcional)..."
+  ./.venv_mac/bin/python -m pip install "pymeshlab>=2023.12" \
+    || echo "Aviso: no se pudo instalar pymeshlab (el mallado boundary-fitted de CAD curvo caera a voxel; el resto funciona)."
 fi
 
 # 3) Lanzar la app

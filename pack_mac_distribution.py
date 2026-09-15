@@ -46,6 +46,7 @@ EXTRA_FILES = [
     "LEEME_MAC.txt",
     "requirements.txt",
     "ejemplo.room",
+    "aula con prediccion.room",   # ejemplo con CAD (arco + columna) -> gmsh remesh
     "MANUAL.pdf",
     "MANUAL.md",
 ]
