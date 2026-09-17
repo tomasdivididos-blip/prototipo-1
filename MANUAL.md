@@ -2618,7 +2618,7 @@ Motivación: la fuente del simulador era un **monopolo puntual**, y con eso los 
 
 En la zona **FRF** del panel hay un botón nuevo **«Subs enfrentados (DBA / CABS)…»**. Abre una herramienta que trabaja sobre la **caja rectangular** de la sala (los subs enfrentados están definidos para cuartos rectangulares). Elegís:
 
-- el **eje** de enfrentamiento (por defecto el más largo de la sala),
+- el **eje** de enfrentamiento (por defecto **Auto**: el software detecta el par de paredes opuestas donde están los subs, en cualquier eje; también podés fijarlo a mano),
 - cuántos **subs por pared** en cada dirección transversal (una grilla n×n),
 - el **drive** del array trasero: **mínimos cuadrados (Santillán)**, el óptimo, o **retardo + inversión (naive)**, la versión clásica,
 - el **amortiguamiento** ξ y la frecuencia máxima del análisis.
@@ -2949,5 +2949,39 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 ### Exportar el CAD curado
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
+
+## Cambios v2.45 (subs enfrentados en cualquier eje + optimizador que no se cuelga)
+
+**Cambios v2.45** (16 de septiembre 2026): **CABS/DBA valen para cualquier par de paredes opuestas**, y el **optimizador de fuentes ya no congela la app**. Pedido del profesor (vía Ale). Dos ejes.
+
+### Subs enfrentados en cualquier eje (no solo el más largo)
+
+Antes, el análisis CABS/DBA elegía el **eje más largo** de la sala para buscar el par de paredes enfrentadas. Si vos ponías, por ejemplo, dos main monitors adelante y dos subs atrás **enfrentados sobre el eje corto**, el software miraba el eje largo, no encontraba el par y avisaba «falta al menos un full range en el frente», aunque la configuración fuera perfectamente válida.
+
+Ahora el combo **«Eje de enfrentamiento»** arranca en **Auto**: el software detecta el par de paredes opuestas donde están los subs, **en cualquier eje**, sin privilegiar la dimensión más larga ni etiquetar una pared como «frente» y otra como «trasera». Cualquier par de paredes opuestas vale. Si querés, podés fijar el eje a mano igual que antes.
+
+### El criterio no bloquea: se juzga por planitud + transferencia total
+
+Antes, si tu configuración no era un array CABS/DBA «de libro» (por ejemplo dos subs enfrentados de a uno por pared, o dos subs + dos full range), el software decía **«NO cumple CABS»** y **bloqueaba** la evaluación/optimización. Eso estaba mal: como dice el profesor, CABS/DBA se deben juzgar por sus **características de planitud y transferencia modal junto al SBIR**, no por si las fuentes arman el esquema exacto.
+
+Ahora **nunca se bloquea**. Evaluar y Optimizar corren **siempre**, y el veredicto es la **planitud + varianza espacial de la respuesta total (modos + SBIR)**, comparada con el ideal de esa sala. Si tu config no coincide con el esquema del array, aparece una **nota informativa** («no es un array CABS/DBA de libro»), pero igual ves y optimizás la planitud. Las condiciones del esquema quedan como lista **informativa** (círculos ○), no como un examen que se aprueba o se reprueba.
+
+### Recintos no rectangulares
+
+CABS/DBA están definidos para cuartos **rectangulares (paralelepípedo)**. Si tu sala es un **polígono irregular, un CAD o tiene techo curvo**, el diálogo lo avisa: los criterios se juzgan por **planitud + transferencia total (modos + SBIR)**. No te lo impide; te lo aclara.
+
+Además, en ese caso la evaluación y la optimización se corren **sobre el campo modal FEM del recinto real** (si ya calculaste los modos con «Calcular modos (FEM)»), no sobre una caja rectangular aproximada: los modos que se usan son los de tu sala de verdad. En una sala rectangular se sigue usando la base analítica rectangular (exacta y más rápida). Nota: para que la evaluación cubra bien la banda (hasta ~200 Hz) conviene haber resuelto suficientes modos.
+
+### Rótulos de los subs por pared
+
+En el modo **«Diseñar array ideal»**, las dos cajas de cantidad de subs ahora dicen **«Subs por pared, dirección 1 / dirección 2»** (con el eje real entre paréntesis) y el total se lee **«N subs por pared × 2 paredes = 2N en total»**. El array es una **grilla por pared**, igual en las dos paredes enfrentadas: las dos cajas son las dos direcciones de esa grilla, no dos paredes distintas.
+
+### El optimizador ya no «tilda» la app
+
+«Optimizar» corría en el **hilo principal**: mientras optimizaba (que puede tardar decenas de segundos, más con muchas fuentes), la ventana quedaba **congelada, sin poder cancelar**, y parecía que se había colgado. Ahora corre en un **hilo aparte**, con una **barra de progreso** y un botón **Cancelar** que devuelve el mejor resultado hasta el momento. La ventana sigue respondiendo todo el tiempo. La barra muestra además el **tiempo restante estimado** (cuenta regresiva, calculada del tiempo por generación). Además la optimización es más predecible y algo más rápida (se sacó el pulido local L-BFGS-B, que aportaba poco y hacía impredecible el tiempo, y el tamaño de población se ajusta al número de variables libres).
+
+La barra de **«Calcular modos (FEM)»** no tiene un número de pasos fijo (el solver de autovalores no lo anticipa), así que en vez de cuenta regresiva muestra el **tiempo transcurrido**.
+
+> **En camino:** unificar toda la optimización de fuentes (los criterios CABS/DBA de Acústica y los de Ubicación de Predicción) en un solo panel donde elegís el «norte» (por ejemplo, transferencia compuesta lo más plana posible) y corre en cualquier geometría. Diseño en `plan_optimizacion_fuentes_unificada.md`.
 
 *Manual actualizado al 12 de Septiembre de 2026 — v2.44.*

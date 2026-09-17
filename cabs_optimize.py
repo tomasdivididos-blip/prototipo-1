@@ -174,7 +174,8 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
                   xi: float = 0.03, c: float = C0, f_schroeder: Optional[float] = None,
                   n_freq: int = 70, grid=(3, 2, 3), maxiter: int = 25,
                   popsize: int = 12, seed: int = 0, criterion: str = "dba",
-                  inside_fn=None) -> dict:
+                  inside_fn=None, progress_cb=None, should_cancel=None,
+                  fem=None) -> dict:
     """Optimiza las variables liberadas de las fuentes (item 6). Devuelve dict con
     la config optimizada, metricas antes/despues, los DOF y un resumen de cambios.
 
@@ -189,13 +190,18 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
         forma. El resultado satisface el chequeo DBA de evaluate por construccion.
       - "cabs": el drive del trasero queda LIBRE (manejado); el optimizador lo busca
         para aplanar y evaluate lo juzga por el colapso, no por L/c.
+
+    `progress_cb(iter, maxiter)` se llama una vez por generacion de
+    differential_evolution (para una barra de progreso). `should_cancel()` -> bool:
+    si devuelve True, DE se detiene y se usa la mejor solucion hasta ese momento
+    (para un boton Cancelar; asi la GUI nunca queda 'tildada' esperando).
     """
     from scipy.optimize import differential_evolution
     dims = tuple(float(x) for x in dims)
     origin = np.asarray(origin, dtype=float)
     active = [s for s in sources if getattr(s, "active", True)]
     if axis is None:
-        axis = dev.best_axis(active, dims, origin, c)
+        axis = dev.best_axis(active, dims, origin, c, criterion)
 
     # Criterio: bajo DBA el drive del array lo fija el criterio y sale de los DOFs;
     # bajo CABS el drive queda libre (el optimizador lo busca).
@@ -208,7 +214,11 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
     if callable(walls):
         walls = walls(fa)
     f_s = float(f_schroeder) if f_schroeder else dev._schroeder_guess(dims, xi)
-    basis = dev.make_basis(dims, fmax, c)
+    # Base modal: FEM del recinto REAL si el panel lo pasa, o rectangular analitica.
+    # Se optimiza sobre el MISMO campo que se evalua (coherencia evaluar<->optimizar).
+    basis, xi = dev._basis_and_xi(fem, origin, xi, c)
+    if basis is None:
+        basis = dev.make_basis(dims, fmax, c)
     zone_box = _dba._zone_grid(dims, axis, grid[0], grid[1], grid[2])
 
     def _metrics(src_list):
@@ -236,11 +246,44 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
     # Si la version es vieja (sin integrality), apply_vector igual la umbrala en
     # 0.5, asi que el fallback es correcto (solo un poco menos eficiente).
     integrality = [k == "polarity" for (_i, k, _a, _lo, _hi) in dofs]
+
+    # Presupuesto ADAPTATIVO: el costo de differential_evolution ~ popsize*D*maxiter
+    # evaluaciones, y cada una arma la respuesta compuesta (SBIR + modal). Con muchos
+    # DOFs el popsize fijo de 12 dispara miles de evaluaciones (medido: ~6500 para
+    # 12 DOFs -> ~28 s). Acotamos popsize para D grande, manteniendo un minimo sano.
+    D = max(1, len(dofs))
+    eff_popsize = int(max(6, min(popsize, round(180 / D))))
+
+    # Callback de progreso + cancelacion. differential_evolution lo llama una vez por
+    # generacion con (xk, convergence=...); devolver True detiene la busqueda y
+    # conserva la mejor solucion hasta ese punto (asi Cancelar es instantaneo y la
+    # GUI no queda 'tildada').
+    _gen = {"i": 0}
+    def _de_callback(xk, convergence=None):
+        _gen["i"] += 1
+        if progress_cb is not None:
+            try:
+                progress_cb(_gen["i"], maxiter)
+            except Exception:
+                pass
+        if should_cancel is not None:
+            try:
+                if should_cancel():
+                    return True
+            except Exception:
+                pass
+        return False
+
+    # polish=False: el pulido local L-BFGS-B corre DESPUES del loop de DE, no chequea
+    # el callback (no se puede cancelar) y su tiempo es erratico (domina de forma
+    # impredecible), sin aportar calidad medible sobre este objetivo ruidoso (medido:
+    # mejora ~igual con y sin polish). Apagarlo hace el tiempo predecible (~popsize*
+    # D*maxiter) y el Cancelar instantaneo.
     kw = dict(args=(base, dofs, dims, origin, walls, receiver, axis, fa, xi, c,
                     f_s, basis, zone_box, inside_fn),
-              maxiter=maxiter, popsize=popsize, seed=seed, tol=1e-3,
-              mutation=(0.5, 1.0), recombination=0.7, polish=True,
-              updating="deferred")
+              maxiter=maxiter, popsize=eff_popsize, seed=seed, tol=1e-3,
+              mutation=(0.5, 1.0), recombination=0.7, polish=False,
+              updating="deferred", callback=_de_callback)
     try:
         res = differential_evolution(_cost, bounds, integrality=integrality, **kw)
     except TypeError:                          # scipy viejo: sin integrality

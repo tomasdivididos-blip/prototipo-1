@@ -5171,9 +5171,18 @@ class AcousticPanel(QWidget):
                             & ~Qt.WindowCloseButtonHint
                             & ~Qt.WindowContextHelpButtonHint)
 
+        # La barra del FEM es PULSANTE (indeterminada: el nº de pasos de eigsh no se
+        # conoce de antemano), asi que no hay ETA real -> mostramos el tiempo
+        # TRANSCURRIDO como contador (lo que pidio el usuario para estas barras).
+        import time as _time
+        _fem_t0 = _time.perf_counter()
+
         def _progress_cb(msg: str):
             self._log(msg)
-            prog.setLabelText(msg)
+            el = _time.perf_counter() - _fem_t0
+            el_txt = (f"{int(el // 60)} min {int(el % 60)} s" if el >= 60
+                      else f"{el:.0f} s")
+            prog.setLabelText(f"{msg}\nTiempo transcurrido: {el_txt}")
             QApplication.processEvents()         # mantiene la barra pulsante
 
         try:
@@ -5834,6 +5843,39 @@ class AcousticPanel(QWidget):
                     np.linspace(20.0, 200.0, 300))[2]
         except Exception:
             eqc = None
+        # ¿La sala es un paralelepípedo (caja)? CABS/DBA están definidos para
+        # cuartos rectangulares; si no lo es (CAD, polígono irregular, techo curvo),
+        # el diálogo avisa que evalúa/optimiza sobre el AABB por planitud +
+        # transferencia total (modos + SBIR).
+        is_rectangular = False
+        try:
+            if not bool(getattr(self, "_is_imported_cad", False)):
+                import mesh_router as _mr
+                is_rectangular = bool(
+                    _mr.is_axis_aligned_box(self._current_params_for_router()))
+        except Exception:
+            is_rectangular = False
+        # Campo FEM REAL para evaluar/optimizar CABS/DBA cuando la sala NO es
+        # rectangular (pedido del profesor 16 Sep 2026): la base analitica rectangular
+        # es la geometria equivocada; los modos FEM son los del recinto de verdad. Se
+        # pasa el bundle (locator/freqs/phis/xi) SOLO si ya hay modos resueltos y la
+        # sala no es caja. En una caja se sigue con la base analitica (exacta y con
+        # mas modos). Frames: modal_result vive en el mismo mundo que las fuentes y
+        # origin=vmin -> el adaptador mapea box->mundo sumando origin (validado).
+        fem_bundle = None
+        try:
+            mres = getattr(self, "modal_result", None)
+            if (mres is not None and not is_rectangular
+                    and getattr(mres, "locator", None) is not None):
+                fem_bundle = {
+                    "locator": mres.locator,
+                    "freqs": np.asarray(mres.freqs, dtype=float),
+                    "phis": np.asarray(mres.phis),
+                    "xi": (self._xi_per_mode
+                           if self._xi_per_mode is not None else 0.03),
+                }
+        except Exception:
+            fem_bundle = None
         eval_context = {
             "sources": lambda: list(self.sources.sources),
             "walls_fn": self._cabs_sbir_walls,
@@ -5844,6 +5886,8 @@ class AcousticPanel(QWidget):
             "apply_optimized": self._apply_cabs_optimization,
             "eqc": eqc,
             "inside_fn": _inside_fn,
+            "is_rectangular": is_rectangular,
+            "fem": fem_bundle,
         }
         DBADialog(dims, rec, self,
                   apply_callback=lambda specs: self._apply_dba_to_room(specs, vmin),

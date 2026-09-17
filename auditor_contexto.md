@@ -143,6 +143,56 @@ VERIFICAR):**
   aproximación. (2) ¿El gate front/rear por `wall_tol=0.6 m` clasifica bien en salas chicas?
   `bench_cabs_criterion.py` 14/14 (incluye las reglas de array por criterio).
 
+**CUALQUIER PAR OPUESTO + OPTIMIZADOR NO-FREEZE (16 Sep 2026, en alcance — VERIFICAR):**
+pedido del profesor. (1) `dba_evaluate.best_axis` ahora es CRITERION-AWARE: elige el eje del par
+de paredes opuestas que CUMPLE el criterio (cabs=≥2 subs en una pared + ≥1 fuente en la opuesta,
+simétrico; dba=2+2), y la longitud del eje pasa a último desempate. Antes desempataba por la
+dimensión más larga → con subs enfrentados en el eje corto elegía el eje largo y fallaba. A
+auditar: (a) ¿`_axis_satisfies` puede dar un falso positivo (dos subs "en una pared" que en
+realidad no están enfrentados a la fuente opuesta por estar en esquinas)? el `wall_tol=0.6 m`
+define "en la pared"; en salas chicas dos paredes opuestas quedan a <1.2 m y un sub podría contar
+en ambas. (b) el combo "Auto" pasa axis=None → `evaluate_cabs`/`cabs_feasibility`/`optimize_cabs`
+resuelven con best_axis(criterion): ¿coincide el eje elegido para evaluar con el usado para
+optimizar? (deberían, mismo criterio). (2) `cabs_optimize.optimize_cabs` sumó `progress_cb`/
+`should_cancel` y **polish=False** + popsize adaptativo (180/D). A auditar: ¿polish=False degrada
+el óptimo? (medido: mejora ~igual, 4.86→4.68 en un caso; el L-BFGS-B aportaba poco sobre este
+objetivo ruidoso, pero verificar en configs con muchos DOFs). El threading (`_OptimizeWorker`
+QThread en `dba_dialog`) es GUI, fuera del núcleo físico, pero opera sobre COPIAS (`replace`) de
+las fuentes sin tocar Qt → sin data race. `bench_source_opt.py` 11/11.
+
+**CABS/DBA NO BLOQUEAN, se juzgan por planitud (16 Sep 2026, 2da tanda — SOLO GUI, VERIFICAR que el
+núcleo no cambió):** spec del profesor. El diálogo ya no rechaza/bloquea una config que no sea un
+array de libro (p.ej. 1 sub por pared enfrentados): evalúa/optimiza SIEMPRE por planitud + varianza
+espacial de la respuesta total (modos+SBIR). CAMBIOS SOLO EN `dba_dialog.py` + un flag en
+`acoustic_panel`; **`dba_evaluate.evaluate_cabs`, su `passed` y el checklist estructural quedan
+IDÉNTICOS** (benches 14/14+13/13 sin tocar). A auditar: (1) el nuevo veredicto de UI usa
+`flat_real<=flat_ideal+1.5 and spatial_real<=spatial_ideal+1.5` como "respuesta plana" — ¿el margen
+1.5 dB es defendible o arbitrario? es cosmético (badge), las métricas crudas se muestran igual.
+(2) `is_rectangular` = `mesh_router.is_axis_aligned_box(params)` (False para CAD/polígono/arco):
+¿describe bien "paralelepípedo"? para un recinto rotado no-axis-aligned da False aunque sea una caja
+(conservador: muestra la nota de más, no de menos). (3) la evaluación sobre AABB de un recinto
+irregular ya existía (el diálogo siempre trabajó sobre la caja); lo único nuevo es AVISARLO. El
+núcleo físico no se tocó.
+
+**CABS/DBA SOBRE EL CAMPO FEM REAL (16 Sep 2026, EN ALCANCE — VERIFICAR):** para salas no
+rectangulares, evaluar/optimizar CABS/DBA sobre la base analitica rectangular es la geometria
+equivocada. `dba_evaluate.FEMModalField` adapta la solucion modal FEM a la interfaz de
+`RectModalBasis` (mapeo caja<->mundo por `origin`), y `evaluate_cabs`/`optimize_cabs` la usan via
+`fem=`. A auditar con dureza: (1) **FRAMES** — el FEM vive en frame mundo (mismo que las fuentes) y
+`_config_metrics` trabaja en coords caja; el adaptador suma `origin` para volver a mundo. Verificar
+que el panel pasa origin=vmin CONSISTENTE con el frame de `modal_result.nodes` (si difieren, phi se
+evalua en el lugar equivocado y todo el metric miente; el oraculo en caja lo detecta: FEM debe
+coincidir con el analitico). (2) **ENMASCARADO** `FEMModalField.inside_mask`: los pts de grilla
+fuera de la malla real se excluyen; ¿el criterio de "adentro" (evaluate_many de campo=1 -> NaN
+afuera) coincide con el dominio acustico real, o el voxel/gmsh deja pts de borde ambiguos? (3)
+**n_modes**: la evaluacion usa los modos que resolvio el panel; si son pocos (default n_modes=12),
+la planitud hasta 200 Hz queda subrepresentada -> el veredicto puede ser optimista. (4) el decay se
+saltea sobre FEM (no entra en el veredicto, OK). Oraculo `bench_source_opt.py` 16/16 (en caja
+FEM~analitico <1.5 dB). El adaptador es matematica pura (superposicion modal como
+`acoustic_fem.frequency_response`, factor c^2), reusa la Green modal ya validada
+(`bench_modal_vs_impedance`). Rutas alternativas (perturbacion de forma de Slater; DtN no local) en
+`plan_optimizacion_fuentes_unificada.md` §8, NO implementadas.
+
 **Fix frame ubicación v2.44 (12 Sep 2026, en alcance — VERIFICAR):** el optimizador/
 evaluador de ubicación de la pestaña Predicción ponía fuentes AFUERA del recinto (y daba
 falso "afuera") con `origin_mode=corner` en CAD y recinto paramétrico. Causa afirmada: el

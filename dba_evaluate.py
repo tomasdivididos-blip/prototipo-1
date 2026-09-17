@@ -91,24 +91,50 @@ def classify_sources(sources, dims, origin, axis: int,
     return roles
 
 
-def best_axis(sources, dims, origin=(0.0, 0.0, 0.0), c: float = C0) -> int:
-    """Eje de enfrentamiento mas probable de las fuentes.
+def _axis_satisfies(roles, criterion: str):
+    """(met, opposed) del criterio sobre un eje, SIN privilegiar 'frente'/'trasera':
+    cualquier par de paredes OPUESTAS del eje vale (spec del profesor, 15 Sep 2026).
 
-    Un array denso de pared deja subs en las esquinas -> parecen enfrentados en
-    los TRES ejes (empate por geometria). El desempate real es la COHERENCIA del
-    drive: en el eje verdadero el grupo trasero esta retardado ~L/c e invertido de
-    forma uniforme; en los otros ejes el drive queda mezclado. Score:
-    (drive coherente, min(n_front,n_rear), L_eje)."""
+      cabs -> >=2 subs en UNA pared del par + >=1 fuente (cualquier tipo) en la
+              OPUESTA. Simetrico: no importa cual pared es 'frente'.
+      dba  -> >=2 subs en CADA una de las dos paredes opuestas.
+
+    `opposed` = min(fuentes-en-min, fuentes-en-max): cuantas fuentes hay realmente
+    enfrentadas en ese eje (desempate cuando el criterio se cumple en varios ejes)."""
+    n_front_subs = sum(1 for r in roles if r.role == "front")   # subs en pared min
+    n_rear_subs = sum(1 for r in roles if r.role == "rear")     # subs en pared max
+    n_front_any = sum(1 for r in roles if r.at_front)           # cualquier tipo, min
+    n_rear_any = sum(1 for r in roles if r.at_rear)             # cualquier tipo, max
+    if criterion == "cabs":
+        met = ((n_rear_subs >= 2 and n_front_any >= 1) or
+               (n_front_subs >= 2 and n_rear_any >= 1))
+    else:  # dba
+        met = (n_front_subs >= 2 and n_rear_subs >= 2)
+    return bool(met), min(n_front_any, n_rear_any)
+
+
+def best_axis(sources, dims, origin=(0.0, 0.0, 0.0), c: float = C0,
+              criterion: str = "dba") -> int:
+    """Eje del par de paredes OPUESTAS que mejor satisface el criterio.
+
+    Cambio 15 Sep 2026 (spec del profesor): antes, con el drive todavia no
+    coherente, el desempate caia en la dimension MAS LARGA -> si los subs estaban
+    enfrentados en un eje corto (mains adelante + subs atras sobre el eje corto),
+    elegia el eje largo y el criterio fallaba ('falta full range en el frente').
+    Ahora el primer criterio de orden es si el eje CUMPLE el criterio; la longitud
+    del eje pasa a ultimo desempate. Score:
+    (cumple criterio, fuentes enfrentadas, drive coherente, L_eje)."""
     scored = []
     for ax in range(3):
         roles = classify_sources(sources, dims, origin, ax)
         fronts = [r for r in roles if r.role == "front"]
         rears = [r for r in roles if r.role == "rear"]
+        met, opposed = _axis_satisfies(roles, criterion)
         drive_ok, _ = _check_rear_drive(rears, dims[ax] / c)
         coherent = 1 if (fronts and rears and drive_ok) else 0
-        scored.append((coherent, min(len(fronts), len(rears)), dims[ax], ax))
+        scored.append((int(met), opposed, coherent, dims[ax], ax))
     scored.sort(reverse=True)
-    return int(scored[0][3])
+    return int(scored[0][4])
 
 
 def cabs_feasibility(sources, dims, origin=(0.0, 0.0, 0.0),
@@ -124,7 +150,8 @@ def cabs_feasibility(sources, dims, origin=(0.0, 0.0, 0.0),
     Devuelve (feasible, reasons, axis)."""
     active = [s for s in sources if getattr(s, "active", True)]
     if axis is None:
-        axis = best_axis(active, dims, origin, c) if active else int(np.argmax(dims))
+        axis = (best_axis(active, dims, origin, c, criterion) if active
+                else int(np.argmax(dims)))
     roles = classify_sources(sources, dims, origin, axis)
     fronts = [r for r in roles if r.role == "front"]
     rears = [r for r in roles if r.role == "rear"]
@@ -258,6 +285,81 @@ def make_basis(dims, fmax, c=C0):
     return RectModalBasis(dims, fmax=fmax * 1.3, n_max=n_max, c=c)
 
 
+class FEMModalField:
+    """Adaptador que expone la solucion modal del FEM (recinto REAL, cualquier
+    geometria) con la MISMA interfaz que `RectModalBasis`, para que `_config_metrics`
+    lo use SIN cambios y CABS/DBA se evaluen/optimicen sobre el campo real (no sobre
+    la caja AABB analitica). Motivo: los criterios miden PLANITUD + transferencia
+    total; sobre una sala no rectangular la base analitica rectangular es la
+    geometria equivocada, mientras que los modos FEM son los del recinto de verdad.
+
+    Frames: el FEM trabaja en coords MUNDO (los nodos estan en el mismo frame que
+    las fuentes). `_config_metrics` pasa coords de CAJA (mundo - origin), asi que
+    este adaptador vuelve a sumar `origin` para caer en el frame del FEM.
+
+    Interfaz espejo de RectModalBasis: n_modes, c, omega_n, phi(x_box), phi_matrix(
+    points_box)."""
+
+    is_fem = True
+
+    def __init__(self, locator, freqs, phis, origin, c=C0):
+        self.locator = locator
+        self.freqs = np.asarray(freqs, dtype=float)
+        self.omega_n = 2.0 * np.pi * self.freqs
+        self.phis = np.asarray(phis)
+        self.n_modes = int(self.phis.shape[1])
+        self.c = float(c)
+        self.origin = np.asarray(origin, dtype=float)
+        self._cache = {}                 # phi_matrix cacheada por hash de puntos
+        self._ones = np.ones(self.phis.shape[0])
+
+    def inside_mask(self, points_box):
+        """True donde el punto (coords CAJA) cae DENTRO de la malla FEM. Evalua un
+        campo constante=1 (1 adentro, NaN afuera). En un recinto irregular, la grilla
+        de zona esta sobre el AABB y algunos puntos caen en el volumen extra fuera del
+        recinto real -> hay que excluirlos del metric (si no, presion 0 -> -600 dB ->
+        varianza gigante)."""
+        pts = np.atleast_2d(np.asarray(points_box, dtype=float)) + self.origin
+        vals = self.locator.evaluate_many(self._ones, pts)
+        return ~np.isnan(np.asarray(vals))
+
+    def _phi_world(self, points_world):
+        pts = np.atleast_2d(np.asarray(points_world, dtype=float))
+        out = np.zeros((len(pts), self.n_modes), dtype=float)
+        for n in range(self.n_modes):
+            vals = self.locator.evaluate_many(self.phis[:, n], pts)
+            out[:, n] = np.real(np.nan_to_num(vals, nan=0.0))
+        return out
+
+    def phi(self, x_box):
+        """phi_n en un punto (coords de CAJA -> mundo sumando origin). (n_modes,)."""
+        w = np.asarray(x_box, dtype=float) + self.origin
+        return self._phi_world(w[None, :])[0]
+
+    def phi_matrix(self, points_box):
+        """phi_n en una nube (coords de CAJA). (Npts, n_modes). Cacheada: en el
+        optimizador la grilla de zona es FIJA (solo se mueven las fuentes)."""
+        pb = np.atleast_2d(np.asarray(points_box, dtype=float))
+        key = (pb.shape, hash(pb.tobytes()))
+        hit = self._cache.get(key)
+        if hit is not None:
+            return hit
+        val = self._phi_world(pb + self.origin)
+        self._cache[key] = val
+        return val
+
+
+def _basis_and_xi(fem, origin, xi, c):
+    """(basis, xi) a usar en `_config_metrics`. Con `fem` (dict del panel:
+    locator/freqs/phis[/xi]) devuelve un `FEMModalField` (campo real) + el xi por
+    modo del FEM si viene; sin `fem`, (None -> base rectangular analitica, xi)."""
+    if fem is None:
+        return None, xi
+    basis = FEMModalField(fem["locator"], fem["freqs"], fem["phis"], origin, c=c)
+    fx = fem.get("xi", None)
+    return basis, (fx if fx is not None else xi)
+
+
 def _config_metrics(sources_world, dims, origin, walls, receiver_world, *,
                     axis, fa, xi, c, f_s, basis=None, with_decay=True,
                     zone_box=None) -> dict:
@@ -284,6 +386,13 @@ def _config_metrics(sources_world, dims, origin, walls, receiver_world, *,
     modal_db = 20.0 * np.log10(np.abs(modal_grid) + 1e-30)
     total_db = _total_db_grid(active, walls, list(grid_world), fa, modal_db, f_s,
                               c=c, rho0=RHO0)
+    # FEM sobre recinto real: excluir los puntos de grilla que caen FUERA de la malla
+    # (volumen extra del AABB en salas no rectangulares) antes de medir planitud/
+    # varianza. La base analitica no lo necesita (la caja esta definida en todo punto).
+    if getattr(basis, "is_fem", False):
+        inside = basis.inside_mask(grid_box)
+        if 0 < int(np.count_nonzero(inside)) < len(inside):
+            total_db = total_db[inside]
     flat, spatial, L_bar = flatness_and_spatial(fa, total_db)
     decay = (_decay_of(basis, kappa, arr, receiver_box, fmax=fa[-1], xi=xi)
              if with_decay else float("nan"))
@@ -299,7 +408,7 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
                   fmax: float = 200.0, xi: float = 0.03, c: float = C0,
                   n_freq: int = 200, ideal_grid=None,
                   f_schroeder: Optional[float] = None,
-                  criterion: str = "dba") -> dict:
+                  criterion: str = "dba", fem=None) -> dict:
     """Evalua la configuracion de fuentes real contra el criterio elegido.
 
     Parameters
@@ -332,13 +441,15 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
     """
     dims = tuple(float(x) for x in dims)
     origin = np.asarray(origin, dtype=float)
-    if axis is None:
-        axis = int(np.argmax(dims))
-    L = dims[axis]
-
     active = [s for s in sources if getattr(s, "active", True)]
     if not active:
         raise ValueError("No hay fuentes activas para evaluar.")
+    # axis=None -> auto-detecta el par de paredes opuestas segun el CRITERIO (no el
+    # eje mas largo): asi 'subs enfrentados' en un eje corto tambien se reconoce.
+    if axis is None:
+        axis = best_axis(active, dims, origin, c, criterion)
+    L = dims[axis]
+
     roles = classify_sources(sources, dims, origin, axis)
     fronts = [r for r in roles if r.role == "front"]
     rears = [r for r in roles if r.role == "rear"]
@@ -350,9 +461,19 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
     if callable(walls):
         walls = walls(fa)
 
+    # Base modal: FEM del recinto REAL si el panel lo pasa (cualquier geometria),
+    # o la base rectangular analitica (default, exacta para cajas). Ambas metricas
+    # (real e ideal) se miden sobre la MISMA base -> comparables.
+    basis, xi_eff = _basis_and_xi(fem, origin, xi, c)
+
+    # El decay (IFFT modal) usa `frf_dispersive`, que solo tiene la base analitica;
+    # sobre FEM se saltea (no entra en el veredicto planitud+varianza). decay=NaN.
+    wd = fem is None
+
     # --- metricas de la config REAL ---
     real = _config_metrics(active, dims, origin, walls, receiver,
-                           axis=axis, fa=fa, xi=xi, c=c, f_s=f_s)
+                           axis=axis, fa=fa, xi=xi_eff, c=c, f_s=f_s, basis=basis,
+                           with_decay=wd)
 
     # --- metricas del IDEAL (mismo pipeline; array LS materializado) ---
     n_front = len(fronts)
@@ -362,7 +483,8 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
         na, nb = ideal_grid
     ideal_srcs = _ideal_sources(dims, origin, axis, na, nb, fmin, fmax, xi, c)
     ideal = _config_metrics(ideal_srcs, dims, origin, walls, receiver,
-                            axis=axis, fa=fa, xi=xi, c=c, f_s=f_s)
+                            axis=axis, fa=fa, xi=xi_eff, c=c, f_s=f_s, basis=basis,
+                            with_decay=wd)
 
     # --- banda de validez CABS (aliasing del array real) ---
     f_max_alias = _alias_fmax_from_roles(fronts, dims, axis, c)
