@@ -131,6 +131,11 @@ def _baffle_wireframe(center, size, yaw_deg, pitch_deg=0.0, nseg=20):
     prisma + 2 circulos (woofer/tweeter) en la cara frontal. Devuelve una lista
     de puntos (x,y,z) en PARES (cada 2 puntos = un segmento de linea).
 
+    `center` es el PUNTO ACUSTICO = centro de la CARA DELANTERA (entre woofer y
+    tweeter). La caja se extiende hacia ATRAS (x' de 0 a -d), asi que el punto
+    queda sobre la cara y no en el centro del prisma (17 Sep 2026: antes se
+    centraba en el punto y por eso los bafles se solapaban).
+
     Frente = cara con los parlantes, normal en (azimut `yaw_deg`, elevacion
     `pitch_deg`). Base local SIN roll: x'=profundidad (frente=n), y'=ancho
     (horizontal, nivelado), z'=alto (se inclina con el pitch). Con pitch=0
@@ -149,21 +154,43 @@ def _baffle_wireframe(center, size, yaw_deg, pitch_deg=0.0, nseg=20):
         p = c0 + xp * n + yp * ey + zp * ez
         return (float(p[0]), float(p[1]), float(p[2]))
 
-    hx, hy, hz = d / 2.0, w / 2.0, h / 2.0
-    box = [R(-hx, -hy, -hz), R(hx, -hy, -hz), R(hx, hy, -hz), R(-hx, hy, -hz),
-           R(-hx, -hy, hz),  R(hx, -hy, hz),  R(hx, hy, hz),  R(-hx, hy, hz)]
+    # Cara delantera en x'=0 (sobre el punto); cara trasera en x'=-d.
+    xf, xb, hy, hz = 0.0, -d, w / 2.0, h / 2.0
+    box = [R(xb, -hy, -hz), R(xf, -hy, -hz), R(xf, hy, -hz), R(xb, hy, -hz),
+           R(xb, -hy, hz),  R(xf, -hy, hz),  R(xf, hy, hz),  R(xb, hy, hz)]
     edges = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4),
              (0, 4), (1, 5), (2, 6), (3, 7)]
     segs = []
     for a, b in edges:
         segs.append(box[a]); segs.append(box[b])
-    # Dos circulos en la cara frontal (x'=+hx): woofer abajo (grande), tweeter
+    # Dos circulos en la cara frontal (x'=0): woofer abajo (grande), tweeter
     # arriba (chico). Cada circulo como bucle de segmentos.
     for (zc, rad) in [(-h * 0.18, w * 0.34), (h * 0.27, w * 0.15)]:
-        ring = [R(hx + 0.012, rad * np.cos(2 * np.pi * k / nseg),
+        ring = [R(xf + 0.012, rad * np.cos(2 * np.pi * k / nseg),
                   zc + rad * np.sin(2 * np.pi * k / nseg)) for k in range(nseg)]
         for k in range(nseg):
             segs.append(ring[k]); segs.append(ring[(k + 1) % nseg])
+    return segs
+
+
+def _sphere_wireframe(center, radius, nseg=20):
+    """Wireframe de una esfera para GLLinePlotItem(mode='lines'): 3 circulos
+    maximos (planos XY, XZ, YZ) centrados en `center`. Liviano (mismo buffer de
+    lineas que el bafle, sin GLMeshItem por fuente -> sin reconstruir el scene
+    graph en cada frame del drag)."""
+    c0 = np.asarray(center, dtype=float)
+    r = float(radius)
+    segs = []
+    planes = (((1, 0, 0), (0, 1, 0)),     # XY
+              ((1, 0, 0), (0, 0, 1)),     # XZ
+              ((0, 1, 0), (0, 0, 1)))     # YZ
+    for u, v in planes:
+        u = np.asarray(u, dtype=float); v = np.asarray(v, dtype=float)
+        ring = [tuple(c0 + r * np.cos(2 * np.pi * k / nseg) * u
+                      + r * np.sin(2 * np.pi * k / nseg) * v) for k in range(nseg)]
+        for k in range(nseg):
+            segs.append(tuple(float(x) for x in ring[k]))
+            segs.append(tuple(float(x) for x in ring[(k + 1) % nseg]))
     return segs
 
 
@@ -211,11 +238,17 @@ class SourceMarkers:
         self._ensure_items()
         normal_segs, sel_segs = [], []
         for i, s in enumerate(source_array or []):
-            yaw = (s.orientation if getattr(s, "orientation", None) is not None
-                   else 90.0)                # default: frente hacia +Y
-            pitch = float(getattr(s, "pitch", 0.0) or 0.0)
             size = getattr(s, "baffle_size", (0.30, 0.50, 0.40))
-            segs = _baffle_wireframe(s.position, size, yaw, pitch)
+            if getattr(s, "render_kind", "baffle") == "sphere":
+                # esfera centrada en el punto; radio = 1/2 lado menor del bafle
+                r = (s.sphere_radius() if hasattr(s, "sphere_radius")
+                     else 0.5 * float(min(size)))
+                segs = _sphere_wireframe(s.position, r)
+            else:
+                yaw = (s.orientation if getattr(s, "orientation", None) is not None
+                       else 90.0)            # default: frente hacia +Y
+                pitch = float(getattr(s, "pitch", 0.0) or 0.0)
+                segs = _baffle_wireframe(s.position, size, yaw, pitch)
             (sel_segs if i == selected_idx else normal_segs).extend(segs)
         # Actualizacion IN-PLACE (sin tocar el scene graph): rapido y sin cuelgue.
         for item, segs in ((self._item_normal, normal_segs),

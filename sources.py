@@ -90,6 +90,21 @@ def normalize_radiation_baked(v) -> str:
     return v if v in RADIATION_BAKED else "none"
 
 
+# render_kind: como se DIBUJA la fuente y que define el limite de posicion (T4 UI,
+# 17 Sep 2026). Es puramente visual + colision: la fuente sigue siendo un monopolo
+# omni en `position` (no cambia la fisica). "baffle" = caja (el punto acustico
+# queda en el CENTRO DE LA CARA DELANTERA y la caja se extiende hacia atras; el
+# limite de posicion son las CARAS de la caja, que no pueden cruzar la pared).
+# "sphere" = esfera centrada en el punto (el limite es el CENTRO; la esfera puede
+# asomar afuera). Default "baffle" = look historico.
+RENDER_KINDS = ("baffle", "sphere")
+
+
+def normalize_render_kind(v) -> str:
+    v = str(v or "baffle").strip().lower()
+    return v if v in RENDER_KINDS else "baffle"
+
+
 def dipole_direction(orientation_deg, pitch_deg=0.0) -> np.ndarray:
     """Vector unitario del eje del bafle (frente del dipolo). orientation = azimut
     [grados, 0=+X, CCW] (None -> 90 = +Y); pitch = elevacion [grados, + arriba]."""
@@ -366,6 +381,10 @@ class OmniSource:
     baffle_size:    Tuple[float, float, float] = (0.30, 0.50, 0.40)
     pitch:          float = 0.0
     mounted:        bool  = False
+    # render_kind (17 Sep 2026): "baffle" (caja, punto en la cara delantera, limite
+    # = caras de la caja) | "sphere" (esfera en el punto, limite = centro). Visual +
+    # colision, NO fisica. Ver RENDER_KINDS / normalize_render_kind.
+    render_kind:    str   = "baffle"
     # v2.16: mute por fuente. Una fuente inactiva sigue en la lista (posicion,
     # curva, bafle intactos) pero NO radia: los caminos de computo (FRF, SBIR,
     # FoM, campo 3D, comparaciones) la excluyen. Permite analizar parlante por
@@ -409,6 +428,7 @@ class OmniSource:
             self.Q = q_from_sensitivity(self.sensitivity_dB,
                                         self.power_W, self.f_ref)
         self.baffle_size = tuple(float(x) for x in self.baffle_size)
+        self.render_kind = normalize_render_kind(getattr(self, "render_kind", "baffle"))
         if self.orientation is not None:
             self.orientation = float(self.orientation)
         self.pitch = float(self.pitch)
@@ -501,6 +521,64 @@ class OmniSource:
 
     def as_array(self) -> np.ndarray:
         return np.asarray(self.position, dtype=float)
+
+    # ----- geometria del render/colision del bafle (una sola fuente de verdad) ----
+    def baffle_axes(self):
+        """(n, ey, ez): terna local del bafle. n = frente (azimut orientation,
+        elevacion pitch); ey = ancho horizontal; ez = alto (= n x ey, se inclina
+        con el pitch). Igual convencion que acoustic_viewer._baffle_wireframe."""
+        th = np.radians(90.0 if self.orientation is None else float(self.orientation))
+        ph = np.radians(float(self.pitch or 0.0))
+        n = np.array([np.cos(ph) * np.cos(th), np.cos(ph) * np.sin(th), np.sin(ph)])
+        ey = np.array([-np.sin(th), np.cos(th), 0.0])
+        ez = np.cross(n, ey)
+        return n, ey, ez
+
+    def baffle_frame(self):
+        """(box_center, n, ey, ez, (hx, hy, hz)) del prisma del bafle.
+
+        El PUNTO ACUSTICO (`position`) queda en el CENTRO DE LA CARA DELANTERA
+        (entre woofer y tweeter, sobre el eje del bafle); la caja se extiende hacia
+        ATRAS. Por eso el centro geometrico del prisma esta a media profundidad
+        detras del punto: box_center = position - (d/2)*n. hx/hy/hz son las
+        semi-longitudes en profundidad/ancho/alto."""
+        w, h, d = [float(v) for v in (self.baffle_size or (0.30, 0.50, 0.40))]
+        n, ey, ez = self.baffle_axes()
+        box_center = self.as_array() - 0.5 * d * n
+        return box_center, n, ey, ez, (d / 2.0, w / 2.0, h / 2.0)
+
+    def sphere_radius(self) -> float:
+        """Radio de la esfera (modo render 'sphere') = 1/2 del lado MENOR del
+        bafle. Derivado, sin campo nuevo (decision del usuario 17 Sep 2026)."""
+        bsz = self.baffle_size or (0.30, 0.50, 0.40)
+        return 0.5 * float(min(abs(x) for x in bsz))
+
+    def _baffle_aabb(self):
+        """(min, max) del prisma del bafle (caja detras de la cara delantera)."""
+        c, n, ey, ez, (hx, hy, hz) = self.baffle_frame()
+        corners = np.array([c + a * hx * n + b * hy * ey + e * hz * ez
+                            for a in (-1, 1) for b in (-1, 1) for e in (-1, 1)])
+        return corners.min(axis=0), corners.max(axis=0)
+
+    def render_aabb(self):
+        """(min, max) del bounding box VISUAL segun render_kind (para picking/hover):
+        'baffle' -> caja detras de la cara delantera; 'sphere' -> cubo de la esfera
+        centrada en el punto."""
+        if getattr(self, "render_kind", "baffle") == "sphere":
+            pos = self.as_array()
+            r = self.sphere_radius()
+            return pos - r, pos + r
+        return self._baffle_aabb()
+
+    def limit_aabb(self):
+        """(min, max) que define el LIMITE DE POSICION (decision del usuario 17 Sep
+        2026): 'baffle' -> las CARAS de la caja no pueden cruzar la pared, asi que el
+        limite es el prisma; 'sphere' -> el limite es el CENTRO (la esfera puede
+        asomar afuera), asi que el bbox es DEGENERADO en el punto."""
+        if getattr(self, "render_kind", "baffle") == "sphere":
+            pos = self.as_array()
+            return pos.copy(), pos.copy()
+        return self._baffle_aabb()
 
     # ----- acoplamiento modal: puntos monopolares equivalentes (item 5, Fase B) -
     def coupling_points(self):

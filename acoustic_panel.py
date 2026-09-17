@@ -492,6 +492,24 @@ class SourceEditDialog(QDialog):
         # --- Bafle: orientación + dimensiones (T4, visual + insumo de T8) ----
         grp_baf = QGroupBox("Bafle (visual)")
         fb = QFormLayout(grp_baf)
+        # Modo de render / límite físico del transductor (17 Sep 2026, pedido del
+        # usuario): Bafle (caja; el punto queda en la cara delantera y el límite son
+        # las caras) o Esfera (el límite es el centro; la esfera puede asomar). Es
+        # visual + colisión, no cambia la acústica (la fuente sigue siendo omni).
+        self.combo_render = QComboBox()
+        self.combo_render.addItem("Bafle (caja)", "baffle")
+        self.combo_render.addItem("Esfera (omni)", "sphere")
+        _rok = getattr(source, "render_kind", "baffle") if source else "baffle"
+        _jrok = self.combo_render.findData(_rok)
+        self.combo_render.setCurrentIndex(_jrok if _jrok >= 0 else 0)
+        self.combo_render.setToolTip(
+            "Cómo se dibuja la fuente y qué la traba al moverla:\n"
+            "• Bafle (caja): el punto acústico queda en el centro de la cara "
+            "delantera; el límite son las CARAS de la caja (no cruzan la pared).\n"
+            "• Esfera (omni): el límite es el CENTRO de la esfera (puede asomar "
+            "media esfera afuera). Radio = ½ del lado menor del bafle.\n"
+            "No cambia la acústica: la fuente es un monopolo omni en el punto.")
+        fb.addRow("Render / límite:", self.combo_render)
         ori0 = (90.0 if (source is None or getattr(source, "orientation", None) is None)
                 else float(source.orientation))
         self.sb_orient = QDoubleSpinBox()
@@ -921,6 +939,8 @@ class SourceEditDialog(QDialog):
         # Modelo de radiacion (item 5).
         src.radiator_kind = self.combo_radiator.currentData()
         src.radiation_baked = self.combo_baked.currentData()
+        # Render/limite (17 Sep 2026): bafle (caja) | esfera (centro).
+        src.render_kind = self.combo_render.currentData()
         if self.combo_drv_mode.currentData() == "ts":
             src.ts_fs = self.sb_drv_fs.value()
             src.ts_qts = self.sb_drv_qts.value()
@@ -4224,6 +4244,7 @@ class AcousticPanel(QWidget):
         new.free_vars = frozenset(getattr(s, "free_vars", frozenset()))
         new.radiator_kind = getattr(s, "radiator_kind", "box")
         new.radiation_baked = getattr(s, "radiation_baked", "none")
+        new.render_kind = getattr(s, "render_kind", "baffle")
         for _a in ("ts_fs", "ts_qts", "ts_vas", "ts_vb", "ts_sd"):
             setattr(new, _a, getattr(s, _a, None))
         self.sources.add(new)
@@ -4355,8 +4376,13 @@ class AcousticPanel(QWidget):
 
     @staticmethod
     def _source_baffle_aabb(s):
-        """AABB del bafle (caja visual) de una fuente, con su yaw+pitch. Mismo
-        frame que acoustic_viewer._baffle_wireframe (n=frente, ey=ancho, ez=n×ey)."""
+        """AABB que define el LIMITE DE POSICION de la fuente. Delega en
+        `OmniSource.limit_aabb()`: en modo 'baffle' es el prisma (caras que no
+        cruzan la pared, con el punto acustico en la cara delantera y la caja hacia
+        atras); en modo 'sphere' es DEGENERADO en el punto (la esfera puede asomar,
+        el limite es el centro). Fallback inline si la fuente es un stub sin metodo."""
+        if hasattr(s, "limit_aabb"):
+            return s.limit_aabb()
         pos = np.array([float(v) for v in s.position])
         bsz = getattr(s, "baffle_size", None) or (0.30, 0.50, 0.40)
         w, h, d = [float(v) for v in bsz]
@@ -4366,8 +4392,9 @@ class AcousticPanel(QWidget):
         n = np.array([np.cos(ph) * np.cos(th), np.cos(ph) * np.sin(th), np.sin(ph)])
         ey = np.array([-np.sin(th), np.cos(th), 0.0])
         ez = np.cross(n, ey)
+        c = pos - 0.5 * d * n                       # cara delantera en el punto
         hx, hy, hz = d / 2.0, w / 2.0, h / 2.0
-        corners = np.array([pos + a * hx * n + b * hy * ey + e * hz * ez
+        corners = np.array([c + a * hx * n + b * hy * ey + e * hz * ez
                             for a in (-1, 1) for b in (-1, 1) for e in (-1, 1)])
         return corners.min(axis=0), corners.max(axis=0)
 
@@ -4390,6 +4417,39 @@ class AcousticPanel(QWidget):
         for v, l, h in zip((x, y, z), lo, hi):
             l2, h2 = float(l) + eps, float(h) - eps
             out.append(float(v) if h2 < l2 else min(max(float(v), l2), h2))
+        return tuple(out)
+
+    def _clamp_source_to_room(self, idx, x, y, z, eps=1e-3):
+        """Traba el arrastre de la fuente `idx` segun su modo de render (17 Sep
+        2026): en 'sphere' el limite es el CENTRO (clamp del punto, la esfera puede
+        asomar); en 'baffle' el limite son las CARAS de la caja (se clampea para que
+        el prisma entero quede adentro del recinto). Sin geometria -> punto igual."""
+        srcs = getattr(self, "sources", None)
+        if srcs is None or not (0 <= idx < len(srcs.sources)):
+            return self._clamp_to_room_bbox(x, y, z, eps)
+        s = srcs.sources[idx]
+        if getattr(s, "render_kind", "baffle") == "sphere":
+            return self._clamp_to_room_bbox(x, y, z, eps)
+        try:
+            lo, hi = self._room_bbox()
+        except Exception:
+            return (float(x), float(y), float(z))
+        import copy as _copy
+        sc = _copy.copy(s)
+        sc.position = (float(x), float(y), float(z))
+        amin, amax = self._source_baffle_aabb(sc)   # prisma en la posicion candidata
+        p = np.array([float(x), float(y), float(z)])
+        lo_off = p - np.asarray(amin)               # cuanto sobresale la caja bajo p
+        hi_off = np.asarray(amax) - p               # cuanto sobresale sobre p
+        out = []
+        for k in range(3):
+            lomin = float(lo[k]) + float(lo_off[k]) + eps
+            himax = float(hi[k]) - float(hi_off[k]) - eps
+            if himax < lomin:                       # caja mas grande que la sala: centrar
+                out.append(0.5 * (float(lo[k]) + float(hi[k]))
+                           + 0.5 * (float(lo_off[k]) - float(hi_off[k])))
+            else:
+                out.append(min(max(float(p[k]), lomin), himax))
         return tuple(out)
 
     def point_inside_furniture(self, x, y, z) -> int:

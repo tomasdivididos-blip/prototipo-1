@@ -2980,6 +2980,15 @@ Los puntos de la grilla de escucha que caen en el volumen extra del AABB (fuera 
 
 En el panel de cada fuente, junto a «Optimizar:», hay un botón **«todas»** que tilda (o destilda) de un saque las seis variables optimizables (posición, delay, corte, polaridad, filtro, nivel). Un clic las libera todas al optimizador; otro las limpia. El botón se sincroniza solo con los tildes manuales.
 
+### Render de la fuente: bafle o esfera, y el punto acústico en la cara delantera
+
+En el panel de la fuente, dentro de «Bafle (visual)», hay un selector **«Render / límite»** con dos modos. **No cambia la acústica** (la fuente sigue siendo un monopolo omni en su punto): cambia cómo se dibuja y qué la traba al moverla.
+
+- **Bafle (caja)**: el **punto acústico queda en el centro de la cara delantera** (entre woofer y tweeter), y la caja se extiende **hacia atrás**. Antes la caja se dibujaba centrada en el punto, por eso dos bafles cercanos se solapaban aunque los puntos estuvieran separados. Ahora el límite al mover la fuente son las **caras de la caja**: el prisma entero no puede cruzar la pared.
+- **Esfera (omni)**: se dibuja una esfera centrada en el punto (radio = ½ del lado menor del bafle). El límite es el **centro**: podés llevar el centro hasta la pared, y la esfera puede quedar medio adentro y medio afuera (es lo que representa una fuente puntual omni).
+
+El modo se guarda en el `.room` (las salas viejas cargan en «Bafle», el comportamiento histórico).
+
 ## Cambios v2.45 (subs enfrentados en cualquier eje + optimizador que no se cuelga)
 
 **Cambios v2.45** (16 de septiembre 2026): **CABS/DBA valen para cualquier par de paredes opuestas**, y el **optimizador de fuentes ya no congela la app**. Pedido del profesor (vía Ale). Dos ejes.

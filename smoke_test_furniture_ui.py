@@ -895,6 +895,31 @@ def t38_patch_blocked_by_furniture_warns():
     return "parche tapado por mueble: avisa sin bloquear"
 
 
+@test
+def t39_render_kind_clamp_baffle_vs_sphere():
+    """El límite de posición depende del modo de render (17 Sep 2026): en 'baffle'
+    la CAJA no cruza la pared (se traba el prisma); en 'sphere' el límite es el
+    CENTRO (el punto se traba al bbox, la esfera puede asomar)."""
+    from sources import OmniSource
+    _v, panel = make_panel(width=6.0, length=8.0, height=3.0)   # x∈[-3,3], y∈[-4,4]
+    s = OmniSource((0.0, 0.0, 1.2), baffle_size=(0.3, 0.5, 0.4),
+                   orientation=90.0, render_kind="baffle")       # frente +Y, caja -Y
+    panel.sources.add(s)
+    # (a) baffle: empujar contra -Y -> la caja (hacia -Y) queda dentro de y_min=-4
+    cx, cy, cz = panel._clamp_source_to_room(0, 0.0, -100.0, 1.2)
+    sc = OmniSource((cx, cy, cz), baffle_size=(0.3, 0.5, 0.4),
+                    orientation=90.0, render_kind="baffle")
+    amin, amax = panel._source_baffle_aabb(sc)
+    assert amin[1] >= -4.0 - 1e-2 and amax[1] <= 4.0 + 1e-2, \
+        f"la caja del bafle cruzó la pared: y∈[{amin[1]:.2f},{amax[1]:.2f}]"
+    assert cy > -4.0 + 1e-3, f"el punto no debería tocar y_min (la caja va detrás): {cy}"
+    # (b) sphere: el límite es el centro -> el PUNTO se traba al bbox (~y_max)
+    s.render_kind = "sphere"
+    _sx, sy, _sz = panel._clamp_source_to_room(0, 0.0, 100.0, 1.2)
+    assert abs(sy - 4.0) < 5e-2, f"en esfera el centro debe tocar la pared: {sy}"
+    return "límite de posición: baffle traba la caja, sphere traba el centro"
+
+
 # ---------------------------------------------------------------------------
 def main():
     print("=" * 78)

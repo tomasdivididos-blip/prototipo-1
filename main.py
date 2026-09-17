@@ -869,8 +869,9 @@ class MainWindow(QMainWindow):
 
     def _on_source_moved_from_viewer(self, idx: int, x: float, y: float, z: float):
         """Shift+drag en el viewer 3D: mover fuente acustica (actualiza en-lugar).
-        Se traba en los limites del recinto (clamp al bbox)."""
-        x, y, z = self.acoustic._clamp_to_room_bbox(x, y, z)
+        Se traba en los limites del recinto segun el modo de render (bafle -> caras
+        de la caja; esfera -> centro)."""
+        x, y, z = self.acoustic._clamp_source_to_room(idx, x, y, z)
         # Colision-stop contra muebles: frena al contacto en vez de atravesarlos.
         # Si YA estaba en conflicto (p.ej. se agrego un mueble encima), se deja
         # mover para que pueda salir -- mismo criterio de escape que los muebles.
@@ -1185,6 +1186,9 @@ class MainWindow(QMainWindow):
                 # Modelo de fuente exacto (item 5). Aditivo, sin bump.
                 "radiator_kind": str(getattr(s, "radiator_kind", "box")),
                 "radiation_baked": str(getattr(s, "radiation_baked", "none")),
+                # Render/limite (17 Sep 2026): "baffle" | "sphere". Aditivo, sin
+                # bump: un .room viejo carga con "baffle" (look historico).
+                "render_kind": str(getattr(s, "render_kind", "baffle")),
                 "ts": {k: getattr(s, "ts_" + k, None)
                        for k in ("fs", "qts", "vas", "vb", "sd")},
                 "position": [float(s.position[0]),
@@ -1652,6 +1656,8 @@ class MainWindow(QMainWindow):
             kwargs["radiator_kind"] = str(s.get("radiator_kind", "box") or "box")
             kwargs["radiation_baked"] = str(s.get("radiation_baked", "none")
                                             or "none")
+            # Render/limite (17 Sep 2026). Default "baffle" si el .room es viejo.
+            kwargs["render_kind"] = str(s.get("render_kind", "baffle") or "baffle")
             _ts = s.get("ts") or {}
             for _k in ("fs", "qts", "vas", "vb", "sd"):
                 _v = _ts.get(_k)
