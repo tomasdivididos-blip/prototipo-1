@@ -5856,12 +5856,16 @@ class AcousticPanel(QWidget):
         fuentes LIBRES reales de la sala. `optimized` viene en el MISMO orden que
         self.sources.sources (el optimizador copió esa lista). Las fuentes fijas
         (free_vars vacío) no se tocan. Item 6."""
-        for real, opt in zip(self.sources.sources, optimized):
+        for i, (real, opt) in enumerate(zip(self.sources.sources, optimized)):
             fv = getattr(real, "free_vars", None) or frozenset()
             if not fv:
                 continue
             if "pos" in fv:
                 real.position = tuple(float(x) for x in opt.position)
+                # Traba con el MISMO criterio que el arrastre manual (bafle -> caras
+                # de la caja; esfera -> centro), asi el optimizador nunca deja el
+                # bafle medio afuera aunque proponga una posicion de borde.
+                real.position = self._clamp_source_to_room(i, *real.position)
             if "delay" in fv:
                 real.delay_s = float(opt.delay_s)
             if "fc" in fv:

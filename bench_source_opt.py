@@ -152,6 +152,29 @@ def main():
     check("la optimizacion (fuentes libres) baja el costo compuesto", c1 <= c0 + 1e-6,
           f"{c0:.2f} -> {c1:.2f}")
 
+    # --- 6b. bounds del optimizador respetan el BAFLE (17 Sep 2026) -------------
+    # Regresion: el optimizador usaba un margen de pared FIJO 0.15 m que no sabia del
+    # bafle -> dejaba la caja medio afuera. Ahora los bounds de posicion usan el
+    # semi-tamano de la caja (bafle) o ~0 (esfera, limite = centro).
+    dims_b = (4.0, 5.0, 3.0)
+    s_baf = OmniSource((2.0, 0.2, 1.2), baffle_size=(0.3, 0.5, 0.4),
+                       orientation=0.0, render_kind="baffle", free_vars={"pos"})
+    dofs_b = copt._source_dofs(s_baf, dims_b, np.zeros(3), 1)   # enf en Y
+    amin, amax = s_baf.limit_aabb(); p = np.asarray(s_baf.position)
+    lo_off, hi_off = p - amin, amax - p
+    ok_baf = True
+    for _k, ax, lo, hi in dofs_b:
+        if (lo - lo_off[ax]) < -1e-9 or (hi + hi_off[ax]) > dims_b[ax] + 1e-9:
+            ok_baf = False
+    check("bounds(bafle): la caja queda dentro del recinto en los extremos", ok_baf,
+          f"dofs={[(ax, round(lo,2), round(hi,2)) for _k,ax,lo,hi in dofs_b]}")
+    s_sph = OmniSource((2.0, 0.2, 1.2), baffle_size=(0.3, 0.5, 0.4),
+                       render_kind="sphere", free_vars={"pos"})
+    dofs_s = copt._source_dofs(s_sph, dims_b, np.zeros(3), 1)
+    ok_sph = all(lo < 0.1 and hi > dims_b[ax] - 0.1 for _k, ax, lo, hi in dofs_s)
+    check("bounds(esfera): el centro puede llegar a la pared (esfera asoma)", ok_sph,
+          f"dofs={[(ax, round(lo,2), round(hi,2)) for _k,ax,lo,hi in dofs_s]}")
+
     # --- 7. CAMPO FEM REAL (FEMModalField): oraculo en una CAJA -----------------
     # En una caja, evaluar sobre el campo FEM real debe dar ~lo mismo que la base
     # analitica rectangular (valida frames box<->mundo + el enmascarado de puntos

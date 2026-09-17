@@ -44,10 +44,28 @@ def _source_dofs(src, dims, origin, enf_axis):
     fv = getattr(src, "free_vars", frozenset()) or frozenset()
     out = []
     if "pos" in fv:
+        # Margen de pared SEGUN el limite del render (17 Sep 2026): en 'baffle' las
+        # CARAS de la caja no pueden cruzar la pared, asi que el margen por eje es el
+        # semi-tamano de la caja (asimetrico: la caja va detras de la cara delantera);
+        # en 'sphere' el limite es el CENTRO, margen ~0 (la esfera puede asomar). Sin
+        # esto el optimizador dejaba el bafle medio afuera (usaba un margen fijo de
+        # 0.15 m que no sabia del bafle).
+        pos = np.asarray(src.position, dtype=float)
+        if hasattr(src, "limit_aabb"):
+            amin, amax = src.limit_aabb()
+            lo_off = pos - np.asarray(amin, dtype=float)   # sobresale bajo el punto
+            hi_off = np.asarray(amax, dtype=float) - pos   # sobresale sobre el punto
+        else:
+            lo_off = hi_off = np.zeros(3)
+        eps = 0.02
         for k in range(3):
             if k == enf_axis:
                 continue                       # se queda en la pared
-            out.append(("pos", k, origin[k] + 0.15, origin[k] + dims[k] - 0.15))
+            lo = origin[k] + float(lo_off[k]) + eps
+            hi = origin[k] + dims[k] - float(hi_off[k]) - eps
+            if hi < lo:                        # caja mas grande que la sala en ese eje
+                lo = hi = origin[k] + 0.5 * dims[k]
+            out.append(("pos", k, lo, hi))
     if "delay" in fv:
         out.append(("delay", None, 0.0, 1.5 * max(dims) / C0))
     if "fc" in fv and getattr(src, "filter_type", "none") != "none":

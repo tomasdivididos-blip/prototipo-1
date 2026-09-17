@@ -2987,7 +2987,7 @@ En el panel de la fuente, dentro de «Bafle (visual)», hay un selector **«Rend
 - **Bafle (caja)**: el **punto acústico queda en el centro de la cara delantera** (entre woofer y tweeter), y la caja se extiende **hacia atrás**. Antes la caja se dibujaba centrada en el punto, por eso dos bafles cercanos se solapaban aunque los puntos estuvieran separados. Ahora el límite al mover la fuente son las **caras de la caja**: el prisma entero no puede cruzar la pared.
 - **Esfera (omni)**: se dibuja una esfera centrada en el punto (radio = ½ del lado menor del bafle). El límite es el **centro**: podés llevar el centro hasta la pared, y la esfera puede quedar medio adentro y medio afuera (es lo que representa una fuente puntual omni).
 
-El modo se guarda en el `.room` (las salas viejas cargan en «Bafle», el comportamiento histórico).
+El modo se guarda en el `.room` (las salas viejas cargan en «Bafle», el comportamiento histórico). El **optimizador CABS/DBA respeta el mismo límite**: cuando reacomoda una fuente en modo bafle, mantiene la caja entera dentro del recinto (antes usaba un margen fijo y podía dejar el bafle medio afuera); en modo esfera puede llevar el centro hasta la pared.
 
 ## Cambios v2.45 (subs enfrentados en cualquier eje + optimizador que no se cuelga)
 
