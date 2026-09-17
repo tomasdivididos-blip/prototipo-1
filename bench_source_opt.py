@@ -98,6 +98,30 @@ def main():
     check("DBA feasibility(Auto) factible en Y", feas_dba and ax_dba2 == 1,
           f"feas={feas_dba} axis={ax_dba2}")
 
+    # --- 4b. ControlAle: monitores a ~0.65 m del muro (NO flush) en el eje corto --
+    # Regresion del 17 Sep 2026: con wall_tol fijo=0.6 m los Genelec a 0.65 m no se
+    # reconocian como pegados a la pared -> CABS no se detectaba y best_axis caia al
+    # eje largo (todo 'otras'). La zona de pared RELATIVA (WALL_FRAC*L) los reconoce.
+    dims_ca = (4.8, 3.9, 3.1)
+    ctrlale = [
+        OmniSource((3.28, 0.65, 1.0), label="Genelec_L", source_type="fullrange"),
+        OmniSource((1.29, 0.65, 1.0), label="Genelec_R", source_type="fullrange"),
+        OmniSource((3.28, 3.70, 1.1), label="Sub L", source_type="subwoofer",
+                   delay_s=0.008, polarity=-1),
+        OmniSource((1.29, 3.70, 1.1), label="Sub R", source_type="subwoofer",
+                   delay_s=0.008, polarity=-1),
+    ]
+    ax_ca = dev.best_axis(ctrlale, dims_ca, (0, 0, 0), criterion="cabs")
+    feas_ca, why_ca, _ = dev.cabs_feasibility(ctrlale, dims_ca, axis=None,
+                                              criterion="cabs")
+    check("ControlAle: CABS se detecta en el eje corto Y (monitores a 0.65 m)",
+          ax_ca == 1 and feas_ca, f"axis={ax_ca} feas={feas_ca} why={why_ca}")
+    r_ca = dev.evaluate_cabs(ctrlale, dims_ca, (2.28, 1.74, 1.15), axis=None,
+                             criterion="cabs", fmax=150.0)
+    check("ControlAle: evaluate_cabs PASA en Y (par de subs + par de mains enfrente)",
+          r_ca["axis"] == 1 and r_ca["passed"],
+          f"axis={r_ca['axis']} passed={r_ca['passed']}")
+
     # --- 5. optimizador CANCELABLE: should_cancel corta y devuelve dict valido ---
     subs_free = [
         OmniSource((2.0, 0.1, 1.2), source_type="fullrange", free_vars={"pos"}),

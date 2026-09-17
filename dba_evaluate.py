@@ -37,6 +37,13 @@ from source_coupling import RectModalBasis
 import sbir as _sbir
 import dba as _dba
 
+# Fraccion del largo del eje que define la "zona de pared" para clasificar una
+# fuente como pegada a una cara (front/rear) en CABS/DBA. Escala con la sala para
+# reconocer pares enfrentados aunque las fuentes no esten flush al muro (un monitor
+# tipico queda a 0.3-0.8 m). Se combina con un piso absoluto (wall_tol=0.6 m) y se
+# clampea a < L/2 para que las zonas min/max nunca se solapen.
+WALL_FRAC = 0.25
+
 
 # ---------------------------------------------------------------------------
 # Clasificacion de la configuracion (que fuente es que en el esquema CABS)
@@ -62,11 +69,22 @@ def classify_sources(sources, dims, origin, axis: int,
     - Solo las fuentes cuyo tipo esta en SUBWOOFER_TYPES son candidatas al array
       (is_sub=True). Las demas (fullrange/horn/generic) quedan "other" (igual
       entran en la respuesta total, pero no forman el array CABS).
-    - Un sub se asigna a "front" si esta a <= wall_tol de la pared minima del eje
-      (coord ~0), "rear" si esta a <= wall_tol de la pared maxima (coord ~L).
+    - Una fuente pertenece a la pared minima ("front") o maxima ("rear") del eje si
+      esta dentro de la ZONA DE PARED de esa cara. La zona escala con la sala:
+      tol = max(wall_tol, WALL_FRAC * L). Un monitor a 0.65 m de la pared en una
+      sala de 3.9 m (ControlAle) cae en el tercio de pared aunque supere el 0.6 m
+      fijo; en una sala chica el piso 0.6 m evita que el centro cuente como pared.
+      Las dos zonas nunca se solapan (WALL_FRAC <= 0.5 y clamp), asi que 'front' y
+      'rear' son excluyentes.
     """
     origin = np.asarray(origin, dtype=float)
     L = float(dims[axis])
+    # Zona de pared relativa al tamano de la sala (spec del profesor: reconocer los
+    # pares enfrentados aunque las fuentes no esten pegadas al muro). Clamp a < L/2
+    # para que las zonas min/max no se toquen (si no, en un eje muy corto todo seria
+    # 'front' y 'rear' a la vez).
+    tol = max(float(wall_tol), WALL_FRAC * L)
+    tol = min(tol, 0.5 * L - 1e-6) if L > 0 else float(wall_tol)
     roles: List[SourceRole] = []
     for i, s in enumerate(sources):
         if not getattr(s, "active", True):
@@ -77,8 +95,8 @@ def classify_sources(sources, dims, origin, axis: int,
         u = pos_box[axis]
         # Membresia de pared para CUALQUIER tipo de fuente (para CABS, donde el
         # frente puede ser Full Range). El rol front/rear se reserva a los SUBS.
-        at_front = u <= wall_tol
-        at_rear = u >= L - wall_tol
+        at_front = u <= tol
+        at_rear = u >= L - tol
         if is_sub and at_front:
             role = "front"
         elif is_sub and at_rear:

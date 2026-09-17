@@ -2963,6 +2963,8 @@ El texto de evaluación ya no habla de fuentes «adelante» o «atrás». Los cr
 
 Esto también reconoce el caso recíproco: un par de mains enfrentado a un par de subs se evalúa como CABS válido, sin importar en qué pared cae cada par. La clasificación del resultado nombra las paredes como «pared 1» y «pared 2» (las dos caras opuestas del eje), no como frente/trasera.
 
+La **zona de pared** (qué tan cerca de una cara tiene que estar una fuente para contar como «pegada» a ella) ahora **escala con el tamaño de la sala**: un monitor a 0.65 m de la pared en una sala de 3.9 m se reconoce como parte de esa pared, aunque no esté flush al muro. Antes había un límite fijo de 0.6 m que dejaba afuera monitores realistas (por ejemplo el `ControlAle.room`: dos Genelec a 0.65 m del frente más dos subs enfrentados atrás no se detectaban como CABS y el análisis caía al eje equivocado). Se mantiene un piso de 0.6 m para salas chicas.
+
 Recordá que estos criterios están **definidos para recintos rectangulares (paralelepípedo)**. Si tu sala no lo es, se avisa y se evalúa/optimiza igual por **planitud + transferencia total (modos + SBIR)**.
 
 ### Evaluación/optimización sobre el volumen interior real
