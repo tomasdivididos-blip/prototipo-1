@@ -155,6 +155,10 @@ def main():
         r_fe = dev.evaluate_cabs(cfg, bd, rec, fem=fem, **kw)
         check("FEM: usa los modos del recinto real (no la base analitica)",
               r_fe["n_modes"] == len(freqs), f"n_modes={r_fe['n_modes']}")
+        check("flag field='fem' cuando corre sobre el campo real",
+              r_fe.get("field") == "fem", f"field={r_fe.get('field')}")
+        check("flag field='aabb' cuando corre sobre la base analitica",
+              r_an.get("field") == "aabb", f"field={r_an.get('field')}")
         check("FEM ~ analitico en una caja: planitud (<1.5 dB)",
               abs(r_fe["flat_real"] - r_an["flat_real"]) < 1.5,
               f"an={r_an['flat_real']:.2f} fem={r_fe['flat_real']:.2f}")

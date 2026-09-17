@@ -112,12 +112,16 @@ check("G4b DBA canonico PASA en cabs", e_c_cabs["passed"])
 
 
 # ---------------------------------------------------------------------------
-# Reglas de array por criterio (spec del usuario 9 Sep 2026):
-#   DBA  = >=2 subs adelante Y >=2 atras.
-#   CABS = >=2 subs atras + fuente adelante de cualquier tipo (Full Range OK).
-# -> 4 subs: ambos PASAN · FR atras: ninguno · FR adelante: solo CABS.
+# Reglas de array por criterio SIMETRICAS (spec del profesor 16 Sep 2026: sin
+# 'adelante'/'atras', vale cualquier par de paredes OPUESTAS del eje):
+#   DBA  = un par (>=2) de subs en CADA pared opuesta.
+#   CABS = un par (>=2) de subs en UNA pared + al menos una fuente (cualquier tipo,
+#          tipicamente un par de full-range) en la OPUESTA.
+# -> 4 subs: ambos PASAN. Un par de subs + un par de FR enfrentados: solo CABS pasa
+#    (da igual de que lado estan los subs; es SIMETRICO).
 def _cfg(front_type, rear_type):
-    """2 fuentes adelante (front_type) + 2 atras (rear_type, drive DBA canonico)."""
+    """2 fuentes en una pared (front_type) + 2 en la opuesta (rear_type, drive
+    DBA canonico)."""
     return [
         OmniSource((1.5, 0.10, 1.0), label="F1", source_type=front_type),
         OmniSource((3.5, 0.10, 1.0), label="F2", source_type=front_type),
@@ -138,16 +142,18 @@ c4 = _cfg("subwoofer", "subwoofer")
 check("G5a 4 subs PASA en dba", _passed(c4, "dba"))
 check("G5b 4 subs PASA en cabs", _passed(c4, "cabs"))
 
-print("\nG6  Full Range ATRAS (no hay subs atras): NINGUN criterio pasa")
+print("\nG6  Par de subs en pared 1 + par de FR en la opuesta: SOLO CABS pasa")
 c_fr_rear = _cfg("subwoofer", "fullrange")
-check("G6a FR atras NO pasa en dba", not _passed(c_fr_rear, "dba"))
-check("G6b FR atras NO pasa en cabs", not _passed(c_fr_rear, "cabs"))
+check("G6a NO pasa en dba (DBA pide subs en las DOS paredes)",
+      not _passed(c_fr_rear, "dba"))
+check("G6b SI pasa en cabs (par de subs en una pared + FR enfrente; simetrico)",
+      _passed(c_fr_rear, "cabs"))
 
-print("\nG7  Full Range ADELANTE (subs solo atras): SOLO CABS pasa")
+print("\nG7  Par de FR en pared 1 + par de subs en la opuesta: SOLO CABS pasa")
 c_fr_front = _cfg("fullrange", "subwoofer")
-check("G7a FR adelante NO pasa en dba (faltan subs adelante)",
+check("G7a NO pasa en dba (faltan subs en una pared)",
       not _passed(c_fr_front, "dba"))
-check("G7b FR adelante SI pasa en cabs (adelante puede ser Full Range)",
+check("G7b SI pasa en cabs (da igual el lado de los subs: es simetrico)",
       _passed(c_fr_front, "cabs"))
 
 

@@ -193,6 +193,16 @@ FEM~analitico <1.5 dB). El adaptador es matematica pura (superposicion modal com
 (`bench_modal_vs_impedance`). Rutas alternativas (perturbacion de forma de Slater; DtN no local) en
 `plan_optimizacion_fuentes_unificada.md` §8, NO implementadas.
 
+**v2.46 (17 Sep 2026, en alcance — VERIFICAR):** (a) los criterios CABS/DBA se volvieron
+SIMETRICOS entre las dos paredes de un eje (sin "adelante/atras"): CABS = par de subs en una
+pared + >=1 fuente en la opuesta; DBA = par de subs en cada pared. El checklist `ok_arr` de CABS
+(que alimenta `passed`) era asimetrico y quedo consistente con `_axis_satisfies` (ambos simetricos).
+Verificar que la simetria no habilite falsos positivos fisicos: 2 subs en una pared + 2 full-range
+enfrente ahora "pasa CABS" estructuralmente, pero el VEREDICTO sigue siendo planitud+transferencia
+(no bloquea ni por estructura). (b) nuevo flag `evaluate_cabs(...)["field"]` = "fem"|"aabb": solo
+rotula sobre que volumen se midio (no cambia la fisica). (c) boton "todas" = azucar de UI para los
+free_vars (no toca el nucleo).
+
 **Fix frame ubicación v2.44 (12 Sep 2026, en alcance — VERIFICAR):** el optimizador/
 evaluador de ubicación de la pestaña Predicción ponía fuentes AFUERA del recinto (y daba
 falso "afuera") con `origin_mode=corner` en CAD y recinto paramétrico. Causa afirmada: el

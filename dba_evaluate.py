@@ -144,32 +144,42 @@ def cabs_feasibility(sources, dims, origin=(0.0, 0.0, 0.0),
     satisfacer el criterio elegido. Estas condiciones son INVARIANTES bajo la
     optimizacion (mover fuentes libres dentro de su pared no cambia el tipo ni las
     despega), asi que sirven de PRE-CHEQUEO: si fallan aca, van a seguir fallando
-    despues de optimizar. Reglas (spec del usuario):
-      dba  -> >=2 subs ADELANTE y >=2 subs ATRAS.
-      cabs -> >=2 subs ATRAS + una fuente ADELANTE de cualquier tipo (Full Range OK).
+    despues de optimizar. Reglas SIMETRICAS (spec del profesor, 16 Sep 2026: sin
+    'adelante'/'atras', vale CUALQUIER par de paredes OPUESTAS del eje):
+      dba  -> un par (>=2) de subs en CADA una de las dos paredes opuestas.
+      cabs -> un par (>=2) de subs en UNA pared + al menos una fuente (cualquier
+              tipo, tipicamente un par de full-range) en la pared OPUESTA.
     Devuelve (feasible, reasons, axis)."""
     active = [s for s in sources if getattr(s, "active", True)]
     if axis is None:
         axis = (best_axis(active, dims, origin, c, criterion) if active
                 else int(np.argmax(dims)))
     roles = classify_sources(sources, dims, origin, axis)
-    fronts = [r for r in roles if r.role == "front"]
-    rears = [r for r in roles if r.role == "rear"]
+    fronts = [r for r in roles if r.role == "front"]      # subs pared min del eje
+    rears = [r for r in roles if r.role == "rear"]         # subs pared max del eje
     n_front_any = sum(1 for r in roles if r.at_front)
+    n_rear_any = sum(1 for r in roles if r.at_rear)
     axis_name = ["X (ancho)", "Y (largo)", "Z (alto)"][axis]
+    n_subs_wall = max(len(fronts), len(rears))             # pared con mas subs
     reasons = []
     if criterion == "cabs":
-        if len(rears) < 2:
-            reasons.append(f"CABS necesita >=2 subs ATRAS en {axis_name} "
-                           f"(hay {len(rears)}). Asignales Tipo Sub-Woofer/Woofer.")
-        if n_front_any < 1:
-            reasons.append(f"CABS necesita una fuente ADELANTE en {axis_name} "
-                           "(cualquier tipo, puede ser Full Range).")
+        # simetrico: un par de subs en cualquiera de las dos paredes del eje + una
+        # fuente en la opuesta (la de subs 'absorbe' la onda; la opuesta la excita,
+        # sea full-range o sub).
+        met = ((len(rears) >= 2 and n_front_any >= 1) or
+               (len(fronts) >= 2 and n_rear_any >= 1))
+        if not met:
+            reasons.append(
+                f"CABS necesita un par (>=2) de subs en una pared del eje "
+                f"{axis_name} y al menos una fuente en la pared opuesta "
+                f"(hay {n_subs_wall} sub(s) en la pared con mas subs). "
+                "Asignales Tipo Sub-Woofer/Woofer al par.")
     else:
         if len(fronts) < 2 or len(rears) < 2:
-            reasons.append(f"DBA necesita >=2 subs ADELANTE y >=2 ATRAS en "
-                           f"{axis_name} (hay {len(fronts)}+{len(rears)}). "
-                           "Asignales Tipo Sub-Woofer/Woofer a los cuatro.")
+            reasons.append(
+                f"DBA necesita un par (>=2) de subs en CADA pared opuesta del eje "
+                f"{axis_name} (hay {len(fronts)} en una y {len(rears)} en la otra). "
+                "Asignales Tipo Sub-Woofer/Woofer a los cuatro.")
     return len(reasons) == 0, reasons, axis
 
 
@@ -508,6 +518,11 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
         "freq": fa, "total_db_mean_real": real["L_bar"],
         "total_db_mean_ideal": ideal["L_bar"],
         "f_schroeder": f_s, "criterion": criterion,
+        # Sobre que VOLUMEN se midio: "fem" = campo modal del recinto REAL (los
+        # modos FEM, cualquier geometria); "aabb" = base rectangular analitica de
+        # la caja envolvente. El panel usa esto para NO mentir en el texto (antes
+        # decia 'AABB' aunque hubiera corrido sobre el campo real).
+        "field": ("fem" if fem is not None else "aabb"),
     }
 
 
@@ -566,42 +581,49 @@ def _build_checklist(roles, fronts, rears, dims, axis, L, band_hi, fmax, c,
     items = []
     axis_name = ["X (ancho)", "Y (largo)", "Z (alto)"][axis]
 
-    # Reglas de array por criterio (spec del usuario, 9 Sep 2026):
-    #   DBA  = >=2 subs ADELANTE y >=2 subs ATRAS (minimo 4, 2+2, todos subs).
-    #   CABS = >=2 subs ATRAS + una fuente ADELANTE de cualquier tipo (puede ser
-    #          Full Range). Asi: FR atras -> ninguno pasa; FR adelante -> solo CABS.
-    n_front_subs = len(fronts)
-    n_rear_subs = len(rears)
+    # Reglas de array por criterio SIMETRICAS (spec del profesor, 16 Sep 2026:
+    # sin 'adelante'/'atras', vale cualquier par de paredes OPUESTAS del eje):
+    #   DBA  = un par (>=2) de subs en CADA pared opuesta (minimo 4, 2+2, todos subs).
+    #   CABS = un par (>=2) de subs en UNA pared + al menos una fuente (cualquier
+    #          tipo, tipicamente un par de full-range) en la OPUESTA.
+    n_front_subs = len(fronts)                       # subs en la pared min del eje
+    n_rear_subs = len(rears)                          # subs en la pared max del eje
     n_front_any = sum(1 for r in roles if r.at_front)
+    n_rear_any = sum(1 for r in roles if r.at_rear)
+    n_subs_wall = max(n_front_subs, n_rear_subs)      # par de subs de un lado
+    n_opp_any = n_rear_any if n_front_subs < n_rear_subs else n_front_any
     if criterion == "cabs":
-        ok_arr = n_rear_subs >= 2 and n_front_any >= 1
+        ok_arr = ((n_rear_subs >= 2 and n_front_any >= 1) or
+                  (n_front_subs >= 2 and n_rear_any >= 1))
         arr_txt = (
-            f"CABS en {axis_name}: {n_rear_subs} sub(s) atras (min. 2) + "
-            f"{n_front_any} fuente(s) adelante (puede ser Full Range)."
+            f"CABS en {axis_name}: un par de subs en una pared ({n_subs_wall}) + "
+            f"{n_opp_any} fuente(s) en la pared opuesta (la de subs 'absorbe' la "
+            "onda; la opuesta puede ser un par de full-range)."
             if ok_arr else
-            f"CABS necesita >=2 subs ATRAS ({n_rear_subs}) y una fuente ADELANTE "
-            f"({n_front_any}, cualquier tipo) en {axis_name}.")
+            f"CABS necesita un par (>=2) de subs en una pared del eje {axis_name} "
+            f"y al menos una fuente en la pared opuesta (hay {n_subs_wall} sub(s) "
+            "en la pared con mas subs).")
     else:  # dba
         ok_arr = n_front_subs >= 2 and n_rear_subs >= 2
         arr_txt = (
-            f"DBA en {axis_name}: {n_front_subs} subs adelante + {n_rear_subs} "
-            f"atras (min. 2+2)."
+            f"DBA en {axis_name}: {n_front_subs} + {n_rear_subs} subs en las dos "
+            f"paredes opuestas (min. 2+2)."
             if ok_arr else
-            f"DBA necesita >=2 subs ADELANTE ({n_front_subs}) y >=2 ATRAS "
-            f"({n_rear_subs}) en {axis_name}.")
+            f"DBA necesita un par (>=2) de subs en CADA pared opuesta del eje "
+            f"{axis_name} (hay {n_front_subs} en una y {n_rear_subs} en la otra).")
     items.append({"key": "opposing", "ok": bool(ok_arr), "critical": True,
                   "text": arr_txt})
 
     tau_ideal = L / c
     ok_drive, drive_txt = _check_rear_drive(rears, tau_ideal)
     if criterion == "cabs":
-        # CABS: el trasero es MANEJADO (absorbe la onda), su drive no tiene por que
-        # ser el DBA canonico L/c. El criterio se juzga por el COLAPSO de la
-        # respuesta (planitud/varianza), no por el retardo -> rear_drive informativo.
+        # CABS: la pared de subs es MANEJADA (absorbe la onda), su drive no tiene por
+        # que ser el DBA canonico L/c. El criterio se juzga por el COLAPSO de la
+        # respuesta (planitud/varianza), no por el retardo -> drive informativo.
         items.append({
             "key": "rear_drive", "ok": True, "critical": False,
-            "text": "Modo CABS: trasero manejado (se juzga por el colapso de la "
-                    "respuesta, no por el retardo L/c). " + drive_txt})
+            "text": "Modo CABS: pared de subs manejada (se juzga por el colapso de "
+                    "la respuesta, no por el retardo L/c). " + drive_txt})
     else:
         items.append({"key": "rear_drive", "ok": ok_drive, "critical": True,
                       "text": drive_txt})
@@ -617,9 +639,9 @@ def _build_checklist(roles, fronts, rears, dims, axis, L, band_hi, fmax, c,
     items.append({"key": "spacing", "ok": bool(ok_alias), "critical": False,
                   "text": alias_txt})
 
-    n_front_fr = sum(1 for r in roles if r.at_front and not r.is_sub)
+    n_fr_any = sum(1 for r in roles if (r.at_front or r.at_rear) and not r.is_sub)
     ok_count = (len(fronts) + len(rears)) >= 4
-    fr_txt = (f" + {n_front_fr} full-range adelante" if n_front_fr else "")
+    fr_txt = (f" + {n_fr_any} full-range en una pared" if n_fr_any else "")
     items.append({
         "key": "count", "ok": ok_count, "critical": False,
         "text": (f"{len(fronts)}+{len(rears)} subs{fr_txt}: "
@@ -641,11 +663,11 @@ def _build_checklist(roles, fronts, rears, dims, axis, L, band_hi, fmax, c,
 def _check_rear_drive(rears, tau_ideal, tol_rel=0.35):
     """¿El array trasero esta retardado ~L/c e invertido respecto del frente?"""
     if not rears:
-        return False, "Sin array trasero: no hay drive CABS que evaluar."
+        return False, "Sin par de subs en la segunda pared: no hay drive que evaluar."
     n_baked = sum(1 for r in rears
                   if getattr(r.src, "response", None) is not None)
     if n_baked == len(rears):
-        return True, ("Trasero con curva de drive (LS/manejado): "
+        return True, ("Segunda pared con curva de drive (LS/manejado): "
                       "retardo+inversion horneados en la respuesta.")
     delays = [float(getattr(r.src, "delay_s", 0.0)) for r in rears]
     pols = [int(getattr(r.src, "polarity", 1)) for r in rears]
@@ -653,11 +675,12 @@ def _check_rear_drive(rears, tau_ideal, tol_rel=0.35):
     inverted = all(p < 0 for p in pols)
     delay_ok = abs(d_mean - tau_ideal) <= tol_rel * tau_ideal
     ok = delay_ok and inverted
-    txt = (f"Drive trasero: retardo medio {d_mean*1e3:.1f} ms "
+    txt = (f"Drive de la pared opuesta: retardo medio {d_mean*1e3:.1f} ms "
            f"(ideal L/c = {tau_ideal*1e3:.1f} ms), "
            f"polaridad {'invertida' if inverted else 'NO invertida'}. "
            + ("OK." if ok else
-              "CABS pide retardo ≈ L/c e inversion de polaridad en el trasero."))
+              "el DBA canonico pide retardo ≈ L/c e inversion de polaridad en la "
+              "pared opuesta."))
     return ok, txt
 
 

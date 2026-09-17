@@ -2950,6 +2950,34 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.46 (CABS/DBA simétrico sin «adelante/atrás», volumen real, botón «todas»)
+
+**Cambios v2.46** (17 de septiembre 2026): tres mejoras sobre la herramienta de fuentes enfrentadas, pedidas mirando el `ControlAle.room`.
+
+### Sin «adelante» ni «atrás»: pares de paredes opuestas
+
+El texto de evaluación ya no habla de fuentes «adelante» o «atrás». Los criterios son **simétricos** entre las dos paredes de un eje: no importa cuál pared llamás «frente».
+
+- **CABS**: un par (≥2) de subs en **una** pared, que actúa como pared manejada (los subs «absorben» la onda plana), más al menos una fuente en la **pared opuesta** (cualquier tipo, típicamente un par de full-range). Da igual de qué lado están los subs.
+- **DBA**: un par (≥2) de subs en **cada** una de las dos paredes opuestas.
+
+Esto también reconoce el caso recíproco: un par de mains enfrentado a un par de subs se evalúa como CABS válido, sin importar en qué pared cae cada par. La clasificación del resultado nombra las paredes como «pared 1» y «pared 2» (las dos caras opuestas del eje), no como frente/trasera.
+
+Recordá que estos criterios están **definidos para recintos rectangulares (paralelepípedo)**. Si tu sala no lo es, se avisa y se evalúa/optimiza igual por **planitud + transferencia total (modos + SBIR)**.
+
+### Evaluación/optimización sobre el volumen interior real
+
+Cuando la sala **no es un paralelepípedo** y ya calculaste los **modos (FEM)**, la evaluación y la optimización CABS/DBA corren sobre el **volumen interior real** (el campo modal del recinto de verdad), **no** sobre la caja envolvente (AABB). El resultado te dice explícitamente sobre qué volumen se midió:
+
+- «se hizo sobre el **volumen interior real** (campo modal FEM del recinto, N modos)» cuando hay modos FEM, o
+- «se evaluó sobre la caja envolvente (AABB)… para correrlo sobre el volumen real, calculá los modos (FEM) y volvé a evaluar» cuando todavía no los calculaste.
+
+Los puntos de la grilla de escucha que caen en el volumen extra del AABB (fuera del recinto real) se excluyen de la métrica, así la planitud y la varianza miden solo el interior de verdad.
+
+### Botón «todas» en el panel de cada fuente
+
+En el panel de cada fuente, junto a «Optimizar:», hay un botón **«todas»** que tilda (o destilda) de un saque las seis variables optimizables (posición, delay, corte, polaridad, filtro, nivel). Un clic las libera todas al optimizador; otro las limpia. El botón se sincroniza solo con los tildes manuales.
+
 ## Cambios v2.45 (subs enfrentados en cualquier eje + optimizador que no se cuelga)
 
 **Cambios v2.45** (16 de septiembre 2026): **CABS/DBA valen para cualquier par de paredes opuestas**, y el **optimizador de fuentes ya no congela la app**. Pedido del profesor (vía Ale). Dos ejes.

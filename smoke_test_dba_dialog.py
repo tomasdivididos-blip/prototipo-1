@@ -24,7 +24,11 @@ def ck(cond, msg):
 # --- 1) DBADialog directo ---------------------------------------------------
 from dba_dialog import DBADialog
 d = DBADialog((5.0, 6.5, 3.0), (3.5, 4.0, 1.5))
-ck(d.combo_axis.currentIndex() == 1, "eje default = Y (el más largo)")
+# El eje default es 'Auto' (data None, index 0): el núcleo detecta el par de
+# paredes opuestas en CUALQUIER eje. Sin fuentes, _axis_concrete cae al más largo (Y).
+ck(d.combo_axis.currentIndex() == 0 and d._axis_arg() is None,
+   "eje default = Auto (detectar par de paredes)")
+ck(d._axis_concrete() == 1, "Auto sin fuentes resuelve al eje más largo (Y)")
 d.sb_fmax.setValue(160.0)
 d.combo_drive.setCurrentIndex(0)      # LS
 d._calc()

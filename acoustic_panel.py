@@ -142,6 +142,16 @@ class SourceEditDialog(QDialog):
         _free = getattr(source, "free_vars", frozenset()) if source else frozenset()
         self.chk_free = {}
         _frow = QHBoxLayout()
+        # Boton "todas": tilda/destilda de un saque las 6 variables optimizables
+        # (comodidad para liberar toda la fuente al optimizador). Checkable: un clic
+        # tilda todas, otro las limpia.
+        self.btn_free_all = QPushButton("todas")
+        self.btn_free_all.setCheckable(True)
+        self.btn_free_all.setMaximumWidth(56)
+        self.btn_free_all.setToolTip(
+            "Tilda (o destilda) de un saque todas las variables optimizables de "
+            "esta fuente.")
+        _frow.addWidget(self.btn_free_all)
         for _key, _lbl in (("pos", "posición"), ("delay", "delay"),
                            ("fc", "corte"), ("polarity", "polaridad"),
                            ("filter", "filtro"), ("level", "nivel")):
@@ -149,6 +159,21 @@ class SourceEditDialog(QDialog):
             cb.setChecked(_key in (_free or frozenset()))
             self.chk_free[_key] = cb
             _frow.addWidget(cb)
+
+        def _toggle_all_free(on):
+            for _cb in self.chk_free.values():
+                _cb.setChecked(bool(on))
+
+        def _sync_free_all():
+            # el boton refleja "todas tildadas" sin re-disparar el toggle
+            allc = all(c.isChecked() for c in self.chk_free.values())
+            self.btn_free_all.blockSignals(True)
+            self.btn_free_all.setChecked(allc)
+            self.btn_free_all.blockSignals(False)
+        self.btn_free_all.toggled.connect(_toggle_all_free)
+        for _cb in self.chk_free.values():
+            _cb.toggled.connect(lambda _v: _sync_free_all())
+        _sync_free_all()
         _fw = QWidget(); _fw.setLayout(_frow)
         _fw.setToolTip(
             "Variables que el optimizador «Optimizar» (DBA/CABS) puede mover en "

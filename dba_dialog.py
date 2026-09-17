@@ -135,14 +135,15 @@ class DBADialog(QDialog):
             self.lbl_criterion = QLabel("Criterio:")
             crow.addWidget(self.lbl_criterion)
             self.combo_criterion = QComboBox()
-            self.combo_criterion.addItem("DBA (subs adelante y atrás)", "dba")
-            self.combo_criterion.addItem("CABS (trasero manejado)", "cabs")
+            self.combo_criterion.addItem("DBA (pares de subs en dos paredes opuestas)", "dba")
+            self.combo_criterion.addItem("CABS (par de subs en una pared, manejada)", "cabs")
             self.combo_criterion.setToolTip(
-                "DBA: el trasero reproduce el frente retardado L/c e invertido "
-                "(drive canónico; al «Optimizar» se fija ese drive, "
-                "no un delay libre). CABS: el trasero es manejado, su drive queda "
-                "libre y se juzga por el colapso de la respuesta, no por el retardo "
-                "L/c. El mismo criterio se usa para evaluar y para optimizar.")
+                "DBA: dos pares de subs en paredes opuestas; una pared reproduce a "
+                "la otra retardada L/c e invertida (drive canónico; al «Optimizar» "
+                "se fija ese drive, no un delay libre). CABS: un par de subs en una "
+                "pared (manejada, 'absorbe' la onda) + una fuente en la opuesta; su "
+                "drive queda libre y se juzga por el colapso de la respuesta, no por "
+                "el retardo L/c. El mismo criterio se usa para evaluar y optimizar.")
             self.combo_criterion.currentIndexChanged.connect(
                 self._on_criterion_changed)
             crow.addWidget(self.combo_criterion, 1)
@@ -348,10 +349,17 @@ class DBADialog(QDialog):
                 "reacomodar las que marcaste.")
         notes = []
         if not self._is_rectangular():
-            notes.append(
-                "los criterios CABS/DBA son de recinto <b>rectangular</b>; esta sala "
-                "no lo es, así que se trabaja sobre el AABB por planitud + "
-                "transferencia total")
+            if (self._eval_ctx or {}).get("fem") is not None:
+                notes.append(
+                    "los criterios CABS/DBA son de recinto <b>rectangular</b>; esta "
+                    "sala no lo es, así que se trabaja sobre el <b>volumen interior "
+                    "real</b> (campo modal FEM) por planitud + transferencia total")
+            else:
+                notes.append(
+                    "los criterios CABS/DBA son de recinto <b>rectangular</b>; esta "
+                    "sala no lo es y aún no hay modos FEM, así que se trabaja sobre el "
+                    "AABB por planitud + transferencia total (calculá los modos FEM "
+                    "para usar el volumen real)")
         try:
             import dba_evaluate as dev
             ctx = self._eval_ctx or {}
@@ -471,9 +479,16 @@ class DBADialog(QDialog):
             axis=axis, criterion=self._criterion())
         opt_note = ""
         if not self._is_rectangular():
-            opt_note += ("<span style='color:#b45309;'>Nota: recinto no rectangular; "
-                         "se optimiza sobre el AABB por planitud + transferencia "
-                         "total (modos + SBIR).</span><br>")
+            if ctx.get("fem") is not None:
+                opt_note += ("<span style='color:#2e7d32;'>Nota: recinto no "
+                             "rectangular; se optimiza sobre el <b>volumen interior "
+                             "real</b> (campo modal FEM) por planitud + transferencia "
+                             "total (modos + SBIR).</span><br>")
+            else:
+                opt_note += ("<span style='color:#b45309;'>Nota: recinto no "
+                             "rectangular y sin modos FEM; se optimiza sobre la caja "
+                             "AABB por planitud + transferencia total. Para usar el "
+                             "volumen real, calculá los modos (FEM) primero.</span><br>")
         elif not feasible:
             opt_note += ("<span style='color:#555;'>Nota: no es un array "
                          f"{self._criterion().upper()} de libro ("
@@ -616,15 +631,27 @@ class DBADialog(QDialog):
             f"&nbsp;&nbsp;<span style='color:#555;'>(eje {_AXIS_NAMES[r['axis']]}, "
             f"{r['n_modes']} modos)</span>"]
 
-        # Nota de geometría irregular: los criterios son de paralelepípedo, pero la
-        # evaluación se hace igual sobre el AABB por planitud + transferencia total.
+        # Nota de geometría irregular: los criterios son de paralelepípedo. Si hay
+        # modos FEM del recinto real, la evaluación corre sobre el VOLUMEN INTERIOR
+        # REAL (no el AABB); si no, cae al AABB analítico y se avisa cómo mejorarlo.
         if not self._is_rectangular():
-            lines.append(
-                "<span style='color:#b45309;'>Nota: los criterios CABS/DBA están "
-                "definidos para recintos <b>rectangulares (paralelepípedo)</b>. Esta "
-                "sala no lo es; la evaluación y la optimización se hacen sobre la caja "
-                "que la contiene (AABB), por <b>planitud + transferencia total "
-                "(modos + SBIR)</b>.</span>")
+            if str(r.get("field")) == "fem":
+                lines.append(
+                    "<span style='color:#2e7d32;'>Nota: los criterios CABS/DBA están "
+                    "definidos para recintos <b>rectangulares (paralelepípedo)</b>. "
+                    "Esta sala no lo es, así que la evaluación se hizo sobre el "
+                    f"<b>volumen interior real</b> (campo modal FEM del recinto, "
+                    f"{r['n_modes']} modos), no sobre la caja AABB, por planitud + "
+                    "transferencia total (modos + SBIR).</span>")
+            else:
+                lines.append(
+                    "<span style='color:#b45309;'>Nota: los criterios CABS/DBA están "
+                    "definidos para recintos <b>rectangulares (paralelepípedo)</b>. "
+                    "Esta sala no lo es y todavía no hay modos FEM resueltos, así que "
+                    "se evaluó sobre la caja envolvente (AABB) por planitud + "
+                    "transferencia total. Para correrlo sobre el <b>volumen interior "
+                    "real</b>, calculá los modos (FEM) del recinto y volvé a evaluar."
+                    "</span>")
 
         # clasificacion, con la POLARIDAD de cada fuente.
         roles = r["roles"]
@@ -705,7 +732,7 @@ class DBADialog(QDialog):
                 if 2 * n > 16 else "")
         if QMessageBox.question(
                 self, "Aplicar DBA a la sala",
-                f"Se crearán <b>{2*n} fuentes</b> ({n} al frente + {n} atrás) "
+                f"Se crearán <b>{2*n} fuentes</b> ({n} en una pared + {n} en la opuesta) "
                 f"con drive <b>{drv_txt}</b>.<br><br>"
                 "Reemplaza las fuentes DBA previas (las demás se conservan). "
                 f"¿Continuar?{warn}",
