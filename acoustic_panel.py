@@ -4473,11 +4473,13 @@ class AcousticPanel(QWidget):
     def source_placement_conflict(self, idx: int, x, y, z):
         """Mensaje si la fuente `idx` no puede ir a (x,y,z), o None si está OK.
 
-        Dos reglas, de distinta naturaleza:
+        Tres reglas, de distinta naturaleza:
           1. el PUNTO (el monopolo) no puede quedar dentro de un mueble -> NaN;
           2. el BAFLE (la caja del parlante) no puede atravesar un mueble, que
              es la contraparte de la regla que ya aplican los muebles contra los
              parlantes (MANUAL §6.4). Sin esto la regla valía en un solo sentido.
+          3. dos BAFLES no pueden superponerse entre sí (un parlante ocupa lugar).
+             Las ESFERAS quedan exentas (su límite es el centro): pueden solaparse.
         """
         i = self.point_inside_furniture(x, y, z)
         if i >= 0:
@@ -4495,6 +4497,21 @@ class AcousticPanel(QWidget):
                 bmin, bmax = self._furniture_aabb(m)
                 if self._aabb_overlap(amin, amax, bmin, bmax):
                     return f"el bafle se superpondría con el mueble «{m.label}»"
+            # (3) anti-solape entre bafles. Solo si ESTA fuente es un bafle; contra
+            # las OTRAS fuentes activas que también sean bafles. Esferas exentas.
+            if getattr(s, "render_kind", "baffle") != "sphere" \
+                    and hasattr(s, "render_aabb"):
+                smin, smax = s.render_aabb()
+                for j, other in enumerate(self.sources.sources):
+                    if j == idx or not getattr(other, "active", True):
+                        continue
+                    if getattr(other, "render_kind", "baffle") == "sphere" \
+                            or not hasattr(other, "render_aabb"):
+                        continue
+                    omin, omax = other.render_aabb()
+                    if self._aabb_overlap(smin, smax, omin, omax):
+                        lbl = getattr(other, "label", "") or f"S{j+1}"
+                        return f"el bafle se superpondría con la fuente «{lbl}»"
         except Exception:
             pass
         return None

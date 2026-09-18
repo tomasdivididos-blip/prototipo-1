@@ -175,6 +175,37 @@ def main():
     check("bounds(esfera): el centro puede llegar a la pared (esfera asoma)", ok_sph,
           f"dofs={[(ax, round(lo,2), round(hi,2)) for _k,ax,lo,hi in dofs_s]}")
 
+    # --- 6c. anti-solape de BAFLES: el optimizador separa cajas superpuestas -----
+    def _overlap(s1, s2):
+        a, b = s1.render_aabb(); cc, dd = s2.render_aabb()
+        return bool(np.all(np.minimum(b, dd) - np.maximum(a, cc) > 0))
+    subs_ov = [
+        OmniSource((3.0, 0.2, 1.2), baffle_size=(0.5, 0.5, 0.4), orientation=90.0,
+                   render_kind="baffle", source_type="subwoofer", free_vars={"pos"}),
+        OmniSource((3.2, 0.2, 1.2), baffle_size=(0.5, 0.5, 0.4), orientation=90.0,
+                   render_kind="baffle", source_type="subwoofer", free_vars={"pos"}),
+        OmniSource((3.0, 3.8, 1.2), source_type="subwoofer"),
+        OmniSource((3.2, 3.8, 1.2), source_type="subwoofer")]
+    check("dos bafles arrancan SOLAPADOS (test no trivial)",
+          _overlap(subs_ov[0], subs_ov[1]))
+    r_ov = copt.optimize_cabs(subs_ov, (6.0, 4.0, 3.0), (3.0, 2.0, 1.2), axis=1,
+                              fmax=150.0, criterion="cabs", maxiter=40)
+    oo = r_ov["optimized"]
+    check("el optimizador SEPARA los bafles (no quedan superpuestos)",
+          not _overlap(oo[0], oo[1]),
+          f"pos {np.round(oo[0].position,2)} / {np.round(oo[1].position,2)}")
+    # esferas: exentas del anti-solape (pueden superponerse) -> el optimizador
+    # corre igual y NO las obliga a separarse por colision (la exencion se ve
+    # tambien en la panel: source_placement_conflict devuelve None para esferas).
+    subs_sph = [OmniSource(s.position, baffle_size=(0.5, 0.5, 0.4),
+                           render_kind="sphere", source_type="subwoofer",
+                           free_vars={"pos"}) for s in subs_ov[:2]] + subs_ov[2:]
+    r_sph = copt.optimize_cabs(subs_sph, (6.0, 4.0, 3.0), (3.0, 2.0, 1.2), axis=1,
+                               fmax=150.0, criterion="cabs", maxiter=6)
+    check("optimizar esferas (exentas del anti-solape) corre y devuelve dict valido",
+          isinstance(r_sph, dict) and len(r_sph["optimized"]) == 4
+          and all(o.render_kind == "sphere" for o in r_sph["optimized"][:2]))
+
     # --- 7. CAMPO FEM REAL (FEMModalField): oraculo en una CAJA -----------------
     # En una caja, evaluar sobre el campo FEM real debe dar ~lo mismo que la base
     # analitica rectangular (valida frames box<->mundo + el enmascarado de puntos

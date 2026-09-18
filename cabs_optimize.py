@@ -161,14 +161,33 @@ def _cost(x, sources, dofs, dims, origin, walls, receiver, axis, fa, xi, c, f_s,
     # grande que la planta, asi que un movimiento transversal puede caer dentro
     # del AABB pero fuera del poligono -> se penaliza fuerte (100 dB por fuente
     # afuera, muy por encima de la escala del objetivo ~pocos dB).
+    pos_idx = {i for (i, k, *_r) in dofs if k == "pos"}
     if inside_fn is not None:
-        pos_idx = {i for (i, k, *_r) in dofs if k == "pos"}
         for i in pos_idx:
             try:
                 if not inside_fn(cand[i].position):
                     pen += 100.0
             except Exception:
                 pass
+    # Anti-solape de BAFLES (17 Sep 2026): dos cajas de bafle no pueden superponerse
+    # (un parlante ocupa lugar). Las ESFERAS si pueden (su limite es el centro). Solo
+    # se penaliza el par si al menos una fuente es MOVIBLE (un solape entre dos fijas
+    # no lo puede resolver el optimizador). Penalty graduada por la penetracion (MTV)
+    # para darle gradiente a DE ademas del piso duro de 100.
+    baf = [i for i, s in enumerate(cand)
+           if getattr(s, "active", True)
+           and getattr(s, "render_kind", "baffle") != "sphere"
+           and hasattr(s, "render_aabb")]
+    for u in range(len(baf)):
+        for v in range(u + 1, len(baf)):
+            ia, ib = baf[u], baf[v]
+            if ia not in pos_idx and ib not in pos_idx:
+                continue
+            amin, amax = cand[ia].render_aabb()
+            bmin, bmax = cand[ib].render_aabb()
+            inter = np.minimum(amax, bmax) - np.maximum(amin, bmin)
+            if np.all(inter > 0.0):
+                pen += 100.0 + 100.0 * float(inter.min())
     return float(m["flat"] + m["spatial"] + pen)
 
 

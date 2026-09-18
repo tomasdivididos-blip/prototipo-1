@@ -2989,6 +2989,8 @@ En el panel de la fuente, dentro de «Bafle (visual)», hay un selector **«Rend
 
 El modo se guarda en el `.room` (las salas viejas cargan en «Bafle», el comportamiento histórico). El **optimizador CABS/DBA respeta el mismo límite**: cuando reacomoda una fuente en modo bafle, mantiene la caja entera dentro del recinto (antes usaba un margen fijo y podía dejar el bafle medio afuera); en modo esfera puede llevar el centro hasta la pared.
 
+Además, **dos bafles no pueden superponerse entre sí** (un parlante ocupa lugar), ni al arrastrarlos a mano ni al optimizar. Las **esferas quedan exentas**: como su límite es el centro, pueden solaparse libremente (representan fuentes puntuales sin volumen físico).
+
 ## Cambios v2.45 (subs enfrentados en cualquier eje + optimizador que no se cuelga)
 
 **Cambios v2.45** (16 de septiembre 2026): **CABS/DBA valen para cualquier par de paredes opuestas**, y el **optimizador de fuentes ya no congela la app**. Pedido del profesor (vía Ale). Dos ejes.

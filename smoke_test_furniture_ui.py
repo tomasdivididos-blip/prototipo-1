@@ -920,6 +920,35 @@ def t39_render_kind_clamp_baffle_vs_sphere():
     return "límite de posición: baffle traba la caja, sphere traba el centro"
 
 
+@test
+def t40_baffle_vs_baffle_overlap_blocks():
+    """Dos BAFLES no pueden superponerse (un parlante ocupa lugar); las ESFERAS
+    sí pueden (su límite es el centro). 17 Sep 2026."""
+    from sources import OmniSource
+    _v, panel = make_panel(width=6.0, length=8.0, height=3.0)
+    a = OmniSource((0.0, 0.0, 1.2), baffle_size=(0.3, 0.5, 0.4),
+                   orientation=90.0, render_kind="baffle", label="A")
+    b = OmniSource((1.5, 0.0, 1.2), baffle_size=(0.3, 0.5, 0.4),
+                   orientation=90.0, render_kind="baffle", label="B")
+    panel.sources.add(a)
+    panel.sources.add(b)
+    # (a) mover B encima de A -> bloquea (bafle vs bafle)
+    msg = panel.source_placement_conflict(1, 0.1, 0.0, 1.2)
+    assert msg and "fuente" in msg, f"debería bloquear bafle-vs-bafle: {msg!r}"
+    # (b) lejos -> libre
+    assert panel.source_placement_conflict(1, 3.0, 0.0, 1.2) is None
+    # (c) si B es esfera -> puede solaparse (esfera exenta)
+    b.render_kind = "sphere"
+    assert panel.source_placement_conflict(1, 0.1, 0.0, 1.2) is None, \
+        "una esfera SÍ puede superponerse"
+    # (d) si el OTRO (A) es esfera y B bafle -> el bafle no choca contra la esfera
+    b.render_kind = "baffle"
+    a.render_kind = "sphere"
+    assert panel.source_placement_conflict(1, 0.1, 0.0, 1.2) is None, \
+        "un bafle no choca contra una esfera"
+    return "anti-solape de bafles (esferas exentas)"
+
+
 # ---------------------------------------------------------------------------
 def main():
     print("=" * 78)
