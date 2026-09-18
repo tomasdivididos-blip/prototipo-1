@@ -154,8 +154,14 @@ Preguntas de UX abiertas (para charlar):
    (default) + espacial + CABS + DBA (los que ya calcula `_config_metrics`). Sin
    motor nuevo. `objective_weights` pondera flat/spatial por norte; nortes puros
    sin esquema de array. `bench_norte_criterios` 15/15.
-2. **Fase B (criterios de Predicción):** traer SBIR + smoothness + FoM al panel
-   (motor común, decisión §3.1). Requiere unificar la función-objetivo (§3.2).
+2. **Fase B (criterios de Predicción): PARCIAL (2026-09-18).** HECHO: norte **SBIR**
+   (peine de bordes en el receptor, `_sbir_span`, layout-dependiente) + **uniformidad
+   modal Bolt** como INFORMATIVA (decisión del usuario: no es objetivo porque no
+   depende del layout, solo de la geometría). Motor único = `differential_evolution`
+   (§3.1 opción B); función-objetivo unificada en `dba_evaluate.composite_cost`
+   (flat/spatial/sbir/cabs/dba). `bench_norte_criterios` 23/23. PENDIENTE (deferido a
+   pedido del usuario): norte **Combinado con pesos por caso de uso** (música/voz/mixto,
+   reusando `location_opt.default_location_weights` + `_lin_score`).
 3. **Fase C (semillas):** DE con semillas heurísticas de Predicción (opción C).
 4. **Fase D:** deprecar/redirigir la entrada duplicada, .room versionado, MANUAL.
 

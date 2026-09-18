@@ -142,6 +142,7 @@ class DBADialog(QDialog):
             # plana (el norte del profesor Bidondo).
             self.combo_criterion.addItem("Transferencia compuesta plana", "flat")
             self.combo_criterion.addItem("Uniformidad espacial (asiento a asiento)", "spatial")
+            self.combo_criterion.addItem("Mínimo SBIR (peine de bordes)", "sbir")
             self.combo_criterion.addItem("CABS (par de subs en una pared, manejada)", "cabs")
             self.combo_criterion.addItem("DBA (pares de subs en dos paredes opuestas)", "dba")
             self.combo_criterion.setToolTip(
@@ -149,11 +150,12 @@ class DBADialog(QDialog):
                 "• Transferencia compuesta plana: aplanar la respuesta compuesta "
                 "(mains + subs) en la banda; es el norte general, sin esquema de "
                 "array.\n• Uniformidad espacial: minimizar la varianza asiento a "
-                "asiento.\n• CABS: un par de subs en una pared (manejada) + una "
-                "fuente enfrente; drive libre.\n• DBA: dos pares de subs en paredes "
-                "opuestas; una reproduce a la otra retardada L/c e invertida (drive "
-                "canónico, se fija al optimizar).\nEl mismo norte se usa para evaluar "
-                "y optimizar (coherencia).")
+                "asiento.\n• Mínimo SBIR: minimizar el peine de reflexiones de borde "
+                "en el punto de escucha (20-200 Hz).\n• CABS: un par de subs en una "
+                "pared (manejada) + una fuente enfrente; drive libre.\n• DBA: dos "
+                "pares de subs en paredes opuestas; una reproduce a la otra retardada "
+                "L/c e invertida (drive canónico, se fija al optimizar).\nEl mismo "
+                "norte se usa para evaluar y optimizar (coherencia).")
             self.combo_criterion.currentIndexChanged.connect(
                 self._on_criterion_changed)
             crow.addWidget(self.combo_criterion, 1)
@@ -299,6 +301,7 @@ class DBADialog(QDialog):
     _CRIT_LABELS = {
         "flat": "Transferencia compuesta plana",
         "spatial": "Uniformidad espacial",
+        "sbir": "Mínimo SBIR",
         "cabs": "CABS", "dba": "DBA",
     }
 
@@ -676,16 +679,37 @@ class DBADialog(QDialog):
         # la respuesta, no por si las fuentes cumplen el esquema de libro.
         fr_real, sp_real = r["flat_real"], r["spatial_real"]
         fr_id, sp_id = r["flat_ideal"], r["spatial_ideal"]
-        collapse_ok = (fr_real <= fr_id + 1.5) and (sp_real <= sp_id + 1.5)
-        badge = ("<span style='color:#2e7d32;'><b>respuesta plana</b></span>"
-                 if collapse_ok else
-                 "<span style='color:#b45309;'><b>se puede aplanar más</b></span>")
-        lines = [
-            f"<b>{crit} — planitud + transferencia total (modos + SBIR):</b> {badge}",
-            f"&nbsp;&nbsp;Planitud: <b>{fr_real:.2f}</b> dB (ideal {fr_id:.2f}) · "
-            f"Varianza espacial: <b>{sp_real:.2f}</b> dB (ideal {sp_id:.2f})",
-            f"&nbsp;&nbsp;<span style='color:#555;'>(eje {_AXIS_NAMES[r['axis']]}, "
-            f"{r['n_modes']} modos)</span>"]
+        if crit_key == "sbir":
+            # Veredicto sobre el PEINE SBIR (real vs el ideal de referencia).
+            sb_r, sb_i = r.get("sbir_real", float("nan")), r.get("sbir_ideal", float("nan"))
+            ok = np.isfinite(sb_r) and np.isfinite(sb_i) and (sb_r <= sb_i + 1.5)
+            badge = ("<span style='color:#2e7d32;'><b>peine controlado</b></span>"
+                     if ok else
+                     "<span style='color:#b45309;'><b>se puede reducir el peine</b></span>")
+            lines = [
+                f"<b>{crit} — peine de reflexiones de borde:</b> {badge}",
+                f"&nbsp;&nbsp;Peine SBIR pico-a-valle: <b>{sb_r:.2f}</b> dB "
+                f"(ideal {sb_i:.2f}) · Planitud compuesta: {fr_real:.2f} dB",
+                f"&nbsp;&nbsp;<span style='color:#555;'>(receptor, "
+                f"{r['n_modes']} modos)</span>"]
+        else:
+            collapse_ok = (fr_real <= fr_id + 1.5) and (sp_real <= sp_id + 1.5)
+            badge = ("<span style='color:#2e7d32;'><b>respuesta plana</b></span>"
+                     if collapse_ok else
+                     "<span style='color:#b45309;'><b>se puede aplanar más</b></span>")
+            lines = [
+                f"<b>{crit} — planitud + transferencia total (modos + SBIR):</b> {badge}",
+                f"&nbsp;&nbsp;Planitud: <b>{fr_real:.2f}</b> dB (ideal {fr_id:.2f}) · "
+                f"Varianza espacial: <b>{sp_real:.2f}</b> dB (ideal {sp_id:.2f})",
+                f"&nbsp;&nbsp;<span style='color:#555;'>(eje {_AXIS_NAMES[r['axis']]}, "
+                f"{r['n_modes']} modos)</span>"]
+        # Uniformidad modal (Bolt): informativa (propiedad de la sala, no cambia al
+        # mover fuentes). Se muestra siempre como contexto.
+        _sm = r.get("smoothness", float("nan"))
+        if np.isfinite(_sm):
+            lines.append(
+                f"&nbsp;&nbsp;<span style='color:#555;'>Uniformidad modal (Bolt): "
+                f"{_sm:.0f}/100 — propiedad de la sala (no depende de las fuentes).</span>")
 
         # Nota de geometría irregular: los criterios son de paralelepípedo. Si hay
         # modos FEM del recinto real, la evaluación corre sobre el VOLUMEN INTERIOR

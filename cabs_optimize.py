@@ -150,11 +150,11 @@ def _apply_dba_drive(sources, dims, origin, axis, c):
 # Optimizacion
 # ---------------------------------------------------------------------------
 def _cost(x, sources, dofs, dims, origin, walls, receiver, axis, fa, xi, c, f_s,
-          basis, zone_box, inside_fn=None, w_flat=1.0, w_spatial=1.0):
+          basis, zone_box, inside_fn=None, criterion="flat"):
     cand = apply_vector(sources, dofs, x)
     m = dev._config_metrics(cand, dims, origin, walls, receiver, axis=axis, fa=fa,
                             xi=xi, c=c, f_s=f_s, basis=basis, with_decay=False,
-                            zone_box=zone_box)
+                            zone_box=zone_box, want_sbir=dev.wants_sbir(criterion))
     pen = 0.0
     # Restriccion dura: ninguna fuente MOVIDA puede quedar fuera del recinto
     # real. Las cotas de caja son el AABB; en un recinto irregular el AABB es mas
@@ -188,9 +188,10 @@ def _cost(x, sources, dofs, dims, origin, walls, receiver, axis, fa, xi, c, f_s,
             inter = np.minimum(amax, bmax) - np.maximum(amin, bmin)
             if np.all(inter > 0.0):
                 pen += 100.0 + 100.0 * float(inter.min())
-    # Objetivo segun el NORTE: 'flat' pesa la no-planitud; 'spatial' la varianza
-    # espacial; cabs/dba/compuesta pesan ambos (w=1,1) -> identico al historico.
-    return float(w_flat * m["flat"] + w_spatial * m["spatial"] + pen)
+    # Objetivo segun el NORTE (fuente de verdad unica en dba_evaluate): 'flat'/'spatial'
+    # pesan planitud/varianza; 'sbir' minimiza el peine; cabs/dba pesan flat+spatial
+    # (identico al historico).
+    return float(dev.composite_cost(m, criterion) + pen)
 
 
 def _criterion_drive_changes(orig, base, excluded) -> list:
@@ -260,17 +261,19 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
         basis = dev.make_basis(dims, fmax, c)
     zone_box = _dba._zone_grid(dims, axis, grid[0], grid[1], grid[2])
 
-    # Pesos del NORTE (flat/spatial/cabs/dba). El objetivo compuesto que se minimiza
-    # y con el que se juzga "mejoro" usa estos pesos (coherencia evaluar<->optimizar).
-    w_flat, w_spatial = dev.objective_weights(criterion)
+    # Objetivo del NORTE (flat/spatial/sbir/cabs/dba). El costo que se minimiza y con
+    # el que se juzga "mejoro" es el MISMO `composite_cost` que usa `_cost` (coherencia
+    # evaluar<->optimizar). El peine SBIR solo se computa si el norte lo pide.
+    _ws = dev.wants_sbir(criterion)
 
     def _metrics(src_list):
         return dev._config_metrics(src_list, dims, origin, walls, receiver,
                                    axis=axis, fa=fa, xi=xi, c=c, f_s=f_s,
-                                   basis=basis, with_decay=False, zone_box=zone_box)
+                                   basis=basis, with_decay=False, zone_box=zone_box,
+                                   want_sbir=_ws)
 
     def _obj(mm):
-        return w_flat * mm["flat"] + w_spatial * mm["spatial"]
+        return dev.composite_cost(mm, criterion)
 
     before = _metrics(sources)
     dofs = [d for d in collect_dofs(base, dims, origin, axis)
@@ -325,7 +328,7 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
     # mejora ~igual con y sin polish). Apagarlo hace el tiempo predecible (~popsize*
     # D*maxiter) y el Cancelar instantaneo.
     kw = dict(args=(base, dofs, dims, origin, walls, receiver, axis, fa, xi, c,
-                    f_s, basis, zone_box, inside_fn, w_flat, w_spatial),
+                    f_s, basis, zone_box, inside_fn, criterion),
               maxiter=maxiter, popsize=eff_popsize, seed=seed, tol=1e-3,
               mutation=(0.5, 1.0), recombination=0.7, polish=False,
               updating="deferred", callback=_de_callback)

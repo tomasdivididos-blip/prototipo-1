@@ -55,26 +55,58 @@ WALL_FRAC = 0.25
 #   "spatial" = uniformidad espacial (varianza asiento-a-asiento).
 # El objetivo real (flat/spatial) SIEMPRE se computa (`_config_metrics`); el norte
 # solo cambia el PESO de cada termino y si se evalua/optimiza el esquema de array.
+#   "sbir"    = mínimo peine SBIR (reflexiones de borde) en el receptor. Depende
+#               del layout (Fase B). Mide `sbir_span` (realce-atenuacion).
 ARRAY_CRITERIA = ("cabs", "dba")
-OBJECTIVE_CRITERIA = ("flat", "spatial")
+OBJECTIVE_CRITERIA = ("flat", "spatial", "sbir")
 
 
 def is_array_criterion(criterion) -> bool:
     """True si el criterio evalua un ESQUEMA de array (cabs/dba); False para los
-    nortes puros (flat/spatial), que solo miran planitud/uniformidad."""
+    nortes puros (flat/spatial/sbir), que solo miran el objetivo."""
     return str(criterion) in ARRAY_CRITERIA
+
+
+def wants_sbir(criterion) -> bool:
+    """True si el norte necesita el peine SBIR como objetivo (evitar computarlo
+    en el loop del optimizador cuando no hace falta)."""
+    return str(criterion) == "sbir"
 
 
 def objective_weights(criterion):
     """(w_flat, w_spatial) del norte: 'flat' minimiza la no-planitud; 'spatial' la
     varianza asiento-a-asiento; cabs/dba/compuesta pesan ambos por igual (sin
-    cambio respecto del comportamiento historico)."""
+    cambio respecto del comportamiento historico). El norte 'sbir' NO usa estos
+    pesos (su costo es `sbir_span`, ver `composite_cost`)."""
     c = str(criterion)
     if c == "flat":
         return (1.0, 0.0)
     if c == "spatial":
         return (0.0, 1.0)
     return (1.0, 1.0)
+
+
+def composite_cost(metrics, criterion) -> float:
+    """Costo a MINIMIZAR (lower=better) de una config, segun el norte. Fuente de
+    verdad unica para el optimizador y para el veredicto (coherencia). 'sbir' ->
+    el peine; el resto -> combinacion ponderada de flat/spatial."""
+    c = str(criterion)
+    if c == "sbir":
+        v = metrics.get("sbir_span", float("nan"))
+        return float(v) if np.isfinite(v) else 0.0
+    w_f, w_s = objective_weights(c)
+    return float(w_f * metrics["flat"] + w_s * metrics["spatial"])
+
+
+def modal_smoothness(freqs) -> float:
+    """Uniformidad modal (Bolt) 0..100 de la sala (informativa: depende SOLO de las
+    frecuencias modales, no del layout, asi que no es un objetivo de optimizacion).
+    Reusa `location_opt.modal_smoothness_score`."""
+    try:
+        import location_opt as _lo
+        return float(_lo.modal_smoothness_score(np.asarray(freqs, dtype=float)))
+    except Exception:
+        return float("nan")
 
 
 # ---------------------------------------------------------------------------
@@ -428,16 +460,38 @@ def _basis_and_xi(fem, origin, xi, c):
     return basis, (fx if fx is not None else xi)
 
 
+def _sbir_span(sources_world, walls, receiver_world, fa,
+               f_lo=20.0, f_hi=200.0) -> float:
+    """Peine SBIR pico-a-valle [dB] en el receptor, en la banda modal (Fase B).
+
+    Es la misma metrica que usa Predicción (`location_opt`): el realce menos la
+    atenuacion del peine de reflexiones de borde en [f_lo, f_hi]. Depende del
+    layout (posicion de las fuentes respecto de las paredes) -> sirve de objetivo.
+    Sin paredes (oraculo) -> 0 (no hay peine)."""
+    if not walls:
+        return 0.0
+    try:
+        arr = SourceArray([s for s in sources_world if getattr(s, "active", True)])
+        sb = _sbir.sbir_from_sources(arr, walls, np.asarray(receiver_world, float), fa)
+        _fpk, realce, _fdip, aten = sb.band_extremes(f_lo, min(f_hi, float(fa[-1])))
+        return float(realce - aten)
+    except Exception:
+        return 0.0
+
+
 def _config_metrics(sources_world, dims, origin, walls, receiver_world, *,
                     axis, fa, xi, c, f_s, basis=None, with_decay=True,
-                    zone_box=None) -> dict:
+                    zone_box=None, want_sbir=False) -> dict:
     """Total (SBIR+modal) + metricas de una lista de fuentes (coords mundo).
 
     `basis` opcional (la base solo depende de dims, no de las fuentes -> se puede
     pre-construir y reusar en el bucle del optimizador). `with_decay=False` saltea
     el decay (IFFT caro) cuando solo se necesita flat+spatial como costo.
     `zone_box` opcional: grilla de zona en coords caja (el optimizador pasa una
-    gruesa para ir rapido; None -> la fina de _zone_grid)."""
+    gruesa para ir rapido; None -> la fina de _zone_grid).
+    `want_sbir`: si True agrega `sbir_span` (peine en el receptor). Se gatea porque
+    solo lo necesita el norte SBIR (evitar el costo del SBIR en el loop del norte
+    plana/espacial/cabs/dba)."""
     active = [s for s in sources_world if getattr(s, "active", True)]
     origin = np.asarray(origin, dtype=float)
     arr = SourceArray(active)
@@ -464,8 +518,11 @@ def _config_metrics(sources_world, dims, origin, walls, receiver_world, *,
     flat, spatial, L_bar = flatness_and_spatial(fa, total_db)
     decay = (_decay_of(basis, kappa, arr, receiver_box, fmax=fa[-1], xi=xi)
              if with_decay else float("nan"))
+    sbir_span = (_sbir_span(active, walls, receiver_world, fa)
+                 if want_sbir else float("nan"))
     return {"flat": flat, "spatial": spatial, "decay": decay, "L_bar": L_bar,
-            "n_modes": basis.n_modes}
+            "n_modes": basis.n_modes, "sbir_span": sbir_span,
+            "freqs": np.asarray(basis.omega_n, dtype=float) / (2.0 * np.pi)}
 
 
 # ---------------------------------------------------------------------------
@@ -537,11 +594,12 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
     # El decay (IFFT modal) usa `frf_dispersive`, que solo tiene la base analitica;
     # sobre FEM se saltea (no entra en el veredicto planitud+varianza). decay=NaN.
     wd = fem is None
+    ws = wants_sbir(criterion)     # el peine SBIR solo se computa si el norte lo usa
 
     # --- metricas de la config REAL ---
     real = _config_metrics(active, dims, origin, walls, receiver,
                            axis=axis, fa=fa, xi=xi_eff, c=c, f_s=f_s, basis=basis,
-                           with_decay=wd)
+                           with_decay=wd, want_sbir=ws)
 
     # --- metricas del IDEAL (mismo pipeline; array LS materializado) ---
     n_front = len(fronts)
@@ -552,7 +610,7 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
     ideal_srcs = _ideal_sources(dims, origin, axis, na, nb, fmin, fmax, xi, c)
     ideal = _config_metrics(ideal_srcs, dims, origin, walls, receiver,
                             axis=axis, fa=fa, xi=xi_eff, c=c, f_s=f_s, basis=basis,
-                            with_decay=wd)
+                            with_decay=wd, want_sbir=ws)
 
     # --- banda de validez CABS (aliasing del array real) ---
     f_max_alias = _alias_fmax_from_roles(fronts, dims, axis, c)
@@ -581,6 +639,11 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
         # la caja envolvente. El panel usa esto para NO mentir en el texto (antes
         # decia 'AABB' aunque hubiera corrido sobre el campo real).
         "field": ("fem" if fem is not None else "aabb"),
+        # Fase B: peine SBIR (real/ideal) cuando el norte es "sbir" (NaN si no), y
+        # uniformidad modal Bolt (informativa, propiedad de la sala).
+        "sbir_real": real.get("sbir_span", float("nan")),
+        "sbir_ideal": ideal.get("sbir_span", float("nan")),
+        "smoothness": modal_smoothness(real.get("freqs")),
     }
 
 
@@ -639,17 +702,22 @@ def _build_checklist(roles, fronts, rears, dims, axis, L, band_hi, fmax, c,
     items = []
     axis_name = ["X (ancho)", "Y (largo)", "Z (alto)"][axis]
 
-    # Nortes puros (flat/spatial): no hay esquema de array que chequear. Solo se
-    # reporta el objetivo (planitud/varianza) como item informativo.
+    # Nortes puros (flat/spatial/sbir): no hay esquema de array que chequear. Solo
+    # se reporta el objetivo elegido como item informativo.
     if not is_array_criterion(criterion):
-        norte = ("transferencia compuesta plana" if criterion == "flat"
-                 else "uniformidad espacial (varianza asiento-a-asiento)")
-        items.append({
-            "key": "objective", "ok": True, "critical": False,
-            "text": (f"Norte: {norte}. No evalua esquema de array; se juzga por "
-                     f"planitud σ|H| {real['flat']:.1f} dB (ideal {ideal['flat']:.1f}) "
-                     f"y varianza espacial {real['spatial']:.1f} dB "
-                     f"(ideal {ideal['spatial']:.1f}).")})
+        if criterion == "sbir":
+            sr, si = real.get("sbir_span", float("nan")), ideal.get("sbir_span", float("nan"))
+            txt = (f"Norte: mínimo peine SBIR (reflexiones de borde) en el receptor. "
+                   f"Peine pico-a-valle: {sr:.1f} dB (ideal {si:.1f}). Menor = más "
+                   "plano el peine.")
+        else:
+            norte = ("transferencia compuesta plana" if criterion == "flat"
+                     else "uniformidad espacial (varianza asiento-a-asiento)")
+            txt = (f"Norte: {norte}. No evalua esquema de array; se juzga por "
+                   f"planitud σ|H| {real['flat']:.1f} dB (ideal {ideal['flat']:.1f}) "
+                   f"y varianza espacial {real['spatial']:.1f} dB "
+                   f"(ideal {ideal['spatial']:.1f}).")
+        items.append({"key": "objective", "ok": True, "critical": False, "text": txt})
         return items
 
     # Reglas de array por criterio SIMETRICAS (spec del profesor, 16 Sep 2026:

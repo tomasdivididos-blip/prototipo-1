@@ -2997,8 +2997,11 @@ La herramienta que abría el botón «Subs enfrentados (DBA / CABS)» ahora se l
 
 - **Transferencia compuesta plana** (por defecto): aplanar la respuesta compuesta (mains + subs) en la banda de interés. Es el norte general, no evalúa ningún esquema de array.
 - **Uniformidad espacial**: minimizar la varianza asiento a asiento.
+- **Mínimo SBIR**: minimizar el peine de reflexiones de borde (SBIR) en el punto de escucha, en la banda 20-200 Hz. Es la misma métrica que usa la pestaña Predicción, ahora disponible como norte de optimización (depende de dónde ubiques las fuentes respecto de las paredes).
 - **CABS**: un par de subs en una pared (manejada) + una fuente enfrente.
 - **DBA**: dos pares de subs en paredes opuestas, con el drive canónico L/c.
+
+El resultado también muestra, como dato informativo, la **uniformidad modal (Bolt)** de la sala (0-100). No es un norte de optimización: depende solo de las frecuencias modales del recinto (su geometría), no de dónde pongas las fuentes, así que mover las fuentes no la cambia.
 
 El mismo norte se usa para «Evaluar» y para «Optimizar» (coherencia). Con los nortes puros (compuesta plana / uniformidad espacial) el resultado es directamente el veredicto de planitud/uniformidad, sin la clasificación de paredes ni las condiciones de esquema (que solo aplican a CABS/DBA). Todo lo demás (variables libres por fuente, barra con tiempo restante, campo FEM real en salas no rectangulares, límites de bafle/esfera) funciona igual para cualquier norte.
 

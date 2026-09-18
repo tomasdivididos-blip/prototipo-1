@@ -21,6 +21,17 @@ import numpy as np
 import dba_evaluate as dev
 import cabs_optimize as copt
 from sources import OmniSource
+from sbir import Wall
+
+
+def _box_walls(dims, R=0.7):
+    Lx, Ly, Lz = dims
+    return [Wall(point=[0, 0, 0], normal=[1, 0, 0], R=R),
+            Wall(point=[Lx, 0, 0], normal=[1, 0, 0], R=R),
+            Wall(point=[0, 0, 0], normal=[0, 1, 0], R=R),
+            Wall(point=[0, Ly, 0], normal=[0, 1, 0], R=R),
+            Wall(point=[0, 0, 0], normal=[0, 0, 1], R=R),
+            Wall(point=[0, 0, Lz], normal=[0, 0, 1], R=R)]
 
 _N_OK = 0
 _N_FAIL = 0
@@ -91,6 +102,45 @@ def main():
           of[0] * m["flat"] + of[1] * m["spatial"] == 8.0)
     check("objetivo 'spatial' = solo varianza (4.0)",
           osp[0] * m["flat"] + osp[1] * m["spatial"] == 4.0)
+
+    # --- 6. Fase B: norte SBIR (peine de bordes) --------------------------------
+    check("wants_sbir: solo 'sbir'",
+          dev.wants_sbir("sbir") and not dev.wants_sbir("flat")
+          and not dev.wants_sbir("cabs"))
+    check("composite_cost('sbir') = el peine (sbir_span)",
+          dev.composite_cost({"flat": 9.0, "spatial": 9.0, "sbir_span": 5.5}, "sbir") == 5.5)
+    check("composite_cost('flat') = planitud; cabs = flat+spatial",
+          dev.composite_cost(m, "flat") == 8.0
+          and dev.composite_cost(m, "cabs") == 12.0)
+
+    walls = _box_walls(dims)
+    src_sb = [OmniSource((1.0, 0.5, 1.2), source_type="subwoofer"),
+              OmniSource((4.0, 0.5, 1.2), source_type="subwoofer")]
+    r_sb = dev.evaluate_cabs(src_sb, dims, (2.5, 2.0, 1.2), walls=walls,
+                             criterion="sbir", fmax=200.0)
+    check("evaluate_cabs('sbir') con paredes -> sbir_real FINITO y >= 0",
+          np.isfinite(r_sb["sbir_real"]) and r_sb["sbir_real"] >= 0.0,
+          f"sbir_real={r_sb['sbir_real']:.2f}")
+    check("evaluate_cabs('sbir') checklist menciona el peine SBIR",
+          any("SBIR" in it["text"] for it in r_sb["checklist"]))
+    check("smoothness (Bolt) presente y FINITO (informativo)",
+          np.isfinite(r_sb["smoothness"]) and 0.0 <= r_sb["smoothness"] <= 100.0,
+          f"smoothness={r_sb['smoothness']:.0f}")
+    # el peine RESPONDE a la posicion (metrica no trivial)
+    r_sb2 = dev.evaluate_cabs(
+        [OmniSource((0.15, 0.15, 0.3), source_type="subwoofer")],
+        dims, (2.5, 2.0, 1.2), walls=walls, criterion="sbir", fmax=200.0)
+    check("el peine SBIR responde a la posicion (esquina != centro)",
+          abs(r_sb["sbir_real"] - r_sb2["sbir_real"]) > 1e-3,
+          f"{r_sb['sbir_real']:.2f} vs esquina {r_sb2['sbir_real']:.2f}")
+    # optimizar por SBIR corre y no empeora el peine
+    free_sb = [OmniSource((1.0, 0.5, 1.2), source_type="subwoofer", free_vars={"pos"}),
+               OmniSource((4.0, 0.5, 1.2), source_type="subwoofer", free_vars={"pos"})]
+    r_opt = copt.optimize_cabs(free_sb, dims, (2.5, 2.0, 1.2), walls=walls, axis=1,
+                               criterion="sbir", fmax=200.0, maxiter=12)
+    check("optimize('sbir') corre y no empeora el peine",
+          r_opt["after"]["sbir_span"] <= r_opt["before"]["sbir_span"] + 1e-6,
+          f"sbir {r_opt['before']['sbir_span']:.2f} -> {r_opt['after']['sbir_span']:.2f}")
 
     print("-" * 64)
     print(f"  {_N_OK}/{_N_OK + _N_FAIL} checks OK")
