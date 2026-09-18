@@ -150,7 +150,7 @@ def _apply_dba_drive(sources, dims, origin, axis, c):
 # Optimizacion
 # ---------------------------------------------------------------------------
 def _cost(x, sources, dofs, dims, origin, walls, receiver, axis, fa, xi, c, f_s,
-          basis, zone_box, inside_fn=None):
+          basis, zone_box, inside_fn=None, w_flat=1.0, w_spatial=1.0):
     cand = apply_vector(sources, dofs, x)
     m = dev._config_metrics(cand, dims, origin, walls, receiver, axis=axis, fa=fa,
                             xi=xi, c=c, f_s=f_s, basis=basis, with_decay=False,
@@ -188,7 +188,9 @@ def _cost(x, sources, dofs, dims, origin, walls, receiver, axis, fa, xi, c, f_s,
             inter = np.minimum(amax, bmax) - np.maximum(amin, bmin)
             if np.all(inter > 0.0):
                 pen += 100.0 + 100.0 * float(inter.min())
-    return float(m["flat"] + m["spatial"] + pen)
+    # Objetivo segun el NORTE: 'flat' pesa la no-planitud; 'spatial' la varianza
+    # espacial; cabs/dba/compuesta pesan ambos (w=1,1) -> identico al historico.
+    return float(w_flat * m["flat"] + w_spatial * m["spatial"] + pen)
 
 
 def _criterion_drive_changes(orig, base, excluded) -> list:
@@ -258,10 +260,17 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
         basis = dev.make_basis(dims, fmax, c)
     zone_box = _dba._zone_grid(dims, axis, grid[0], grid[1], grid[2])
 
+    # Pesos del NORTE (flat/spatial/cabs/dba). El objetivo compuesto que se minimiza
+    # y con el que se juzga "mejoro" usa estos pesos (coherencia evaluar<->optimizar).
+    w_flat, w_spatial = dev.objective_weights(criterion)
+
     def _metrics(src_list):
         return dev._config_metrics(src_list, dims, origin, walls, receiver,
                                    axis=axis, fa=fa, xi=xi, c=c, f_s=f_s,
                                    basis=basis, with_decay=False, zone_box=zone_box)
+
+    def _obj(mm):
+        return w_flat * mm["flat"] + w_spatial * mm["spatial"]
 
     before = _metrics(sources)
     dofs = [d for d in collect_dofs(base, dims, origin, axis)
@@ -272,8 +281,7 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
         # Sin DOFs continuos: o no hay nada libre (config intacta), o el criterio ya
         # fijo el drive (DBA) y no queda mas que optimizar.
         after = _metrics(base) if excluded else before
-        improved = (after["flat"] + after["spatial"]
-                    < before["flat"] + before["spatial"] - 1e-6)
+        improved = _obj(after) < _obj(before) - 1e-6
         return {"optimized": base, "before": before, "after": after, "dofs": [],
                 "result": None, "improved": bool(improved), "axis": axis,
                 "n_free": 0, "changes": crit_changes, "criterion": criterion}
@@ -317,7 +325,7 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
     # mejora ~igual con y sin polish). Apagarlo hace el tiempo predecible (~popsize*
     # D*maxiter) y el Cancelar instantaneo.
     kw = dict(args=(base, dofs, dims, origin, walls, receiver, axis, fa, xi, c,
-                    f_s, basis, zone_box, inside_fn),
+                    f_s, basis, zone_box, inside_fn, w_flat, w_spatial),
               maxiter=maxiter, popsize=eff_popsize, seed=seed, tol=1e-3,
               mutation=(0.5, 1.0), recombination=0.7, polish=False,
               updating="deferred", callback=_de_callback)
@@ -328,8 +336,7 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
 
     best = apply_vector(base, dofs, res.x)
     after = _metrics(best)
-    improved = (after["flat"] + after["spatial"]
-                < before["flat"] + before["spatial"] - 1e-6)
+    improved = _obj(after) < _obj(before) - 1e-6
     n_free = len({i for (i, *_r) in dofs})
     return {"optimized": best, "before": before, "after": after, "dofs": dofs,
             "result": res, "improved": improved, "axis": axis, "n_free": n_free,

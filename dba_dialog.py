@@ -85,7 +85,7 @@ class DBADialog(QDialog):
                  eval_context=None):
         super().__init__(parent)
         apply_dialog_theme(self)
-        self.setWindowTitle("Subs enfrentados (DBA / CABS)")
+        self.setWindowTitle("Optimización de fuentes")
         self._dims = tuple(float(x) for x in dims)
         self._receiver = tuple(float(x) for x in receiver)
         self._apply_callback = apply_callback
@@ -132,18 +132,26 @@ class DBADialog(QDialog):
             # optimizar, así concuerdan por construcción (cierra el bug del delay
             # 2x). Oculto hasta entrar en modo evaluar.
             crow = QHBoxLayout()
-            self.lbl_criterion = QLabel("Criterio:")
+            self.lbl_criterion = QLabel("Norte (criterio):")
             crow.addWidget(self.lbl_criterion)
             self.combo_criterion = QComboBox()
-            self.combo_criterion.addItem("DBA (pares de subs en dos paredes opuestas)", "dba")
+            # Norte de la optimizacion (Fase A del panel unificado). Nortes PUROS
+            # (objetivo) primero, luego los ESQUEMAS de array. Default = compuesta
+            # plana (el norte del profesor Bidondo).
+            self.combo_criterion.addItem("Transferencia compuesta plana", "flat")
+            self.combo_criterion.addItem("Uniformidad espacial (asiento a asiento)", "spatial")
             self.combo_criterion.addItem("CABS (par de subs en una pared, manejada)", "cabs")
+            self.combo_criterion.addItem("DBA (pares de subs en dos paredes opuestas)", "dba")
             self.combo_criterion.setToolTip(
-                "DBA: dos pares de subs en paredes opuestas; una pared reproduce a "
-                "la otra retardada L/c e invertida (drive canónico; al «Optimizar» "
-                "se fija ese drive, no un delay libre). CABS: un par de subs en una "
-                "pared (manejada, 'absorbe' la onda) + una fuente en la opuesta; su "
-                "drive queda libre y se juzga por el colapso de la respuesta, no por "
-                "el retardo L/c. El mismo criterio se usa para evaluar y optimizar.")
+                "Qué se minimiza al evaluar/optimizar:\n"
+                "• Transferencia compuesta plana: aplanar la respuesta compuesta "
+                "(mains + subs) en la banda; es el norte general, sin esquema de "
+                "array.\n• Uniformidad espacial: minimizar la varianza asiento a "
+                "asiento.\n• CABS: un par de subs en una pared (manejada) + una "
+                "fuente enfrente; drive libre.\n• DBA: dos pares de subs en paredes "
+                "opuestas; una reproduce a la otra retardada L/c e invertida (drive "
+                "canónico, se fija al optimizar).\nEl mismo norte se usa para evaluar "
+                "y optimizar (coherencia).")
             self.combo_criterion.currentIndexChanged.connect(
                 self._on_criterion_changed)
             crow.addWidget(self.combo_criterion, 1)
@@ -271,10 +279,26 @@ class DBADialog(QDialog):
     def _mode(self):
         return self.combo_mode.currentData() if self.combo_mode else "design"
 
+    _CRIT_LABELS = {
+        "flat": "Transferencia compuesta plana",
+        "spatial": "Uniformidad espacial",
+        "cabs": "CABS", "dba": "DBA",
+    }
+
     def _criterion(self):
-        """Criterio elegido (dba|cabs); el MISMO va a evaluar y a optimizar."""
+        """Norte elegido (flat|spatial|cabs|dba); el MISMO va a evaluar y optimizar.
+        Default 'flat' (transferencia compuesta plana, el norte del profesor)."""
         return (self.combo_criterion.currentData()
-                if self.combo_criterion is not None else "dba")
+                if self.combo_criterion is not None else "flat")
+
+    def _crit_label(self, crit=None):
+        """Nombre legible del norte (para los textos, en vez de 'FLAT'/'SPATIAL')."""
+        c = str(crit if crit is not None else self._criterion())
+        return self._CRIT_LABELS.get(c, c.upper())
+
+    def _is_array_crit(self, crit=None):
+        c = str(crit if crit is not None else self._criterion())
+        return c in ("cabs", "dba")
 
     def _axis_arg(self):
         """Eje para pasar al nucleo: None si el combo esta en 'Auto' (el nucleo
@@ -343,12 +367,12 @@ class DBADialog(QDialog):
         """Heads-up de factibilidad del CRITERIO elegido, apenas se entra al modo o
         se cambia de criterio (barato, sin computar respuesta)."""
         crit = self._criterion()
-        head = (f"Criterio <b>{crit.upper()}</b>. Se evalúa/optimiza por "
+        head = (f"Norte: <b>{self._crit_label(crit)}</b>. Se evalúa/optimiza por "
                 "<b>planitud + transferencia total (modos + SBIR)</b>. Tocá "
                 "«Evaluar» para analizar las fuentes cargadas, o «Optimizar» para "
                 "reacomodar las que marcaste.")
         notes = []
-        if not self._is_rectangular():
+        if self._is_array_crit(crit) and not self._is_rectangular():
             if (self._eval_ctx or {}).get("fem") is not None:
                 notes.append(
                     "los criterios CABS/DBA son de recinto <b>rectangular</b>; esta "
@@ -365,13 +389,13 @@ class DBADialog(QDialog):
             ctx = self._eval_ctx or {}
             srcs = [s for s in ctx.get("sources", lambda: [])()
                     if getattr(s, "active", True)]
-            if srcs:
+            if srcs and self._is_array_crit(crit):
                 feasible, reasons, _ax = dev.cabs_feasibility(
                     srcs, self._dims, origin=ctx.get("origin", (0.0, 0.0, 0.0)),
                     axis=self._axis_arg(), criterion=crit)
                 if feasible is False and self._is_rectangular():
                     notes.append(
-                        f"no es un array {crit.upper()} de libro ("
+                        f"no es un array {self._crit_label(crit)} de libro ("
                         + "; ".join(reasons)
                         + "), pero se evalúa igual por planitud")
         except Exception:
@@ -477,8 +501,9 @@ class DBADialog(QDialog):
         feasible, reasons, _ax = _dev.cabs_feasibility(
             sources, self._dims, origin=ctx.get("origin", (0.0, 0.0, 0.0)),
             axis=axis, criterion=self._criterion())
+        _array = self._is_array_crit()
         opt_note = ""
-        if not self._is_rectangular():
+        if _array and not self._is_rectangular():
             if ctx.get("fem") is not None:
                 opt_note += ("<span style='color:#2e7d32;'>Nota: recinto no "
                              "rectangular; se optimiza sobre el <b>volumen interior "
@@ -489,9 +514,9 @@ class DBADialog(QDialog):
                              "rectangular y sin modos FEM; se optimiza sobre la caja "
                              "AABB por planitud + transferencia total. Para usar el "
                              "volumen real, calculá los modos (FEM) primero.</span><br>")
-        elif not feasible:
+        elif _array and not feasible:
             opt_note += ("<span style='color:#555;'>Nota: no es un array "
-                         f"{self._criterion().upper()} de libro ("
+                         f"{self._crit_label()} de libro ("
                          + "; ".join(reasons) + "); se optimiza igual por planitud + "
                          "transferencia total.</span><br>")
         # Corre en un HILO con barra de progreso + Cancelar: la GUI queda VIVA
@@ -612,7 +637,9 @@ class DBADialog(QDialog):
 
     def _show_eval(self, r):
         na, nb = r["ideal_grid"]
-        crit = str(r.get("criterion", "dba")).upper()
+        crit_key = str(r.get("criterion", "flat"))
+        crit = self._crit_label(crit_key)
+        array = self._is_array_crit(crit_key)
 
         # VEREDICTO PRIMARIO = planitud + transferencia total (modos + SBIR), real
         # vs el ideal de esta sala. NO se bloquea ni se rechaza por la estructura del
@@ -635,47 +662,47 @@ class DBADialog(QDialog):
         # modos FEM del recinto real, la evaluación corre sobre el VOLUMEN INTERIOR
         # REAL (no el AABB); si no, cae al AABB analítico y se avisa cómo mejorarlo.
         if not self._is_rectangular():
+            _crit_txt = ("los criterios CABS/DBA están" if array
+                         else "el norte compuesto está")
             if str(r.get("field")) == "fem":
                 lines.append(
-                    "<span style='color:#2e7d32;'>Nota: los criterios CABS/DBA están "
-                    "definidos para recintos <b>rectangulares (paralelepípedo)</b>. "
-                    "Esta sala no lo es, así que la evaluación se hizo sobre el "
-                    f"<b>volumen interior real</b> (campo modal FEM del recinto, "
-                    f"{r['n_modes']} modos), no sobre la caja AABB, por planitud + "
-                    "transferencia total (modos + SBIR).</span>")
+                    f"<span style='color:#2e7d32;'>Nota: {_crit_txt} definido para "
+                    "recintos <b>rectangulares (paralelepípedo)</b>. Esta sala no lo "
+                    "es, así que la evaluación se hizo sobre el <b>volumen interior "
+                    f"real</b> (campo modal FEM del recinto, {r['n_modes']} modos), no "
+                    "sobre la caja AABB, por planitud + transferencia total.</span>")
             else:
                 lines.append(
-                    "<span style='color:#b45309;'>Nota: los criterios CABS/DBA están "
-                    "definidos para recintos <b>rectangulares (paralelepípedo)</b>. "
-                    "Esta sala no lo es y todavía no hay modos FEM resueltos, así que "
-                    "se evaluó sobre la caja envolvente (AABB) por planitud + "
-                    "transferencia total. Para correrlo sobre el <b>volumen interior "
-                    "real</b>, calculá los modos (FEM) del recinto y volvé a evaluar."
-                    "</span>")
+                    f"<span style='color:#b45309;'>Nota: {_crit_txt} definido para "
+                    "recintos <b>rectangulares (paralelepípedo)</b>. Esta sala no lo "
+                    "es y todavía no hay modos FEM resueltos, así que se evaluó sobre "
+                    "la caja envolvente (AABB) por planitud + transferencia total. "
+                    "Para correrlo sobre el <b>volumen interior real</b>, calculá los "
+                    "modos (FEM) del recinto y volvé a evaluar.</span>")
 
-        # clasificacion, con la POLARIDAD de cada fuente.
-        roles = r["roles"]
+        # Clasificacion + condiciones de esquema: SOLO para nortes de array (cabs/dba).
+        # Para los nortes puros (flat/spatial) el resultado es solo el veredicto de
+        # planitud/uniformidad (el checklist ya trae un unico item informativo).
+        if array:
+            roles = r["roles"]
 
-        def _lab(ro):
-            pol = int(getattr(getattr(ro, "src", None), "polarity", 1) or 1)
-            return ro.label + (" [180°]" if pol < 0 else " [0°]")
+            def _lab(ro):
+                pol = int(getattr(getattr(ro, "src", None), "polarity", 1) or 1)
+                return ro.label + (" [180°]" if pol < 0 else " [0°]")
 
-        fr = [_lab(ro) for ro in roles if ro.role == "front"]
-        re = [_lab(ro) for ro in roles if ro.role == "rear"]
-        ot = [_lab(ro) for ro in roles if ro.role == "other"]
-        lines.append(
-            f"<b>Clasificación</b> (con polaridad)<b>:</b> "
-            f"pared 1: {', '.join(fr) or '—'} · "
-            f"pared 2: {', '.join(re) or '—'} · otras: {', '.join(ot) or '—'}")
-
-        # La estructura del array (que la config sea un CABS/DBA de libro) pasa a ser
-        # INFORMATIVA, no un veredicto que bloquea. Si no matchea el esquema, se avisa.
-        if not r["passed"]:
+            fr = [_lab(ro) for ro in roles if ro.role == "front"]
+            re = [_lab(ro) for ro in roles if ro.role == "rear"]
+            ot = [_lab(ro) for ro in roles if ro.role == "other"]
             lines.append(
-                "<span style='color:#555;'>Tu configuración no es un array "
-                f"{crit} de libro (ver condiciones abajo), pero igual se evaluó por "
-                "planitud + transferencia total.</span>")
-        lines.append("<b>Condiciones del esquema (informativas):</b>")
+                f"<b>Clasificación</b> (con polaridad)<b>:</b> "
+                f"pared 1: {', '.join(fr) or '—'} · "
+                f"pared 2: {', '.join(re) or '—'} · otras: {', '.join(ot) or '—'}")
+            if not r["passed"]:
+                lines.append(
+                    "<span style='color:#555;'>Tu configuración no es un array "
+                    f"{crit} de libro (ver condiciones abajo), pero igual se evaluó "
+                    "por planitud + transferencia total.</span>")
+            lines.append("<b>Condiciones del esquema (informativas):</b>")
         for it in r["checklist"]:
             mark = "✓" if it["ok"] else "○"
             col = "#2e7d32" if it["ok"] else "#777"

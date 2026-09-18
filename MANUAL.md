@@ -2991,6 +2991,17 @@ El modo se guarda en el `.room` (las salas viejas cargan en «Bafle», el compor
 
 Además, **dos bafles no pueden superponerse entre sí** (un parlante ocupa lugar), ni al arrastrarlos a mano ni al optimizar. Las **esferas quedan exentas**: como su límite es el centro, pueden solaparse libremente (representan fuentes puntuales sin volumen físico).
 
+### Panel «Optimización de fuentes» (antes «Subs enfrentados»)
+
+La herramienta que abría el botón «Subs enfrentados (DBA / CABS)» ahora se llama **«Optimización de fuentes»**. El cambio de fondo es que el criterio ya no es solo DBA o CABS: hay un selector de **norte** (qué se minimiza) con cuatro opciones:
+
+- **Transferencia compuesta plana** (por defecto): aplanar la respuesta compuesta (mains + subs) en la banda de interés. Es el norte general, no evalúa ningún esquema de array.
+- **Uniformidad espacial**: minimizar la varianza asiento a asiento.
+- **CABS**: un par de subs en una pared (manejada) + una fuente enfrente.
+- **DBA**: dos pares de subs en paredes opuestas, con el drive canónico L/c.
+
+El mismo norte se usa para «Evaluar» y para «Optimizar» (coherencia). Con los nortes puros (compuesta plana / uniformidad espacial) el resultado es directamente el veredicto de planitud/uniformidad, sin la clasificación de paredes ni las condiciones de esquema (que solo aplican a CABS/DBA). Todo lo demás (variables libres por fuente, barra con tiempo restante, campo FEM real en salas no rectangulares, límites de bafle/esfera) funciona igual para cualquier norte.
+
 ## Cambios v2.45 (subs enfrentados en cualquier eje + optimizador que no se cuelga)
 
 **Cambios v2.45** (16 de septiembre 2026): **CABS/DBA valen para cualquier par de paredes opuestas**, y el **optimizador de fuentes ya no congela la app**. Pedido del profesor (vía Ale). Dos ejes.

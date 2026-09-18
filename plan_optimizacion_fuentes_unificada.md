@@ -1,9 +1,18 @@
 # Plan — Panel unificado "Optimización de fuentes"
 
-> Estado: DISEÑO (sin implementar). Escrito 2026-09-16. Pedido del profesor
-> Bidondo (vía Ale, chat 15 Sep 2026) + acuerdo de dirección con el usuario
-> (opción "panel único"). Los puntos 1 (cualquier par opuesto) y 2 (optimizador
-> no-freeze) YA se implementaron; este .md es el punto 3. NO codear sin OK.
+> Estado: **FASE A IMPLEMENTADA (2026-09-18)**; Fases B-D en diseño. Escrito
+> 2026-09-16. Pedido del profesor Bidondo (vía Ale, chat 15 Sep 2026) + acuerdo de
+> dirección con el usuario (opción "panel único"). Los puntos 1 (cualquier par
+> opuesto) y 2 (optimizador no-freeze) YA se implementaron; este .md es el punto 3.
+>
+> **Fase A hecha (2026-09-18):** renombrado "Subs enfrentados" → "Optimización de
+> fuentes" (botón + título del diálogo); el combo de criterio ahora es un **selector
+> de NORTE** con `flat` (transferencia compuesta plana, DEFAULT), `spatial`
+> (uniformidad espacial), `cabs`, `dba`. Los nortes puros no evalúan esquema de
+> array (feasibility siempre factible, checklist = 1 item informativo) y su objetivo
+> pondera flat/spatial (`dba_evaluate.objective_weights`: flat=(1,0), spatial=(0,1),
+> cabs/dba=(1,1) → histórico intacto). Sin motor nuevo. Benches:
+> `bench_norte_criterios` 15/15; sin regresión (cabs 14/14, dba 13/13, opt 25/25).
 
 ## 0. Motivación y norte físico
 
@@ -140,9 +149,11 @@ Preguntas de UX abiertas (para charlar):
 
 ## 5. Fases sugeridas (cuando haya OK)
 
-1. **Fase A (UI):** renombrar "Subs Enfrentados" → "Optimización de fuentes",
-   agregar el selector de criterio-norte con CABS/DBA + compuesta-plana +
-   espacial (los que ya calcula `_config_metrics`). Sin motor nuevo. Barato.
+1. **Fase A (UI): HECHA 2026-09-18.** Renombrado "Subs Enfrentados" →
+   "Optimización de fuentes", selector de criterio-norte con compuesta-plana
+   (default) + espacial + CABS + DBA (los que ya calcula `_config_metrics`). Sin
+   motor nuevo. `objective_weights` pondera flat/spatial por norte; nortes puros
+   sin esquema de array. `bench_norte_criterios` 15/15.
 2. **Fase B (criterios de Predicción):** traer SBIR + smoothness + FoM al panel
    (motor común, decisión §3.1). Requiere unificar la función-objetivo (§3.2).
 3. **Fase C (semillas):** DE con semillas heurísticas de Predicción (opción C).

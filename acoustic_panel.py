@@ -4021,12 +4021,12 @@ class AcousticPanel(QWidget):
         fg.addRow(self.btn_sbir)
         self.btn_sbir.clicked.connect(self._open_sbir)
 
-        self.btn_dba = QPushButton("Subs enfrentados (DBA / CABS)…")
+        self.btn_dba = QPushButton("Optimización de fuentes…")
         self.btn_dba.setToolTip(
-            "Analiza subs enfrentados (DBA/CABS) sobre la caja rectangular de la "
-            "sala: un array frontal lanza una onda plana y el trasero la absorbe. "
-            "Compara CABS off vs on (planitud, varianza espacial, decay). "
-            "Motor analítico rectangular exacto (independiente del FEM).")
+            "Evalúa u optimiza las fuentes según un NORTE (criterio): transferencia "
+            "compuesta plana, uniformidad espacial, CABS o DBA. Minimiza planitud + "
+            "transferencia total (modos + SBIR) moviendo las variables libres de "
+            "cada fuente. Corre sobre el volumen real (FEM) si la sala no es caja.")
         fg.addRow(self.btn_dba)
         self.btn_dba.clicked.connect(self._open_dba)
         layout.addWidget(grp_frf)

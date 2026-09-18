@@ -46,6 +46,38 @@ WALL_FRAC = 0.25
 
 
 # ---------------------------------------------------------------------------
+# Taxonomia de criterios-norte (panel unificado "Optimizacion de fuentes", Fase A)
+# ---------------------------------------------------------------------------
+# ARRAY: criterios de ESQUEMA de array (evaluan clasificacion en pared + drive).
+# OBJECTIVE: criterios de norte PURO (solo el objetivo, sin esquema de array):
+#   "flat"    = transferencia compuesta plana (minimiza la no-planitud), el norte
+#               del profesor Bidondo (default).
+#   "spatial" = uniformidad espacial (varianza asiento-a-asiento).
+# El objetivo real (flat/spatial) SIEMPRE se computa (`_config_metrics`); el norte
+# solo cambia el PESO de cada termino y si se evalua/optimiza el esquema de array.
+ARRAY_CRITERIA = ("cabs", "dba")
+OBJECTIVE_CRITERIA = ("flat", "spatial")
+
+
+def is_array_criterion(criterion) -> bool:
+    """True si el criterio evalua un ESQUEMA de array (cabs/dba); False para los
+    nortes puros (flat/spatial), que solo miran planitud/uniformidad."""
+    return str(criterion) in ARRAY_CRITERIA
+
+
+def objective_weights(criterion):
+    """(w_flat, w_spatial) del norte: 'flat' minimiza la no-planitud; 'spatial' la
+    varianza asiento-a-asiento; cabs/dba/compuesta pesan ambos por igual (sin
+    cambio respecto del comportamiento historico)."""
+    c = str(criterion)
+    if c == "flat":
+        return (1.0, 0.0)
+    if c == "spatial":
+        return (0.0, 1.0)
+    return (1.0, 1.0)
+
+
+# ---------------------------------------------------------------------------
 # Clasificacion de la configuracion (que fuente es que en el esquema CABS)
 # ---------------------------------------------------------------------------
 @dataclass
@@ -123,6 +155,10 @@ def _axis_satisfies(roles, criterion: str):
     n_rear_subs = sum(1 for r in roles if r.role == "rear")     # subs en pared max
     n_front_any = sum(1 for r in roles if r.at_front)           # cualquier tipo, min
     n_rear_any = sum(1 for r in roles if r.at_rear)             # cualquier tipo, max
+    if criterion not in ARRAY_CRITERIA:
+        # nortes puros (flat/spatial): no hay esquema de array que satisfacer -> el
+        # eje se elige por otra via (el mas largo, para la grilla de zona).
+        return False, min(n_front_any, n_rear_any)
     if criterion == "cabs":
         met = ((n_rear_subs >= 2 and n_front_any >= 1) or
                (n_front_subs >= 2 and n_rear_any >= 1))
@@ -172,6 +208,10 @@ def cabs_feasibility(sources, dims, origin=(0.0, 0.0, 0.0),
     if axis is None:
         axis = (best_axis(active, dims, origin, c, criterion) if active
                 else int(np.argmax(dims)))
+    # Nortes puros (flat/spatial): no hay esquema de array que chequear -> siempre
+    # "factible" (se optimiza/evalua por planitud/uniformidad, sin pre-chequeo).
+    if not is_array_criterion(criterion):
+        return True, [], axis
     roles = classify_sources(sources, dims, origin, axis)
     fronts = [r for r in roles if r.role == "front"]      # subs pared min del eje
     rears = [r for r in roles if r.role == "rear"]         # subs pared max del eje
@@ -598,6 +638,19 @@ def _build_checklist(roles, fronts, rears, dims, axis, L, band_hi, fmax, c,
     """Lista falsable de condiciones del criterio elegido (por que pasa/falla)."""
     items = []
     axis_name = ["X (ancho)", "Y (largo)", "Z (alto)"][axis]
+
+    # Nortes puros (flat/spatial): no hay esquema de array que chequear. Solo se
+    # reporta el objetivo (planitud/varianza) como item informativo.
+    if not is_array_criterion(criterion):
+        norte = ("transferencia compuesta plana" if criterion == "flat"
+                 else "uniformidad espacial (varianza asiento-a-asiento)")
+        items.append({
+            "key": "objective", "ok": True, "critical": False,
+            "text": (f"Norte: {norte}. No evalua esquema de array; se juzga por "
+                     f"planitud σ|H| {real['flat']:.1f} dB (ideal {ideal['flat']:.1f}) "
+                     f"y varianza espacial {real['spatial']:.1f} dB "
+                     f"(ideal {ideal['spatial']:.1f}).")})
+        return items
 
     # Reglas de array por criterio SIMETRICAS (spec del profesor, 16 Sep 2026:
     # sin 'adelante'/'atras', vale cualquier par de paredes OPUESTAS del eje):
