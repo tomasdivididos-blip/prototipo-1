@@ -3002,6 +3002,11 @@ La herramienta que abría el botón «Subs enfrentados (DBA / CABS)» ahora se l
 
 El mismo norte se usa para «Evaluar» y para «Optimizar» (coherencia). Con los nortes puros (compuesta plana / uniformidad espacial) el resultado es directamente el veredicto de planitud/uniformidad, sin la clasificación de paredes ni las condiciones de esquema (que solo aplican a CABS/DBA). Todo lo demás (variables libres por fuente, barra con tiempo restante, campo FEM real en salas no rectangulares, límites de bafle/esfera) funciona igual para cualquier norte.
 
+El panel tiene dos **modos** (selector «Modo» arriba):
+
+- **Optimizar mis fuentes** (por defecto): evaluar u optimizar las fuentes que ya cargaste, según el norte. Solo se ven el norte, la banda de análisis y los botones «Evaluar» / «Optimizar». El «Eje de enfrentamiento» aparece solo si el norte es CABS o DBA (para elegir el par de paredes); con los nortes puros se oculta porque el objetivo no depende de un eje.
+- **Diseñar un array DBA/CABS**: construir un array desde cero. Recién acá aparecen los controles de **configuración del array** (nº de subs por pared, drive del trasero) y el botón «Aplicar a la sala» que crea las fuentes. El norte se oculta: el array lo definen el nº de subs y el drive. Así la configuración del array no ensucia el flujo normal de optimización.
+
 ## Cambios v2.45 (subs enfrentados en cualquier eje + optimizador que no se cuelga)
 
 **Cambios v2.45** (16 de septiembre 2026): **CABS/DBA valen para cualquier par de paredes opuestas**, y el **optimizador de fuentes ya no congela la app**. Pedido del profesor (vía Ale). Dos ejes.

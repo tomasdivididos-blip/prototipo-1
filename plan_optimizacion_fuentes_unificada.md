@@ -233,9 +233,15 @@ no se implementa.
 como aproximación rápida futura si se quiere el corrimiento modal analítico; ruta
 **c** documentada pero descartada por costo.
 
-## 9. Separar "diseñar el array" del flujo de optimización (diseño, 2026-09-18)
+## 9. Separar "diseñar el array" del flujo de optimización (IMPLEMENTADO 2026-09-18)
 
-Pedido del usuario (18 Sep): *"toda la parte de configuración del array en DBA y CABS
+Estado: **HECHO.** Decisiones de UX confirmadas por el usuario: combo de modo (default
+"Optimizar mis fuentes") y el norte OCULTO en modo diseño (el drive + nº de subs definen
+el array). Implementado en `dba_dialog.py` (solo visibilidad, sin tocar núcleo):
+`grp_design` (nº subs/pared + drive) se oculta al optimizar; `_axis_w` (eje) en fila
+propia con `_refresh_axis_visibility` (visible al diseñar, o al optimizar con norte
+CABS/DBA); combo "Modo" reordenado; `_on_mode_changed` pasa a `setVisible`. Guarda:
+`smoke_test_dba_dialog` sección 5 (visibilidad por modo/norte). Pedido del usuario (18 Sep): *"toda la parte de configuración del array en DBA y CABS
 aparezca solo si el usuario quiere diseñar el array"*. Motivación: tras la Fase A el
 panel se llama "Optimización de fuentes" y su trabajo primario es **evaluar/optimizar
 las fuentes que el usuario ya tiene** contra un norte. Los controles para **construir un

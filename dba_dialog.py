@@ -106,10 +106,10 @@ class DBADialog(QDialog):
         outer.addWidget(scroll, 1)
         lay = QVBoxLayout(content)
         info = QLabel(
-            "Analiza <b>subs enfrentados</b> (DBA/CABS) sobre la caja rectangular "
-            f"de la sala ({self._dims[0]:.1f}×{self._dims[1]:.1f}×{self._dims[2]:.1f} m). "
-            "Un array frontal lanza una onda plana; el trasero la absorbe. "
-            "Compara CABS <i>off</i> (frente solo) vs <i>on</i> (frente + trasero).")
+            "<b>Optimización de fuentes</b> sobre la sala "
+            f"({self._dims[0]:.1f}×{self._dims[1]:.1f}×{self._dims[2]:.1f} m). "
+            "Elegí un <b>norte</b> y evaluá u optimizá las fuentes cargadas, o pasá "
+            "a <b>diseñar un array</b> DBA/CABS desde cero.")
         info.setWordWrap(True)
         lay.addWidget(info)
 
@@ -121,8 +121,10 @@ class DBADialog(QDialog):
             mrow = QHBoxLayout()
             mrow.addWidget(QLabel("Modo:"))
             self.combo_mode = QComboBox()
-            self.combo_mode.addItem("Diseñar array ideal", "design")
-            self.combo_mode.addItem("Evaluar mis fuentes cargadas", "eval")
+            # Default = "Optimizar mis fuentes" (el uso principal). "Diseñar un array"
+            # queda opt-in; sus controles de construcción se ocultan fuera de él.
+            self.combo_mode.addItem("Optimizar mis fuentes", "eval")
+            self.combo_mode.addItem("Diseñar un array DBA/CABS", "design")
             self.combo_mode.currentIndexChanged.connect(self._on_mode_changed)
             mrow.addWidget(self.combo_mode, 1)
             lay.addLayout(mrow)
@@ -159,38 +161,50 @@ class DBADialog(QDialog):
             self.lbl_criterion.setVisible(False)
             self.combo_criterion.setVisible(False)
 
-        grp = QGroupBox("Configuración")
-        fl = QFormLayout(grp)
+        # Eje de enfrentamiento: en FILA PROPIA (no dentro de un grupo) porque su
+        # visibilidad es condicional: se ve al DISEÑAR un array (elegir la pared) y
+        # al OPTIMIZAR solo con norte CABS/DBA (elegir el par a evaluar). Con norte
+        # flat/spatial se oculta (el objetivo no depende de un eje). Ver §9 del plan.
+        self._axis_w = QWidget()
+        _axrow = QHBoxLayout(self._axis_w)
+        _axrow.setContentsMargins(0, 0, 0, 0)
+        _axrow.addWidget(QLabel("Eje de enfrentamiento:"))
         self.combo_axis = QComboBox()
-        # "Auto": detecta el par de paredes OPUESTAS donde estan los subs, en
-        # CUALQUIER eje (no el mas largo). Default, para que "subs enfrentados"
-        # funcione sin que el usuario tenga que elegir un eje (spec profesor).
         self.combo_axis.addItem("Auto (detectar par de paredes)", None)
         for i, nm in enumerate(_AXIS_NAMES):
             self.combo_axis.addItem(nm, i)
         self.combo_axis.setCurrentIndex(0)                    # Auto
-        fl.addRow("Eje de enfrentamiento:", self.combo_axis)
+        _axrow.addWidget(self.combo_axis, 1)
+        lay.addWidget(self._axis_w)
 
+        # Diseño del array (SOLO modo "Diseñar un array"): nº de subs por pared y el
+        # drive del trasero. Se OCULTA entero al optimizar (pedido del usuario 18 Sep:
+        # la configuración del array aparece solo si se quiere diseñar el array).
+        self.grp_design = QGroupBox("Diseño del array")
+        dfl = QFormLayout(self.grp_design)
         self.sb_nx = QSpinBox(); self.sb_nx.setRange(1, 8); self.sb_nx.setValue(4)
         self.sb_nz = QSpinBox(); self.sb_nz.setRange(1, 8); self.sb_nz.setValue(4)
         # Rótulos dinámicos: muestran el eje real de cada dirección de la pared
         # (se actualizan al cambiar el eje de enfrentamiento, en _refresh_count).
         self.lbl_na = QLabel("Subs por pared, dirección 1:")
         self.lbl_nb = QLabel("Subs por pared, dirección 2:")
-        fl.addRow(self.lbl_na, self.sb_nx)
-        fl.addRow(self.lbl_nb, self.sb_nz)
+        dfl.addRow(self.lbl_na, self.sb_nx)
+        dfl.addRow(self.lbl_nb, self.sb_nz)
         self.lbl_count = QLabel("")
         self.lbl_count.setStyleSheet("color:#555; font-size:8pt;")
-        fl.addRow("", self.lbl_count)
+        dfl.addRow("", self.lbl_count)
+        self.combo_drive = QComboBox()
+        self.combo_drive.addItem("Mínimos cuadrados (Santillán)", "ls")
+        self.combo_drive.addItem("Retardo + inversión (naive)", "naive")
+        dfl.addRow("Drive del array trasero:", self.combo_drive)
+        lay.addWidget(self.grp_design)
         self.sb_nx.valueChanged.connect(self._refresh_count)
         self.sb_nz.valueChanged.connect(self._refresh_count)
         self.combo_axis.currentIndexChanged.connect(self._refresh_count)
 
-        self.combo_drive = QComboBox()
-        self.combo_drive.addItem("Mínimos cuadrados (Santillán)", "ls")
-        self.combo_drive.addItem("Retardo + inversión (naive)", "naive")
-        fl.addRow("Drive del array trasero:", self.combo_drive)
-
+        # Análisis (compartido por diseñar y optimizar): banda + amortiguamiento.
+        grp_an = QGroupBox("Análisis")
+        fl = QFormLayout(grp_an)
         self.sb_xi = QDoubleSpinBox()
         self.sb_xi.setRange(0.002, 0.3); self.sb_xi.setDecimals(3)
         self.sb_xi.setSingleStep(0.005); self.sb_xi.setValue(0.03)
@@ -200,7 +214,7 @@ class DBADialog(QDialog):
         self.sb_fmax.setRange(50.0, 400.0); self.sb_fmax.setValue(180.0)
         self.sb_fmax.setSuffix(" Hz")
         fl.addRow("f máx del análisis:", self.sb_fmax)
-        lay.addWidget(grp)
+        lay.addWidget(grp_an)
 
         self.btn = QPushButton("Calcular")
         self.btn.setObjectName("PrimaryButton")
@@ -272,6 +286,9 @@ class DBADialog(QDialog):
             avail = 900
         self.resize(600, min(720, int(avail * 0.9)))
         self._refresh_count()
+        # Estado inicial de visibilidad segun el modo default ("Optimizar mis
+        # fuentes" si hay eval_ctx; "Diseñar un array" si el diálogo es solo diseño).
+        self._on_mode_changed()
 
     # -----------------------------------------------------------------------
     # Modo evaluación
@@ -331,12 +348,23 @@ class DBADialog(QDialog):
             pass
         return int(np.argmax(self._dims))
 
-    def _on_mode_changed(self):
-        """Habilita/deshabilita controles segun el modo. Los subs/pared y el drive
-        son solo para DISEÑAR; en modo evaluar el array se toma de las fuentes."""
+    def _refresh_axis_visibility(self):
+        """El 'Eje de enfrentamiento' se ve al DISEÑAR (elegir la pared) y al
+        OPTIMIZAR solo con norte CABS/DBA (elegir el par a evaluar). Con norte
+        flat/spatial se oculta: el objetivo no depende de un eje (§9 del plan)."""
+        if not hasattr(self, "_axis_w"):
+            return
         ev = self._mode() == "eval"
-        for w in (self.sb_nx, self.sb_nz, self.combo_drive):
-            w.setEnabled(not ev)
+        self._axis_w.setVisible((not ev) or self._is_array_crit())
+
+    def _on_mode_changed(self):
+        """Muestra/OCULTA los controles segun el modo (pedido del usuario 18 Sep):
+        la construcción del array (nº subs/pared + drive + «Aplicar») aparece SOLO al
+        'Diseñar un array'; al 'Optimizar mis fuentes' se ve el norte + «Optimizar»."""
+        ev = self._mode() == "eval"
+        # Grupo de construcción del array: oculto entero al optimizar.
+        if hasattr(self, "grp_design"):
+            self.grp_design.setVisible(not ev)
         self.btn.setText("Evaluar" if ev else "Calcular")
         if hasattr(self, "btn_apply"):
             self.btn_apply.setVisible(not ev)
@@ -346,21 +374,22 @@ class DBADialog(QDialog):
             self.lbl_opt_vars.setVisible(ev)
             if ev:
                 self._refresh_opt_vars_label()
+        # El norte solo vive en modo optimizar; al diseñar, el array lo define el
+        # nº de subs + el drive (decisión de UX 18 Sep).
         if self.combo_criterion is not None:
             self.combo_criterion.setVisible(ev)
             self.lbl_criterion.setVisible(ev)
-        # El eje ya no se fuerza al entrar en modo evaluar: el combo esta en "Auto"
-        # y el nucleo detecta el par de paredes opuestas segun el criterio (cualquier
-        # eje). Si el usuario elige un eje a mano, se respeta.
+        self._refresh_axis_visibility()
         if not ev:
-            self.lbl_res.setText("Elegí la configuración y tocá «Calcular».")
+            self.lbl_res.setText("Elegí el array y tocá «Calcular».")
             return
         self._refresh_feasibility_head()
 
     def _on_criterion_changed(self):
-        """Al cambiar el criterio en modo evaluar, refresca el aviso (el criterio
-        cambia las condiciones: DBA pide subs 2+2, CABS 2 atras + fuente adelante)."""
+        """Al cambiar el norte en modo optimizar: refresca el aviso y la visibilidad
+        del eje (CABS/DBA lo muestran; flat/spatial lo ocultan)."""
         if self._mode() == "eval":
+            self._refresh_axis_visibility()
             self._refresh_feasibility_head()
 
     def _refresh_feasibility_head(self):

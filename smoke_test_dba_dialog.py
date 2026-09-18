@@ -47,7 +47,9 @@ v, t, _, _ = make_room(width=W, length=L, height=H, n_walls=4)
 viewer = IsoViewer()
 panel = ap.AcousticPanel(viewer=viewer, get_surface=lambda: (v, t),
                          get_dims_hint=lambda: (W, L, H))
-ck(hasattr(panel, "btn_dba"), "el panel tiene el botón «Subs enfrentados»")
+ck(hasattr(panel, "btn_dba"), "el panel tiene el botón «Optimización de fuentes»")
+ck(panel.btn_dba.text().startswith("Optimización de fuentes"),
+   "el botón se llama «Optimización de fuentes…»")
 ck(callable(getattr(panel, "_open_dba", None)), "_open_dba es invocable")
 
 # Stub de DBADialog para no bloquear en exec_(); captura dims/receptor.
@@ -123,6 +125,33 @@ d2 = DBADialog(exp_dims, exp_rec, apply_callback=lambda sp: grabbed.setdefault("
 d2.sb_nx.setValue(2); d2.sb_nz.setValue(2); d2.combo_drive.setCurrentIndex(1)
 d2._apply()
 ck(grabbed.get("n") == 8, "botón «Aplicar a la sala» invoca el callback con 8 specs")
+
+# --- 5) visibilidad por modo/norte (§9: config del array solo al diseñar) ---
+from sources import OmniSource as _Omni
+_srcs = [_Omni((1.0, 1.0, 1.2), source_type="subwoofer", label="S1"),
+         _Omni((4.0, 1.0, 1.2), source_type="subwoofer", label="S2")]
+_ctx = {"sources": lambda: _srcs, "walls_fn": None, "receiver_world": (2.5, 2.0, 1.2),
+        "origin": (0, 0, 0), "f_schroeder": 100.0, "is_rectangular": True,
+        "apply_optimized": lambda o: None}
+d3 = DBADialog((5.0, 4.0, 3.0), (2.5, 2.0, 1.2), eval_context=_ctx,
+               apply_callback=lambda s: None)
+_vis = lambda w: not w.isHidden()
+# default = "Optimizar mis fuentes", norte flat -> sin config de array ni eje
+ck(d3._mode() == "eval" and d3._criterion() == "flat",
+   "default = optimizar mis fuentes / norte compuesta plana")
+ck(not _vis(d3.grp_design) and not _vis(d3._axis_w) and not _vis(d3.btn_apply),
+   "optimizar(flat): oculta diseño de array, eje y «Aplicar»")
+ck(_vis(d3.combo_criterion) and _vis(d3.btn_opt),
+   "optimizar: se ven el norte y «Optimizar»")
+# norte CABS/DBA -> aparece el eje (elegir el par); sigue sin config de array
+d3.combo_criterion.setCurrentIndex(d3.combo_criterion.findData("dba"))
+ck(_vis(d3._axis_w) and not _vis(d3.grp_design),
+   "optimizar(DBA): aparece el eje, el diseño de array sigue oculto")
+# modo diseñar -> aparece la config del array + «Aplicar»; se oculta el norte
+d3.combo_mode.setCurrentIndex(d3.combo_mode.findData("design"))
+ck(_vis(d3.grp_design) and _vis(d3.btn_apply) and not _vis(d3.combo_criterion)
+   and not _vis(d3.btn_opt) and d3.btn.text() == "Calcular",
+   "diseñar array: config de array + «Aplicar» visibles, norte oculto")
 
 print("\nRESULTADO:", ("TODO VERDE" if not fails else f"{len(fails)} FAIL"))
 import sys
