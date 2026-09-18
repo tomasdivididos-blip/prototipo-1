@@ -142,6 +142,42 @@ def main():
           r_opt["after"]["sbir_span"] <= r_opt["before"]["sbir_span"] + 1e-6,
           f"sbir {r_opt['before']['sbir_span']:.2f} -> {r_opt['after']['sbir_span']:.2f}")
 
+    # --- 7. Fase B: norte COMBINADO (por caso de uso) ---------------------------
+    check("combined es objetivo (no array) y usa SBIR",
+          "combined" in dev.OBJECTIVE_CRITERIA and not dev.is_array_criterion("combined")
+          and dev.wants_sbir("combined"))
+    import location_opt as _lo
+    mm2 = {"flat": 4.0, "spatial": 4.0, "sbir_span": 6.0,
+           "freqs": np.array([40., 55., 70., 90., 110.])}
+    sc = dev.combined_score(mm2, _lo.default_location_weights("musica"))
+    check("combined_score en rango 0..100", 0.0 <= sc <= 100.0, f"score={sc:.1f}")
+    check("composite_cost('combined') = 100 - score",
+          abs(dev.composite_cost(mm2, "combined", _lo.default_location_weights("musica"))
+              - (100.0 - sc)) < 1e-9)
+    # los pesos por caso de uso CAMBIAN el score (musica != voz cuando difieren
+    # los sub-scores)
+    mm3 = {"flat": 2.0, "spatial": 11.0, "sbir_span": 6.0,   # planitud buena, espacial mala
+           "freqs": mm2["freqs"]}
+    s_mus = dev.combined_score(mm3, _lo.default_location_weights("musica"))
+    s_voz = dev.combined_score(mm3, _lo.default_location_weights("voz"))
+    check("los pesos por uso cambian el score (voz prioriza planitud > espacial)",
+          abs(s_mus - s_voz) > 1e-6 and s_voz > s_mus,
+          f"musica={s_mus:.1f} voz={s_voz:.1f}")
+    # evaluate + optimize con weights
+    r_cb = dev.evaluate_cabs(src_sb, dims, (2.5, 2.0, 1.2), walls=walls,
+                             criterion="combined", fmax=200.0,
+                             weights=_lo.default_location_weights("mixto"))
+    check("evaluate_cabs('combined') -> combined_real FINITO 0..100",
+          np.isfinite(r_cb["combined_real"]) and 0.0 <= r_cb["combined_real"] <= 100.0,
+          f"combined_real={r_cb['combined_real']:.0f}")
+    r_ocb = copt.optimize_cabs(free_sb, dims, (2.5, 2.0, 1.2), walls=walls, axis=1,
+                               criterion="combined", fmax=200.0, maxiter=12,
+                               weights=_lo.default_location_weights("mixto"))
+    j0 = dev.composite_cost(r_ocb["before"], "combined", _lo.default_location_weights("mixto"))
+    j1 = dev.composite_cost(r_ocb["after"], "combined", _lo.default_location_weights("mixto"))
+    check("optimize('combined') no empeora el objetivo (100-score)", j1 <= j0 + 1e-6,
+          f"{j0:.2f} -> {j1:.2f}")
+
     print("-" * 64)
     print(f"  {_N_OK}/{_N_OK + _N_FAIL} checks OK")
     return _N_FAIL == 0

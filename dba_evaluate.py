@@ -57,20 +57,23 @@ WALL_FRAC = 0.25
 # solo cambia el PESO de cada termino y si se evalua/optimiza el esquema de array.
 #   "sbir"    = mínimo peine SBIR (reflexiones de borde) en el receptor. Depende
 #               del layout (Fase B). Mide `sbir_span` (realce-atenuacion).
+#   "combined"= combinado por caso de uso (música/voz/mixto): score 0..100 pesando
+#               planitud + espacial + SBIR (+ Bolt como constante), con los MISMOS
+#               umbrales y pesos que Predicción (`location_opt`). Fase B.
 ARRAY_CRITERIA = ("cabs", "dba")
-OBJECTIVE_CRITERIA = ("flat", "spatial", "sbir")
+OBJECTIVE_CRITERIA = ("flat", "spatial", "sbir", "combined")
 
 
 def is_array_criterion(criterion) -> bool:
     """True si el criterio evalua un ESQUEMA de array (cabs/dba); False para los
-    nortes puros (flat/spatial/sbir), que solo miran el objetivo."""
+    nortes puros (flat/spatial/sbir/combined), que solo miran el objetivo."""
     return str(criterion) in ARRAY_CRITERIA
 
 
 def wants_sbir(criterion) -> bool:
     """True si el norte necesita el peine SBIR como objetivo (evitar computarlo
-    en el loop del optimizador cuando no hace falta)."""
-    return str(criterion) == "sbir"
+    en el loop del optimizador cuando no hace falta). SBIR y Combinado lo usan."""
+    return str(criterion) in ("sbir", "combined")
 
 
 def objective_weights(criterion):
@@ -86,14 +89,37 @@ def objective_weights(criterion):
     return (1.0, 1.0)
 
 
-def composite_cost(metrics, criterion) -> float:
+def combined_score(metrics, weights=None) -> float:
+    """Score 0..100 (mayor=mejor) del norte 'combinado', con los MISMOS umbrales y
+    pesos que Predicción (`location_opt`): planitud + espacial + SBIR (dB->0..100 por
+    `_lin_score`) + uniformidad modal Bolt (informativa, constante bajo el layout).
+    `weights` = dict {flat,espacial,sbir,smoothness}; None -> pesos 'mixto'."""
+    import location_opt as _lo
+    if weights is None:
+        weights = _lo.default_location_weights("")
+    sb = metrics.get("sbir_span", float("nan"))
+    sub = {
+        "flat": _lo._lin_score(metrics["flat"], 2.0, 12.0),
+        "espacial": _lo._lin_score(metrics["spatial"], 2.0, 12.0),
+        "sbir": _lo._lin_score(sb if np.isfinite(sb) else 0.0, 2.0, 24.0),
+        "smoothness": modal_smoothness(metrics.get("freqs")),
+    }
+    if not np.isfinite(sub["smoothness"]):
+        sub["smoothness"] = 50.0
+    wsum = sum(weights.values()) or 1.0
+    return float(sum(weights.get(k, 0.0) * sub[k] for k in sub) / wsum)
+
+
+def composite_cost(metrics, criterion, weights=None) -> float:
     """Costo a MINIMIZAR (lower=better) de una config, segun el norte. Fuente de
-    verdad unica para el optimizador y para el veredicto (coherencia). 'sbir' ->
-    el peine; el resto -> combinacion ponderada de flat/spatial."""
+    verdad unica para el optimizador y para el veredicto (coherencia). 'sbir' -> el
+    peine; 'combined' -> 100 - score combinado; el resto -> ponderado flat/spatial."""
     c = str(criterion)
     if c == "sbir":
         v = metrics.get("sbir_span", float("nan"))
         return float(v) if np.isfinite(v) else 0.0
+    if c == "combined":
+        return float(100.0 - combined_score(metrics, weights))
     w_f, w_s = objective_weights(c)
     return float(w_f * metrics["flat"] + w_s * metrics["spatial"])
 
@@ -533,7 +559,7 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
                   fmax: float = 200.0, xi: float = 0.03, c: float = C0,
                   n_freq: int = 200, ideal_grid=None,
                   f_schroeder: Optional[float] = None,
-                  criterion: str = "dba", fem=None) -> dict:
+                  criterion: str = "dba", fem=None, weights=None) -> dict:
     """Evalua la configuracion de fuentes real contra el criterio elegido.
 
     Parameters
@@ -644,6 +670,11 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
         "sbir_real": real.get("sbir_span", float("nan")),
         "sbir_ideal": ideal.get("sbir_span", float("nan")),
         "smoothness": modal_smoothness(real.get("freqs")),
+        # Norte combinado (0..100, mayor=mejor): score real vs el ideal de la sala.
+        "combined_real": (combined_score(real, weights)
+                          if criterion == "combined" else float("nan")),
+        "combined_ideal": (combined_score(ideal, weights)
+                           if criterion == "combined" else float("nan")),
     }
 
 
@@ -705,7 +736,12 @@ def _build_checklist(roles, fronts, rears, dims, axis, L, band_hi, fmax, c,
     # Nortes puros (flat/spatial/sbir): no hay esquema de array que chequear. Solo
     # se reporta el objetivo elegido como item informativo.
     if not is_array_criterion(criterion):
-        if criterion == "sbir":
+        if criterion == "combined":
+            txt = (f"Norte: combinado por caso de uso (planitud + espacial + SBIR, "
+                   f"pesos de Predicción). Planitud {real['flat']:.1f} dB, varianza "
+                   f"{real['spatial']:.1f} dB, peine SBIR "
+                   f"{real.get('sbir_span', float('nan')):.1f} dB. Score 0..100 arriba.")
+        elif criterion == "sbir":
             sr, si = real.get("sbir_span", float("nan")), ideal.get("sbir_span", float("nan"))
             txt = (f"Norte: mínimo peine SBIR (reflexiones de borde) en el receptor. "
                    f"Peine pico-a-valle: {sr:.1f} dB (ideal {si:.1f}). Menor = más "

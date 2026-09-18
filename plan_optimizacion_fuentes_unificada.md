@@ -154,14 +154,16 @@ Preguntas de UX abiertas (para charlar):
    (default) + espacial + CABS + DBA (los que ya calcula `_config_metrics`). Sin
    motor nuevo. `objective_weights` pondera flat/spatial por norte; nortes puros
    sin esquema de array. `bench_norte_criterios` 15/15.
-2. **Fase B (criterios de Predicción): PARCIAL (2026-09-18).** HECHO: norte **SBIR**
-   (peine de bordes en el receptor, `_sbir_span`, layout-dependiente) + **uniformidad
-   modal Bolt** como INFORMATIVA (decisión del usuario: no es objetivo porque no
-   depende del layout, solo de la geometría). Motor único = `differential_evolution`
-   (§3.1 opción B); función-objetivo unificada en `dba_evaluate.composite_cost`
-   (flat/spatial/sbir/cabs/dba). `bench_norte_criterios` 23/23. PENDIENTE (deferido a
-   pedido del usuario): norte **Combinado con pesos por caso de uso** (música/voz/mixto,
-   reusando `location_opt.default_location_weights` + `_lin_score`).
+2. **Fase B (criterios de Predicción): HECHA (2026-09-18).** Nortes: **SBIR** (peine de
+   bordes en el receptor, `_sbir_span`, layout-dependiente), **Combinado por caso de uso**
+   (música/voz/mixto: score 0..100 pesando planitud+espacial+SBIR con los mismos umbrales
+   `_lin_score` y pesos `default_location_weights` que Predicción; selector de caso de uso
+   en la UI, visible solo con este norte), y **uniformidad modal Bolt** como INFORMATIVA
+   (no es objetivo: solo depende de la geometría de la sala, no del layout). Motor único =
+   `differential_evolution` (§3.1 opción B); función-objetivo unificada en
+   `dba_evaluate.composite_cost(metrics, criterion, weights)` (flat/spatial/sbir/combined/
+   cabs/dba) -> optimizar y evaluar concuerdan por construcción. `bench_norte_criterios`
+   29/29 (oráculos SBIR + combinado: score en rango, pesos por uso discriminan, optimiza).
 3. **Fase C (semillas):** DE con semillas heurísticas de Predicción (opción C).
 4. **Fase D:** deprecar/redirigir la entrada duplicada, .room versionado, MANUAL.
 

@@ -150,7 +150,7 @@ def _apply_dba_drive(sources, dims, origin, axis, c):
 # Optimizacion
 # ---------------------------------------------------------------------------
 def _cost(x, sources, dofs, dims, origin, walls, receiver, axis, fa, xi, c, f_s,
-          basis, zone_box, inside_fn=None, criterion="flat"):
+          basis, zone_box, inside_fn=None, criterion="flat", weights=None):
     cand = apply_vector(sources, dofs, x)
     m = dev._config_metrics(cand, dims, origin, walls, receiver, axis=axis, fa=fa,
                             xi=xi, c=c, f_s=f_s, basis=basis, with_decay=False,
@@ -189,9 +189,9 @@ def _cost(x, sources, dofs, dims, origin, walls, receiver, axis, fa, xi, c, f_s,
             if np.all(inter > 0.0):
                 pen += 100.0 + 100.0 * float(inter.min())
     # Objetivo segun el NORTE (fuente de verdad unica en dba_evaluate): 'flat'/'spatial'
-    # pesan planitud/varianza; 'sbir' minimiza el peine; cabs/dba pesan flat+spatial
-    # (identico al historico).
-    return float(dev.composite_cost(m, criterion) + pen)
+    # pesan planitud/varianza; 'sbir' minimiza el peine; 'combined' = 100-score por caso
+    # de uso; cabs/dba pesan flat+spatial (identico al historico).
+    return float(dev.composite_cost(m, criterion, weights) + pen)
 
 
 def _criterion_drive_changes(orig, base, excluded) -> list:
@@ -215,7 +215,7 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
                   n_freq: int = 70, grid=(3, 2, 3), maxiter: int = 25,
                   popsize: int = 12, seed: int = 0, criterion: str = "dba",
                   inside_fn=None, progress_cb=None, should_cancel=None,
-                  fem=None) -> dict:
+                  fem=None, weights=None) -> dict:
     """Optimiza las variables liberadas de las fuentes (item 6). Devuelve dict con
     la config optimizada, metricas antes/despues, los DOF y un resumen de cambios.
 
@@ -273,7 +273,7 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
                                    want_sbir=_ws)
 
     def _obj(mm):
-        return dev.composite_cost(mm, criterion)
+        return dev.composite_cost(mm, criterion, weights)
 
     before = _metrics(sources)
     dofs = [d for d in collect_dofs(base, dims, origin, axis)
@@ -328,7 +328,7 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
     # mejora ~igual con y sin polish). Apagarlo hace el tiempo predecible (~popsize*
     # D*maxiter) y el Cancelar instantaneo.
     kw = dict(args=(base, dofs, dims, origin, walls, receiver, axis, fa, xi, c,
-                    f_s, basis, zone_box, inside_fn, criterion),
+                    f_s, basis, zone_box, inside_fn, criterion, weights),
               maxiter=maxiter, popsize=eff_popsize, seed=seed, tol=1e-3,
               mutation=(0.5, 1.0), recombination=0.7, polish=False,
               updating="deferred", callback=_de_callback)

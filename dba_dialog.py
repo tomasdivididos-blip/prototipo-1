@@ -143,6 +143,7 @@ class DBADialog(QDialog):
             self.combo_criterion.addItem("Transferencia compuesta plana", "flat")
             self.combo_criterion.addItem("Uniformidad espacial (asiento a asiento)", "spatial")
             self.combo_criterion.addItem("Mínimo SBIR (peine de bordes)", "sbir")
+            self.combo_criterion.addItem("Combinado (por caso de uso)", "combined")
             self.combo_criterion.addItem("CABS (par de subs en una pared, manejada)", "cabs")
             self.combo_criterion.addItem("DBA (pares de subs en dos paredes opuestas)", "dba")
             self.combo_criterion.setToolTip(
@@ -151,7 +152,9 @@ class DBADialog(QDialog):
                 "(mains + subs) en la banda; es el norte general, sin esquema de "
                 "array.\n• Uniformidad espacial: minimizar la varianza asiento a "
                 "asiento.\n• Mínimo SBIR: minimizar el peine de reflexiones de borde "
-                "en el punto de escucha (20-200 Hz).\n• CABS: un par de subs en una "
+                "en el punto de escucha (20-200 Hz).\n• Combinado: score 0..100 que "
+                "pesa planitud + espacial + SBIR según el caso de uso (música/voz/"
+                "mixto), con los mismos umbrales que Predicción.\n• CABS: un par de subs en una "
                 "pared (manejada) + una fuente enfrente; drive libre.\n• DBA: dos "
                 "pares de subs en paredes opuestas; una reproduce a la otra retardada "
                 "L/c e invertida (drive canónico, se fija al optimizar).\nEl mismo "
@@ -162,6 +165,25 @@ class DBADialog(QDialog):
             lay.addLayout(crow)
             self.lbl_criterion.setVisible(False)
             self.combo_criterion.setVisible(False)
+
+            # Caso de uso (SOLO norte "Combinado"): fija los pesos flat/espacial/sbir
+            # reusando los de Predicción (`default_location_weights`).
+            self._use_w = QWidget()
+            _urow = QHBoxLayout(self._use_w)
+            _urow.setContentsMargins(0, 0, 0, 0)
+            _urow.addWidget(QLabel("Caso de uso:"))
+            self.combo_use = QComboBox()
+            self.combo_use.addItem("Mixto / polivalente", "mixto")
+            self.combo_use.addItem("Música", "musica")
+            self.combo_use.addItem("Voz / conferencia", "voz")
+            self.combo_use.setToolTip(
+                "Pesos del norte combinado por caso de uso (mismos que Predicción):\n"
+                "• Música: prioriza consistencia espacial + control del peine.\n"
+                "• Voz: prioriza timbre plano + SBIR.\n• Mixto: pesos parejos.")
+            self.combo_use.currentIndexChanged.connect(self._on_criterion_changed)
+            _urow.addWidget(self.combo_use, 1)
+            lay.addWidget(self._use_w)
+            self._use_w.setVisible(False)
 
         # Eje de enfrentamiento: en FILA PROPIA (no dentro de un grupo) porque su
         # visibilidad es condicional: se ve al DISEÑAR un array (elegir la pared) y
@@ -302,8 +324,20 @@ class DBADialog(QDialog):
         "flat": "Transferencia compuesta plana",
         "spatial": "Uniformidad espacial",
         "sbir": "Mínimo SBIR",
+        "combined": "Combinado por caso de uso",
         "cabs": "CABS", "dba": "DBA",
     }
+
+    def _criterion_weights(self):
+        """Pesos del norte combinado (por caso de uso), o None para el resto. Reusa
+        `location_opt.default_location_weights` (misma escala que Predicción)."""
+        if self._criterion() != "combined" or not hasattr(self, "combo_use"):
+            return None
+        try:
+            import location_opt as _lo
+            return _lo.default_location_weights(self.combo_use.currentData() or "mixto")
+        except Exception:
+            return None
 
     def _criterion(self):
         """Norte elegido (flat|spatial|cabs|dba); el MISMO va a evaluar y optimizar.
@@ -354,11 +388,13 @@ class DBADialog(QDialog):
     def _refresh_axis_visibility(self):
         """El 'Eje de enfrentamiento' se ve al DISEÑAR (elegir la pared) y al
         OPTIMIZAR solo con norte CABS/DBA (elegir el par a evaluar). Con norte
-        flat/spatial se oculta: el objetivo no depende de un eje (§9 del plan)."""
-        if not hasattr(self, "_axis_w"):
-            return
+        flat/spatial/sbir/combined se oculta: el objetivo no depende de un eje.
+        El 'Caso de uso' se ve solo con el norte combinado, en modo optimizar."""
         ev = self._mode() == "eval"
-        self._axis_w.setVisible((not ev) or self._is_array_crit())
+        if hasattr(self, "_axis_w"):
+            self._axis_w.setVisible((not ev) or self._is_array_crit())
+        if hasattr(self, "_use_w"):
+            self._use_w.setVisible(ev and self._criterion() == "combined")
 
     def _on_mode_changed(self):
         """Muestra/OCULTA los controles segun el modo (pedido del usuario 18 Sep):
@@ -497,7 +533,7 @@ class DBADialog(QDialog):
                 walls=ctx.get("walls_fn"), axis=axis,
                 fmin=20.0, fmax=self.sb_fmax.value(), xi=self.sb_xi.value(),
                 f_schroeder=ctx.get("f_schroeder"), criterion=self._criterion(),
-                fem=ctx.get("fem"))
+                fem=ctx.get("fem"), weights=self._criterion_weights())
         except Exception as e:
             self.lbl_res.setText(f"<span style='color:#b00'>Error: {e}</span>")
             return
@@ -578,7 +614,8 @@ class DBADialog(QDialog):
             walls=ctx.get("walls_fn"), axis=axis, fmin=20.0,
             fmax=self.sb_fmax.value(), xi=self.sb_xi.value(),
             f_schroeder=ctx.get("f_schroeder"), criterion=self._criterion(),
-            inside_fn=ctx.get("inside_fn"), maxiter=maxiter, fem=ctx.get("fem"))
+            inside_fn=ctx.get("inside_fn"), maxiter=maxiter, fem=ctx.get("fem"),
+            weights=self._criterion_weights())
         worker = _OptimizeWorker(kwargs, self)
         self._opt_worker = worker            # ref para que no lo junte el GC
 
@@ -626,15 +663,21 @@ class DBADialog(QDialog):
         resultado y ofrecer aplicarlo. Si se cancelo, igual muestra lo mejor hasta
         el momento pero no auto-aplica."""
         self._last_opt = r
-        c0 = r["before"]["flat"] + r["before"]["spatial"]
-        c1 = r["after"]["flat"] + r["after"]["spatial"]
+        import dba_evaluate as _dev
+        crit = str(r.get("criterion", "flat"))
+        wts = self._criterion_weights()
+        # El costo mostrado es el OBJETIVO real del norte (coherente con lo que se
+        # minimizó): sbir -> peine; combined -> 100-score; resto -> planitud+varianza.
+        c0 = _dev.composite_cost(r["before"], crit, wts)
+        c1 = _dev.composite_cost(r["after"], crit, wts)
+        _unit = {"sbir": " dB (peine)", "combined": " (100−puntaje)"}.get(crit, " dB")
         cancelled = bool(r.get("cancelled"))
         head = ("<b>Optimización CANCELADA</b> (mejor resultado hasta el corte):"
                 if cancelled else
                 f"<b>Optimización de {r['n_free']} fuente(s) libre(s)</b> "
-                f"(eje {_AXIS_NAMES[r['axis']]}):")
+                f"({self._crit_label(crit)}):")
         lines = [head,
-                 f"Planitud+varianza: {c0:.2f} → <b>{c1:.2f}</b> dB "
+                 f"Objetivo: {c0:.2f} → <b>{c1:.2f}</b>{_unit} "
                  + ("(mejora)" if r["improved"] else "(sin mejora)"),
                  f"&nbsp;&nbsp;planitud {r['before']['flat']:.2f}→{r['after']['flat']:.2f}, "
                  f"varianza {r['before']['spatial']:.2f}→{r['after']['spatial']:.2f}"]
@@ -646,7 +689,8 @@ class DBADialog(QDialog):
         if r["improved"] and apply_cb is not None:
             if QMessageBox.question(
                     self, "Aplicar optimización",
-                    f"El optimizador bajó el criterio de {c0:.2f} a {c1:.2f} dB.\n\n"
+                    f"El optimizador bajó el objetivo de {c0:.2f} a {c1:.2f}"
+                    f"{_unit}.\n\n"
                     "¿Aplicar los cambios a las fuentes libres de la sala? "
                     "(las fuentes fijas no se tocan).",
                     QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
@@ -679,7 +723,21 @@ class DBADialog(QDialog):
         # la respuesta, no por si las fuentes cumplen el esquema de libro.
         fr_real, sp_real = r["flat_real"], r["spatial_real"]
         fr_id, sp_id = r["flat_ideal"], r["spatial_ideal"]
-        if crit_key == "sbir":
+        if crit_key == "combined":
+            # Veredicto sobre el score COMBINADO 0..100 (mayor=mejor), real vs ideal.
+            cb_r = r.get("combined_real", float("nan"))
+            cb_i = r.get("combined_ideal", float("nan"))
+            ok = np.isfinite(cb_r) and np.isfinite(cb_i) and (cb_r >= cb_i - 5.0)
+            badge = ("<span style='color:#2e7d32;'><b>buen puntaje</b></span>" if ok
+                     else "<span style='color:#b45309;'><b>se puede mejorar</b></span>")
+            _uc = (self.combo_use.currentText() if hasattr(self, "combo_use") else "")
+            lines = [
+                f"<b>{crit} ({_uc}):</b> {badge}",
+                f"&nbsp;&nbsp;Puntaje: <b>{cb_r:.0f}</b>/100 (ideal {cb_i:.0f}) · "
+                f"planitud {fr_real:.1f} dB, varianza {sp_real:.1f} dB, "
+                f"peine {r.get('sbir_real', float('nan')):.1f} dB",
+                f"&nbsp;&nbsp;<span style='color:#555;'>({r['n_modes']} modos)</span>"]
+        elif crit_key == "sbir":
             # Veredicto sobre el PEINE SBIR (real vs el ideal de referencia).
             sb_r, sb_i = r.get("sbir_real", float("nan")), r.get("sbir_ideal", float("nan"))
             ok = np.isfinite(sb_r) and np.isfinite(sb_i) and (sb_r <= sb_i + 1.5)

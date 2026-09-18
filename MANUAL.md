@@ -2998,6 +2998,7 @@ La herramienta que abría el botón «Subs enfrentados (DBA / CABS)» ahora se l
 - **Transferencia compuesta plana** (por defecto): aplanar la respuesta compuesta (mains + subs) en la banda de interés. Es el norte general, no evalúa ningún esquema de array.
 - **Uniformidad espacial**: minimizar la varianza asiento a asiento.
 - **Mínimo SBIR**: minimizar el peine de reflexiones de borde (SBIR) en el punto de escucha, en la banda 20-200 Hz. Es la misma métrica que usa la pestaña Predicción, ahora disponible como norte de optimización (depende de dónde ubiques las fuentes respecto de las paredes).
+- **Combinado (por caso de uso)**: un puntaje 0-100 que combina planitud + uniformidad espacial + SBIR, con los mismos umbrales y pesos que la pestaña Predicción. Al elegirlo aparece un selector de **caso de uso** (Música / Voz / Mixto) que fija los pesos: música prioriza consistencia espacial y control del peine; voz, timbre plano; mixto, parejo. Cierra el hueco de que Acústica y Predicción usaran criterios distintos.
 - **CABS**: un par de subs en una pared (manejada) + una fuente enfrente.
 - **DBA**: dos pares de subs en paredes opuestas, con el drive canónico L/c.
 
