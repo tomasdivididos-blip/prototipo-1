@@ -232,7 +232,19 @@ class DBADialog(QDialog):
         self.sb_xi = QDoubleSpinBox()
         self.sb_xi.setRange(0.002, 0.3); self.sb_xi.setDecimals(3)
         self.sb_xi.setSingleStep(0.005); self.sb_xi.setValue(0.03)
+        self.sb_xi.setToolTip(
+            "Amortiguamiento modal ξ (fracción del crítico). Valores sugeridos:\n"
+            "• poco amortiguado (sala viva): ~0.01\n"
+            "• amortiguado (típico tratado): ~0.03\n"
+            "• muy amortiguado: ~0.08\n"
+            "• sobre amortiguado (seco): ~0.15")
         fl.addRow("ξ (amortiguamiento modal):", self.sb_xi)
+        # Leyenda con la banda cualitativa del valor actual + los sugeridos.
+        self.lbl_xi_hint = QLabel("")
+        self.lbl_xi_hint.setStyleSheet("color:#555; font-size:8pt;")
+        self.lbl_xi_hint.setWordWrap(True)
+        fl.addRow("", self.lbl_xi_hint)
+        self.sb_xi.valueChanged.connect(self._refresh_xi_hint)
 
         self.sb_fmax = QDoubleSpinBox()
         self.sb_fmax.setRange(50.0, 400.0); self.sb_fmax.setValue(180.0)
@@ -310,6 +322,7 @@ class DBADialog(QDialog):
             avail = 900
         self.resize(600, min(720, int(avail * 0.9)))
         self._refresh_count()
+        self._refresh_xi_hint()
         # Estado inicial de visibilidad segun el modo default ("Optimizar mis
         # fuentes" si hay eval_ctx; "Diseñar un array" si el diálogo es solo diseño).
         self._on_mode_changed()
@@ -327,6 +340,26 @@ class DBADialog(QDialog):
         "combined": "Combinado por caso de uso",
         "cabs": "CABS", "dba": "DBA",
     }
+
+    @staticmethod
+    def _xi_band(xi):
+        """Etiqueta cualitativa del amortiguamiento modal ξ (fracción del crítico).
+        Rangos aproximados para salas: ~0.01 viva, ~0.03 típica tratada, ~0.08
+        muy amortiguada, >0.12 seca."""
+        if xi <= 0.02:
+            return "poco amortiguado (sala viva)"
+        if xi <= 0.05:
+            return "amortiguado (típico tratado)"
+        if xi <= 0.12:
+            return "muy amortiguado"
+        return "sobre amortiguado (seco)"
+
+    def _refresh_xi_hint(self):
+        if not hasattr(self, "lbl_xi_hint"):
+            return
+        self.lbl_xi_hint.setText(
+            f"≈ <b>{self._xi_band(self.sb_xi.value())}</b>  ·  sugeridos: poco "
+            "amortiguado ~0.01 · típico ~0.03 · muy ~0.08 · sobre ~0.15")
 
     def _criterion_weights(self):
         """Pesos del norte combinado (por caso de uso), o None para el resto. Reusa
@@ -666,31 +699,52 @@ class DBADialog(QDialog):
         import dba_evaluate as _dev
         crit = str(r.get("criterion", "flat"))
         wts = self._criterion_weights()
-        # El costo mostrado es el OBJETIVO real del norte (coherente con lo que se
-        # minimizó): sbir -> peine; combined -> 100-score; resto -> planitud+varianza.
-        c0 = _dev.composite_cost(r["before"], crit, wts)
-        c1 = _dev.composite_cost(r["after"], crit, wts)
-        _unit = {"sbir": " dB (peine)", "combined": " (100−puntaje)"}.get(crit, " dB")
+        b, a = r["before"], r["after"]
+        c0 = _dev.composite_cost(b, crit, wts)
+        c1 = _dev.composite_cost(a, crit, wts)
+        # El objetivo mostrado usa la MÉTRICA real del norte y en su dirección natural
+        # (menor dB mejor, mayor puntaje mejor), asi no queda contradictorio con las
+        # sub-metricas. Ademas se listan TODAS las que pesan (para el combinado, el
+        # SBIR explica por que el puntaje sube aunque planitud/varianza suban un poco).
+        tag = " <b>(mejora)</b>" if r["improved"] else " (sin mejora)"
+        _fs = lambda m: (f"{m.get('flat', float('nan')):.2f}",
+                         f"{m.get('spatial', float('nan')):.2f}",
+                         f"{m.get('sbir_span', float('nan')):.2f}")
+        (bf, bs, bsb), (af, as_, asb) = _fs(b), _fs(a)
+        if crit == "combined":
+            obj = (f"Puntaje: {100.0 - c0:.0f} → <b>{100.0 - c1:.0f}</b>/100" + tag)
+            detail = (f"&nbsp;&nbsp;planitud {bf}→{af} dB · varianza {bs}→{as_} dB · "
+                      f"peine SBIR {bsb}→{asb} dB")
+        elif crit == "sbir":
+            obj = f"Peine SBIR: {c0:.2f} → <b>{c1:.2f}</b> dB" + tag
+            detail = f"&nbsp;&nbsp;planitud {bf}→{af} dB · varianza {bs}→{as_} dB"
+        elif crit == "flat":
+            obj = f"Planitud: {c0:.2f} → <b>{c1:.2f}</b> dB" + tag
+            detail = f"&nbsp;&nbsp;varianza {bs}→{as_} dB"
+        elif crit == "spatial":
+            obj = f"Varianza espacial: {c0:.2f} → <b>{c1:.2f}</b> dB" + tag
+            detail = f"&nbsp;&nbsp;planitud {bf}→{af} dB"
+        else:  # cabs / dba
+            obj = f"Planitud+varianza: {c0:.2f} → <b>{c1:.2f}</b> dB" + tag
+            detail = f"&nbsp;&nbsp;planitud {bf}→{af} · varianza {bs}→{as_}"
         cancelled = bool(r.get("cancelled"))
         head = ("<b>Optimización CANCELADA</b> (mejor resultado hasta el corte):"
                 if cancelled else
                 f"<b>Optimización de {r['n_free']} fuente(s) libre(s)</b> "
                 f"({self._crit_label(crit)}):")
-        lines = [head,
-                 f"Objetivo: {c0:.2f} → <b>{c1:.2f}</b>{_unit} "
-                 + ("(mejora)" if r["improved"] else "(sin mejora)"),
-                 f"&nbsp;&nbsp;planitud {r['before']['flat']:.2f}→{r['after']['flat']:.2f}, "
-                 f"varianza {r['before']['spatial']:.2f}→{r['after']['spatial']:.2f}"]
+        lines = [head, obj, detail]
         if r["changes"]:
             lines.append("<b>Cambios propuestos:</b>")
             lines += [f"&nbsp;• {c}" for c in r["changes"]]
         self.lbl_res.setText("<br>".join(lines))
         apply_cb = ctx.get("apply_optimized")
         if r["improved"] and apply_cb is not None:
+            _msg = (f"El optimizador subió el puntaje de {100.0 - c0:.0f} a "
+                    f"{100.0 - c1:.0f} / 100." if crit == "combined" else
+                    f"El optimizador mejoró el objetivo de {c0:.2f} a {c1:.2f} dB.")
             if QMessageBox.question(
                     self, "Aplicar optimización",
-                    f"El optimizador bajó el objetivo de {c0:.2f} a {c1:.2f}"
-                    f"{_unit}.\n\n"
+                    _msg + "\n\n"
                     "¿Aplicar los cambios a las fuentes libres de la sala? "
                     "(las fuentes fijas no se tocan).",
                     QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:

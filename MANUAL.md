@@ -3004,6 +3004,10 @@ La herramienta que abría el botón «Subs enfrentados (DBA / CABS)» ahora se l
 
 El resultado también muestra, como dato informativo, la **uniformidad modal (Bolt)** de la sala (0-100). No es un norte de optimización: depende solo de las frecuencias modales del recinto (su geometría), no de dónde pongas las fuentes, así que mover las fuentes no la cambia.
 
+El campo **ξ (amortiguamiento modal)** trae una leyenda con la banda cualitativa del valor y los sugeridos: poco amortiguado (sala viva) ~0.01, amortiguado (típico tratado) ~0.03, muy amortiguado ~0.08, sobre amortiguado (seco) ~0.15.
+
+El **resultado de «Optimizar»** muestra el objetivo en su métrica natural y en la dirección intuitiva: con el norte Combinado dice «Puntaje X → Y / 100» (más alto es mejor) y lista las tres métricas que lo componen (planitud, varianza y peine SBIR), así se entiende, por ejemplo, que el puntaje suba porque el peine bajó aunque la planitud haya subido un poco. Con los nortes simples muestra directamente la métrica que se minimiza (planitud, varianza o peine, en dB).
+
 El mismo norte se usa para «Evaluar» y para «Optimizar» (coherencia). Con los nortes puros (compuesta plana / uniformidad espacial) el resultado es directamente el veredicto de planitud/uniformidad, sin la clasificación de paredes ni las condiciones de esquema (que solo aplican a CABS/DBA). Todo lo demás (variables libres por fuente, barra con tiempo restante, campo FEM real en salas no rectangulares, límites de bafle/esfera) funciona igual para cualquier norte.
 
 El panel tiene dos **modos** (selector «Modo» arriba):
