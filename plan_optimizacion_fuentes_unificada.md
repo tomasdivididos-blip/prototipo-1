@@ -232,3 +232,72 @@ no se implementa.
 **Decisión:** ruta **e** como primaria (ya hecha para evaluar/optimizar); ruta **d**
 como aproximación rápida futura si se quiere el corrimiento modal analítico; ruta
 **c** documentada pero descartada por costo.
+
+## 9. Separar "diseñar el array" del flujo de optimización (diseño, 2026-09-18)
+
+Pedido del usuario (18 Sep): *"toda la parte de configuración del array en DBA y CABS
+aparezca solo si el usuario quiere diseñar el array"*. Motivación: tras la Fase A el
+panel se llama "Optimización de fuentes" y su trabajo primario es **evaluar/optimizar
+las fuentes que el usuario ya tiene** contra un norte. Los controles para **construir un
+array DBA/CABS desde cero** (nº de subs por pared, drive del trasero, "Aplicar a la sala")
+son un trabajo distinto y confunden el flujo por defecto. Hoy están SIEMPRE visibles y
+solo se deshabilitan en modo evaluar (`dba_dialog._on_mode_changed`).
+
+### 9.1 Dos trabajos, dos modos (con el default correcto)
+
+- **Optimizar mis fuentes (DEFAULT).** Evaluar/optimizar las fuentes cargadas por el
+  norte elegido. Controles: selector de **norte**, banda (fmin/fmax, ξ), «Evaluar»,
+  «Optimizar» + la lista de variables libres por fuente. NO se ve nada de construcción
+  de array.
+- **Diseñar un array DBA/CABS (opt-in).** Construir un preset de array: nº de subs por
+  pared × 2 paredes de un eje, con un drive (LS/naive), previsualizar y «Aplicar a la
+  sala» (crea las fuentes). Solo acá aparecen `nx`, `nz`, el contador, el drive y
+  «Aplicar».
+
+Cambio de default: hoy abre en "Diseñar array ideal"; pasa a abrir en **"Optimizar mis
+fuentes"** (el uso principal). El modo diseño queda a un toque de distancia.
+
+### 9.2 Qué se muestra/oculta (no solo deshabilitar: OCULTAR)
+
+| Control | Optimizar (norte flat/spatial) | Optimizar (norte CABS/DBA) | Diseñar array |
+|---|---|---|---|
+| Selector de **norte** | visible | visible | oculto |
+| **Eje de enfrentamiento** | oculto (irrelevante) | visible (elegir el par) | visible (pared a construir) |
+| **nº subs/pared** (`nx`,`nz`) + contador | oculto | oculto | visible |
+| **Drive del trasero** (LS/naive) | oculto | oculto | visible |
+| Banda: fmin/fmax, ξ | visible | visible | visible |
+| Botón primario | «Evaluar» / «Optimizar» | «Evaluar» / «Optimizar» | «Calcular» (preview) |
+| «Aplicar a la sala» | oculto | oculto | visible |
+| Lista de variables libres | visible | visible | oculto |
+| Clasificación pared 1/2 + checklist de esquema | no aplica | en el resultado | (no hay evaluación) |
+
+Regla clave: el **eje de enfrentamiento** aparece en Optimizar SOLO cuando el norte es
+CABS/DBA (ahí importa qué par de paredes se mira); con flat/spatial se oculta porque el
+objetivo no depende de un eje (se usa el más largo internamente para la grilla de zona).
+
+### 9.3 Implementación (cuando haya OK) — barata, sin motor nuevo
+
+Todo es reorganización de visibilidad en `dba_dialog.py` (no toca núcleo):
+
+1. Agrupar los controles de construcción en un `QGroupBox "Diseño del array"`
+   (`grp_design`): eje, `nx`, `nz`, contador, drive. Los de análisis (banda, ξ) quedan
+   en un grupo aparte compartido.
+2. Renombrar el combo "Modo": "Diseñar array ideal" → **"Diseñar un array DBA/CABS"**;
+   "Evaluar mis fuentes cargadas" → **"Optimizar mis fuentes"**. Default = optimizar.
+3. `_on_mode_changed` pasa de `setEnabled(not ev)` a `setVisible(...)` sobre `grp_design`
+   entero + el botón «Aplicar»; muestra norte/Optimizar/variables-libres solo en optimizar.
+4. Nuevo `_refresh_axis_visibility()`: en modo optimizar, `combo_axis` visible solo si
+   `_is_array_crit()`; en diseño, siempre visible. Se llama en `_on_mode_changed` y en
+   `_on_criterion_changed`.
+5. La ventana se reajusta de alto al ocultar el grupo (evitar hueco). El `smoke_test_dba_dialog`
+   ya construye el diálogo: agregar aserciones de visibilidad por modo/norte.
+
+### 9.4 Preguntas de UX abiertas (para confirmar antes de codear)
+
+- ¿El modo se elige con el combo "Modo" (como hoy, reordenado) o con un botón/segmented
+  "Optimizar | Diseñar array"? (combo = cambio mínimo; segmented = más claro).
+- Al pasar a "Diseñar array", ¿el norte se fuerza a CABS/DBA (el array que se construye)
+  o se deja el combo de norte oculto y el drive define CABS/DBA? (propuesta: ocultar el
+  norte en diseño; el drive + nº subs definen el array).
+- ¿Vale la pena mostrar, en modo Optimizar con norte CABS/DBA, un botón "→ Diseñar este
+  array" que precargue nx/nz/eje desde las fuentes actuales? (futuro, no Fase A de esto).
