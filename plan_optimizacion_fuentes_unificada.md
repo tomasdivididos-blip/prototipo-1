@@ -7,8 +7,8 @@
 > usuario (opción "panel único"). Los puntos 1 (cualquier par opuesto) y 2
 > (optimizador no-freeze) ya estaban; este .md era el punto 3. **TODAS las fases
 > (A, B, C, D) + §9 + greenfield HECHAS (2026-09-20).** Plan cerrado; ver §5 el
-> detalle de cada fase. Único pendiente opcional: §8 ruta d (perturbación de forma),
-> nice-to-have no bloqueante (la ruta e / campo FEM real ya cubre el caso).
+> detalle de cada fase. §8 ruta d (perturbación de forma) también HECHA
+> (`shape_perturbation`, validada 8/8, no wireada a la GUI). **Plan 100% cerrado.**
 >
 > **Hecho:** panel "Optimización de fuentes" con selector de NORTE (flat DEFAULT,
 > spatial, sbir, combined por caso de uso, cabs, dba); nortes puros sin esquema de
@@ -242,20 +242,29 @@ Caveat: la calidad depende de cuántos modos resolvió el FEM (el panel usa
 `n_modes`); para una banda hasta ~200 Hz conviene resolver suficientes modos. El
 decay se saltea sobre FEM (no entra en el veredicto planitud+varianza).
 
-### d) Aproximación rápida: perturbación de la forma del dominio
+### d) Aproximación rápida: perturbación de la forma del dominio (IMPLEMENTADO 2026-09-20)
 
 Si se quiere conservar la caja analítica y sólo corregir por el chaflán/esquina,
 la herramienta es la **perturbación de cavidad** (teorema de Slater; Morse & Ingard
 §9.4, Pierce §9): al quitar un volumen δV cada modo se corre
 
-$$\frac{\Delta\omega_n}{\omega_n}=\frac{1}{2}\,\frac{\int_{\delta V}(k_n^{-2}|\nabla p_n|^2-|p_n|^2)\,dV}{\int_V |p_n|^2\,dV}$$
+$$\frac{\Delta f_n}{f_n}=\frac{\int_{\delta V}\left(p_n^2-k_n^{-2}|\nabla p_n|^2\right)dV}{2\int_V |p_n|^2\,dV}$$
 
 (quitar volumen donde el modo tiene máximo de presión sube fₙ; donde tiene máximo
-de velocidad la baja). Da Δfₙ (y Δξₙ con el mismo esquema) sin re-resolver, y es el
-MISMO tipo de perturbación que el amortiguamiento por β de pared que ya usa el soft
-(`perturbation`, Morse & Ingard 9.4.14). Válido si la esquina es chica vs recinto y
-vs λ. Candidato a mini-paper (perturbación geométrica ↔ paper G de perturbación de
-frontera). NO implementado.
+de velocidad la baja). **OJO: el signo de la fórmula estaba invertido en versiones
+previas de este plan** (la prosa era correcta); el signo bueno se derivó en 1D
+(acortar un tubo por el extremo rígido sube fₙ) y se validó contra la caja exacta.
+Da Δfₙ sin re-resolver, y es el MISMO tipo de perturbación que el amortiguamiento por
+β de pared que ya usa el soft. Válido si δV es chico vs recinto y vs λ.
+
+Estado: HECHO en `shape_perturbation.py` (`perturbed_freqs(dims, inside_mask, ...)`),
+con modos analíticos de la caja + cuadratura sobre δV = caja \ recinto real.
+Validado en `bench_shape_perturbation.py` 8/8: quitar una losa fina = caja más chica
+exacta -> rel axial coincide (0.0311 vs 0.0309, 0.6%), tangenciales ≈ 0, signos
+correctos (presión→sube, velocidad→baja), converge con la grilla. NO wireado a la
+GUI: es la alternativa analítica rápida a la ruta e (FEM real, que es el default y
+exacto). Candidato a mini-paper (perturbación geométrica ↔ paper G de perturbación
+de frontera).
 
 ### c) Exacto formal: operador Dirichlet-a-Neumann en el plano de corte
 
@@ -267,9 +276,9 @@ Phys. 82:172; Givoli, *Numerical Methods for Problems in Infinite Domains* (1992
 Steklov-Poincaré en Quarteroni & Valli (1999). Correcto pero overkill bajo Schroeder;
 no se implementa.
 
-**Decisión:** ruta **e** como primaria (ya hecha para evaluar/optimizar); ruta **d**
-como aproximación rápida futura si se quiere el corrimiento modal analítico; ruta
-**c** documentada pero descartada por costo.
+**Decisión:** ruta **e** como primaria (ya hecha, default, exacta para evaluar/
+optimizar); ruta **d** HECHA como herramienta analítica rápida (`shape_perturbation`,
+validada, no wireada a la GUI); ruta **c** documentada pero descartada por costo.
 
 ## 9. Separar "diseñar el array" del flujo de optimización (IMPLEMENTADO 2026-09-18)
 
