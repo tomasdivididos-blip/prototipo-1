@@ -1,18 +1,19 @@
 # Plan — Panel unificado "Optimización de fuentes"
 
-> Estado: **FASE A IMPLEMENTADA (2026-09-18)**; Fases B-D en diseño. Escrito
-> 2026-09-16. Pedido del profesor Bidondo (vía Ale, chat 15 Sep 2026) + acuerdo de
-> dirección con el usuario (opción "panel único"). Los puntos 1 (cualquier par
-> opuesto) y 2 (optimizador no-freeze) YA se implementaron; este .md es el punto 3.
+> Estado (2026-09-20): **Fases A y B HECHAS; §9 (separar diseño/optimizar) HECHA;
+> §8 ruta e (campo FEM real) HECHA. Faltan Fase C (semillas heurísticas) y Fase D
+> (deprecar la entrada duplicada de Predicción + .room versionado).** Escrito
+> 2026-09-16. Pedido del profesor Bidondo (vía Ale, 15 Sep 2026) + acuerdo con el
+> usuario (opción "panel único"). Los puntos 1 (cualquier par opuesto) y 2
+> (optimizador no-freeze) ya estaban; este .md era el punto 3.
 >
-> **Fase A hecha (2026-09-18):** renombrado "Subs enfrentados" → "Optimización de
-> fuentes" (botón + título del diálogo); el combo de criterio ahora es un **selector
-> de NORTE** con `flat` (transferencia compuesta plana, DEFAULT), `spatial`
-> (uniformidad espacial), `cabs`, `dba`. Los nortes puros no evalúan esquema de
-> array (feasibility siempre factible, checklist = 1 item informativo) y su objetivo
-> pondera flat/spatial (`dba_evaluate.objective_weights`: flat=(1,0), spatial=(0,1),
-> cabs/dba=(1,1) → histórico intacto). Sin motor nuevo. Benches:
-> `bench_norte_criterios` 15/15; sin regresión (cabs 14/14, dba 13/13, opt 25/25).
+> **Hecho:** panel "Optimización de fuentes" con selector de NORTE (flat DEFAULT,
+> spatial, sbir, combined por caso de uso, cabs, dba); nortes puros sin esquema de
+> array; uniformidad modal Bolt informativa; función-objetivo única
+> `dba_evaluate.composite_cost`; leyenda de ξ; resultado de optimizar por métrica
+> natural. Motor único DE (§3.1 opción B). Config del array visible solo en modo
+> "Diseñar un array" (§9). Benches: `bench_norte_criterios` 29/29 + sin regresión.
+> Detalle de cada fase en §5.
 
 ## 0. Motivación y norte físico
 

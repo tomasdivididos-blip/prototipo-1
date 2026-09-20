@@ -3047,6 +3047,6 @@ En el modo **«Diseñar array ideal»**, las dos cajas de cantidad de subs ahora
 
 La barra de **«Calcular modos (FEM)»** no tiene un número de pasos fijo (el solver de autovalores no lo anticipa), así que en vez de cuenta regresiva muestra el **tiempo transcurrido**.
 
-> **En camino:** unificar toda la optimización de fuentes (los criterios CABS/DBA de Acústica y los de Ubicación de Predicción) en un solo panel donde elegís el «norte» (por ejemplo, transferencia compuesta lo más plana posible) y corre en cualquier geometría. Diseño en `plan_optimizacion_fuentes_unificada.md`.
+> **Estado del panel unificado (20 Sep 2026):** el panel **«Optimización de fuentes»** ya está: elegís un «norte» (transferencia compuesta plana, uniformidad espacial, mínimo SBIR, combinado por caso de uso, CABS o DBA) y corre en cualquier geometría (campo FEM real en salas no rectangulares). La configuración del array aparece solo en el modo «Diseñar un array». Falta traer las semillas heurísticas de Predicción al motor (Fase C) y deprecar la entrada duplicada de Ubicación en Predicción (Fase D). Diseño y estado en `plan_optimizacion_fuentes_unificada.md`.
 
-*Manual actualizado al 12 de Septiembre de 2026 — v2.44.*
+*Manual actualizado al 20 de Septiembre de 2026 — v2.46.*

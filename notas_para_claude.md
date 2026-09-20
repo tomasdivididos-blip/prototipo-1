@@ -634,6 +634,13 @@ explícito del usuario). El usuario es ingeniero en acústica: valorá su tiempo
 rigor, cuentas y comparaciones, no con chistes ni metáforas de color. Le gusta la
 didáctica clara, pero necesita **más rigurosidad y menos gracia**.
 
+**CONCISO (pedido 20 Sep 2026, integra la ex-memoria `respuestas-concisas.md`):**
+respuestas CORTAS, ~3 párrafos con 2 ideas cada uno como norte (no regla rígida).
+Le molesta el panel de "pensamiento"/razonamiento visible: es largo, arranca en
+inglés, gasta tokens y no enriquece la explicación. **Pensar corto y en español**;
+no repetir en la respuesta lo ya razonado. Mantener el rigor técnico (cuentas,
+referencias, opciones) pero MÁS COMPACTO.
+
 ### ✅ Hacé esto
 
 - **Notación matemática de verdad, NUNCA ASCII. Pero OJO con el inline (20 Ago 2026):**

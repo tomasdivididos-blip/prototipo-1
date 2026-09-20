@@ -203,6 +203,20 @@ enfrente ahora "pasa CABS" estructuralmente, pero el VEREDICTO sigue siendo plan
 rotula sobre que volumen se midio (no cambia la fisica). (c) boton "todas" = azucar de UI para los
 free_vars (no toca el nucleo).
 
+**Panel unificado "Optimización de fuentes" (18-20 Sep 2026, en alcance — VERIFICAR):** la
+herramienta CABS/DBA pasa a ser un panel con selector de NORTE: `flat` (planitud compuesta,
+default), `spatial` (varianza espacial), `sbir` (peine de bordes en el receptor,
+`_sbir_span` via sbir.band_extremes 20-200), `combined` (score 0..100 con umbrales `_lin_score`
+y pesos `default_location_weights` de Predicción por caso de uso), `cabs`, `dba`. Función-objetivo
+UNICA `dba_evaluate.composite_cost(metrics, criterion, weights)` que usan optimizar Y evaluar
+(coherencia). Uniformidad modal Bolt = INFORMATIVA (no objetivo: invariante bajo el layout).
+PUNTOS A AUDITAR: (1) el peine SBIR y el score combinado reusan `location_opt` (misma escala que
+Predicción) -> chequear que los umbrales `_lin_score` (flat/esp 2..12, sbir 2..24) son defendibles
+y no arbitrarios; (2) `composite_cost` mezcla dB (flat/spatial) con dB (sbir) sumando con pesos:
+validar que la escala es comparable; (3) el "ideal" de referencia (array LS) se recomputa por
+norte -> verificar que sigue siendo un techo alcanzable. Solo reorganiza que se minimiza; el
+nucleo fisico (base modal, SBIR, respuesta compuesta) intacto. bench_norte_criterios 29/29.
+
 **Fix frame ubicación v2.44 (12 Sep 2026, en alcance — VERIFICAR):** el optimizador/
 evaluador de ubicación de la pestaña Predicción ponía fuentes AFUERA del recinto (y daba
 falso "afuera") con `origin_mode=corner` en CAD y recinto paramétrico. Causa afirmada: el
