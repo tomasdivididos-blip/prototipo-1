@@ -610,6 +610,20 @@ class PredictionPanel(QWidget):
         )
         self.combo_pred_mode.currentTextChanged.connect(self._on_pred_mode_changed)
         f_mode.addRow("Optimizar:", self.combo_pred_mode)
+        # Redirección (deprecación suave, 20 Sep 2026): la ubicación de fuentes
+        # SOLA ahora también vive en Acústica → «Optimización de fuentes», con más
+        # nortes (SBIR, combinado, CABS/DBA) y refinamiento de las fuentes cargadas.
+        # Acá se conserva (por las tarjetas de recomendación y el modo Combinado, que
+        # optimiza forma + ubicación juntas, algo que el panel unificado no hace).
+        self.lbl_loc_redirect = QLabel(
+            "Nota: para ubicar fuentes con más criterios (Mínimo SBIR, Combinado por "
+            "caso de uso, CABS/DBA) y también refinar las fuentes que ya cargaste, usá "
+            "<b>Acústica → «Optimización de fuentes»</b>. Este modo sigue disponible; "
+            "«Combinado» (forma + ubicación) es exclusivo de acá.")
+        self.lbl_loc_redirect.setStyleSheet("color:#b45309; font-size:8pt;")
+        self.lbl_loc_redirect.setWordWrap(True)
+        self.lbl_loc_redirect.setVisible(False)
+        f_mode.addRow("", self.lbl_loc_redirect)
         layout.addWidget(g_mode)
 
         # Pesos del objetivo de ubicación (visibles en Ubicación/Combinado).
@@ -752,6 +766,10 @@ class PredictionPanel(QWidget):
     def _on_pred_mode_changed(self, text: str):
         is_loc = (text != "Geometría")
         self.g_weights.setVisible(is_loc)
+        # El aviso de redirección solo en "Ubicación de fuentes" (sola): es la que el
+        # panel unificado ya cubre. "Combinado" (forma+ubicación) no es redundante.
+        if hasattr(self, "lbl_loc_redirect"):
+            self.lbl_loc_redirect.setVisible(text == "Ubicación de fuentes")
         if is_loc:
             self._load_weight_defaults()
 

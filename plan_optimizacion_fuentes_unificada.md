@@ -5,9 +5,10 @@
 > (deprecar la entrada duplicada de Predicción + .room versionado).** Escrito
 > 2026-09-16. Pedido del profesor Bidondo (vía Ale, 15 Sep 2026) + acuerdo con el
 > usuario (opción "panel único"). Los puntos 1 (cualquier par opuesto) y 2
-> (optimizador no-freeze) ya estaban; este .md era el punto 3. **Fase C (semillas)
-> también HECHA (2026-09-20).** Falta solo la Fase D (deprecar la entrada duplicada
-> de Predicción + .room versionado), pendiente de decisión de UX.
+> (optimizador no-freeze) ya estaban; este .md era el punto 3. **TODAS las fases
+> (A, B, C, D) + §9 + greenfield HECHAS (2026-09-20).** Plan cerrado; ver §5 el
+> detalle de cada fase. Único pendiente opcional: §8 ruta d (perturbación de forma),
+> nice-to-have no bloqueante (la ruta e / campo FEM real ya cubre el caso).
 >
 > **Hecho:** panel "Optimización de fuentes" con selector de NORTE (flat DEFAULT,
 > spatial, sbir, combined por caso de uso, cabs, dba); nortes puros sin esquema de
@@ -187,8 +188,14 @@ Preguntas de UX abiertas (para charlar):
    despegado (regla flush/soffit). `bench_norte_criterios` 33/33. Con esto el panel
    unificado hace greenfield + refine -> la Fase D (deprecar la entrada de Predicción)
    ya no borra capacidad.
-5. **Fase D (pendiente):** ahora sí, deprecar/redirigir la «Ubicación de fuentes» de
-   Predicción hacia el panel unificado + .room versionado + MANUAL.
+5. **Fase D (deprecación suave): HECHA (2026-09-20).** La «Ubicación de fuentes» de
+   Predicción muestra un aviso que redirige a Acústica → «Optimización de fuentes»
+   (más nortes + refinamiento), pero SE CONSERVA: sus tarjetas de recomendación y el
+   modo «Combinado» (optimiza forma + ubicación juntas, exclusivo de Predicción) no
+   son redundantes. No se removió código (bajo riesgo). `.room`: no se versiona; los
+   `free_vars` por fuente ya se guardan y el «norte» es una elección de análisis
+   transitoria, no una propiedad de la sala. `prediction_panel.lbl_loc_redirect`,
+   visible solo en modo «Ubicación de fuentes».
 
 ## 6. Qué NO cambia
 
