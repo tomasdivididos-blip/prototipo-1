@@ -327,9 +327,13 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
     # impredecible), sin aportar calidad medible sobre este objetivo ruidoso (medido:
     # mejora ~igual con y sin polish). Apagarlo hace el tiempo predecible (~popsize*
     # D*maxiter) y el Cancelar instantaneo.
+    # Poblacion inicial SEMBRADA (Fase C): mismo tamaño total que el popsize adaptativo
+    # (eff_popsize*D), pero con arranques heuristicos en vez de solo azar -> mejores
+    # optimos y mas repetibles, sin cambiar el presupuesto de evaluaciones.
+    init_pop = _seed_population(base, dofs, eff_popsize * D, seed)
     kw = dict(args=(base, dofs, dims, origin, walls, receiver, axis, fa, xi, c,
                     f_s, basis, zone_box, inside_fn, criterion, weights),
-              maxiter=maxiter, popsize=eff_popsize, seed=seed, tol=1e-3,
+              maxiter=maxiter, init=init_pop, seed=seed, tol=1e-3,
               mutation=(0.5, 1.0), recombination=0.7, polish=False,
               updating="deferred", callback=_de_callback)
     try:
@@ -345,6 +349,66 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
             "result": res, "improved": improved, "axis": axis, "n_free": n_free,
             "changes": crit_changes + summarize_changes(sources, best, dofs),
             "criterion": criterion}
+
+
+def _current_vector(sources, dofs):
+    """Vector x de los DOF en su valor ACTUAL (para sembrar la config del usuario
+    como uno de los arranques)."""
+    x = []
+    for (i, kind, ax, lo, hi) in dofs:
+        s = sources[i]
+        if kind == "pos":
+            x.append(float(s.position[ax]))
+        elif kind == "delay":
+            x.append(float(getattr(s, "delay_s", 0.0)))
+        elif kind == "fc":
+            x.append(float(getattr(s, "filter_fc", 100.0)))
+        elif kind == "polarity":
+            x.append(0.0 if int(getattr(s, "polarity", 1)) >= 0 else 1.0)
+        elif kind == "level":
+            x.append(float(getattr(s, "sensitivity_dB", None) or 90.0))
+        else:
+            x.append(0.5 * (lo + hi))
+    return np.asarray(x, dtype=float)
+
+
+def _seed_population(base, dofs, n_pop, seed_val):
+    """Poblacion INICIAL de differential_evolution con SEMILLAS heuristicas (Fase C).
+
+    Reemplaza arranques aleatorios por geometrias conocidas-buenas sobre los DOF de
+    POSICION (las demas variables quedan en su valor actual): centrado, esquina min,
+    esquina max, cuartos (1/4-3/4 alternado) y spread simetrico angosto. Analogo a
+    las semillas de `location_opt` (estereo/subs-1/4/esquina), mapeadas al espacio de
+    busqueda de este optimizador. El resto de la poblacion se llena al azar dentro de
+    las cotas. MISMO presupuesto (n_pop*maxiter): solo cambia DE DONDE arranca DE, no
+    cuanto evalua. Devuelve un array (n_pop, D) para pasar como `init`."""
+    lo = np.asarray([d[3] for d in dofs], dtype=float)
+    hi = np.asarray([d[4] for d in dofs], dtype=float)
+    pos_idx = [j for j, d in enumerate(dofs) if d[1] == "pos"]
+    x_cur = _current_vector(base, dofs)
+
+    def _seed(frac_fn):
+        v = x_cur.copy()
+        for n, j in enumerate(pos_idx):
+            v[j] = lo[j] + float(frac_fn(n)) * (hi[j] - lo[j])
+        return v
+
+    seeds = [x_cur,
+             _seed(lambda n: 0.5),                          # centrado
+             _seed(lambda n: 0.12),                         # esquina min
+             _seed(lambda n: 0.88),                         # esquina max
+             _seed(lambda n: 0.25 if n % 2 == 0 else 0.75),  # cuartos
+             _seed(lambda n: 0.35 if n % 2 == 0 else 0.65)]  # spread angosto
+    rng = np.random.default_rng(seed_val)
+    n_pop = max(int(n_pop), len(seeds) + 4)
+    init = rng.uniform(lo, hi, size=(n_pop, len(dofs)))
+    for m, sv in enumerate(seeds[:n_pop]):
+        init[m] = np.clip(sv, lo, hi)
+    # DOF binarios (polaridad): la poblacion inicial debe caer en {0,1}.
+    for j, d in enumerate(dofs):
+        if d[1] == "polarity":
+            init[:, j] = np.round(np.clip(init[:, j], 0.0, 1.0))
+    return init
 
 
 def summarize_changes(before_sources, after_sources, dofs) -> list:

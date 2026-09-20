@@ -206,6 +206,31 @@ def main():
           isinstance(r_sph, dict) and len(r_sph["optimized"]) == 4
           and all(o.render_kind == "sphere" for o in r_sph["optimized"][:2]))
 
+    # --- 6d. Fase C: poblacion inicial SEMBRADA (heuristicas) -------------------
+    subs_seed = [
+        OmniSource((3.0, 0.2, 1.2), source_type="subwoofer", free_vars={"pos"}),
+        OmniSource((3.2, 0.2, 1.2), source_type="subwoofer", free_vars={"pos"}),
+        OmniSource((3.0, 3.8, 1.2), source_type="subwoofer"),
+        OmniSource((3.2, 3.8, 1.2), source_type="subwoofer")]
+    dofs_s = copt.collect_dofs(subs_seed, (6.0, 4.0, 3.0), np.zeros(3), 1)
+    init = copt._seed_population(subs_seed, dofs_s, 20, seed_val=0)
+    lo_a = np.array([d[3] for d in dofs_s]); hi_a = np.array([d[4] for d in dofs_s])
+    check("semillas: poblacion inicial DENTRO de las cotas",
+          np.all(init >= lo_a - 1e-9) and np.all(init <= hi_a + 1e-9))
+    check("semillas: la config ACTUAL del usuario es un arranque (fila 0)",
+          np.allclose(init[0], copt._current_vector(subs_seed, dofs_s)))
+    check("semillas: la poblacion tiene >= 10 arranques (5 heuristicas + azar)",
+          init.shape[0] >= 10 and init.shape[1] == len(dofs_s),
+          f"shape={init.shape}")
+    r_seed = copt.optimize_cabs(subs_seed, (6.0, 4.0, 3.0), (3.0, 2.0, 1.2), axis=1,
+                                fmax=150.0, criterion="flat", maxiter=15)
+    # la garantia es sobre el OBJETIVO real del norte (la config actual es semilla y
+    # DE conserva la mejor), no sobre otra metrica.
+    c_b = dev.composite_cost(r_seed["before"], "flat")
+    c_a = dev.composite_cost(r_seed["after"], "flat")
+    check("con semillas el objetivo NO empeora respecto del arranque",
+          c_a <= c_b + 1e-6, f"{c_b:.2f} -> {c_a:.2f}")
+
     # --- 7. CAMPO FEM REAL (FEMModalField): oraculo en una CAJA -----------------
     # En una caja, evaluar sobre el campo FEM real debe dar ~lo mismo que la base
     # analitica rectangular (valida frames box<->mundo + el enmascarado de puntos

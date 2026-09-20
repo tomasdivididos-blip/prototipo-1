@@ -5,7 +5,9 @@
 > (deprecar la entrada duplicada de Predicción + .room versionado).** Escrito
 > 2026-09-16. Pedido del profesor Bidondo (vía Ale, 15 Sep 2026) + acuerdo con el
 > usuario (opción "panel único"). Los puntos 1 (cualquier par opuesto) y 2
-> (optimizador no-freeze) ya estaban; este .md era el punto 3.
+> (optimizador no-freeze) ya estaban; este .md era el punto 3. **Fase C (semillas)
+> también HECHA (2026-09-20).** Falta solo la Fase D (deprecar la entrada duplicada
+> de Predicción + .room versionado), pendiente de decisión de UX.
 >
 > **Hecho:** panel "Optimización de fuentes" con selector de NORTE (flat DEFAULT,
 > spatial, sbir, combined por caso de uso, cabs, dba); nortes puros sin esquema de
@@ -165,7 +167,15 @@ Preguntas de UX abiertas (para charlar):
    `dba_evaluate.composite_cost(metrics, criterion, weights)` (flat/spatial/sbir/combined/
    cabs/dba) -> optimizar y evaluar concuerdan por construcción. `bench_norte_criterios`
    29/29 (oráculos SBIR + combinado: score en rango, pesos por uso discriminan, optimiza).
-3. **Fase C (semillas):** DE con semillas heurísticas de Predicción (opción C).
+3. **Fase C (semillas): HECHA (2026-09-20).** El optimizador (`cabs_optimize`) ya no
+   arranca solo desde las posiciones actuales: siembra la población inicial de
+   `differential_evolution` con arranques heurísticos sobre los DOF de posición
+   (centrado, esquina min/max, cuartos 1/4-3/4, spread simétrico) más la config actual
+   del usuario, y el resto al azar (`_seed_population`, pasado como `init`). Mismo
+   presupuesto (eff_popsize·D). Análogo a las semillas de `location_opt`. Medido:
+   nunca peor que el arranque (la config actual es semilla y DE conserva la mejor);
+   con arranque malo y pocas generaciones da head-start (maxiter=4: sembrado 3.25 vs
+   aleatorio 3.38; convergen con más iters). `bench_source_opt` 29/29.
 4. **Fase D:** deprecar/redirigir la entrada duplicada, .room versionado, MANUAL.
 
 ## 6. Qué NO cambia
