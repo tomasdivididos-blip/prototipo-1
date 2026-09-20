@@ -281,6 +281,27 @@ class DBADialog(QDialog):
             self.lbl_opt_vars.setVisible(False)
             lay.addWidget(self.lbl_opt_vars)
 
+            # Colocación DESDE CERO (greenfield): propone ubicaciones (mono/estéreo/
+            # subs-1/4/esquina/flush) rankeadas por el norte, y aplica la elegida.
+            self._suggestions = []
+            self.btn_suggest = QPushButton("Sugerir ubicaciones (desde cero)")
+            self.btn_suggest.setToolTip(
+                "Propone dónde ubicar las fuentes desde cero (estéreo, subs a 1/4, "
+                "esquina, montadas a la pared…), rankeadas por el norte elegido. "
+                "Elegí una en la lista y tocá «Aplicar sugerencia».")
+            self.btn_suggest.clicked.connect(self._suggest)
+            self.btn_suggest.setVisible(False)
+            lay.addWidget(self.btn_suggest)
+            _srow = QHBoxLayout()
+            self.combo_suggest = QComboBox()
+            self.btn_apply_suggest = QPushButton("Aplicar sugerencia")
+            self.btn_apply_suggest.clicked.connect(self._apply_suggest)
+            _srow.addWidget(self.combo_suggest, 1)
+            _srow.addWidget(self.btn_apply_suggest)
+            self._suggest_w = QWidget(); self._suggest_w.setLayout(_srow)
+            self._suggest_w.setVisible(False)
+            lay.addWidget(self._suggest_w)
+
         self.lbl_res = QLabel("Elegí la configuración y tocá «Calcular».")
         self.lbl_res.setWordWrap(True)
         lay.addWidget(self.lbl_res)
@@ -442,6 +463,9 @@ class DBADialog(QDialog):
             self.btn_apply.setVisible(not ev)
         if self.btn_opt is not None:
             self.btn_opt.setVisible(ev)
+        if hasattr(self, "btn_suggest"):
+            self.btn_suggest.setVisible(ev)
+            self._suggest_w.setVisible(ev and bool(self._suggestions))
         if self.lbl_opt_vars is not None:
             self.lbl_opt_vars.setVisible(ev)
             if ev:
@@ -690,6 +714,63 @@ class DBADialog(QDialog):
         worker.finished_ok.connect(_ok)
         worker.failed.connect(_err)
         worker.start()
+
+    def _suggest(self):
+        """Propone ubicaciones desde cero, rankeadas por el norte (greenfield)."""
+        import cabs_optimize as copt
+        ctx = self._eval_ctx or {}
+        self.btn_suggest.setEnabled(False)
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            sug = copt.suggest_layouts(
+                self._dims, ctx.get("origin", (0.0, 0.0, 0.0)),
+                ctx.get("receiver_world", self._receiver),
+                walls=ctx.get("walls_fn"), criterion=self._criterion(),
+                weights=self._criterion_weights(), fem=ctx.get("fem"),
+                fmax=self.sb_fmax.value(), xi=self.sb_xi.value(),
+                inside_fn=ctx.get("inside_fn"))
+        except Exception as e:
+            self.lbl_res.setText(f"<span style='color:#b00'>Error: {e}</span>")
+            return
+        finally:
+            QApplication.restoreOverrideCursor()
+            self.btn_suggest.setEnabled(True)
+        self._suggestions = sug
+        self.combo_suggest.clear()
+        _names = {"mono": "Mono al frente", "estereo": "Estéreo",
+                  "estereo_ancho": "Estéreo ancho", "subs_1/4": "Subs a 1/4 y 3/4",
+                  "esquina": "Esquina", "flush_estereo": "Estéreo pegado a la pared"}
+        for d in sug:
+            nm = _names.get(d["label"], d["label"])
+            self.combo_suggest.addItem(f"{nm}  (costo {d['cost']:.1f})", d)
+        self._suggest_w.setVisible(bool(sug))
+        crit = self._crit_label()
+        lines = [f"<b>Ubicaciones sugeridas</b> (norte: {crit}, menor costo = mejor):"]
+        for d in sug[:6]:
+            nm = _names.get(d["label"], d["label"])
+            extra = (f", peine {d['sbir_span']:.1f} dB"
+                     if self._criterion() == "sbir" else
+                     f", planitud {d['flat']:.1f}, varianza {d['spatial']:.1f} dB")
+            outside = "" if d["inside"] else " <span style='color:#b45309;'>(cae fuera del recinto)</span>"
+            lines.append(f"&nbsp;• <b>{nm}</b>: costo {d['cost']:.2f}{extra}{outside}")
+        lines.append("<span style='color:#555;'>Elegí una en la lista y tocá "
+                     "«Aplicar sugerencia».</span>")
+        self.lbl_res.setText("<br>".join(lines))
+
+    def _apply_suggest(self):
+        """Aplica la ubicación sugerida elegida (crea las fuentes en la sala)."""
+        d = self.combo_suggest.currentData()
+        apply_cb = (self._eval_ctx or {}).get("apply_layout")
+        if not d or apply_cb is None:
+            return
+        try:
+            apply_cb(d["positions"])
+            self.lbl_res.setText(
+                f"<span style='color:#2e7d32;'>Ubicación aplicada: "
+                f"{len(d['positions'])} fuente(s) creada(s). Podés evaluar u "
+                "optimizar desde acá.</span>")
+        except Exception as e:
+            self.lbl_res.setText(f"<span style='color:#b00'>No se pudo aplicar: {e}</span>")
 
     def _on_opt_done(self, r, ctx):
         """Post-proceso de la optimizacion (en el hilo principal): mostrar el

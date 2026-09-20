@@ -5990,6 +5990,7 @@ class AcousticPanel(QWidget):
             "origin": tuple(np.asarray(vmin, dtype=float).tolist()),
             "f_schroeder": f_s,
             "apply_optimized": self._apply_cabs_optimization,
+            "apply_layout": self._apply_suggested_layout,
             "eqc": eqc,
             "inside_fn": _inside_fn,
             "is_rectangular": is_rectangular,
@@ -6044,6 +6045,36 @@ class AcousticPanel(QWidget):
         self.schedule_field_update()
         muted = "  (otras fuentes muteadas)" if mute_others else ""
         self._log(f"DBA aplicado: {len(specs)} fuentes creadas.{muted}")
+
+    def _apply_suggested_layout(self, positions):
+        """Crea fuentes (subwoofer) en las posiciones MUNDO sugeridas por el panel
+        de optimización (colocación desde cero). Reemplaza las sugerencias previas
+        (label Sug-*); ofrece mutear las otras activas para un A/B limpio."""
+        from sources import OmniSource
+        pos_list = [tuple(float(x) for x in p) for p in positions]
+        others = [s for s in self.sources.sources
+                  if not str(getattr(s, "label", "")).startswith("Sug-")
+                  and getattr(s, "active", True)]
+        mute = False
+        if others:
+            mute = QMessageBox.question(
+                self, "Aplicar ubicación sugerida",
+                f"Se crearán {len(pos_list)} fuente(s) en las posiciones sugeridas.\n"
+                f"Hay {len(others)} fuente(s) activas.\n\n¿Mutearlas para escuchar/"
+                "medir solo las nuevas? (las reactivás con el mute por fuente).",
+                QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes
+        self.sources.sources = [s for s in self.sources.sources
+                                if not str(getattr(s, "label", "")).startswith("Sug-")]
+        if mute:
+            for s in self.sources.sources:
+                s.active = False
+        for i, p in enumerate(pos_list):
+            self.sources.add(OmniSource(position=p, label=f"Sug-{i+1}",
+                                        source_type="subwoofer"))
+        self._refresh_sources_list()
+        self.schedule_field_update()
+        self._log(f"Ubicación sugerida aplicada: {len(pos_list)} fuentes"
+                  + ("  (otras muteadas)" if mute else "") + ".")
 
     def _modal_fom_eqc(self, act, damping, fa):
         """FoM (planitud/espacial, §8) + corregibilidad EQ (C13/C21) sobre una

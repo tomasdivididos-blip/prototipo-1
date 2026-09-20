@@ -3010,6 +3010,8 @@ El **resultado de «Optimizar»** muestra el objetivo en su métrica natural y e
 
 El mismo norte se usa para «Evaluar» y para «Optimizar» (coherencia). Con los nortes puros (compuesta plana / uniformidad espacial) el resultado es directamente el veredicto de planitud/uniformidad, sin la clasificación de paredes ni las condiciones de esquema (que solo aplican a CABS/DBA). Todo lo demás (variables libres por fuente, barra con tiempo restante, campo FEM real en salas no rectangulares, límites de bafle/esfera) funciona igual para cualquier norte.
 
+En modo «Optimizar mis fuentes», además de «Evaluar» y «Optimizar», está **«Sugerir ubicaciones (desde cero)»**: propone dónde poner las fuentes partiendo de configuraciones típicas (mono, estéreo, estéreo ancho, subs a 1/4 y 3/4, esquina, estéreo pegado a la pared), las **rankea por el norte elegido** sobre el campo real de la sala, y con «Aplicar sugerencia» crea las fuentes en la elegida. Es la colocación desde cero que antes solo estaba en Predicción, ahora con el mismo criterio que el resto del panel (por ejemplo, con norte «Mínimo SBIR» gana el estéreo pegado a la pared, que saca el peine de banda).
+
 El panel tiene dos **modos** (selector «Modo» arriba):
 
 - **Optimizar mis fuentes** (por defecto): evaluar u optimizar las fuentes que ya cargaste, según el norte. Solo se ven el norte, la banda de análisis y los botones «Evaluar» / «Optimizar». El «Eje de enfrentamiento» aparece solo si el norte es CABS o DBA (para elegir el par de paredes); con los nortes puros se oculta porque el objetivo no depende de un eje.

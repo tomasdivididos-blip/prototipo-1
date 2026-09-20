@@ -24,9 +24,69 @@ import numpy as np
 from dataclasses import replace
 from typing import List, Optional
 
-from sources import C0
+from sources import C0, OmniSource
 import dba_evaluate as dev
 import dba as _dba
+
+
+# ---------------------------------------------------------------------------
+# Colocacion GREENFIELD: rankear layouts SEMILLA por el norte (Fase C+, unifica la
+# "Ubicacion de fuentes" de Prediccion dentro del panel unico)
+# ---------------------------------------------------------------------------
+def suggest_layouts(dims, origin, receiver, *, walls=None, criterion="flat",
+                    weights=None, fem=None, baffle=(0.30, 0.50, 0.40),
+                    fmin=20.0, fmax=200.0, n_freq=120, xi=0.03, c=C0,
+                    inside_fn=None, axis=None):
+    """Propone ubicaciones DESDE CERO: toma los layouts semilla de `location_opt`
+    (mono, estereo, estereo ancho, subs 1/4, esquina, flush) y los RANKEA por el
+    MISMO norte (`composite_cost`) sobre el campo de esta sala (FEM real o base
+    analitica). Devuelve una lista de dicts ordenada por costo (menor=mejor):
+    {label, positions [mundo], cost, flat, spatial, sbir_span, inside}.
+
+    Reusa el motor y el objetivo del panel unificado -> el score de una sugerencia
+    coincide con lo que daria evaluar ese layout. `inside_fn` filtra al recinto real
+    (si todas quedan afuera, no filtra, para no dejar la lista vacia)."""
+    import location_opt as _lo
+    origin = np.asarray(origin, dtype=float)
+    dims = tuple(float(x) for x in dims)
+    fa = np.linspace(fmin, fmax, int(n_freq))
+    if callable(walls):
+        walls = walls(fa)
+    basis, xi_eff = dev._basis_and_xi(fem, origin, xi, c)
+    if basis is None:
+        basis = dev.make_basis(dims, fmax, c)
+    if axis is None:
+        axis = int(np.argmax(dims))
+    f_s = dev._schroeder_guess(dims, xi)
+    want_sbir = dev.wants_sbir(criterion)
+    layouts = _lo.seed_layouts(origin, origin + np.asarray(dims), baffle=baffle)
+
+    def _inside(pos):
+        if inside_fn is None:
+            return True
+        try:
+            return bool(np.all([inside_fn(p) for p in pos]))
+        except Exception:
+            return True
+
+    scored = []
+    for lay in layouts:
+        pos = np.atleast_2d(np.asarray(lay.positions, dtype=float))
+        srcs = [OmniSource(tuple(p), source_type="subwoofer", baffle_size=baffle)
+                for p in pos]
+        m = dev._config_metrics(srcs, dims, origin, walls, receiver, axis=axis,
+                                fa=fa, xi=xi_eff, c=c, f_s=f_s, basis=basis,
+                                with_decay=False, want_sbir=want_sbir)
+        scored.append({
+            "label": lay.label, "positions": pos.tolist(),
+            "cost": float(dev.composite_cost(m, criterion, weights)),
+            "flat": float(m["flat"]), "spatial": float(m["spatial"]),
+            "sbir_span": float(m.get("sbir_span", float("nan"))),
+            "inside": bool(_inside(pos))})
+    ins = [d for d in scored if d["inside"]]
+    use = ins if ins else scored            # si todas caen afuera, no filtrar
+    use.sort(key=lambda d: d["cost"])
+    return use
 
 
 # ---------------------------------------------------------------------------

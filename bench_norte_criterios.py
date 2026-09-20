@@ -178,6 +178,36 @@ def main():
     check("optimize('combined') no empeora el objetivo (100-score)", j1 <= j0 + 1e-6,
           f"{j0:.2f} -> {j1:.2f}")
 
+    # --- 8. GREENFIELD: suggest_layouts rankea semillas por el norte -------------
+    sug = copt.suggest_layouts(dims, np.zeros(3), (2.5, 2.0, 1.2), walls=walls,
+                               criterion="flat", fmax=180.0)
+    check("suggest_layouts devuelve candidatos ordenados por costo (menor primero)",
+          len(sug) >= 4 and all(sug[i]["cost"] <= sug[i + 1]["cost"] + 1e-9
+                                for i in range(len(sug) - 1)),
+          f"{[(d['label'], round(d['cost'],1)) for d in sug[:3]]}")
+    # coherencia: el costo del candidato = composite_cost de evaluar ese layout
+    top = sug[0]
+    r_top = dev.evaluate_cabs(
+        [OmniSource(tuple(p), source_type="subwoofer") for p in top["positions"]],
+        dims, (2.5, 2.0, 1.2), walls=walls, criterion="flat", fmax=180.0)
+    check("el costo de una sugerencia coincide con evaluar ese layout (coherencia)",
+          abs(top["cost"] - dev.composite_cost(
+              {"flat": r_top["flat_real"], "spatial": r_top["spatial_real"]}, "flat")) < 0.2,
+          f"sug={top['cost']:.2f} eval={r_top['flat_real']:.2f}")
+    # SBIR: el estereo FLUSH (montado a la pared) baja el peine respecto del MISMO
+    # estereo despegado (regla flush/soffit: el notch se va de banda). Robusto al
+    # set de paredes (no exige que flush sea el #1 absoluto).
+    sug_sb = copt.suggest_layouts(dims, np.zeros(3), (2.5, 2.0, 1.2), walls=walls,
+                                  criterion="sbir", fmax=180.0)
+    by = {d["label"]: d["cost"] for d in sug_sb}
+    check("SBIR: el estereo FLUSH mejora el peine vs el estereo despegado",
+          by.get("flush_estereo", 1e9) <= by.get("estereo", -1e9) + 1e-6,
+          f"flush={by.get('flush_estereo'):.2f} estereo={by.get('estereo'):.2f}")
+    # inside_fn que rechaza todo -> no deja la lista vacia (fallback)
+    sug_out = copt.suggest_layouts(dims, np.zeros(3), (2.5, 2.0, 1.2), walls=walls,
+                                   criterion="flat", inside_fn=lambda p: False)
+    check("inside_fn que rechaza todo -> lista NO vacia (fallback)", len(sug_out) >= 1)
+
     print("-" * 64)
     print(f"  {_N_OK}/{_N_OK + _N_FAIL} checks OK")
     return _N_FAIL == 0

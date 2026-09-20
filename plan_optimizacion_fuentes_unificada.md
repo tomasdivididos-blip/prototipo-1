@@ -176,7 +176,19 @@ Preguntas de UX abiertas (para charlar):
    nunca peor que el arranque (la config actual es semilla y DE conserva la mejor);
    con arranque malo y pocas generaciones da head-start (maxiter=4: sembrado 3.25 vs
    aleatorio 3.38; convergen con más iters). `bench_source_opt` 29/29.
-4. **Fase D:** deprecar/redirigir la entrada duplicada, .room versionado, MANUAL.
+4. **Greenfield en el panel unificado (2026-09-20, previo a Fase D — opción (b) del
+   usuario):** botón **«Sugerir ubicaciones (desde cero)»** en modo Optimizar:
+   `cabs_optimize.suggest_layouts` toma los layouts semilla de `location_opt`
+   (mono/estéreo/estéreo-ancho/subs-1/4/esquina/flush) y los RANKEA por el norte
+   (`composite_cost`) sobre el campo real de la sala; combo + «Aplicar sugerencia»
+   crea las fuentes (`acoustic_panel._apply_suggested_layout`, label Sug-*). Reusa el
+   motor y el objetivo del panel -> el score de una sugerencia coincide con evaluar
+   ese layout. Validado: para SBIR el estéreo FLUSH baja el peine ~10 dB vs el
+   despegado (regla flush/soffit). `bench_norte_criterios` 33/33. Con esto el panel
+   unificado hace greenfield + refine -> la Fase D (deprecar la entrada de Predicción)
+   ya no borra capacidad.
+5. **Fase D (pendiente):** ahora sí, deprecar/redirigir la «Ubicación de fuentes» de
+   Predicción hacia el panel unificado + .room versionado + MANUAL.
 
 ## 6. Qué NO cambia
 
