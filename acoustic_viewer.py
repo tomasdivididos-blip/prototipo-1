@@ -740,6 +740,33 @@ def colormap_signed_vivid(t: np.ndarray) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # Mapa de calor 3D (nube de puntos coloreada por presion)
 # ---------------------------------------------------------------------------
+def _field_point_size_world(points, factor: float = 0.6, fallback: float = 0.08):
+    """Diametro del punto en UNIDADES DE MUNDO (metros) ligado al espaciado de la
+    grilla del campo.
+
+    Con `pxMode=False` el tamano se interpreta en coordenadas de la escena, no en
+    pixeles fijos de pantalla: los puntos quedan del mismo tamano FISICO en
+    cualquier recinto (chico dibujado o CAD grande) y escalan al hacer zoom. Antes
+    se usaba `size=7, pxMode=True`, tamano fijo en pixeles que no dependia del
+    recinto -> puntos gigantes en salas chicas y minusculos en salas grandes.
+
+    El espaciado sale de la propia grilla regular: el minimo paso entre las
+    coordenadas unicas de cada eje. Se usa el MINIMO entre ejes para que los puntos
+    no se superpongan en el eje mas denso; `factor` < 1 deja una pequena separacion.
+    """
+    pts = np.asarray(points, dtype=float)
+    if pts.ndim != 2 or len(pts) < 2:
+        return fallback
+    steps = []
+    for a in range(3):
+        u = np.unique(np.round(pts[:, a], 6))
+        if u.size > 1:
+            steps.append(float(np.min(np.diff(u))))
+    if not steps:
+        return fallback
+    return factor * min(steps)
+
+
 class PressureField3D:
     """Renderiza el campo de presion acustica 3D como nube de puntos coloreada.
 
@@ -752,11 +779,12 @@ class PressureField3D:
         self._item = None
 
     def update(self, points: np.ndarray, pressure_abs: np.ndarray,
-               point_size: int = 7):
+               point_size=None):
         """Actualiza la visualizacion.
 
         points: (N,3) posiciones dentro del recinto
         pressure_abs: (N,) amplitud de presion en cada punto
+        point_size: diametro en METROS; None = auto segun el espaciado de la grilla.
         """
         self.clear()
         if points is None or len(points) == 0:
@@ -770,21 +798,24 @@ class PressureField3D:
         alpha = (0.4 + 0.5 * t).reshape(-1, 1)      # mas opaco donde hay mas presion
         rgba = np.concatenate([rgb, alpha], axis=1).astype(np.float32)
 
+        sz = _field_point_size_world(points) if point_size is None else point_size
         self._item = gl.GLScatterPlotItem(
             pos=points.astype(np.float32),
             color=rgba,
-            size=point_size,
-            pxMode=True,
+            size=sz,
+            pxMode=False,
         )
         self.viewer.addItem(self._item)
 
     def update_signed(self, points: np.ndarray, values: np.ndarray,
-                      point_size: int = 7):
+                      point_size=None):
         """Muestra forma modal con signo: AZUL=negativo, GRIS=cero, ROJO=positivo.
 
         Reemplazo del blanco central por gris para evitar que los puntos cerca
         de cero "blanqueen" la imagen al subir la resolucion. Usa colors mas
         vibrantes (saturacion por sqrt(|t|)).
+
+        point_size: diametro en METROS; None = auto segun el espaciado de la grilla.
         """
         self.clear()
         if points is None or len(points) == 0:
@@ -797,11 +828,12 @@ class PressureField3D:
         # (no aportan informacion modal). Minimo 0.25 para que se vean.
         alpha = (0.25 + 0.70 * np.abs(t)).reshape(-1, 1)
         rgba = np.concatenate([rgb, alpha], axis=1).astype(np.float32)
+        sz = _field_point_size_world(points) if point_size is None else point_size
         self._item = gl.GLScatterPlotItem(
             pos=points.astype(np.float32),
             color=rgba,
-            size=point_size,
-            pxMode=True,
+            size=sz,
+            pxMode=False,
         )
         self.viewer.addItem(self._item)
 

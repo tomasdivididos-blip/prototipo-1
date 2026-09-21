@@ -349,6 +349,30 @@ class MainWindow(QMainWindow):
         )
 
     # ---------- Importacion de CAD ----------
+    def _quick_import_cad(self):
+        """Ctrl+I: importa un CAD DIRECTO y lo aplica como geometria activa,
+        salteando el panel «Configuración de CAD».
+
+        Corre el mismo pipeline que el boton «Importar CAD…» del panel (file
+        dialog + escala/orientacion + diagnostico) via `_load_cad_for_dialog`, pero
+        en vez de abrir el panel aplica la malla directamente (centrada). El panel
+        sigue disponible por su boton para curar/exportar sobre el CAD activo, o
+        cuando la malla venga rota. Es el atajo que hace la accion frecuente, no el
+        que abre su menu."""
+        res = self._load_cad_for_dialog(None)
+        if not res:
+            return
+        mesh, diag, path = res
+        self._apply_cad_mesh(mesh, path, center=True)
+        # Aviso NO bloqueante: si la malla no es cerrada, se puede curar en el panel.
+        try:
+            if diag is not None and not bool(getattr(diag, "is_watertight", True)):
+                self.status.setText(
+                    self.status.text() +
+                    "  ·  CAD no cerrado: podés curarlo en «Configuración de CAD».")
+        except Exception:
+            pass
+
     def _open_cad_import(self):
         """Slot: usuario abrio «Configuración de CAD».
 
@@ -997,7 +1021,7 @@ class MainWindow(QMainWindow):
         self._add_shortcut("Ctrl+Shift+S", self.save_file_as)
         self._add_shortcut("Ctrl+O", self.load_file)
         self._add_shortcut("0", self.viewer.reset_camera)
-        self._add_shortcut("Ctrl+I", self._open_cad_import)
+        self._add_shortcut("Ctrl+I", self._quick_import_cad)
         # Fijar / liberar eje mundial para rotacion restringida (toggle).
         # Atajos: Ctrl+Shift+Alt + X / Y / Z.
         self._add_shortcut("Ctrl+Shift+Alt+X",

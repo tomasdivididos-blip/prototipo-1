@@ -2950,6 +2950,40 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.47 (tanda UI/UX + coherencia npm/modos en perturbación)
+
+**Cambios v2.47** (21 de septiembre 2026): una tanda de mejoras de interfaz (plan en `plan_mejoras_ux.md`, criterio en `ux_principios.md`) más un ajuste de coherencia en el auto-mallado. Ningún cambio toca la física: campo, frecuencias y modos son los mismos.
+
+### Campo 3D: puntos del tamaño correcto
+
+La nube de puntos del campo 3D ahora escala con el recinto. Antes el tamaño era fijo en píxeles de pantalla, así que los puntos se veían enormes en salas chicas y minúsculos en un CAD grande. Ahora el diámetro va en metros, ligado al espaciado real de la grilla, y crece/achica al hacer zoom (mismo tamaño físico en cualquier sala).
+
+### Ejes X/Y/Z en el render + colores más saturados
+
+Sobre las flechas de origen aparecen las letras **X, Y, Z**, cada una del color de su flecha (X roja, Y azul, Z verde), para orientarse de un vistazo. Los tres colores de eje quedaron más saturados.
+
+### Ctrl+I importa el CAD directo
+
+**Ctrl+I** ahora abre el diálogo de archivo de importar CAD directo (elegir, escalar/orientar, aplicar), sin pasar por el panel de «Configuración de CAD». El panel sigue disponible por su botón para curar/exportar sobre el CAD activo.
+
+### Panel FEM: dos botones + configuración
+
+El grupo «FEM modal» quedó limpio: **«Configuración de FEM…»** (un diálogo con Nº de modos, densidad voxel/npm, h de gmsh y motor de mallado) y **«Calcular modos (FEM)»**, con el estado del motor entre ambos. Dentro del diálogo, el botón de sugerencia se llama **«Aplicar sugerencia»** (carga el npm recomendado, sobrescribe tu valor) y al lado hay un **«OK»** que confirma los valores actuales y calcula el FEM con ellos.
+
+### Campo 3D: actualización Automática o Manual
+
+Un selector **Automático / Manual (Enter)** en el grupo «Campo acústico 3D». En Automático, cambiar la frecuencia/modo (o mover una fuente) re-renderiza solo. En Manual, el campo solo se re-renderiza al apretar Enter o el botón (recomendado con resolución alta).
+
+### Cortes laterales: mini-planta con la pared activa
+
+Al dibujar el perfil de tope de cada pared («Cortes laterales»), un mini-preview de la planta muestra en **rojo** la pared que estás dibujando (con su número), en azul las ya dibujadas y en gris el resto. Resuelve el no saber qué pared es cada corte.
+
+### Coherencia npm/modos con amortiguamiento por perturbación
+
+Con el modelo de **perturbación** y motor **Automático**, el f_S real (T30 por modo) es más alto que el estimador Sabine con el que se dimensiona la malla en la primera pasada. Ahora, al apretar Calcular una vez, si el f_S de perturbación supera la validez de la malla, el automático **re-malla y re-resuelve una sola vez** con el npm/h más alto (vale para voxel y gmsh), sin pedir acción manual (la primera vez tarda unas dos pasadas). En motor fijo queda el aviso para subir npm a mano.
+
+Además, el número de modos de **Weyl** (una estimación asintótica que sobreestima el conteo real) ya no se lee como contradicción frente a los modos válidos. Cuando la malla cubre f_S, el label dice, por ejemplo, «323 modos válidos hasta ~266 Hz: cubren f_S ≈ 267 Hz (Weyl estima ~372, sobreestima el conteo real)»; solo avisa de subir npm cuando la malla queda de verdad por debajo de f_S.
+
 ## Cambios v2.46 (CABS/DBA simétrico sin «adelante/atrás», volumen real, botón «todas»)
 
 **Cambios v2.46** (17 de septiembre 2026): tres mejoras sobre la herramienta de fuentes enfrentadas, pedidas mirando el `ControlAle.room`.
@@ -3051,4 +3085,4 @@ La barra de **«Calcular modos (FEM)»** no tiene un número de pasos fijo (el s
 
 > **Estado del panel unificado (20 Sep 2026):** el panel **«Optimización de fuentes»** ya está: elegís un «norte» (transferencia compuesta plana, uniformidad espacial, mínimo SBIR, combinado por caso de uso, CABS o DBA) y corre en cualquier geometría (campo FEM real en salas no rectangulares). La configuración del array aparece solo en el modo «Diseñar un array». Falta traer las semillas heurísticas de Predicción al motor (Fase C) y deprecar la entrada duplicada de Ubicación en Predicción (Fase D). Diseño y estado en `plan_optimizacion_fuentes_unificada.md`.
 
-*Manual actualizado al 20 de Septiembre de 2026 — v2.46.*
+*Manual actualizado al 21 de Septiembre de 2026 — v2.47.*

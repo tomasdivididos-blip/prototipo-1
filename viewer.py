@@ -109,9 +109,11 @@ class AxisIndicator(QFrame):
             lab.setStyleSheet(self._style_active(k) if k == axis
                               else self._style_inactive())
 
-AXIS_X = (0.94, 0.27, 0.27, 1.0)
-AXIS_Y = (0.23, 0.51, 0.96, 1.0)
-AXIS_Z = (0.13, 0.77, 0.37, 1.0)
+# Colores de los ejes de origen (flechas 3D y sus letras X/Y/Z). Mas saturados
+# que antes para que la terna se lea de un vistazo sobre el fondo oscuro.
+AXIS_X = (0.98, 0.13, 0.13, 1.0)   # rojo
+AXIS_Y = (0.10, 0.40, 1.00, 1.0)   # azul
+AXIS_Z = (0.06, 0.82, 0.30, 1.0)   # verde
 EDGE_COLOR = (0.96, 0.74, 0.95, 1.0)
 
 
@@ -973,10 +975,10 @@ class IsoViewer(gl.GLViewWidget):
 
     # ---------- Ejes ----------
     def _add_axes(self, length, arrow):
-        for direction, color in (
-            (np.array([1.0, 0.0, 0.0]), AXIS_X),
-            (np.array([0.0, 1.0, 0.0]), AXIS_Y),
-            (np.array([0.0, 0.0, 1.0]), AXIS_Z),
+        for direction, color, letter in (
+            (np.array([1.0, 0.0, 0.0]), AXIS_X, "X"),
+            (np.array([0.0, 1.0, 0.0]), AXIS_Y, "Y"),
+            (np.array([0.0, 0.0, 1.0]), AXIS_Z, "Z"),
         ):
             tip = direction * length
             self.addItem(gl.GLLinePlotItem(
@@ -984,6 +986,24 @@ class IsoViewer(gl.GLViewWidget):
                 color=color, width=3.5, antialias=True, mode="lines",
             ))
             self.addItem(self._make_cone(tip, direction, arrow, color))
+            # Letra del eje, del mismo color que su flecha, justo pasando la punta
+            # (reconocer > recordar: el usuario ve cual eje es cual en el 3D).
+            self._add_axis_letter(direction * (length + arrow * 2.2),
+                                  letter, color)
+
+    def _add_axis_letter(self, pos, letter, color):
+        qc = QColor.fromRgbF(*[float(c) for c in color])
+        font = QFont()
+        font.setPointSize(13)
+        font.setBold(True)
+        try:
+            item = gl.GLTextItem(pos=np.asarray(pos, dtype=float),
+                                 text=letter, color=qc, font=font)
+            self.addItem(item)
+        except Exception:
+            # GLTextItem puede fallar en algun backend GL viejo: la letra es
+            # decorativa, sin ella los ejes siguen funcionando.
+            pass
 
     @staticmethod
     def _make_cone(tip, direction, size, color):

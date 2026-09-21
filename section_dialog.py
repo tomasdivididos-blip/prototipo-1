@@ -270,6 +270,99 @@ class ProfileCanvas(QWidget):
 
 
 # ---------------------------------------------------------------------------
+# Mini-preview de la planta (resalta la pared que se esta dibujando)
+# ---------------------------------------------------------------------------
+class PlanMiniPreview(QWidget):
+    """Dibuja la planta del recinto (poligono base) y RESALTA la pared activa.
+
+    Item 5 del plan UX: al dibujar el perfil de una pared, el usuario no sabia
+    CUAL de las paredes fisicas estaba editando. Este preview muestra la planta
+    vista desde arriba, con la pared en edicion en color fuerte y su numero, y
+    las demas en gris. Se sincroniza con el wizard via `set_active(i)`."""
+
+    _COL_BG      = QColor("#ffffff")
+    _COL_BORDER  = QColor("#cbd5e1")
+    _COL_WALL    = QColor("#94a3b8")   # paredes inactivas (gris)
+    _COL_DONE    = QColor("#3a86ff")   # paredes ya dibujadas (azul tenue)
+    _COL_ACTIVE  = QColor("#e84545")   # pared en edicion (rojo)
+    _COL_CORNER  = QColor("#64748b")
+
+    def __init__(self, poly, parent=None):
+        super().__init__(parent)
+        self.poly = [(float(x), float(y)) for x, y in poly]
+        self.n = len(self.poly)
+        self._active = 0
+        self._done = set()
+        self.setMinimumSize(150, 150)
+        self.setToolTip("Planta del recinto: en rojo, la pared cuyo perfil de tope "
+                        "estás dibujando; en azul, las ya dibujadas.")
+
+    def set_active(self, i, done=None):
+        self._active = int(i)
+        if done is not None:
+            self._done = set(int(k) for k in done)
+        self.update()
+
+    def _fit(self, rect, margin=16):
+        xs = [p[0] for p in self.poly]; ys = [p[1] for p in self.poly]
+        x0, x1 = min(xs), max(xs); y0, y1 = min(ys), max(ys)
+        dx = max(1e-6, x1 - x0); dy = max(1e-6, y1 - y0)
+        w = rect.width() - 2 * margin; h = rect.height() - 2 * margin
+        s = min(w / dx, h / dy)
+        # centrar
+        ox = margin + (w - s * dx) / 2.0
+        oy = margin + (h - s * dy) / 2.0
+
+        def to_screen(x, y):
+            # y hacia ARRIBA en planta -> se invierte para pantalla
+            sx = ox + (x - x0) * s
+            sy = rect.height() - (oy + (y - y0) * s)
+            return QPointF(sx, sy)
+
+        return to_screen
+
+    def paintEvent(self, _ev):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        r = self.rect()
+        p.fillRect(r, self._COL_BG)
+        p.setPen(QPen(self._COL_BORDER, 1))
+        p.drawRect(r.adjusted(0, 0, -1, -1))
+        if self.n < 2:
+            p.end(); return
+        to_screen = self._fit(QRectF(r))
+
+        # paredes: segmento i -> i+1
+        for i in range(self.n):
+            a = self.poly[i]; b = self.poly[(i + 1) % self.n]
+            pa = to_screen(*a); pb = to_screen(*b)
+            if i == self._active:
+                col, wdt = self._COL_ACTIVE, 4.0
+            elif i in self._done:
+                col, wdt = self._COL_DONE, 2.5
+            else:
+                col, wdt = self._COL_WALL, 2.0
+            p.setPen(QPen(col, wdt))
+            p.drawLine(pa, pb)
+
+        # esquinas
+        p.setPen(QPen(self._COL_CORNER, 1))
+        p.setBrush(QBrush(self._COL_CORNER))
+        for (x, y) in self.poly:
+            c = to_screen(x, y)
+            p.drawEllipse(c, 2.4, 2.4)
+
+        # numero de la pared activa en su punto medio
+        a = self.poly[self._active]; b = self.poly[(self._active + 1) % self.n]
+        mid = to_screen((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0)
+        p.setPen(QPen(self._COL_ACTIVE, 1))
+        f = p.font(); f.setBold(True); f.setPointSize(11); p.setFont(f)
+        p.drawText(QRectF(mid.x() - 14, mid.y() - 14, 28, 28),
+                   Qt.AlignCenter, str(self._active + 1))
+        p.end()
+
+
+# ---------------------------------------------------------------------------
 # Wizard de cortes laterales
 # ---------------------------------------------------------------------------
 def _ccw(poly):
@@ -337,7 +430,19 @@ class SectionWizard(QDialog):
                                     z_start=self.H, z_end=self.H,
                                     pin_start=True, pin_end=False)
         self.canvas.pointHeightEditRequested.connect(self._on_edit_point_height)
-        root.addWidget(self.canvas, 1)
+
+        # Canvas de perfil (izquierda) + mini-preview de la planta (derecha), que
+        # resalta cual pared se esta dibujando (item 5 UX).
+        mid_row = QHBoxLayout()
+        mid_row.addWidget(self.canvas, 1)
+        prev_col = QVBoxLayout()
+        prev_col.addWidget(QLabel("Planta (pared en rojo):"))
+        self.mini = PlanMiniPreview(self.poly)
+        self.mini.setFixedWidth(180)
+        prev_col.addWidget(self.mini, 1)
+        prev_col.addStretch(0)
+        mid_row.addLayout(prev_col)
+        root.addLayout(mid_row, 1)
 
         brow = QHBoxLayout()
         self.btn_flat = QPushButton("Plano")
@@ -402,6 +507,12 @@ class SectionWizard(QDialog):
         self.canvas.pin_end = pin_end
         self.canvas.reset_flat(z_start, z_end) if init is None else \
             self.canvas.set_profile(init, enabled=True)
+
+        # Sincronizar el mini-preview: pared activa + paredes ya dibujadas.
+        if hasattr(self, "mini"):
+            done = {k for k in range(self.n)
+                    if k != i and self.profiles[k] is not None}
+            self.mini.set_active(i, done=done)
 
         sym_txt = (f"  ·  opuesta = pared {opp + 1}" if opp_done else "")
         self.lbl.setText(

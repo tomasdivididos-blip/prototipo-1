@@ -3743,6 +3743,25 @@ class AcousticPanel(QWidget):
         # --- FEM modal ---
         grp_fem = QGroupBox("FEM modal")
         ff = QFormLayout(grp_fem)
+
+        # Los controles de mallado (Nº modos, densidad/npm, h gmsh, motor) viven
+        # en un dialogo «Configuración de FEM…» para dejar el panel limpio: solo
+        # el boton de configuracion, el estado, y «Calcular modos (FEM)». Los
+        # widgets siguen siendo atributos del panel (self.*), asi que toda la
+        # logica que los lee/escribe funciona igual; solo cambia donde se muestran.
+        self._fem_cfg_dialog = QDialog(self)
+        self._fem_cfg_dialog.setWindowTitle("Configuración de FEM")
+        apply_dialog_theme(self._fem_cfg_dialog)   # tema claro (fondo blanco)
+        dff = QFormLayout(self._fem_cfg_dialog)
+
+        self.btn_fem_config = QPushButton("Configuración de FEM…")
+        self.btn_fem_config.setToolTip(
+            "Parametros del mallado: Nº de modos, densidad voxel (npm), h de gmsh "
+            "y motor de mallado.")
+        self.btn_fem_config.clicked.connect(self._open_fem_config)
+        # El boton + el «Estado:» se agregan al layout MAS ABAJO, justo arriba de
+        # «Calcular modos (FEM)» (pedido del usuario: agrupar config con calcular).
+
         self.sb_nmodes = QSpinBox(); self.sb_nmodes.setRange(2, 500); self.sb_nmodes.setValue(12)
         # Tope 30 (era 10): el peor caso REAL es la sala mas viva del catalogo
         # (alpha=0.01, "Superficie totalmente reflectante") en el recinto mas
@@ -3755,7 +3774,7 @@ class AcousticPanel(QWidget):
         self.sb_htarget = QDoubleSpinBox(); self.sb_htarget.setRange(0.05, 5.0); self.sb_htarget.setValue(0.40); self.sb_htarget.setSingleStep(0.05); self.sb_htarget.setDecimals(2); self.sb_htarget.setSuffix(" m")
         self.sb_htarget.setToolTip("Tamaño característico de tetraedro para gmsh.\n"
                                     "Más chico = más preciso, más lento.")
-        ff.addRow("Nº modos:", self.sb_nmodes)
+        dff.addRow("Nº modos:", self.sb_nmodes)
 
         # Sugerencia Weyl: cuantos modos hay por debajo de f_Schroeder.
         # Se actualiza al apretar "Calcular f_Schroeder" (mas abajo) o al
@@ -3765,7 +3784,7 @@ class AcousticPanel(QWidget):
         self.lbl_modes_weyl = QLabel("≈ ? modos hasta f_Schroeder (calculá f_S)")
         self.lbl_modes_weyl.setStyleSheet("color: #94e2d5; font-size: 9pt;")
         self.lbl_modes_weyl.setWordWrap(True)
-        ff.addRow("", self.lbl_modes_weyl)
+        dff.addRow("", self.lbl_modes_weyl)
 
         # Tooltip mejorado: explicar la regla npm = ppw * f / c y apuntar al
         # widget de sugerencia (mas abajo) que la materializa con f_S.
@@ -3777,30 +3796,38 @@ class AcousticPanel(QWidget):
             "Rango 0.5-30: el tope cubre la sala más viva del catálogo (α=0.01) en\n"
             "el recinto más chico. Ojo: el costo va como npm³."
         )
-        ff.addRow("Densidad voxel (1/m):", self.sb_density)
+        dff.addRow("Densidad voxel (1/m):", self.sb_density)
 
         # Compromiso D4: sugerir npm derivado de f_Schroeder, pero dejar al
-        # usuario en control del slider. El boton "Aplicar" carga la sugerencia
-        # al spinbox de un click. Se llena al apretar "Calcular f_Schroeder".
+        # usuario en control del slider. El boton "Aplicar sugerencia" carga la
+        # sugerencia al spinbox de un click. Se llena al apretar "Calcular
+        # f_Schroeder". Al lado, "OK" confirma los valores actuales y calcula.
         self.lbl_npm_suggested = QLabel("npm sugerido: calculá f_Schroeder primero")
         self.lbl_npm_suggested.setStyleSheet("color: #94e2d5; font-size: 9pt;")
         self.lbl_npm_suggested.setWordWrap(True)
-        self.btn_apply_npm_suggested = QPushButton("Aplicar")
-        self.btn_apply_npm_suggested.setMaximumWidth(90)
+        self.btn_apply_npm_suggested = QPushButton("Aplicar sugerencia")
         self.btn_apply_npm_suggested.setEnabled(False)
         self.btn_apply_npm_suggested.setToolTip(
-            "Carga el npm sugerido al spinbox de densidad.\n"
+            "Carga el npm SUGERIDO al spinbox de densidad (sobrescribe tu valor).\n"
             "Calculado como npm = 6 · f_Schroeder / 343."
         )
         self.btn_apply_npm_suggested.clicked.connect(self._apply_suggested_npm)
         self._suggested_npm: Optional[float] = None
+        # OK: confirma los valores ACTUALES (los que vos pusiste, no la sugerencia)
+        # y calcula el FEM con ellos, cerrando el dialogo. Da la "sensacion de ok"
+        # al input propio, sin que Aplicar sugerencia lo pise.
+        self.btn_fem_ok = QPushButton("OK")
+        self.btn_fem_ok.setObjectName("PrimaryButton")
+        self.btn_fem_ok.setToolTip("Calcular el FEM con estos valores y cerrar.")
+        self.btn_fem_ok.clicked.connect(self._fem_config_ok)
         _h_npm = QWidget()
         _h_npm_lay = QHBoxLayout(_h_npm); _h_npm_lay.setContentsMargins(0, 0, 0, 0)
         _h_npm_lay.addWidget(self.lbl_npm_suggested, 1)
         _h_npm_lay.addWidget(self.btn_apply_npm_suggested, 0)
-        ff.addRow("", _h_npm)
+        _h_npm_lay.addWidget(self.btn_fem_ok, 0)
+        dff.addRow("", _h_npm)
 
-        ff.addRow("h gmsh (m):", self.sb_htarget)
+        dff.addRow("h gmsh (m):", self.sb_htarget)
 
         # Combo de motor de mallado + badge de estado
         self.combo_engine = QComboBox()
@@ -3816,7 +3843,13 @@ class AcousticPanel(QWidget):
             default_engine = "auto"
         self.combo_engine.setCurrentIndex(self._ENGINE_IDX.get(default_engine, 0))
         self.combo_engine.currentIndexChanged.connect(self._on_engine_changed)
-        ff.addRow("Motor de mallado:", self.combo_engine)
+        dff.addRow("Motor de mallado:", self.combo_engine)
+
+        # Cierre del dialogo de configuracion.
+        _fem_cfg_btns = QDialogButtonBox(QDialogButtonBox.Close)
+        _fem_cfg_btns.rejected.connect(self._fem_cfg_dialog.reject)
+        _fem_cfg_btns.accepted.connect(self._fem_cfg_dialog.accept)
+        dff.addRow(_fem_cfg_btns)
 
         self.lbl_badge = QLabel("—")
         self.lbl_badge.setAlignment(Qt.AlignCenter)
@@ -3825,7 +3858,7 @@ class AcousticPanel(QWidget):
             "background:#313244; color:#cdd6f4; font-weight:600; }"
         )
         self.lbl_badge.setToolTip("Motor que se usará en el próximo cálculo")
-        ff.addRow("Estado:", self.lbl_badge)
+        # (el «Estado:» se agrega junto al boton de config, arriba de «Calcular»)
 
         # Botones de geometria importada.
         # Antes en HBoxLayout lado-a-lado; en pantallas angostas "Volver a
@@ -3866,6 +3899,9 @@ class AcousticPanel(QWidget):
         self.lbl_xi_info = QLabel("ξ se calcula desde materiales")
         self.lbl_xi_info.setStyleSheet("color: #94a3b8; font-size: 8pt;")
         ff.addRow(self.lbl_xi_info)
+        # Configuracion de FEM + Estado, JUSTO arriba de «Calcular modos (FEM)».
+        ff.addRow(self.btn_fem_config)
+        ff.addRow("Estado:", self.lbl_badge)
         self.btn_solve_fem = QPushButton("Calcular modos (FEM)")
         self.btn_solve_fem.setObjectName("PrimaryButton")
         ff.addRow(self.btn_solve_fem)
@@ -3909,6 +3945,8 @@ class AcousticPanel(QWidget):
         self.combo_mode = QComboBox()
         self.combo_mode.currentIndexChanged.connect(self._update_slice)
         self.combo_mode.currentIndexChanged.connect(self._update_mode_readout)
+        # Item 2: en modo Automatico, cambiar de frecuencia re-renderiza el campo 3D.
+        self.combo_mode.currentIndexChanged.connect(self._maybe_auto_field3d)
         fmode.addRow("Modo:", self.combo_mode)
 
         # Leyenda con conteo total y filtrado (texto reactivo).
@@ -4047,6 +4085,20 @@ class AcousticPanel(QWidget):
         self.btn_field_3d.setObjectName("PrimaryButton")
         self.btn_field_3d.clicked.connect(self._update_field_3d)
         f3d.addRow(self.btn_field_3d)
+
+        # Modo de actualizacion del campo 3D. Automatico: cambiar de frecuencia
+        # (o mover una fuente) re-renderiza solo. Manual: solo se renderiza al
+        # apretar Enter / el boton (util con resoluciones altas, donde cada
+        # recalculo es caro y no se quiere disparar en cada cambio).
+        self.combo_field3d_mode = QComboBox()
+        self.combo_field3d_mode.addItems(["Automático", "Manual (Enter)"])
+        self.combo_field3d_mode.setCurrentIndex(0)
+        self.combo_field3d_mode.setToolTip(
+            "Automático: al cambiar la frecuencia/modo (o mover una fuente) el "
+            "campo 3D se re-renderiza solo.\n"
+            "Manual: el campo solo se re-renderiza al apretar Enter o el botón "
+            "«Actualizar campo 3D» (recomendado con resolución alta).")
+        f3d.addRow("Actualización:", self.combo_field3d_mode)
 
         self.sb_field3d_res = QSpinBox()
         self.sb_field3d_res.setRange(8, 80)
@@ -5121,19 +5173,22 @@ class AcousticPanel(QWidget):
                 "van a mostrar hasta que asignes materiales o un α (botón "
                 "«Materiales…» o «Calcular f_Schroeder»).")
 
-        # Aviso de validez para fuentes y receptor.
-        try:
-            self._validate_inside(verts, tris)
-        except ValueError as e:
-            ret = QMessageBox.question(
-                self, "Posiciones fuera del recinto",
-                f"{e}\n\nContinuar de todas formas?\n"
-                f"(las posiciones fuera del recinto se evaluaran con extrapolacion)",
-                QMessageBox.Yes | QMessageBox.No,
-            )
-            if ret != QMessageBox.Yes:
-                self._fem_timer.fail("cancelado")
-                return
+        # Aviso de validez para fuentes y receptor. En el re-solve automatico
+        # (item 3) NO se re-pregunta: la geometria/posiciones no cambiaron y el
+        # usuario ya respondio en la 1a pasada.
+        if not getattr(self, "_fem_auto_resolved", False):
+            try:
+                self._validate_inside(verts, tris)
+            except ValueError as e:
+                ret = QMessageBox.question(
+                    self, "Posiciones fuera del recinto",
+                    f"{e}\n\nContinuar de todas formas?\n"
+                    f"(las posiciones fuera del recinto se evaluaran con extrapolacion)",
+                    QMessageBox.Yes | QMessageBox.No,
+                )
+                if ret != QMessageBox.Yes:
+                    self._fem_timer.fail("cancelado")
+                    return
 
         # Parametros para el router (proyecto > global)
         params_geom = self._current_params_for_router()
@@ -5148,6 +5203,13 @@ class AcousticPanel(QWidget):
         if is_cad and not self._confirm_nonsolid_cad():
             self._fem_timer.fail("cancelado")
             return
+
+        # Item 3: un solve iniciado por el usuario empieza con el piso de f_S de
+        # perturbacion LIMPIO (materiales/geometria pudieron cambiar). El re-solve
+        # automatico (guard _fem_auto_resolved) NO lo limpia: conserva el f_S alto
+        # que acaba de detectar para dimensionar la 2a pasada.
+        if not getattr(self, "_fem_auto_resolved", False):
+            self._fs_pert_floor = None
 
         # ---------- AUTO-DENSITY (motor=Automatico) ----------
         # Politica: SIEMPRE cobertura completa hasta f_Schroeder. La validez
@@ -5175,6 +5237,18 @@ class AcousticPanel(QWidget):
                     raise RuntimeError("sin geometría válida para el auto-tuner")
                 V, S = ctx["V"], ctx["S"]
                 f_schroeder = ctx["fs"]
+                # Item 3: en perturbacion, el f_S REAL (T30 por modo) es mas alto
+                # que el estimador Sabine con el que se dimensiona en la 1a pasada.
+                # Si una pasada anterior lo dejo cacheado (_fs_pert_floor), el
+                # automatico lo toma como PISO -> re-malla con el npm/h mas alto
+                # (la warning de perturbacion), sin pedir accion manual.
+                _fs_floor = getattr(self, "_fs_pert_floor", None)
+                if (self._damping_model == "perturbation"
+                        and _fs_floor and _fs_floor > f_schroeder):
+                    self._log(
+                        f"Auto: uso f_S de perturbación cacheado = {_fs_floor:.0f} Hz "
+                        f"(más alto que el estimador Sabine {f_schroeder:.0f} Hz).")
+                    f_schroeder = float(_fs_floor)
 
                 # El presupuesto de modos, no la malla, es el techo real. Weyl
                 # dice cuantos modos hay debajo de f_S; si son mas de los que se
@@ -5347,9 +5421,20 @@ class AcousticPanel(QWidget):
             )
         self._refresh_modes_combo()
         self._xi_per_mode = self._compute_xi_from_materials()
-        # Etapa 2b (Pass 2): con la perturbacion activa, ahora que hay modos el
-        # f_S se recalcula con el T30 por banda y se avisa si la malla (sizeada
-        # con el estimador Sabine) quedo corta.
+        # Label honesto Weyl-vs-validos: SIEMPRE post-solve, cualquiera sea el
+        # modelo de amortiguamiento o si hay materiales asignados (el desajuste
+        # Weyl>validos aparece igual sin materiales, con el f_S de fallback). Usa
+        # el f_S del contexto vigente y el f_max real de la malla (del clip).
+        try:
+            _ctx = self._schroeder_context()
+            if _ctx:
+                self._update_weyl_validity_label(
+                    _ctx.get("fs"), f_max_clip, _ctx.get("V"), _ctx.get("S"))
+        except Exception:
+            pass
+        # Etapa 2b (Pass 2): con la perturbacion activa y materiales asignados, el
+        # f_S se recalcula con el T30 por banda; puede disparar el re-mallado
+        # automatico (item 3) y refina el label con ese f_S.
         self._post_solve_schroeder_coherence()
         self._update_slice()
         prog.close()
@@ -5360,6 +5445,24 @@ class AcousticPanel(QWidget):
             self._fem_timer.stop(f"válido hasta {f_max:.0f} Hz")
         except Exception:
             pass
+
+        # Item 3: re-mallado automatico en 1 click. Si el post-solve detecto que
+        # el f_S de perturbacion supera la validez de la malla (motor Automatico),
+        # `_post_solve_schroeder_coherence` dejo _fem_needs_resolve=True y cacheo
+        # el f_S alto (_fs_pert_floor) + subio Nº modos. Re-resolvemos UNA sola vez
+        # (guard _fem_auto_resolved) para que la malla cubra ese f_S sin accion
+        # manual del usuario.
+        if (getattr(self, "_fem_needs_resolve", False)
+                and not getattr(self, "_fem_auto_resolved", False)):
+            self._fem_auto_resolved = True
+            self._fem_needs_resolve = False
+            self._log("Auto: re-mallando una vez con el f_S de perturbación (más "
+                      "alto) para cubrir la banda modal completa…")
+            self._solve_fem()
+            return
+        # Fin del ciclo (pasada normal o 2a pasada ya hecha): limpiar guards.
+        self._fem_auto_resolved = False
+        self._fem_needs_resolve = False
 
     def _refresh_modes_combo(self):
         """Repuebla el picker de modos, respetando el filtro [f_min, f_max].
@@ -5540,6 +5643,26 @@ class AcousticPanel(QWidget):
             except Exception:
                 return None
         return None
+
+    def _open_fem_config(self):
+        """Abre el dialogo «Configuración de FEM» (Nº modos, densidad/npm, h gmsh,
+        motor de mallado). Los cambios impactan de inmediato: los widgets son los
+        mismos que lee el solver. Al cerrar, repinta el estado del panel. Si se
+        cerro con «OK», calcula el FEM con esos valores (fuera del stack del dialogo)."""
+        self._fem_cfg_do_solve = False
+        self._fem_cfg_dialog.exec_()
+        self._refresh_badge_prediction()
+        if self._fem_cfg_do_solve:
+            self._fem_cfg_do_solve = False
+            self._solve_fem()
+
+    def _fem_config_ok(self):
+        """Boton «OK» del dialogo de config: confirma los valores actuales y marca
+        que hay que calcular el FEM. El solve se dispara en `_open_fem_config` tras
+        cerrar el dialogo (no dentro del click, para no resolver con el modal aun
+        abierto)."""
+        self._fem_cfg_do_solve = True
+        self._fem_cfg_dialog.accept()
 
     def _on_engine_changed(self, idx: int):
         """Usuario cambio el combo. Persistir como default global y repintar badge."""
@@ -6364,7 +6487,7 @@ class AcousticPanel(QWidget):
                 self._log(f"Calculando forma modal {mode_idx} en 3D...")
                 pts, vals, _ = aa_mod.mode_shape_field_3d(
                     self.modal_result, mode_idx, resolution=res)
-                self.pressure_3d.update_signed(pts, vals, point_size=7)
+                self.pressure_3d.update_signed(pts, vals)
                 self._log(
                     f"Forma modal {mode_idx} ({f:.1f} Hz): {len(pts)} pts. "
                     f"Azul=(-), Blanco=0, Rojo=(+)."
@@ -6383,7 +6506,7 @@ class AcousticPanel(QWidget):
                 pts, p_abs, _ = aa_mod.pressure_field_3d(
                     self.modal_result, act, f=f,
                     resolution=res, damping=damping)
-                self.pressure_3d.update(pts, p_abs, point_size=7)
+                self.pressure_3d.update(pts, p_abs)
 
                 if hasattr(self, 'chk_grad') and self.chk_grad.isChecked():
                     origs, grads = aa_mod.pressure_gradient_3d(
@@ -6401,9 +6524,26 @@ class AcousticPanel(QWidget):
 
         self.viewer.update()
 
+    def _field3d_auto_on(self) -> bool:
+        """True si el campo 3D esta en modo Automatico (re-render solo al cambiar
+        frecuencia o mover una fuente). Manual = solo con Enter / el boton."""
+        c = getattr(self, "combo_field3d_mode", None)
+        return c is None or c.currentIndex() == 0   # 0 = Automatico
+
+    def _maybe_auto_field3d(self, *args):
+        """Cambio de frecuencia/modo: re-renderiza el campo 3D solo si esta en
+        Automatico y ya hay solucion FEM. En Manual no hace nada (Enter renderiza)."""
+        if not self._field3d_auto_on():
+            return
+        if getattr(self, "modal_result", None) is None:
+            return
+        self._update_field_3d()
+
     def _deferred_field_update(self):
         """Ejecutado por el timer despues de mover una fuente (debounce 350ms)."""
         if self.modal_result is None:
+            return
+        if not self._field3d_auto_on():   # Manual: no auto-render al mover fuente
             return
         if self.combo_field.currentIndex() == 1:   # presion depende de fuente
             self._update_slice()
@@ -6832,6 +6972,18 @@ class AcousticPanel(QWidget):
                     self.lbl_modes_weyl.setText(
                         f"≈ {n_weyl} modos hasta f_S (Weyl) · Nº modos auto-cargado "
                         f"en {n_set} para cobertura completa")
+                # Si YA hay modos resueltos, el label HONESTO manda (validos vs
+                # Weyl): evita re-mostrar "necesito N para cobertura completa"
+                # cuando la malla ya valido menos (staircase / Weyl sobreestima el
+                # conteo real). El "cobertura completa" solo tiene sentido pre-solve.
+                if self.modal_result is not None:
+                    try:
+                        f_max = self._validity_freq(
+                            self.modal_result.mesh_info.get("h_max", 0.0))
+                        if f_max > 0:
+                            self._update_weyl_validity_label(fs, f_max, V, S)
+                    except Exception:
+                        pass
             # Si ya hay modos, mostrar tambien el cruce numerico (2c §9) al lado.
             self._update_modal_crossover()
             return fs
@@ -6866,15 +7018,89 @@ class AcousticPanel(QWidget):
             f"Schroeder (perturbación, post-solve): f_S={fs:.0f} Hz "
             f"({ctx['src_txt']})."
         )
-        if fs > f_max * 1.02:
+        # Tolerancia al ESCALONAMIENTO del voxel: una malla dimensionada para f_S
+        # valida f_max ≈ 0.95·f_S (el h efectivo del staircase es un poco mayor que
+        # el nominal), asi que ~5% de los modos mas altos bajo f_S se clipean
+        # SIEMPRE. Eso NO es sub-cobertura real (esa aparece cuando la malla se
+        # dimensiono para el f_S de Sabine, MUCHO mas bajo). Solo se re-malla/avisa
+        # si el faltante supera el residuo del staircase (umbral 1.10 en frecuencia
+        # ≈ 1.33 en conteo de modos).
+        cover_tol = 1.10
+        if fs > f_max * cover_tol:
             npm_sug = 6.0 * fs / 343.0
-            self._log(
-                f"⚠ La malla se dimensionó con el estimador Sabine y es válida "
-                f"hasta ~{f_max:.0f} Hz, pero con el T30 por modo f_S sube a "
-                f"{fs:.0f} Hz: la banda [{f_max:.0f}, {fs:.0f}] Hz queda "
-                f"sub-cubierta. Para cerrarla, subí npm a ~{npm_sug:.1f} y "
-                f"volvé a resolver (la 2ª pasada ya usa este f_S)."
-            )
+            engine_is_auto = (self.combo_engine.currentIndex() == 0)
+            if engine_is_auto and not getattr(self, "_fem_auto_resolved", False):
+                # Item 3: el motor Automatico TOMA este f_S mas alto y re-malla una
+                # vez sola. Cachear el piso de f_S y subir Nº modos para cubrirlo
+                # (si no, el f_target se capa por presupuesto de modos y la malla
+                # no sube). El re-solve lo dispara `_solve_fem` al final.
+                self._fs_pert_floor = float(fs)
+                try:
+                    V = ctx["V"]; S = ctx["S"]
+                    n_weyl = self._weyl_modal_count(fs, V, S)
+                    cap = self.sb_nmodes.maximum()
+                    n_set = int(min(max(n_weyl, self.sb_nmodes.value()), cap))
+                    if n_set != self.sb_nmodes.value():
+                        self.sb_nmodes.blockSignals(True)
+                        self.sb_nmodes.setValue(n_set)
+                        self.sb_nmodes.blockSignals(False)
+                except Exception:
+                    pass
+                self._fem_needs_resolve = True
+                self._log(
+                    f"Auto: f_S de perturbación = {fs:.0f} Hz supera la validez de "
+                    f"malla ({f_max:.0f} Hz). Re-mallando una vez con npm/h más "
+                    f"alto (npm≈{npm_sug:.1f}) para cubrir la banda modal."
+                )
+            else:
+                # Motor fijo (voxel/gmsh) o 2a pasada ya hecha: sin re-mallado
+                # automatico, se avisa para accion manual.
+                self._log(
+                    f"⚠ La malla se dimensionó con el estimador Sabine y es válida "
+                    f"hasta ~{f_max:.0f} Hz, pero con el T30 por modo f_S sube a "
+                    f"{fs:.0f} Hz: la banda [{f_max:.0f}, {fs:.0f}] Hz queda "
+                    f"sub-cubierta. Para cerrarla, subí npm a ~{npm_sug:.1f} (o bajá "
+                    f"h en gmsh) y volvé a resolver, o usá el motor Automático."
+                )
+
+        # Label HONESTO de Weyl (post-solve): Weyl bajo f_S vs modos que valida esta
+        # malla. Evita leer "necesito 372 pero solo 323 validos" como contradiccion.
+        self._update_weyl_validity_label(fs, f_max, ctx.get("V"), ctx.get("S"))
+
+    def _update_weyl_validity_label(self, fs, f_max, V, S):
+        """Pone en `lbl_modes_weyl` un texto CONSISTENTE con lo que la malla valida.
+
+        Distingue dos casos para no leer "necesito N pero hay menos validos" como
+        contradiccion:
+          - BANDA CUBIERTA (f_max ≈ f_S, dentro de la tolerancia de staircase): los
+            modos validos cubren f_S. El conteo de Weyl (N) es una ESTIMACION
+            asintotica que SOBREESTIMA el numero real de modos a estas frecuencias,
+            asi que validos < Weyl es esperable, no falta cobertura.
+          - SUB-CUBIERTA REAL (f_max << f_S): la malla no llega a f_S; ahi si faltan
+            modos y conviene subir npm (o usar el motor Automatico).
+        `n_valid` = modos resueltos (ya clipeados a f_max)."""
+        if not hasattr(self, "lbl_modes_weyl") or self.modal_result is None:
+            return
+        if not V or not S or not fs or not f_max:
+            return
+        try:
+            n_weyl = self._weyl_modal_count(fs, V, S)
+            n_valid = int(len(self.modal_result.freqs))
+            if fs <= f_max * 1.10:   # banda cubierta (misma tolerancia de staircase)
+                self.lbl_modes_weyl.setText(
+                    f"{n_valid} modos válidos hasta ~{f_max:.0f} Hz: cubren f_S ≈ "
+                    f"{fs:.0f} Hz. (Weyl estima ~{n_weyl}, es una aproximación "
+                    f"asintótica que sobreestima el conteo real.)"
+                )
+            else:
+                falt = max(n_weyl - n_valid, 0)
+                self.lbl_modes_weyl.setText(
+                    f"{n_valid} modos válidos (malla hasta ~{f_max:.0f} Hz). f_S ≈ "
+                    f"{fs:.0f} Hz: faltan ~{falt} modos para cubrir la banda; subí "
+                    f"npm (o usá el motor Automático)."
+                )
+        except Exception:
+            pass
 
     # -----------------------------------------------------------------------
     # Heatmap matplotlib del plano de corte
