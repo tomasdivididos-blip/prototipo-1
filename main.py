@@ -1032,6 +1032,7 @@ class MainWindow(QMainWindow):
                             lambda: self._toggle_locked_axis("z"))
         # Enter -> calcular campo acustico
         self._add_shortcut("Return", self._acoustic_compute_enter)
+        self._add_shortcut("Alt+Return", self._acoustic_clear_field)
         # Modo Rotar (mouse sin rueda / Magic Mouse): "1" alterna, Esc sale.
         self._add_shortcut("1", self._toggle_rotate_mode)
         self._add_shortcut("Escape", self._exit_rotate_mode)
@@ -1064,6 +1065,11 @@ class MainWindow(QMainWindow):
             self.acoustic.trigger_compute()
         elif idx == 2 and hasattr(self, "prediction"):
             self.prediction.trigger_predict()
+
+    def _acoustic_clear_field(self):
+        """Alt+Enter -> borra la nube de campo 3D (solo en la pestaña Acústica)."""
+        if self.tabs.currentIndex() == 1:
+            self.acoustic.trigger_clear_field()
 
     # ---------- Aplicar sugerencia de la pestaña Predicción ----------
     def _on_prediction_apply_params(self, params: dict):

@@ -124,7 +124,7 @@ class IsoViewer(gl.GLViewWidget):
     sourceMoveRequested   = pyqtSignal(int, float, float, float) # idx,x,y,z
     receiverMoveRequested = pyqtSignal(float, float, float)      # x,y,z
     # Orientacion del bafle por gesto directo (Alt+Ctrl): delta en grados.
-    sourceRotateRequested = pyqtSignal(int, float)   # idx, d_azimut (Alt+Ctrl+Left drag)
+    sourceRotateRequested = pyqtSignal(int, float)   # idx, d_azimut (Alt+Ctrl+Left drag; +90° con Alt+Ctrl+click derecho)
     sourceTiltRequested   = pyqtSignal(int, float)   # idx, d_pitch  (Alt+Ctrl+rueda)
     # Muebles: mismos gestos que las fuentes (las fuentes tienen prioridad de
     # picking; el mueble se agarra solo si no hay fuente/receptor bajo el cursor).
@@ -772,6 +772,18 @@ class IsoViewer(gl.GLViewWidget):
                 elif self._rotate_mode:
                     # Nada bajo el cursor: en modo Rotar, orbitar la vista.
                     self._rotate_view_drag = True
+            return
+
+        # Alt+Ctrl + Click DERECHO sobre una fuente -> rotarla 90° (paso discreto).
+        # Mismo modificador que orientar (Alt+Ctrl) pero con el boton DERECHO en vez
+        # del izquierdo-arrastrado: acerca el mouse a la fuente y con Alt+Ctrl
+        # apretados un click derecho la gira 90°. Va ANTES del "Ctrl+Der = colocar
+        # fuente" porque ese branch tambien matchea con Ctrl. Sin fuente bajo el
+        # cursor no hace nada (no coloca: Alt esta apretado).
+        if ev.button() == Qt.RightButton and alt and ctrl:
+            idx = self._pick_source(ev.x(), ev.y())
+            if idx >= 0:
+                self.sourceRotateRequested.emit(idx, 90.0)
             return
 
         # Ctrl + Click derecho -> colocar fuente acustica a 1 m del piso

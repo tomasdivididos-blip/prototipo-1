@@ -6446,6 +6446,12 @@ class AcousticPanel(QWidget):
         else:
             self._update_field_3d()
 
+    def trigger_clear_field(self):
+        """Llamado por Alt+Enter: borra la nube de campo 3D. Reversible (Enter la
+        vuelve a calcular); no toca los modos ni la solucion FEM."""
+        self._clear_field_3d_and_update()
+        self._log("Campo 3D borrado (Alt+Enter). Enter para recalcularlo.")
+
     # -----------------------------------------------------------------------
     # Campo 3D y flechas de gradiente
     # -----------------------------------------------------------------------

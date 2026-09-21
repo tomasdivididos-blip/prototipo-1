@@ -2978,6 +2978,10 @@ Un selector **Automático / Manual (Enter)** en el grupo «Campo acústico 3D».
 
 Al dibujar el perfil de tope de cada pared («Cortes laterales»), un mini-preview de la planta muestra en **rojo** la pared que estás dibujando (con su número), en azul las ya dibujadas y en gris el resto. Resuelve el no saber qué pared es cada corte.
 
+### Atajos: borrar el campo y rotar la fuente 90°
+
+**Alt+Enter** borra la nube de campo 3D (reversible: Enter la vuelve a calcular; no toca los modos ni la solución). Para rotar una fuente en pasos limpios, acercá el mouse a la fuente y, con **Ctrl+Alt** apretados, hacé **click derecho**: gira 90° por click. Es el mismo modificador que orientar arrastrando (Ctrl+Alt + botón izquierdo), pero con el botón derecho para el paso discreto. El click derecho sin modificadores sigue inclinando la pared; Ctrl + click derecho sigue colocando una fuente.
+
 ### Coherencia npm/modos con amortiguamiento por perturbación
 
 Con el modelo de **perturbación** y motor **Automático**, el f_S real (T30 por modo) es más alto que el estimador Sabine con el que se dimensiona la malla en la primera pasada. Ahora, al apretar Calcular una vez, si el f_S de perturbación supera la validez de la malla, el automático **re-malla y re-resuelve una sola vez** con el npm/h más alto (vale para voxel y gmsh), sin pedir acción manual (la primera vez tarda unas dos pasadas). En motor fijo queda el aviso para subir npm a mano.
