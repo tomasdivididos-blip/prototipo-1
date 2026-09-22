@@ -13,6 +13,20 @@
 Tres cambios sobre `Control Ale.room` (recinto con techo a dos aguas = NO convexo). Auditá contra la
 física, son AFIRMACIONES del autor.
 
+**Referencias de auditoría (en `referencias/`, verificá cada afirmación contra la fuente):**
+- Serie modal / Green del recinto y acople κₙ = φₙ(x_s): **Kuttruff, _Room Acoustics_** §3 (`Kuttruf - Room
+  Acoustics.pdf`) y **Morse & Ingard, _Theoretical Acoustics_** cap. 9 (normal modes of rooms). El factor c²
+  de `frequency_response` ya está validado en `bench_modal_vs_impedance.py`.
+- Amortiguamiento modal ξₙ desde la frontera (y por qué el drive NO lo cambia): **Morse & Ingard 9.4.14**;
+  **Kuttruff** §3 (δ del decaimiento modal). La versión C2 (impedancia del cono → Δξₙ) extendería ESTO.
+- Decaimiento / EDC: **Schroeder, JASA 37 (1965)**; **ISO 3382-1** (T20/T30); el ajuste vive en `rir.py`.
+- Waterfall (CSD): **Berman & Fincham, JAES 25 (1977)** (citado en `modal_decay.py`).
+- Validez numérica del FEM (banda ≤ f_valid, dispersión/pollution de Helmholtz): **Ihlenburg, _Finite
+  Element Analysis of Acoustic Scattering_** + `FEM for Acoustics.pdf`.
+- HUECO conocido de referencias (no bloquea): falta un texto de **DSP** (p.ej. Oppenheim & Schafer,
+  _Discrete-Time Signal Processing_) para citar con rigor el IR-por-IFFT, ventaneo, causalidad y leakage del
+  waterfall; hoy eso se deriva de primeros principios + `_scrape.py` sobre el canon acústico.
+
 - **Bug de la «recta −500» (A1/A2/A3), root cause reproducido:** en un techo no-convexo,
   `acoustic_mesh.points_inside_surface` (paridad de rayo 1-dir) da FALSOS «adentro» en una cáscara sobre
   las aguas (sobre el cielorraso inclinado). Ese test era el `inside_fn` del optimizador CABS; ahí el campo
