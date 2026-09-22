@@ -2982,6 +2982,12 @@ Al dibujar el perfil de tope de cada pared («Cortes laterales»), un mini-previ
 
 **Alt+Enter** borra la nube de campo 3D (reversible: Enter la vuelve a calcular; no toca los modos ni la solución). Para rotar una fuente en pasos limpios, acercá el mouse a la fuente y, con **Ctrl+Alt** apretados, hacé **click derecho**: gira 90° por click. Es el mismo modificador que orientar arrastrando (Ctrl+Alt + botón izquierdo), pero con el botón derecho para el paso discreto. El click derecho sin modificadores sigue inclinando la pared; Ctrl + click derecho sigue colocando una fuente.
 
+### Ayuda de atajos y presets de cámara
+
+Arriba a la derecha del visor 3D hay un botón **«?»**: al pasar el mouse (o clickearlo) muestra la lista completa de atajos de teclado y gestos de mouse.
+
+Abajo a la derecha, sobre los ejes, hay tres botones de cámara: **P** (Planta, vista superior), **I** (Isométrica) y **L** (Lateral, de frente a una pared). Al clickear uno, la cámara salta a esa vista y queda **fijada** (bloquea el orbitar, para que no se mueva de ese ángulo). Se libera re-clickeando el mismo botón, arrastrando la vista para orbitar, o con la tecla **0** (resetear cámara). Conserva el zoom y el encuadre: solo cambia el ángulo. (Las flechas para elegir qué pared o qué esquina mirar vienen después.)
+
 ### Coherencia npm/modos con amortiguamiento por perturbación
 
 Con el modelo de **perturbación** y motor **Automático**, el f_S real (T30 por modo) es más alto que el estimador Sabine con el que se dimensiona la malla en la primera pasada. Ahora, al apretar Calcular una vez, si el f_S de perturbación supera la validez de la malla, el automático **re-malla y re-resuelve una sola vez** con el npm/h más alto (vale para voxel y gmsh), sin pedir acción manual (la primera vez tarda unas dos pasadas). En motor fijo queda el aviso para subir npm a mano.

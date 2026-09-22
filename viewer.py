@@ -18,7 +18,7 @@ import numpy as np
 import pyqtgraph.opengl as gl
 from PyQt5.QtCore import Qt, QRectF, pyqtSignal
 from PyQt5.QtGui import QColor, QPainter, QFont, QPen, QVector4D, QMatrix4x4
-from PyQt5.QtWidgets import QFrame, QLabel, QHBoxLayout, QPushButton
+from PyQt5.QtWidgets import QFrame, QLabel, QHBoxLayout, QPushButton, QToolTip
 
 
 # ---------------------------------------------------------------------------
@@ -271,8 +271,55 @@ class IsoViewer(gl.GLViewWidget):
         self._rotate_banner.hide()
         self._reposition_rotate_widgets()
 
+        # Boton de ayuda "?" (esquina sup-derecha): hover o click muestra TODOS los
+        # atajos de teclado y gestos de mouse.
+        self._help_btn = QPushButton("?", self)
+        self._help_btn.setCursor(Qt.PointingHandCursor)
+        self._help_btn.setFixedSize(26, 26)
+        self._help_btn.setToolTip(self._shortcuts_html())
+        self._help_btn.setStyleSheet(
+            "QPushButton { background-color: #45475a; color: #cdd6f4;"
+            " border: none; border-radius: 13px; font-weight: 800;"
+            " font-size: 13pt; }"
+            "QPushButton:hover { background-color: #89b4fa; color: #11111b; }")
+        self._help_btn.clicked.connect(self._show_shortcuts_popup)
+        self._reposition_help_btn()
+
+        # Presets de camara (4a): P=Planta, I=Isometrica, L=Lateral. Fijan la
+        # camara (snap) y la BLOQUEAN: mientras hay un preset activo, orbitar con
+        # el mouse no la mueve. Se libera re-clickeando el mismo boton o arrastrando
+        # (orbitar destraba y vuelve a vista libre). Abajo a la derecha, sobre los
+        # ejes. Las flechas para ciclar pared/arista son la 4b (aparte).
+        self._cam_preset = None
+        self._cam_preset_row = QFrame(self)
+        _cp_lay = QHBoxLayout(self._cam_preset_row)
+        _cp_lay.setContentsMargins(0, 0, 0, 0); _cp_lay.setSpacing(4)
+        self._cam_preset_btns = {}
+        for key, label, tip in (
+                ("planta", "P", "Planta (vista superior)"),
+                ("iso", "I", "Isométrica"),
+                ("lateral", "L", "Lateral (de frente a una pared)")):
+            b = QPushButton(label, self._cam_preset_row)
+            b.setCheckable(True)
+            b.setFixedSize(26, 26)
+            b.setCursor(Qt.PointingHandCursor)
+            b.setToolTip(f"{tip}.\nFija la cámara y bloquea el orbitar. "
+                         "Re-clic o arrastrar la vista para liberar.")
+            b.setStyleSheet(
+                "QPushButton { background-color: #45475a; color: #cdd6f4;"
+                " border: none; border-radius: 5px; font-weight: 800; }"
+                "QPushButton:hover { background-color: #585b70; }"
+                "QPushButton:checked { background-color: #89b4fa; color: #11111b; }")
+            b.clicked.connect(lambda _c, k=key: self._on_cam_preset_clicked(k))
+            _cp_lay.addWidget(b)
+            self._cam_preset_btns[key] = b
+        self._cam_preset_row.adjustSize()
+        self._reposition_cam_presets()
+
     # ---------- Camara ----------
     def reset_camera(self):
+        if getattr(self, "_cam_preset", None) is not None:
+            self._clear_camera_preset()      # 0 destraba y vuelve a iso libre
         self.opts["azimuth"] = 45.0
         self.opts["elevation"] = 30.0
         self.opts["distance"] = self._iso_distance
@@ -858,6 +905,8 @@ class IsoViewer(gl.GLViewWidget):
         # vista (reemplaza al boton central que el Magic Mouse no tiene). Respeta
         # el eje fijo y el modificador Shift (azimut puro), igual que el central.
         if self._rotate_view_drag and (btns & Qt.LeftButton):
+            if self._cam_preset is not None:
+                self._clear_camera_preset()   # arrastrar destraba el preset
             if self._locked_axis is not None:
                 self._rotate_around_locked_axis(-diff.x() * 0.5)
             elif ev.modifiers() & Qt.ShiftModifier:
@@ -939,6 +988,8 @@ class IsoViewer(gl.GLViewWidget):
             self.wallDragMoved.emit(-dy * self.WALL_DRAG_DEG_PER_PX)
             return
         if btns & Qt.MidButton:
+            if self._cam_preset is not None:
+                self._clear_camera_preset()   # arrastrar destraba el preset
             if self._locked_axis is not None:
                 # Rotacion restringida: gira el recinto alrededor del eje
                 # mundial fijado. La componente horizontal del mouse es la
@@ -1462,6 +1513,8 @@ class IsoViewer(gl.GLViewWidget):
         # Reposicionar el indicador en cada cambio de tamano.
         self._reposition_axis_indicator()
         self._reposition_rotate_widgets()
+        self._reposition_help_btn()
+        self._reposition_cam_presets()
 
     # ---------- Modo Rotar ----------
     def _reposition_rotate_widgets(self):
@@ -1492,6 +1545,95 @@ class IsoViewer(gl.GLViewWidget):
 
     def toggle_rotate_mode(self):
         self.set_rotate_mode(not self._rotate_mode)
+
+    def _reposition_help_btn(self):
+        if not hasattr(self, "_help_btn"):
+            return
+        self._help_btn.move(self.width() - self._help_btn.width() - 10, 10)
+        self._help_btn.raise_()
+
+    # ---------- Presets de camara (4a) ----------
+    _CAM_PRESETS = {                 # nombre -> (elevation, azimuth) en grados
+        "planta":  (90.0, -90.0),
+        "iso":     (30.0, 45.0),
+        "lateral": (0.0, 0.0),
+    }
+
+    def _reposition_cam_presets(self):
+        if not hasattr(self, "_cam_preset_row"):
+            return
+        w = self._cam_preset_row.width()
+        h = self._cam_preset_row.height()
+        ax_h = self.axis_indicator.height() if hasattr(self, "axis_indicator") else 0
+        x = self.width() - w - 10
+        y = self.height() - h - ax_h - 20      # arriba del indicador de ejes
+        self._cam_preset_row.move(max(0, x), max(0, y))
+        self._cam_preset_row.raise_()
+
+    def _apply_cam_preset(self, name):
+        """Fija elevacion/azimut de la camara al preset. Conserva distancia y
+        centro (no toca zoom ni encuadre)."""
+        el, az = self._CAM_PRESETS[name]
+        self.opts["elevation"] = float(el)
+        self.opts["azimuth"] = float(az)
+        self.update()
+
+    def _refresh_cam_preset_btns(self):
+        for k, b in self._cam_preset_btns.items():
+            b.setChecked(k == self._cam_preset)
+
+    def _on_cam_preset_clicked(self, name):
+        """Click en P/I/L: si el preset ya estaba activo, lo libera (destraba sin
+        mover). Si no, salta a ese preset y bloquea el orbitar."""
+        if self._cam_preset == name:
+            self._clear_camera_preset()
+            return
+        self._cam_preset = name
+        self._apply_cam_preset(name)
+        self._refresh_cam_preset_btns()
+
+    def _clear_camera_preset(self):
+        """Destraba la camara (sin moverla). Lo llama el orbit-drag y el re-clic."""
+        if self._cam_preset is None:
+            return
+        self._cam_preset = None
+        self._refresh_cam_preset_btns()
+
+    @staticmethod
+    def _shortcuts_html():
+        """Lista de atajos (teclado + gestos de mouse), para el tooltip/popup del
+        boton de ayuda. Un solo lugar: si cambia un atajo, se edita aca."""
+        return (
+            "<div style='font-size:9pt'>"
+            "<b>Teclado</b>"
+            "<table cellspacing='3'>"
+            "<tr><td><b>Enter</b></td><td>Calcular (Acústica: FEM/campo · Predicción: predecir)</td></tr>"
+            "<tr><td><b>Alt+Enter</b></td><td>Borrar el campo 3D</td></tr>"
+            "<tr><td><b>0</b></td><td>Resetear la cámara</td></tr>"
+            "<tr><td><b>1</b> / <b>Esc</b></td><td>Modo Rotar: alternar / salir</td></tr>"
+            "<tr><td><b>Ctrl+I</b></td><td>Importar CAD</td></tr>"
+            "<tr><td><b>Ctrl+S</b> / <b>Ctrl+Shift+S</b></td><td>Guardar / Guardar como</td></tr>"
+            "<tr><td><b>Ctrl+O</b></td><td>Abrir</td></tr>"
+            "<tr><td><b>Ctrl+Z</b> / <b>Ctrl+Shift+Z</b></td><td>Deshacer / Rehacer</td></tr>"
+            "<tr><td><b>Ctrl+Shift+Alt+X/Y/Z</b></td><td>Fijar / liberar eje de rotación</td></tr>"
+            "</table>"
+            "<b>Mouse (visor 3D)</b>"
+            "<table cellspacing='3'>"
+            "<tr><td><b>Shift + arrastrar izq</b></td><td>Mover fuente/receptor/mueble (horizontal) · <b>+Ctrl</b> = solo Z</td></tr>"
+            "<tr><td><b>Ctrl+Alt + arrastrar izq</b></td><td>Orientar bafle (horizontal = azimut, vertical = inclinación)</td></tr>"
+            "<tr><td><b>Ctrl+Alt + click derecho</b></td><td>Rotar la fuente 90° (bajo el cursor)</td></tr>"
+            "<tr><td><b>Ctrl + click derecho</b></td><td>Colocar fuente a 1 m del piso</td></tr>"
+            "<tr><td><b>Click derecho</b></td><td>Inclinar la pared bajo el cursor</td></tr>"
+            "<tr><td><b>Rueda</b></td><td>Zoom</td></tr>"
+            "</table>"
+            "</div>"
+        )
+
+    def _show_shortcuts_popup(self):
+        """Click en '?': muestra los atajos como tooltip persistente junto al boton
+        (ademas del hover, que ya los muestra). Se cierra al mover el mouse."""
+        pos = self._help_btn.mapToGlobal(self._help_btn.rect().bottomLeft())
+        QToolTip.showText(pos, self._shortcuts_html(), self._help_btn)
 
     def _reposition_axis_indicator(self):
         if not hasattr(self, "axis_indicator"):
