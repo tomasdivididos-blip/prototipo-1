@@ -3534,6 +3534,37 @@ bien.
   **Recap: MANUAL v2.41 + notas + commit/push. SIN dist-exe ni win.zip.** Backlog del profesor: queda
   iv (validación de criterios) y vi (ampliar categorías de impedancia). Ver [[backlog-charla-sep]].
 
+- **22 Sep 2026 (v2.48) — 4 correcciones del profesor sobre `Control Ale.room` (techo a dos aguas).**
+  Modelo real: `C:\Users\aceve\OneDrive\Escritorio\Control Ale.room` (4.8×3.9×3.1, gable, 2 Genelec + 2 subs
+  con `free_vars=[delay,polarity,pos]`, norte «flat»). Detalle en [[bug-recta-500-dominio]].
+  - **A (puntos 1+2): FRF/SBIR = recta plana −506 dB tras optimizar+aplicar.** ROOT CAUSE (reproducido):
+    en un techo NO-convexo (gable), `acoustic_mesh.points_inside_surface` (paridad de rayo 1-dir) da falsos
+    «adentro» en una cáscara sobre las aguas (medí ~0.6% del AABB, todos z>3.1). Ese test era el `inside_fn`
+    del optimizador; ahí el campo modal FEM está indefinido y `acoustic_fem._source_modal_coupling` devuelve
+    0 → `run_fem_frf` H=0 → `20·log10(0/20e-6)≈−506`. FRF y SBIR comparten `run_fem_frf` (no es caché).
+    FIX **A1** (`acoustic_panel._open_dba._inside_fn` usa los tets FEM `locator.evaluate_many(ones)≠NaN`
+    cuando hay modos; sin FEM cae al polígono) + **A2** (`_snap_source_into_domain`: marcha pos→centroide,
+    primer punto en los tets; usado en `_apply_cabs_optimization` y `_apply_suggested_layout`; el clamp
+    `_clamp_source_to_room` es al AABB del render, que en el gable llega al pico z=4.3) + **A3**
+    (`_decoupled_active_sources` + guardas en `_compute_frf`/`_open_sbir`: si hay fuentes con ‖κ‖≈0 avisa y NO
+    dibuja la recta; en SBIR omite el overlay modal pero muestra el peine). `bench_source_domain_guard.py`
+    18/18; E2E Control Ale ya no colapsa.
+  - **B (punto 4): parches «solo los últimos agregados».** ROOT CAUSE: la firma de cara
+    (`face_materials._signature`) deriva al cambiar la geometría; parches viejos quedan huérfanos y el editor
+    (`patch_dialog._cur_patches` filtra por firma exacta) no los muestra. FIX
+    `absorption_patch.reconcile_patch_signatures(patches, groups)` (re-ancla por eje de normal + plano más
+    cercano ≤0.75 m; las u-v son de mundo, basta corregir la firma), llamado en
+    `acoustic_panel._open_patches_dialog`. Repro Control Ale: 4 huérfanos → editor 5/9 → 9/9.
+    `bench_absorption_patch.py` T13 OK.
+  - **C1 (punto 3): decaimiento con subs (waterfall).** `modal_decay.py`: IR modal por IFFT de la MISMA H
+    validada (`acoustic_fem.frequency_response`) → EDC Schroeder (vía `rir`) + waterfall CSD. Botón
+    «Decaimiento con subs (waterfall)…» + `AcousticPanel._open_decay_waterfall` + `DecayWaterfallDialog`
+    (compara SIN vs CON subs bajo f_S). HONESTO: decaimiento del campo TOTAL (el array redistribuye energía
+    modal por delay/polaridad), NO cambia ξₙ propio (eso es **C2**, PENDIENTE = impedancia del cono → Δξₙ con
+    la perturbación validada). `bench_modal_decay.py` 9/9 (FFT(IR)↔FRF err 2e-16; T30 de 1 modo=6.908/(ξωₙ)
+    err 1.6%). Sobre Control Ale con drive CABS: RT 0.735→0.673 s.
+  **Recap: MANUAL v2.48 + notas + auditor_contexto + commit/push. dist-exe/zips PENDIENTES (avisar al usuario).**
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.

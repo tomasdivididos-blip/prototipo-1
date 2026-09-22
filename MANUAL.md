@@ -2950,6 +2950,37 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.48 (bug de la «recta −500» al optimizar, parches que reaparecen, decaimiento con subs)
+
+**Cambios v2.48** (22 de septiembre 2026): tres correcciones sobre `Control Ale.room` (recinto con techo a dos aguas), pedidas por el profesor. Dos son arreglos de bugs, la tercera una herramienta nueva.
+
+### La FRF/SBIR ya no dan una «recta plana a −500» tras optimizar las fuentes
+
+**Síntoma:** después de optimizar las fuentes y aplicar los cambios, recalcular la FRF (o el SBIR) daba una recta plana en el piso (≈ −506 dB), no una transferencia real.
+
+**Causa:** en un techo **no-convexo** (dos aguas / arco), el test que decidía «adentro del recinto» (paridad de un rayo en una dirección) daba **falsos «adentro»** en una cáscara sobre las aguas, por encima del cielorraso inclinado. Ahí el campo modal no está definido y una fuente **no acopla** (aporte cero). El optimizador podía dejar un sub (con la altura libre) en esa cáscara sin penalizarlo, y entonces la respuesta colapsaba a cero. La FRF y el SBIR comparten el mismo cálculo, por eso los dos mostraban la recta.
+
+**Arreglo (tres capas):**
+- El optimizador ahora usa el **volumen real de la malla** (los tetraedros donde el campo existe) como definición de «adentro», el mismo que evalúa la respuesta. Así no puede parquear una fuente donde el acople es cero.
+- Al aplicar una optimización, cualquier fuente que quede fuera del volumen (por el recorte al borde de la caja) se **reubica al punto interior más cercano** y se avisa cuáles.
+- Si aun así una fuente activa queda fuera (acople cero), la FRF/SBIR **avisan y no dibujan la recta engañosa**, nombrando la fuente, en vez de mostrar una respuesta plana falsa.
+
+### «Parches de absorción»: ahora aparecen todos, no solo los últimos
+
+**Síntoma:** en «Acústica → Parches de absorción» faltaban parches; solo se veían los últimos agregados, y no se podía editar uno viejo porque no aparecía.
+
+**Causa:** cada parche se ancla a su cara por una «firma» que se calcula de la geometría de esa cara (normal + centro + área). Si cambiás el recinto (dimensiones, techo) **después** de crear los parches, la firma de la cara cambia y los parches viejos quedan «huérfanos»: apuntan a una firma que ya no existe y el editor no los muestra.
+
+**Arreglo:** al abrir el editor, los parches huérfanos se **re-anclan automáticamente** a la cara actual que les corresponde (misma orientación y mismo plano); como su geometría está en coordenadas del recinto, con corregir la firma vuelven a verse y editarse. Si un parche quedó sobre una cara que ya no existe, se avisa (no se lo fuerza a una cara equivocada).
+
+### Nuevo: decaimiento del campo con y sin subs (waterfall)
+
+Un botón **«Decaimiento con subs (waterfall)…»** (grupo FRF) compara el **decaimiento del campo total** en el punto de escucha **sin** vs **con** los subwoofers, por debajo de f_S: una curva de decaimiento de energía (Schroeder) con el RT de cada caso, y dos *waterfalls* (nivel por frecuencia a lo largo del tiempo). Sirve para ver cómo el arreglo de subs (por su delay y polaridad) **redistribuye la energía modal** y cambia el decaimiento efectivo de la sala.
+
+**Qué es y qué no es (honestidad física):** esto muestra el decaimiento del **campo total** con cada configuración de fuentes; el arreglo de subs cambia **qué modos se excitan y con qué fase**, y con eso el decaimiento efectivo. **No** cambia el amortiguamiento propio de cada modo (los «polos» del recinto no se tocan). El caso en que el cono del sub, como frontera de impedancia finita, agrega amortiguamiento a los modos (Δξₙ) es la versión rigurosa, que queda pendiente. El decaimiento se calcula por transformada inversa de la **misma** respuesta en frecuencia validada del solver, así que es consistente con la FRF.
+
+*Manual actualizado al 22 de Septiembre de 2026 — v2.48.*
+
 ## Cambios v2.47 (tanda UI/UX + coherencia npm/modos en perturbación)
 
 **Cambios v2.47** (21 de septiembre 2026): una tanda de mejoras de interfaz (plan en `plan_mejoras_ux.md`, criterio en `ux_principios.md`) más un ajuste de coherencia en el auto-mallado. Ningún cambio toca la física: campo, frecuencias y modos son los mismos.

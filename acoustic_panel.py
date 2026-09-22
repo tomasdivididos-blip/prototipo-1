@@ -1220,6 +1220,88 @@ class FurnitureEditDialog(QDialog):
         return furn, mat
 
 
+class DecayWaterfallDialog(QDialog):
+    """Comparación del DECAIMIENTO del campo total en el receptor SIN vs CON los
+    subwoofers (punto 3 del profesor). Muestra la EDC de Schroeder superpuesta y dos
+    waterfalls (CSD), por debajo de f_S.
+
+    HONESTIDAD FÍSICA: esto es el decaimiento del campo TOTAL con cada configuración
+    de fuentes; el array de subs redistribuye la energía modal (qué modos se excitan y
+    con qué fase por su delay/polaridad) y cambia el decaimiento efectivo. NO cambia el
+    ξ propio de cada modo (los polos del recinto no se tocan). Eso último (impedancia
+    del cono como frontera → Δξₙ) es la versión rigurosa C2, pendiente."""
+
+    def __init__(self, data, parent=None):
+        super().__init__(parent)
+        apply_dialog_theme(self)
+        self.setWindowTitle("Decaimiento del campo total — sin vs con subs")
+        self.resize(1040, 720)
+        v = QVBoxLayout(self)
+        if not _HAS_MPL:
+            v.addWidget(QLabel("matplotlib no disponible. pip install matplotlib"))
+            return
+        import matplotlib.gridspec as gridspec
+        fig = plt.figure(figsize=(10.2, 7.0), dpi=96)
+        fig.patch.set_facecolor('#f0f0f0')
+        gs = gridspec.GridSpec(2, 2, height_ratios=[1.0, 1.2], hspace=0.32,
+                               wspace=0.22, figure=fig)
+        self._fig = fig
+
+        edc = fig.add_subplot(gs[0, :])
+        edc.set_facecolor('#ffffff')
+        ta, ea, rta = data["edc_a"]
+        tb, eb, rtb = data["edc_b"]
+        edc.plot(ta, ea, color='#9aa0a6', linewidth=1.8,
+                 label=f"sin subs · {data['lbl_a']}")
+        edc.plot(tb, eb, color='#1f6fbf', linewidth=1.8,
+                 label=f"con subs · {data['lbl_b']}")
+        for lvl in (-10, -20, -30):
+            edc.axhline(lvl, color='#dddddd', linewidth=0.7, zorder=0)
+        edc.set_xlabel("Tiempo (s)", fontsize=10)
+        edc.set_ylabel("EDC (dB)", fontsize=10)
+        edc.set_ylim(-45, 2)
+        t_hi = float(max(ta[-1] if len(ta) else 0.0, tb[-1] if len(tb) else 0.0))
+        edc.set_xlim(0.0, min(t_hi, data.get("t_view", 1.2)))
+        def _rt_txt(rt):
+            return ("—" if not np.isfinite(rt.rt60)
+                    else f"{rt.rt60:.2f} s ({rt.method}{'' if rt.ok else '?'})")
+        edc.set_title(
+            f"Curva de decaimiento de energía (Schroeder) · banda ≤ {data['f_hi']:.0f} Hz"
+            f"    |    RT sin subs = {_rt_txt(rta)}   ·   con subs = {_rt_txt(rtb)}",
+            fontweight='bold', fontsize=10, pad=8)
+        edc.grid(True, axis='y', linewidth=0.6, alpha=0.5, color='#cccccc')
+        edc.legend(fontsize=9, framealpha=0.9, loc='upper right')
+        edc.tick_params(labelsize=9)
+
+        # Waterfalls (CSD): sin (izq) y con (der) subs, misma escala de color.
+        vmin = -42.0
+        for col, key, ttl in ((0, "csd_a", "sin subs"), (1, "csd_b", "con subs")):
+            ax = fig.add_subplot(gs[1, col])
+            fr, ts, Z = data[key]
+            T, F = np.meshgrid(ts, fr, indexing="ij")
+            pcm = ax.pcolormesh(F, T, np.clip(Z, vmin, 0.0), cmap="magma",
+                                vmin=vmin, vmax=0.0, shading="auto")
+            ax.set_xlabel("Frecuencia (Hz)", fontsize=9)
+            ax.set_ylabel("Tiempo (s)", fontsize=9)
+            ax.set_title(f"Waterfall — {ttl}", fontsize=9, fontweight='bold')
+            ax.tick_params(labelsize=8)
+            fig.colorbar(pcm, ax=ax, shrink=0.85, label="dB")
+
+        canvas = FigureCanvas(fig)
+        v.addWidget(NavigationToolbar(canvas, self))
+        v.addWidget(canvas, 1)
+
+        note = QLabel(
+            "Decaimiento del campo TOTAL en el receptor con cada configuración. El "
+            "array de subs redistribuye la energía modal (por su delay/polaridad) y "
+            "cambia el decaimiento efectivo por debajo de f_S. NO es un cambio del ξ "
+            "propio de los modos (la impedancia del cono como frontera → Δξₙ es la "
+            "versión rigurosa, pendiente).")
+        note.setWordWrap(True)
+        note.setStyleSheet("color:#11111b; font-size:9pt;")
+        v.addWidget(note)
+
+
 class FRFDialog(QDialog):
     """Diálogo de FRF con gráfico matplotlib, exportación y escucha con ruido rosa."""
 
@@ -4067,6 +4149,16 @@ class AcousticPanel(QWidget):
             "cada fuente. Corre sobre el volumen real (FEM) si la sala no es caja.")
         fg.addRow(self.btn_dba)
         self.btn_dba.clicked.connect(self._open_dba)
+
+        self.btn_decay = QPushButton("Decaimiento con subs (waterfall)…")
+        self.btn_decay.setToolTip(
+            "Compara el DECAIMIENTO del campo total en el receptor SIN vs CON los "
+            "subwoofers (EDC de Schroeder + waterfall), por debajo de f_S. Muestra "
+            "cómo el array de subs (delay/polaridad) redistribuye la energía modal y "
+            "cambia el decaimiento efectivo. NO cambia el ξ propio de los modos (eso "
+            "es la impedancia del cono, pendiente).")
+        fg.addRow(self.btn_decay)
+        self.btn_decay.clicked.connect(self._open_decay_waterfall)
         layout.addWidget(grp_frf)
 
         # --- Estado / log ---
@@ -5935,7 +6027,26 @@ class AcousticPanel(QWidget):
         modal_db = None
         f_s = None
         eqc = None
-        if self.modal_result is not None and len(self.modal_result.freqs) > 0:
+        # A3 (guarda anti-recta -500): la transferencia MODAL del overlay usa
+        # run_fem_frf; si una fuente activa quedo fuera de la malla (acople 0) el
+        # modal colapsa a la recta de piso. Se avisa y se OMITE el overlay modal
+        # (modal_db=None), pero el SBIR (campo libre + imagenes) es valido y se
+        # muestra igual. Cierra el punto 2 del profesor (SBIR mostraba la recta).
+        _decpl_sb = self._decoupled_active_sources(act)
+        _all_decpl = bool(_decpl_sb) and len(_decpl_sb) == len(act)
+        if _decpl_sb:
+            _names = ", ".join(str(getattr(s, "label", "?")) for s in _decpl_sb)
+            QMessageBox.warning(
+                self, "Fuente fuera del dominio simulado",
+                (f"{'Todas las fuentes activas' if _all_decpl else 'Estas fuentes'} "
+                 f"quedaron fuera de la malla del recinto: {_names}. "
+                 + ("La transferencia modal no se puede calcular ahí (acople 0), así "
+                    "que el overlay modal se omite; " if _all_decpl else
+                    "No aportan a la transferencia modal (acople 0); ")
+                 + "el SBIR (reflexiones) se muestra igual. Movelas adentro del "
+                   "volumen para incluirlas."))
+        if (not _all_decpl and self.modal_result is not None
+                and len(self.modal_result.freqs) > 0):
             try:
                 if self._xi_per_mode is None:
                     self._xi_per_mode = self._compute_xi_from_materials()
@@ -5961,6 +6072,75 @@ class AcousticPanel(QWidget):
         dlg = SBIRDialog(res, f_lo=f_lo, f_hi=f_hi, parent=self,
                          modal_db=modal_db, f_schroeder=f_s, eqc=eqc)
         dlg.exec_()
+
+    def _open_decay_waterfall(self):
+        """Punto 3 del profesor: compara el DECAIMIENTO del campo total en el receptor
+        SIN vs CON los subwoofers (EDC de Schroeder + waterfall), por debajo de f_S.
+        Muestra cómo el array de subs redistribuye la energía modal y cambia el
+        decaimiento efectivo (NO cambia el ξ propio de los modos: eso es C2)."""
+        if not self._ensure_modes_computed():
+            return
+        act = self._active_sources()
+        if len(act) == 0:
+            QMessageBox.information(self, "Falta excitación",
+                                     "Agregá (o activá) al menos una fuente.")
+            return
+        subs = [s for s in act if str(getattr(s, "source_type", "")) == "subwoofer"]
+        mains = [s for s in act if str(getattr(s, "source_type", "")) != "subwoofer"]
+        if not subs:
+            QMessageBox.information(
+                self, "No hay subwoofers activos",
+                "La comparación es SIN vs CON subwoofers. No hay ninguna fuente de "
+                "tipo subwoofer activa para comparar. Agregá/activá los subs.")
+            return
+        if not mains:
+            QMessageBox.information(
+                self, "No hay fuente de referencia",
+                "Todas las fuentes activas son subwoofers, así que el 'sin subs' "
+                "quedaría en silencio. Dejá activa al menos una fuente NO-sub (main) "
+                "para el 'antes'.")
+            return
+        # Guarda A3: si algo quedó fuera del dominio, avisar (acople 0 -> no aporta).
+        decpl = self._decoupled_active_sources(act)
+        if decpl:
+            _names = ", ".join(str(getattr(s, "label", "?")) for s in decpl)
+            QMessageBox.warning(
+                self, "Fuente fuera del dominio",
+                f"Estas fuentes quedaron fuera de la malla ({_names}) y no aportan al "
+                "decaimiento. Movelas adentro para incluirlas.")
+        try:
+            import modal_decay as mdk
+            damping = (self._xi_per_mode
+                       if self._xi_per_mode is not None else 0.03)
+            ctx = self._schroeder_context()
+            f_s = float(ctx["fs"]) if ctx else None
+            f_hi = f_s if (f_s and f_s > 40.0) else 200.0
+            mf = self._effective_modal_freqs()
+            self.setEnabled(False)
+            self._log("Calculando decaimiento (sin/con subs)...")
+            mk = lambda lst: SourceArray(list(lst))
+            _, ir_a, fs = mdk.modal_impulse_response(
+                self.modal_result, mk(mains), self.receiver,
+                f_hi=f_hi, dur=3.0, damping=damping, modal_freqs=mf)
+            _, ir_b, _ = mdk.modal_impulse_response(
+                self.modal_result, mk(mains + subs), self.receiver,
+                f_hi=f_hi, dur=3.0, damping=damping, modal_freqs=mf)
+            data = {
+                "f_hi": f_hi, "t_view": 1.2,
+                "lbl_a": ", ".join(s.label for s in mains)[:40],
+                "lbl_b": f"+{len(subs)} sub(s)",
+                "edc_a": (*mdk.energy_decay_db(ir_a, fs), mdk.decay_time(ir_a, fs)),
+                "edc_b": (*mdk.energy_decay_db(ir_b, fs), mdk.decay_time(ir_b, fs)),
+                "csd_a": mdk.cumulative_spectral_decay(ir_a, fs, f_hi=f_hi),
+                "csd_b": mdk.cumulative_spectral_decay(ir_b, fs, f_hi=f_hi),
+            }
+        except Exception as e:
+            QMessageBox.critical(self, "Error decaimiento", str(e))
+            return
+        finally:
+            self.setEnabled(True)
+        self._log("Decaimiento listo.")
+        DecayWaterfallDialog(data, parent=self).exec_()
 
     # -----------------------------------------------------------------------
     # FRF
@@ -5996,6 +6176,7 @@ class AcousticPanel(QWidget):
         fuentes LIBRES reales de la sala. `optimized` viene en el MISMO orden que
         self.sources.sources (el optimizador copió esa lista). Las fuentes fijas
         (free_vars vacío) no se tocan. Item 6."""
+        moved_out = []
         for i, (real, opt) in enumerate(zip(self.sources.sources, optimized)):
             fv = getattr(real, "free_vars", None) or frozenset()
             if not fv:
@@ -6006,6 +6187,13 @@ class AcousticPanel(QWidget):
                 # de la caja; esfera -> centro), asi el optimizador nunca deja el
                 # bafle medio afuera aunque proponga una posicion de borde.
                 real.position = self._clamp_source_to_room(i, *real.position)
+                # A2: el clamp es al AABB del RENDER (en un techo no-convexo llega al
+                # pico), que NO es el dominio acustico. Garantizar que el punto caiga
+                # en la malla FEM (tets) para que la fuente acople; si no, proyectar
+                # al interior mas cercano y avisar (evita la recta -500 tras aplicar).
+                real.position, _snapped = self._snap_source_into_domain(real.position)
+                if _snapped:
+                    moved_out.append(str(getattr(real, "label", f"S{i+1}")))
             if "delay" in fv:
                 real.delay_s = float(opt.delay_s)
             if "fc" in fv:
@@ -6020,6 +6208,14 @@ class AcousticPanel(QWidget):
         self._refresh_sources_list()
         self.schedule_field_update()
         self._log("Optimización CABS aplicada a las fuentes libres.")
+        if moved_out:
+            _n = ", ".join(moved_out)
+            self._log(f"A2: se reubicaron dentro del recinto (estaban sobre el "
+                      f"borde/techo): {_n}.")
+            QMessageBox.information(
+                self, "Fuentes reubicadas al interior",
+                f"Estas fuentes quedaban fuera del volumen simulado y se movieron al "
+                f"punto interior más cercano para que acoplen a los modos: {_n}.")
 
     def _open_dba(self):
         """Abre la herramienta de subs enfrentados (DBA/CABS) sobre la caja
@@ -6035,15 +6231,31 @@ class AcousticPanel(QWidget):
             QMessageBox.warning(self, "Sin geometría",
                                 "No hay geometría para analizar.")
             return
-        # Test punto-en-recinto REAL (poligono, no AABB): el optimizador acota la
-        # posicion al recinto de verdad. En un recinto irregular el AABB es mas
-        # grande que la planta, asi que sin esto una fuente podia caer afuera.
+        # Test punto-en-recinto REAL: el optimizador acota la posicion al dominio
+        # donde una fuente REALMENTE acopla a los modos. Ese dominio es la MALLA FEM
+        # (los tets), no el poligono via rayo. En un techo NO-CONVEXO (dos aguas /
+        # arco) el test de rayo 1-direccion da falsos "adentro" en una cascara sobre
+        # el cielorraso inclinado, donde el campo modal esta indefinido y el acople
+        # es 0 exacto (acoustic_fem._source_modal_coupling: "un punto fuera de la
+        # malla aporta 0"). Si el optimizador parkea ahi una fuente z-libre, la
+        # FRF/SBIR (run_fem_frf) colapsan a la recta de piso (~-506 dB). A1: cuando
+        # hay modos resueltos usamos el localizador de tets (campo definido == NaN
+        # afuera); sin malla FEM (base analitica rectangular, convexa) caemos al
+        # poligono como antes. Asi optimizar y evaluar comparten UN dominio.
         _tris_arr = np.asarray(_tris, dtype=int)
+        _mres_dom = getattr(self, "modal_result", None)
+        _loc_dom = getattr(_mres_dom, "locator", None) if _mres_dom is not None else None
+        _ones_dom = (np.ones(np.asarray(_mres_dom.phis).shape[0], dtype=complex)
+                     if _loc_dom is not None else None)
 
-        def _inside_fn(p, _v=v, _t=_tris_arr):
+        def _inside_fn(p, _v=v, _t=_tris_arr, _loc=_loc_dom, _ones=_ones_dom):
+            pt = np.asarray(p, dtype=float).reshape(1, 3)
+            if _loc is not None:
+                # Dominio FEM real: el punto cae en algun tet (campo != NaN).
+                val = _loc.evaluate_many(_ones, pt)
+                return bool(np.isfinite(np.real(np.asarray(val)[0])))
             from acoustic_mesh import points_inside_surface
-            return bool(points_inside_surface(
-                np.asarray(p, dtype=float).reshape(1, 3), _v, _t)[0])
+            return bool(points_inside_surface(pt, _v, _t)[0])
 
         vmin = v.min(axis=0)
         dims = tuple((v.max(axis=0) - vmin).tolist())
@@ -6191,12 +6403,18 @@ class AcousticPanel(QWidget):
         if mute:
             for s in self.sources.sources:
                 s.active = False
+        n_snap = 0
         for i, p in enumerate(pos_list):
-            self.sources.add(OmniSource(position=p, label=f"Sug-{i+1}",
+            # A2: garantizar que la posicion sugerida caiga en el dominio FEM (tets),
+            # no solo en el AABB, para que la fuente acople (evita la recta -500).
+            p2, snapped = self._snap_source_into_domain(p)
+            n_snap += int(snapped)
+            self.sources.add(OmniSource(position=p2, label=f"Sug-{i+1}",
                                         source_type="subwoofer"))
         self._refresh_sources_list()
         self.schedule_field_update()
         self._log(f"Ubicación sugerida aplicada: {len(pos_list)} fuentes"
+                  + (f"  ({n_snap} reubicadas al interior)" if n_snap else "")
                   + ("  (otras muteadas)" if mute else "") + ".")
 
     def _modal_fom_eqc(self, act, damping, fa):
@@ -6257,6 +6475,69 @@ class AcousticPanel(QWidget):
             self._log(f"Aviso FoM/corregibilidad: {e}")
         return fom, fom_band, eqc, eqc_band
 
+    def _snap_source_into_domain(self, pos):
+        """A2: devuelve una posicion DENTRO del dominio FEM (tets) cercana a `pos`.
+
+        Si `pos` ya cae en un tet, la devuelve igual. Si no (caso tipico: el clamp
+        al AABB del render dejo la fuente sobre el cielorraso inclinado de un techo
+        NO-convexo, o el AABB es mas grande que la planta), la proyecta al nodo
+        INTERIOR mas cercano de la malla, empujado un epsilon hacia el centroide
+        para caer estrictamente adentro. Asi la fuente SIEMPRE acopla (evita la
+        recta -500). Sin malla FEM (base analitica / caja convexa) -> `pos` sin
+        tocar. Devuelve (pos_nueva, movida:bool)."""
+        p = tuple(float(x) for x in pos)
+        mr = getattr(self, "modal_result", None)
+        loc = getattr(mr, "locator", None) if mr is not None else None
+        if loc is None:
+            return p, False
+        ones = np.ones(np.asarray(mr.phis).shape[0], dtype=complex)
+
+        def _in(q):
+            v = loc.evaluate_many(ones, np.asarray(q, dtype=float).reshape(1, 3))
+            return bool(np.isfinite(np.real(np.asarray(v)[0])))
+        try:
+            if _in(p):
+                return p, False                      # ya esta adentro
+            # MARCHA hacia el centroide de la malla (interior por construccion): el
+            # primer punto del segmento pos->centroide que cae en los tets queda lo
+            # mas cerca posible de la posicion pedida y estrictamente adentro. Es
+            # robusto (no depende de nodos de frontera/cumbrera, que pueden ser
+            # vertices degenerados que el localizador falla).
+            centroid = np.asarray(mr.nodes, dtype=float).mean(axis=0)
+            pv = np.asarray(p, dtype=float)
+            for t in np.linspace(0.0, 1.0, 41)[1:]:
+                q = pv + t * (centroid - pv)
+                if _in(q):
+                    return tuple(float(x) for x in q), True
+            return tuple(float(x) for x in centroid), True   # fallback: el centroide
+        except Exception:
+            return p, False
+
+    def _decoupled_active_sources(self, act):
+        """A3: fuentes activas cuyo acople modal es ~0 -> caen FUERA del dominio FEM
+        (p.ej. una posicion sobre el cielorraso inclinado de un techo no-convexo, o
+        una que una optimizacion dejo afuera). Su aporte a la FRF/SBIR es 0 exacto
+        (acoustic_fem._source_modal_coupling: un punto fuera de la malla aporta 0);
+        si TODAS lo estan, la curva colapsa a la recta de piso (~-506 dB). Se
+        devuelven para AVISAR cual, en vez de dibujar una recta enganosa. Sin modos
+        o sin localizador -> [] (no se puede juzgar)."""
+        mr = getattr(self, "modal_result", None)
+        if mr is None or getattr(mr, "locator", None) is None:
+            return []
+        try:
+            import acoustic_fem
+        except Exception:
+            return []
+        out = []
+        for s in act:
+            try:
+                k = acoustic_fem._source_modal_coupling(mr.locator, mr.phis, [s])
+                if float(np.linalg.norm(np.asarray(k[0], dtype=float))) < 1e-12:
+                    out.append(s)
+            except Exception:
+                pass
+        return out
+
     def _compute_frf(self, method: str = "fem"):
         act = self._active_sources()
         if len(act) == 0:
@@ -6316,6 +6597,29 @@ class AcousticPanel(QWidget):
         finally:
             self.setEnabled(True)
         self._log("FRF FEM listo.")
+
+        # A3 (guarda anti-recta -500): si una o mas fuentes activas quedaron FUERA
+        # de la malla (acople 0), la FRF no es una transferencia real. Si TODAS lo
+        # estan, la curva es una recta plana enganosa -> avisar y NO dibujarla. Si
+        # solo algunas, avisar cuales y seguir con el resto (H sigue teniendo sentido).
+        _decpl = self._decoupled_active_sources(act)
+        if _decpl:
+            _names = ", ".join(str(getattr(s, "label", "?")) for s in _decpl)
+            if len(_decpl) == len(act):
+                QMessageBox.warning(
+                    self, "Fuentes fuera del dominio simulado",
+                    "TODAS las fuentes activas quedaron fuera de la malla del "
+                    f"recinto ({_names}); su acople a los modos es 0, por lo que la "
+                    "FRF sería una recta plana (~-500 dB), no una transferencia "
+                    "real.\n\nCausa típica: una optimización dejó la fuente sobre el "
+                    "cielorraso inclinado (techo no-convexo) o fuera del volumen. "
+                    "Movela adentro del recinto y volvé a calcular la FRF.")
+                return
+            QMessageBox.warning(
+                self, "Fuente fuera del dominio simulado",
+                f"Estas fuentes quedaron fuera de la malla del recinto: {_names}. "
+                "No aportan a la FRF (acople 0). El resto se computa normalmente; "
+                "movelas adentro del volumen para incluirlas.")
 
         # Figura de merito + corregibilidad EQ (C13/C21) sobre una grilla de
         # receptores. Best-effort. Helper compartido con SBIR/CABS (mismo overlay).
@@ -7331,6 +7635,27 @@ class AcousticPanel(QWidget):
         if not groups:
             self._log("No hay caras para dibujar parches.")
             return
+        # B (bug del profesor): re-anclar parches HUERFANOS a las caras actuales. Si
+        # el recinto cambio de geometria (dimensiones/techo) despues de crear los
+        # parches, su firma de cara quedo vieja y el editor no los mostraba ("solo los
+        # ultimos agregados"). reconcile_patch_signatures corrige la firma por
+        # geometria (mismo eje de normal + plano mas cercano); las coords u-v son de
+        # mundo, asi que el parche vuelve a verse y editarse en su cara.
+        try:
+            import absorption_patch as _ap
+            rep = _ap.reconcile_patch_signatures(self._patches, groups)
+            if rep["migrated"]:
+                self._log(f"Parches: {rep['migrated']} re-anclados a las caras "
+                          f"actuales (la geometria habia cambiado).")
+            if rep["unmatched"]:
+                QMessageBox.warning(
+                    self, "Parches sin cara compatible",
+                    f"{len(rep['unmatched'])} parche(s) quedaron sobre una cara que "
+                    "ya no existe en el recinto actual (cambió la geometría). No se "
+                    "muestran porque no hay dónde ubicarlos. Revisá la geometría o "
+                    "borralos/rehacelos.")
+        except Exception as e:
+            self._log(f"Aviso: no se pudo reconciliar parches ({e}).")
         import patch_dialog as pdlg
         dlg = pdlg.PatchEditorDialog(
             groups=groups, verts=verts, tris=tris,

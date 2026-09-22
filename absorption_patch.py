@@ -471,6 +471,55 @@ def make_patch(group, u0: float, v0: float, u1: float, v1: float,
     )
 
 
+def reconcile_patch_signatures(patches, groups, plane_tol: float = 0.75) -> dict:
+    """Re-ancla los parches HUERFANOS a los FaceGroup actuales por geometria.
+
+    PROBLEMA (bug del profesor, Control Ale.room): `face_signature` se computa de la
+    geometria de la cara (normal + centroide + area, ver `face_materials._signature`).
+    Si el usuario cambia el recinto (dimensiones, techo) DESPUES de crear los parches,
+    la firma de la cara cambia y los parches viejos quedan con la firma vieja: no
+    matchean ningun grupo actual y el editor (que filtra por firma exacta) NO los
+    muestra -> "aparecen solo los ultimos agregados" y no se pueden editar.
+
+    Este helper corrige la deriva: para cada parche cuya firma no coincide con ningun
+    grupo actual, busca el grupo que mejor matchea por (1) MISMO eje de normal
+    dominante y (2) coordenada de plano mas cercana (dentro de `plane_tol` metros), y
+    le reasigna `face_signature` a ese grupo. Las coords u-v del parche son de MUNDO
+    (absolutas), asi que re-mapear solo la firma basta para que el parche vuelva a ser
+    visible y editable sobre su cara. Muta `patch.face_signature` in-place.
+
+    Devuelve dict: {migrated, unmatched (lista de parches sin cara compatible),
+    already_ok, groups, patches}.
+    """
+    cur_sigs = {g.signature for g in groups}
+    ginfo = []
+    for g in groups:
+        na, _ua, _va = axis_aligned_frame(g.normal)
+        ginfo.append((g, na, float(np.asarray(g.centroid, dtype=float)[na])))
+    migrated = 0
+    already_ok = 0
+    unmatched = []
+    for p in patches:
+        if p.face_signature in cur_sigs:
+            already_ok += 1
+            continue
+        cands = [(g, pc) for (g, na, pc) in ginfo if na == int(p.normal_axis)]
+        if not cands:
+            unmatched.append(p)
+            continue
+        g_best, pc_best = min(cands, key=lambda gp: abs(gp[1] - float(p.plane_coord)))
+        if abs(pc_best - float(p.plane_coord)) > plane_tol:
+            # el candidato mas cercano esta demasiado lejos: no arriesgar un mapeo
+            # equivocado (la cara pudo desaparecer). Se deja huerfano y se reporta.
+            unmatched.append(p)
+            continue
+        p.face_signature = g_best.signature
+        migrated += 1
+    return {"migrated": migrated, "unmatched": unmatched,
+            "already_ok": already_ok, "groups": len(groups),
+            "patches": len(patches)}
+
+
 def make_polygon_patch(group, uv_points, material_name: str = "",
                        label: str = "",
                        depth: float = DEFAULT_PATCH_DEPTH) -> AbsorptionPatch:

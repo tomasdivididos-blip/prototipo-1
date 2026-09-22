@@ -6,7 +6,48 @@
 > cada cosa contra la fuente física, un oráculo, o una cuenta propia. Que este archivo
 > diga "resuelto/PASA" no prueba nada; es un puntero a qué mirar.
 
-**Última actualización:** 2026-09-13 (v2.44 + mallado CAD + remesh curvo/pymeshlab).
+**Última actualización:** 2026-09-22 (v2.48: fix dominio inside_fn/tets + reconciliación de parches + `modal_decay`).
+
+## v2.48 — dominio del optimizador, parches y decaimiento con subs (22 Sep 2026, EN ALCANCE — VERIFICAR)
+
+Tres cambios sobre `Control Ale.room` (recinto con techo a dos aguas = NO convexo). Auditá contra la
+física, son AFIRMACIONES del autor.
+
+- **Bug de la «recta −500» (A1/A2/A3), root cause reproducido:** en un techo no-convexo,
+  `acoustic_mesh.points_inside_surface` (paridad de rayo 1-dir) da FALSOS «adentro» en una cáscara sobre
+  las aguas (sobre el cielorraso inclinado). Ese test era el `inside_fn` del optimizador CABS; ahí el campo
+  FEM está indefinido y `acoustic_fem._source_modal_coupling` devuelve 0 → `run_fem_frf` H=0 → recta a
+  ≈−506 dB (FRF y SBIR comparten `run_fem_frf`). **A1:** `acoustic_panel._open_dba._inside_fn` ahora usa el
+  dominio de los TETS (`locator.evaluate_many(ones)≠NaN`) cuando hay modos, el MISMO que evalúa la FRF; sin
+  malla FEM cae al polígono. A auditar: (1) ¿el test de tets (KDTree de centroides + contención, con
+  fallback K) coincide EXACTO con el dominio donde `_source_modal_coupling` da κ≠0? el bench asume que sí
+  (cerró la cáscara a 0 falsos-positivos). (2) para un recinto CAD no-estanco (aula EASE) el locator de tets
+  puede tener huecos propios → ¿el `inside_fn` se vuelve demasiado restrictivo y el optimizador se queda sin
+  región? (conservador = seguro, pero verificar). **A2:** `_snap_source_into_domain` (marcha pos→centroide,
+  primer punto en tets) reubica lo que el clamp al AABB dejó afuera; el nudge a centroide asume dominio
+  estrellado respecto al centroide (cierto para caja/gable, NO garantizado para un recinto muy cóncavo o
+  con columna). **A3:** `_decoupled_active_sources` (‖κ‖<1e-12) + guardas en `_compute_frf`/`_open_sbir`
+  para no dibujar la recta. `bench_source_domain_guard.py` 18/18. NO toca el núcleo de `frequency_response`.
+
+- **`modal_decay.py` (C1) — NÚCLEO NUEVO EN ALCANCE:** decaimiento del campo manejado en el receptor.
+  `modal_impulse_response` = IFFT de `acoustic_fem.frequency_response` (la MISMA H validada, factor c²) →
+  EDC de Schroeder (vía `rir.schroeder_curve`, `noise_trunc=False` para IR sintético) + `cumulative_spectral_
+  decay` (waterfall CSD). A auditar con dureza: (1) **honestidad del claim** — se muestra como decaimiento
+  del CAMPO TOTAL (el drive del array redistribuye energía modal), NO como cambio de ξₙ; verificar que el
+  texto de UI (`DecayWaterfallDialog`) no sugiera que cambian los polos. (2) **consistencia IR↔FRF**:
+  `bench_modal_decay.py` mide err 2e-16 (FFT(IR) vs H banda-limitada), pero la ventana de banda es REAL
+  (fase cero) → introduce pre-ring que envuelve la cola: por eso el IR para RT usa `bandlimit=False` (banda
+  completa causal). Verificar que ningún camino de RT use `bandlimit=True`. (3) **T30 de un modo aislado** =
+  6.908/(ξ·ωₙ): medido 1.6% de error (bench). ¿Se sostiene con ξ por modo (array) y con `modal_freqs`
+  efectivas de Capa 0? (4) el A/B «sin subs / con subs» clasifica por `source_type=='subwoofer'`: ¿es la
+  partición correcta para todos los casos (p.ej. mains full-range que también bajan)? `bench_modal_decay.py`
+  9/9. **C2 (rigurosa: impedancia del cono → Δξₙ) NO implementada.**
+
+- **Reconciliación de parches (B):** `absorption_patch.reconcile_patch_signatures` re-ancla parches
+  huérfanos por deriva de firma (mismo eje de normal + plano ≤0.75 m). Geométrico/IO, fuera del núcleo
+  físico, PERO afecta qué α entra al modelo (los parches mueven ξ por A36): verificar que re-anclar la firma
+  NO cambia la geometría u-v del parche (son coords de mundo) ni su material → el amortiguamiento resultante
+  debe ser idéntico, solo se corrige la visibilidad/edición. `bench_absorption_patch.py` T13.
 
 ## Mallado de CAD con columnas y superficies curvas (13 Sep 2026 — EN ALCANCE, VERIFICAR)
 

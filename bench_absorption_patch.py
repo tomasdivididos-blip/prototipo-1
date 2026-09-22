@@ -496,6 +496,65 @@ def test_patch_prism_edges():
     print("   espesor 0 -> quad plano con contorno de n aristas (legacy)  OK")
 
 
+def test_reconcile_signatures():
+    """Los parches HUERFANOS se re-anclan a la cara correcta cuando la geometria
+    cambio (bug del profesor, Control Ale.room): la firma de cara deriva y el editor
+    dejaba de mostrarlos ('solo los ultimos agregados'). `reconcile_patch_signatures`
+    corrige la firma por geometria (mismo eje de normal + plano mas cercano)."""
+    print("\n[T13] reconciliacion de parches huerfanos por deriva de firma")
+    import numpy as _np
+
+    class _FG:
+        def __init__(self, normal, centroid, sig):
+            self.normal = _np.asarray(normal, float)
+            self.centroid = _np.asarray(centroid, float)
+            self.signature = sig
+
+    # Dos paredes en Y (y=0 y y=3.9) con firmas ACTUALES.
+    groups = [
+        _FG([0, -1, 0], [2.4, 0.0, 1.5], "cur_y0"),
+        _FG([0, 1, 0], [2.4, 3.9, 1.5], "cur_y39"),
+        _FG([-1, 0, 0], [0.0, 1.95, 1.5], "cur_x0"),
+    ]
+    # Parches con firmas VIEJAS (ya no matchean) pero geometria correcta.
+    p_y0 = ap.make_patch(_FG([0, -1, 0], [2.4, 0.0, 1.5], "OLD_y0"),
+                         1.0, 0.5, 2.0, 2.0, "Bass Trap")
+    p_y39 = ap.make_patch(_FG([0, 1, 0], [2.4, 3.9, 1.5], "OLD_y39"),
+                          1.0, 0.5, 2.0, 2.0, "Ventana")
+    p_ok = ap.make_patch(groups[2], 0.5, 0.5, 1.5, 1.5, "vidrio")  # ya matchea
+    patches = [p_y0, p_y39, p_ok]
+
+    cur = {g.signature for g in groups}
+    vis_before = sum(1 for p in patches if p.face_signature in cur)
+    rep = ap.reconcile_patch_signatures(patches, groups)
+    vis_after = sum(1 for p in patches if p.face_signature in cur)
+
+    assert vis_before == 1, f"antes deberia ver solo el que ya matchea ({vis_before})"
+    assert rep["migrated"] == 2, f"deberia migrar 2 ({rep['migrated']})"
+    assert rep["already_ok"] == 1 and not rep["unmatched"]
+    assert vis_after == 3, f"despues deberian verse los 3 ({vis_after})"
+    assert p_y0.face_signature == "cur_y0", "y=0 mal reanclado"
+    assert p_y39.face_signature == "cur_y39", "y=3.9 mal reanclado"
+    assert p_ok.face_signature == "cur_x0", "el que ya matchea no se debe tocar"
+    print(f"   {vis_before}/3 visibles -> {vis_after}/3 tras reconciliar "
+          f"({rep['migrated']} migrados)  OK")
+
+    # Sin cara compatible (la pared desaparecio) -> queda unmatched, no se fuerza.
+    p_ghost = ap.make_patch(_FG([0, 0, 1], [2.4, 1.95, 3.0], "OLD_ceiling"),
+                            0.0, 0.0, 1.0, 1.0, "panel")
+    rep2 = ap.reconcile_patch_signatures([p_ghost], groups)  # no hay cara con normal Z
+    assert rep2["migrated"] == 0 and len(rep2["unmatched"]) == 1, \
+        "una cara inexistente NO se debe re-anclar a la fuerza"
+    print("   parche sobre cara inexistente -> unmatched (no se fuerza)  OK")
+
+    # Plano demasiado lejos (tol): no arriesgar mapeo equivocado.
+    p_far = ap.make_patch(_FG([0, -1, 0], [2.4, 10.0, 1.5], "OLD_far"),
+                          1.0, 0.5, 2.0, 2.0, "x")
+    rep3 = ap.reconcile_patch_signatures([p_far], groups)
+    assert len(rep3["unmatched"]) == 1, "plano lejos (>tol) no se debe migrar"
+    print("   parche con plano fuera de tolerancia -> unmatched  OK")
+
+
 if __name__ == "__main__":
     t0 = time.perf_counter()
     test_tessellation_area()
@@ -510,4 +569,5 @@ if __name__ == "__main__":
     test_thickness_from_material_name()
     test_patch_translate()
     test_patch_prism_edges()
+    test_reconcile_signatures()
     print(f"\nTODOS OK  ({time.perf_counter() - t0:.1f} s)")
