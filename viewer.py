@@ -316,6 +316,30 @@ class IsoViewer(gl.GLViewWidget):
         self._cam_preset_row.adjustSize()
         self._reposition_cam_presets()
 
+        # Flechas de ciclo (4b): con un preset LATERAL o ISO activo, giran la vista
+        # 90° -> ciclan que pared se mira (Lateral) o desde que esquina (Iso).
+        # Semitransparentes, a los costados, centradas en vertical. Ocultas salvo
+        # con esos presets (Planta no tiene: hay una sola vista superior).
+        _arrow_qss = (
+            "QPushButton { background-color: rgba(69,71,90,0.55); color: #e6e9ef;"
+            " border: none; border-radius: 6px; font-size: 18pt; font-weight: 800; }"
+            "QPushButton:hover { background-color: rgba(137,180,250,0.85);"
+            " color: #11111b; }")
+        self._cam_arrow_left = QPushButton("◀", self)   # ◀
+        self._cam_arrow_right = QPushButton("▶", self)  # ▶
+        for b, delta, tip in (
+                (self._cam_arrow_left, -90.0, "Girar la vista 90° a la izquierda "
+                 "(pared / esquina anterior)"),
+                (self._cam_arrow_right, 90.0, "Girar la vista 90° a la derecha "
+                 "(pared / esquina siguiente)")):
+            b.setFixedSize(34, 48)
+            b.setCursor(Qt.PointingHandCursor)
+            b.setToolTip(tip)
+            b.setStyleSheet(_arrow_qss)
+            b.clicked.connect(lambda _c, d=delta: self._cam_arrow_clicked(d))
+            b.hide()
+        self._refresh_cam_arrows()
+
     # ---------- Camara ----------
     def reset_camera(self):
         if getattr(self, "_cam_preset", None) is not None:
@@ -1515,6 +1539,7 @@ class IsoViewer(gl.GLViewWidget):
         self._reposition_rotate_widgets()
         self._reposition_help_btn()
         self._reposition_cam_presets()
+        self._reposition_cam_arrows()
 
     # ---------- Modo Rotar ----------
     def _reposition_rotate_widgets(self):
@@ -1591,6 +1616,7 @@ class IsoViewer(gl.GLViewWidget):
         self._cam_preset = name
         self._apply_cam_preset(name)
         self._refresh_cam_preset_btns()
+        self._refresh_cam_arrows()
 
     def _clear_camera_preset(self):
         """Destraba la camara (sin moverla). Lo llama el orbit-drag y el re-clic."""
@@ -1598,6 +1624,37 @@ class IsoViewer(gl.GLViewWidget):
             return
         self._cam_preset = None
         self._refresh_cam_preset_btns()
+        self._refresh_cam_arrows()
+
+    # ---------- Flechas de ciclo de vista (4b) ----------
+    def _refresh_cam_arrows(self):
+        """Muestra las flechas solo con preset Lateral o Iso (Planta no tiene)."""
+        if not hasattr(self, "_cam_arrow_left"):
+            return
+        show = self._cam_preset in ("lateral", "iso")
+        for b in (self._cam_arrow_left, self._cam_arrow_right):
+            b.setVisible(show)
+        if show:
+            self._reposition_cam_arrows()
+
+    def _reposition_cam_arrows(self):
+        if not hasattr(self, "_cam_arrow_left"):
+            return
+        y = (self.height() - self._cam_arrow_left.height()) // 2
+        self._cam_arrow_left.move(10, max(0, y))
+        self._cam_arrow_right.move(
+            self.width() - self._cam_arrow_right.width() - 10, max(0, y))
+        self._cam_arrow_left.raise_()
+        self._cam_arrow_right.raise_()
+
+    def _cam_arrow_clicked(self, delta):
+        """Gira la vista 90° manteniendo el preset (Lateral: siguiente pared; Iso:
+        siguiente esquina). Los presets fijan el azimut en la grilla canonica
+        (Lateral 0/90/180/270, Iso 45/135/225/315), asi que ±90 la conserva."""
+        if self._cam_preset not in ("lateral", "iso"):
+            return
+        self.opts["azimuth"] = (float(self.opts["azimuth"]) + float(delta)) % 360.0
+        self.update()
 
     @staticmethod
     def _shortcuts_html():

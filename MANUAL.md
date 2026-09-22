@@ -2986,7 +2986,9 @@ Al dibujar el perfil de tope de cada pared («Cortes laterales»), un mini-previ
 
 Arriba a la derecha del visor 3D hay un botón **«?»**: al pasar el mouse (o clickearlo) muestra la lista completa de atajos de teclado y gestos de mouse.
 
-Abajo a la derecha, sobre los ejes, hay tres botones de cámara: **P** (Planta, vista superior), **I** (Isométrica) y **L** (Lateral, de frente a una pared). Al clickear uno, la cámara salta a esa vista y queda **fijada** (bloquea el orbitar, para que no se mueva de ese ángulo). Se libera re-clickeando el mismo botón, arrastrando la vista para orbitar, o con la tecla **0** (resetear cámara). Conserva el zoom y el encuadre: solo cambia el ángulo. (Las flechas para elegir qué pared o qué esquina mirar vienen después.)
+Abajo a la derecha, sobre los ejes, hay tres botones de cámara: **P** (Planta, vista superior), **I** (Isométrica) y **L** (Lateral, de frente a una pared). Al clickear uno, la cámara salta a esa vista y queda **fijada** (bloquea el orbitar, para que no se mueva de ese ángulo). Se libera re-clickeando el mismo botón, arrastrando la vista para orbitar, o con la tecla **0** (resetear cámara). Conserva el zoom y el encuadre: solo cambia el ángulo.
+
+Con un preset **Lateral** o **Isométrica** activo aparecen dos flechas semitransparentes a los costados (◀ ▶): cada click gira la vista 90°, para ir eligiendo qué pared se mira (en Lateral cicla las cuatro paredes) o desde qué esquina (en Isométrica, las cuatro esquinas). En Planta no hay flechas (la vista superior es única). Orbitar o la tecla 0 las ocultan (se libera el preset).
 
 ### Coherencia npm/modos con amortiguamiento por perturbación
 
