@@ -386,11 +386,62 @@ class SourceEditDialog(QDialog):
         self.sb_drv_vb = QDoubleSpinBox()
         self.sb_drv_vb.setRange(1.0, 2000.0); self.sb_drv_vb.setValue(50.0)
         self.sb_drv_vb.setSuffix(" L")
+        self.sb_drv_sd = QDoubleSpinBox()
+        self.sb_drv_sd.setRange(0.001, 1.0); self.sb_drv_sd.setDecimals(4)
+        self.sb_drv_sd.setValue(0.0550); self.sb_drv_sd.setSuffix(" m²")
+        self.sb_drv_sd.setSingleStep(0.005)
+        # Q_ms/Q_es (ficha técnica): separan el amortiguamiento mecánico del
+        # eléctrico; hacen falta para los estados de bornes abiertos/amp real.
+        # 0 = "sin dato" (SpecialValueText) → se cae a bornes en corto (solo Q_ts).
+        self.sb_drv_qms = QDoubleSpinBox()
+        self.sb_drv_qms.setRange(0.0, 30.0); self.sb_drv_qms.setDecimals(3)
+        self.sb_drv_qms.setValue(0.0); self.sb_drv_qms.setSingleStep(0.5)
+        self.sb_drv_qms.setSpecialValueText("(ficha técnica)")
+        self.sb_drv_qes = QDoubleSpinBox()
+        self.sb_drv_qes.setRange(0.0, 30.0); self.sb_drv_qes.setDecimals(3)
+        self.sb_drv_qes.setValue(0.0); self.sb_drv_qes.setSingleStep(0.1)
+        self.sb_drv_qes.setSpecialValueText("(ficha técnica)")
         dt.addRow("fs (resonancia libre):", self.sb_drv_fs)
         dt.addRow("Qts:", self.sb_drv_qts)
         dt.addRow("Vas (compliancia equiv.):", self.sb_drv_vas)
         dt.addRow("Vb (volumen de caja):", self.sb_drv_vb)
+        dt.addRow("Sd (área del diafragma):", self.sb_drv_sd)
+        dt.addRow("Q_ms (mecánico, opc.):", self.sb_drv_qms)
+        dt.addRow("Q_es (eléctrico, opc.):", self.sb_drv_qes)
         dvl.addWidget(self._drv_ts)
+
+        # --- Carga del cono como absorbedor (C2): estado eléctrico de los bornes.
+        # Fija la ADMITANCIA del cono (cuánto amortigua los modos), NO la fuerza
+        # radiada (eso lo da sensibilidad/CLF; son datos distintos, no se pisan).
+        grp_amp = QGroupBox("Carga del cono / amortiguamiento modal (subs)")
+        avl = QVBoxLayout(grp_amp)
+        arow = QHBoxLayout()
+        arow.addWidget(QLabel("Estado de los bornes:"))
+        self.combo_drv_amp = QComboBox()
+        self.combo_drv_amp.addItem("Bornes en corto (amp ideal de tensión)", "short")
+        self.combo_drv_amp.addItem("Amplificador real (factor de amortig. DF)", "amp")
+        self.combo_drv_amp.addItem("Bornes abiertos (driver pasivo)", "open")
+        arow.addWidget(self.combo_drv_amp, 1)
+        avl.addLayout(arow)
+        drow_df = QHBoxLayout()
+        self._drv_df_label = QLabel("Factor de amortiguamiento DF = R_E/R_g:")
+        self.sb_drv_df = QDoubleSpinBox()
+        self.sb_drv_df.setRange(1.0, 1000.0); self.sb_drv_df.setDecimals(0)
+        self.sb_drv_df.setValue(50.0); self.sb_drv_df.setSingleStep(10.0)
+        drow_df.addWidget(self._drv_df_label)
+        drow_df.addWidget(self.sb_drv_df, 1)
+        avl.addLayout(drow_df)
+        lbl_amp = QLabel(
+            "El estado de los bornes fija cuánto AMORTIGUA el cono los modos (C2). "
+            "«En corto» (amp ideal) = máximo freno (Q_tc); «abiertos» = mínimo, "
+            "absorbedor más agudo; «amp real» según DF. La sensibilidad/CLF fija la "
+            "FUERZA radiada aparte, no se duplica. «Abiertos» y «amp real» necesitan "
+            "Q_ms/Q_es; sin ellos se usa «en corto».")
+        lbl_amp.setWordWrap(True)
+        lbl_amp.setStyleSheet("color:#666; font-size:11px;")
+        avl.addWidget(lbl_amp)
+        dvl.addWidget(grp_amp)
+        self.combo_drv_amp.currentIndexChanged.connect(self._on_amp_state_changed)
 
         btn_drv = QPushButton("Aplicar como curva Q(f)")
         btn_drv.clicked.connect(self._apply_driver)
@@ -403,10 +454,21 @@ class SourceEditDialog(QDialog):
             self.sb_drv_qts.setValue(float(source.ts_qts or 0.35))
             self.sb_drv_vas.setValue(float(source.ts_vas or 100.0))
             self.sb_drv_vb.setValue(float(source.ts_vb or 50.0))
+            if getattr(source, "ts_sd", None):
+                self.sb_drv_sd.setValue(float(source.ts_sd))
+            self.sb_drv_qms.setValue(float(getattr(source, "ts_qms", None) or 0.0))
+            self.sb_drv_qes.setValue(float(getattr(source, "ts_qes", None) or 0.0))
+            _jamp = self.combo_drv_amp.findData(
+                str(getattr(source, "ts_amp_state", "short") or "short"))
+            if _jamp >= 0:
+                self.combo_drv_amp.setCurrentIndex(_jamp)
+            if getattr(source, "ts_df", None):
+                self.sb_drv_df.setValue(float(source.ts_df))
             _jts = self.combo_drv_mode.findData("ts")
             if _jts >= 0:
                 self.combo_drv_mode.setCurrentIndex(_jts)
         self._on_drv_mode_changed()
+        self._on_amp_state_changed()
 
         # --- Modelo de radiación (item 5): radiador + qué trae horneada la resp. -
         grp_rad = QGroupBox("Modelo de radiación")
@@ -713,6 +775,13 @@ class SourceEditDialog(QDialog):
         self._drv_direct.setVisible(not ts)
         self._drv_ts.setVisible(ts)
 
+    def _on_amp_state_changed(self):
+        """DF solo aplica al estado «amplificador real»; se deshabilita en los
+        otros dos (en corto = DF→∞, abiertos = sin conexión eléctrica)."""
+        is_amp = (self.combo_drv_amp.currentData() == "amp")
+        self.sb_drv_df.setEnabled(is_amp)
+        self._drv_df_label.setEnabled(is_amp)
+
     def _apply_driver(self):
         """Construye un DriverModel (Thiele-Small, caja sellada) y lo aplica
         como la curva Q(f) de la fuente (S2 del modelo de fuente exacto). La
@@ -946,6 +1015,13 @@ class SourceEditDialog(QDialog):
             src.ts_qts = self.sb_drv_qts.value()
             src.ts_vas = self.sb_drv_vas.value()
             src.ts_vb = self.sb_drv_vb.value()
+            src.ts_sd = self.sb_drv_sd.value()
+            _qms = self.sb_drv_qms.value()
+            _qes = self.sb_drv_qes.value()
+            src.ts_qms = _qms if _qms > 0.0 else None      # 0 = sin dato de ficha
+            src.ts_qes = _qes if _qes > 0.0 else None
+            src.ts_amp_state = self.combo_drv_amp.currentData()
+            src.ts_df = self.sb_drv_df.value()
         return src
 
 
@@ -4404,8 +4480,10 @@ class AcousticPanel(QWidget):
         new.radiator_kind = getattr(s, "radiator_kind", "box")
         new.radiation_baked = getattr(s, "radiation_baked", "none")
         new.render_kind = getattr(s, "render_kind", "baffle")
-        for _a in ("ts_fs", "ts_qts", "ts_vas", "ts_vb", "ts_sd"):
+        for _a in ("ts_fs", "ts_qts", "ts_vas", "ts_vb", "ts_sd",
+                   "ts_qms", "ts_qes", "ts_df"):
             setattr(new, _a, getattr(s, _a, None))
+        new.ts_amp_state = getattr(s, "ts_amp_state", "short")
         self.sources.add(new)
         self._refresh_sources_list()
         self.schedule_field_update()      # el campo |p| cambió (una fuente más)
@@ -6093,14 +6171,21 @@ class AcousticPanel(QWidget):
         que tengan Thiele-Small completo (fs, Qts, Vas, Vb, Sd). Cada cono es un
         absorbedor de frontera con β_cono(f)=ρ₀c·Sd/Z_mech (driver.py), que entra a
         la perturbación como un parche en la posición del sub → Δξ_n (validado vs
-        autovalor complejo exacto, bench_cone_damping). Devuelve (Δξ, n_conos) o
-        (None, 0) si ningún sub trae TS. amp-conectado → Q_tc (bornes en corto)."""
+        autovalor complejo exacto, bench_cone_damping). Devuelve (Δξ, n_conos, nota).
+
+        El Q de la caja depende del ESTADO ELÉCTRICO de los bornes (driver.box_terminal_Q):
+        `ts_amp_state` = "short" (amp ideal, Q_tc histórico), "amp" (ampli real con
+        factor de amortiguamiento `ts_df`) u "open" (bornes abiertos). Los estados
+        open/amp necesitan separar mecánico/eléctrico (Q_ms/Q_es de ficha técnica);
+        si faltan, se cae honestamente a "short" (que solo necesita Q_ts) y se avisa."""
         mr = getattr(self, "modal_result", None)
         if mr is None:
-            return None, 0
+            return None, 0, ""
         import driver
         import face_materials as fm_mod
         cones = []
+        states = []
+        fell_back = False
         for s in subs:
             fs_ = getattr(s, "ts_fs", None); qts = getattr(s, "ts_qts", None)
             vas = getattr(s, "ts_vas", None); vb = getattr(s, "ts_vb", None)
@@ -6110,15 +6195,40 @@ class AcousticPanel(QWidget):
             fc, qtc = driver.sealed_box_params(float(fs_), float(qts),
                                                float(vas), float(vb))
             mms = driver.moving_mass_from_ts(float(fs_), float(vas), float(sd))
-            beta = (lambda f, fc=fc, qtc=qtc, sd=float(sd), mms=mms:
-                    driver.cone_specific_admittance(f, fc, qtc, sd, mms))
+            # Q efectivo segun estado de bornes; default "short" = Q_tc historico.
+            state = str(getattr(s, "ts_amp_state", "short") or "short")
+            q_eff = qtc
+            if state in ("open", "amp"):
+                qms = getattr(s, "ts_qms", None); qes = getattr(s, "ts_qes", None)
+                df = getattr(s, "ts_df", None)
+                try:
+                    qms_v, qes_v = driver.qms_qes_from_qts(
+                        float(qts),
+                        Qms=(float(qms) if qms else None),
+                        Qes=(float(qes) if qes else None))
+                    q_eff = driver.box_terminal_Q(
+                        fc, float(fs_), qms_v, qes_v, state=state,
+                        DF=(float(df) if df else None))
+                    states.append("abiertos" if state == "open"
+                                  else f"amp DF={float(df):g}")
+                except (ValueError, TypeError):
+                    fell_back = True
+                    states.append("en corto*")
+            else:
+                states.append("en corto")
+            beta = (lambda f, fc=fc, q=q_eff, sd=float(sd), mms=mms:
+                    driver.cone_specific_admittance(f, fc, q, sd, mms))
             cones.append({"pos": np.asarray(s.position, dtype=float),
                           "Sd": float(sd), "beta": beta})
         if not cones:
-            return None, 0
+            return None, 0, ""
         mf = self._effective_modal_freqs()
         dxi = fm_mod.cone_xi_shift_per_mode(mf, mr.phis, mr.locator, cones, c=C0)
-        return dxi, len(cones)
+        uniq = sorted(set(states))
+        note = ", ".join(uniq)
+        if fell_back:
+            note += " (falta Q_ms/Q_es → cayó a corto)"
+        return dxi, len(cones), note
 
     def _open_decay_waterfall(self):
         """Punto 3 del profesor: compara el DECAIMIENTO del campo total en el receptor
@@ -6184,7 +6294,7 @@ class AcousticPanel(QWidget):
             # C2: tercer estado = con la CARGA PASIVA del cono (ξ_walls + Δξ_cono),
             # si los subs traen Thiele-Small. Aísla el efecto del profesor: los conos
             # como absorbedores resonantes acortan el decaimiento de los modos.
-            dxi_cone, n_cone = self._cone_delta_xi(subs)
+            dxi_cone, n_cone, cone_note = self._cone_delta_xi(subs)
             if dxi_cone is not None:
                 dmp_loaded = np.asarray(damping, dtype=float) + np.asarray(dxi_cone)
                 _, ir_c, _ = mdk.modal_impulse_response(
@@ -6193,9 +6303,10 @@ class AcousticPanel(QWidget):
                 data["edc_c"] = (*mdk.energy_decay_db(ir_c, fs),
                                  mdk.decay_time(ir_c, fs))
                 data["csd_c"] = mdk.cumulative_spectral_decay(ir_c, fs, f_hi=f_hi)
-                data["lbl_c"] = f"+carga cono ({n_cone})"
+                data["lbl_c"] = f"+carga cono ({n_cone}, {cone_note})"
                 self._log(f"C2: carga pasiva del cono aplicada ({n_cone} sub(s) con "
-                          f"Thiele-Small); Δξ modal máx={float(np.max(dxi_cone)):.4f}.")
+                          f"Thiele-Small; bornes: {cone_note}); "
+                          f"Δξ modal máx={float(np.max(dxi_cone)):.4f}.")
             else:
                 self._log("C2: ningún sub tiene Thiele-Small completo (fs/Qts/Vas/"
                           "Vb/Sd); no se grafica la carga del cono. Cargalos en el "

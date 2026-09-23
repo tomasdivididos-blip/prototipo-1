@@ -3586,6 +3586,29 @@ bien.
   Sin regresión: bench_perturbation_xi 21/21 (solo agregué función, no toqué las existentes), C1 9/9, A 18/18.
   **Recap: MANUAL v2.49 + notas + auditor_contexto + commit/push. dist-exe/zips PENDIENTES.**
 
+- **23 Sep 2026 (v2.50) — el amplificador en la admitancia del sub: estado eléctrico de los bornes.**
+  Mejora del modelo de fuente/admitancia pedida por el usuario (conversación con el profesor Ale: el ampli, al
+  oponerse al movimiento libre de la bobina, altera la impedancia acústica superficial del cono). Refina el Q_tc
+  fijo de v2.49 (que suponía amp ideal) a los TRES estados de bornes. Alcance acordado por AskUserQuestion:
+  selector de 3 estados + solo el waterfall (no la FRF estacionaria). Detalle en [[bug-recta-500-dominio]].
+  - **Física (`driver.py`): `box_terminal_Q(fc, fs, Qms, Qes, state, DF)`** en espacio de Q (equivalente EXACTO
+    al término motional (Bl)²/(R_E+iωL_E+R_g); abajo de Schroeder ωL_E≪R_E → resistencia pura). En caja sellada
+    Q_mc=Qms·(fc/fs), Q_ec=Qes·(fc/fs); ampli real Q_ec(DF)=Q_ec·(1+1/DF), DF=R_E/R_g; total 1/Qtc=1/Qmc+1/Qec.
+    Estados: "open" (Q_mc, mínimo freno, absorbedor agudo), "amp" (DF finito), "short" (Q_tc histórico, EXACTO
+    == sealed_box_params → cero regresión). `qms_qes_from_qts(Qts, Qms=, Qes=)` separa mecánico/eléctrico y
+    **lanza ValueError sin datos** (norte: no inventar reparto). Ref: Small JAES 1972; Beranek & Mellow cap.6.
+  - **Oráculo (`bench_cone_damping.py` 10→17/17):** consistencia short==Qtc, open=Qmc y open>short, amp entre
+    ambos, monotonía en DF (DF→∞=short, DF→0=open), y el KNOB físico Re(β_open)>Re(β_amp)>Re(β_short) en fc.
+    Ojo físico: open da Q≈5.5 (β(fc)≈3 pero ancho ~8 Hz, angostísimo); short Q≈0.63 (ancho, aplanado).
+  - **Wiring (`acoustic_panel._cone_delta_xi`):** lee `ts_amp_state`/`ts_df`/`ts_qms`/`ts_qes`, computa Q_eff por
+    sub, cae a "short" si faltan Qms/Qes (avisa). Devuelve 3-tupla (dxi, n, nota); el waterfall muestra el estado.
+  - **UI (editor de fuente, grupo «Driver físico»):** agregué **Sd** (faltaba del todo en la UI → sin él la carga
+    del cono nunca se activaba desde la GUI), Q_ms, Q_es, subgrupo «Carga del cono» con combo de bornes + DF
+    (habilitado solo en "amp real"), nota sensibilidad≠admitancia. Persiste en `.room` (dict "ts" ampliado,
+    aditivo sin bump de versión; loader con defaults históricos). `OmniSource`: campos ts_qms/ts_qes/ts_amp_state/ts_df.
+  Sin regresión: bench_perturbation_xi 21/21, smoke_test_dba_dialog verde, round-trip .room OK, default histórico
+  (amp_state="short", df=None) intacto. **Recap: MANUAL v2.50 + notas + auditor_contexto + commit/push. dist PENDIENTE.**
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.

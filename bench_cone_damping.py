@@ -103,6 +103,60 @@ def main():
           f"|beta|max={np.abs(b[i]):.3f}")
 
     # -----------------------------------------------------------------------
+    # C3: ESTADO ELECTRICO DE LOS BORNES (driver.box_terminal_Q).
+    # El amplificador cambia el Q de la caja via su impedancia de salida R_g
+    # (factor de amortiguamiento DF = R_E/R_g). Tres estados fisicos:
+    #   open  (bornes abiertos) -> solo Q_mc, absorbedor mas AGUDO y ALTO en f_c
+    #   amp   (ampli real, DF)  -> intermedio
+    #   short (bornes en corto) -> Q_tc historico (max amortiguamiento del cono)
+    # Ref: Small JAES 20 (1972); Beranek & Mellow cap. 6 (R_g sobre Q_es).
+    # -----------------------------------------------------------------------
+    print("\n  --- C3: estado electrico de los bornes ---")
+    Qms, Qes = driver.qms_qes_from_qts(Qts, Qms=3.0)
+    # 7) qms_qes_from_qts respeta 1/Q_ts = 1/Q_ms + 1/Q_es.
+    check("qms_qes_from_qts cumple 1/Qts = 1/Qms + 1/Qes",
+          abs(1.0 / Qts - (1.0 / Qms + 1.0 / Qes)) < 1e-9,
+          f"Qms={Qms:.3f} Qes={Qes:.3f}")
+    # 8) sin Q_ms ni Q_es NO se puede separar -> ValueError (norte: no inventar).
+    try:
+        driver.qms_qes_from_qts(Qts)
+        raised = False
+    except ValueError:
+        raised = True
+    check("sin Qms/Qes lanza ValueError (no inventa amortiguamiento)", raised)
+
+    Q_short = driver.box_terminal_Q(fc, fs, Qms, Qes, state="short")
+    Q_open = driver.box_terminal_Q(fc, fs, Qms, Qes, state="open")
+    Q_amp = driver.box_terminal_Q(fc, fs, Qms, Qes, state="amp", DF=50.0)
+    # 9) "short" reproduce EXACTO el Q_tc historico de sealed_box_params.
+    check("estado 'short' == Q_tc historico (sin regresion)",
+          abs(Q_short - Qtc) < 1e-9, f"short={Q_short:.4f} Qtc={Qtc:.4f}")
+    # 10) "open" = Q_mc = Q_ms f_c/f_s y es el mayor (menos freno del cono).
+    check("estado 'open' = Q_mc = Qms fc/fs y open > short",
+          abs(Q_open - Qms * fc / fs) < 1e-9 and Q_open > Q_short,
+          f"open={Q_open:.3f} short={Q_short:.3f}")
+    # 11) "amp" (DF finito) queda estrictamente entre short y open.
+    check("estado 'amp' (DF=50) entre short y open",
+          Q_short < Q_amp < Q_open, f"short={Q_short:.3f} amp={Q_amp:.3f} open={Q_open:.3f}")
+    # 12) limites y monotonia en DF: DF->inf ~ short, DF->0 ~ open, decreciente.
+    DFs = np.array([1e-4, 0.1, 1.0, 10.0, 100.0, 1e6])
+    Qdf = np.array([driver.box_terminal_Q(fc, fs, Qms, Qes, state="amp", DF=d) for d in DFs])
+    mono = np.all(np.diff(Qdf) < 0)                        # Q decrece al subir DF
+    lim_hi = abs(Qdf[-1] - Q_short) / Q_short < 1e-3
+    lim_lo = abs(Qdf[0] - Q_open) / Q_open < 1e-3
+    check("DF: Q monotono decreciente, DF->inf=short, DF->0=open",
+          mono and lim_hi and lim_lo,
+          f"Q(DF=1e6)={Qdf[-1]:.3f} Q(DF=1e-4)={Qdf[0]:.3f}")
+    # 13) KNOB FISICO: en f_c, Re(beta) open > amp > short (abiertos absorben mas
+    #     en la resonancia; el ampli conectado ensancha y aplana el pico).
+    re_at_fc = lambda Q: float(np.real(
+        driver.cone_specific_admittance(fc, fc, Q, Sd, Mms)))
+    r_short, r_amp, r_open = re_at_fc(Q_short), re_at_fc(Q_amp), re_at_fc(Q_open)
+    check("en f_c: Re(beta) open > amp > short (knob del ampli)",
+          r_open > r_amp > r_short,
+          f"open={r_open:.3f} amp={r_amp:.3f} short={r_short:.3f}")
+
+    # -----------------------------------------------------------------------
     # C2b: Delta xi_n de perturbacion (cono interior) vs QEP complejo EXACTO.
     # El cono en un nodo x_j es un absorbedor interior; el termino exacto de
     # amortiguamiento es C_cone = S_d e_j e_j^T (rango 1). El QEP
@@ -166,7 +220,7 @@ def main():
               [{"pos": x_j, "Sd": Sd, "beta": (lambda f: 0.1)}], c=C0) >= 0))
 
     print("-" * 64)
-    print(f"  {_N_OK}/{_N_OK + _N_FAIL} checks OK  (C2a + C2b)")
+    print(f"  {_N_OK}/{_N_OK + _N_FAIL} checks OK  (C2a + C3 bornes + C2b)")
     return 0 if _N_FAIL == 0 else 1
 
 

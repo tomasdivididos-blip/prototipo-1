@@ -6,7 +6,41 @@
 > cada cosa contra la fuente física, un oráculo, o una cuenta propia. Que este archivo
 > diga "resuelto/PASA" no prueba nada; es un puntero a qué mirar.
 
-**Última actualización:** 2026-09-23 (v2.49: cono como absorbedor de frontera → Δξ_n modal; + v2.48).
+**Última actualización:** 2026-09-23 (v2.50: el amplificador en la admitancia del sub, estado de bornes; + v2.49 + v2.48).
+
+## v2.50 — el amplificador en la admitancia del cono: estado eléctrico de los bornes (23 Sep 2026, NÚCLEO NUEVO EN ALCANCE — VERIFICAR)
+
+Refina v2.49: el Q de la caja (que fija β_cono y el Δξ_n) ahora depende del estado de bornes en vez de suponer
+amp ideal. Cierra el punto (1) de la auditoría de C2a ("para bornes abiertos habría que usar Q_mc; NO
+implementado"). Todo son AFIRMACIONES del autor, auditá.
+
+**Refs de auditoría:** modelo electro-mecánico y efecto de la resistencia de salida del ampli sobre Q_es =
+**Small, JAES 20 (1972)** ("Direct-Radiator Loudspeaker System Analysis" y "Closed-Box Loudspeaker Systems");
+**Beranek & Mellow, _Sound Fields and Transducers_, cap. 6** (impedancia motional (Bl)²/(R_E+R_g) reflejada a
+lo mecánico). Contexto del sub que controla el campo/decaimiento modal (por qué esto importa): **Hill & Hawksford,
+AES 129 (2010), Convention Paper 8313** (CSA, corrección de modos); **Backman, AES 137 (2014), CP 9145**
+(condiciones de frontera del sub fuertemente dependientes de f); **JAES 64(5), May 2016** (low-freq calibration
++ modelado de diafragma). Los tres YA en `referencias/`.
+
+- **Física `driver.box_terminal_Q(fc, fs, Qms, Qes, state, DF)`:** trabaja en espacio de Q. Equivalencia a
+  auditar: es el término motional (Bl)²/(R_E+iωL_E+R_g) reescrito como Q_ec(DF)=Q_es(fc/fs)(1+1/DF), con
+  DF=R_E/R_g. **Aproximación declarada:** se DESPRECIA ωL_E (inductancia de bobina) → válido abajo de Schroeder
+  (ωL_E≪R_E) pero NO arriba; alcance acordado = solo el waterfall < f_S, así que no toca la FRF de banda ancha.
+  A auditar: (1) ¿1/Qtc=1/Qmc+1/Qec es el combinado correcto (pérdidas en paralelo) y Q_mc=Qms·(fc/fs),
+  Q_ec=Qes·(fc/fs) el escalado de caja sellada? (2) límite "short" (DF→∞) == sealed_box_params EXACTO (bench
+  lo mide <1e-9 → sin regresión); "open" (DF→0) = Q_mc. (3) monotonía Q(DF) decreciente. bench C3 7/7.
+- **`driver.qms_qes_from_qts`:** completa (Qms,Qes) desde Qts si falta uno; **lanza ValueError sin ninguno**
+  (decisión de norte: no repartir amortiguamiento sin dato). A auditar: la identidad 1/Qts=1/Qms+1/Qes y que el
+  fallback en el wiring caiga a "short" (que solo usa Qts) y avise, en vez de asumir un Qms típico.
+- **Wiring `acoustic_panel._cone_delta_xi`:** Q_eff por sub según ts_amp_state; β=cone_specific_admittance con
+  ese Q. A auditar: (1) el knob físico es Re(β(f_n)): open (Q alto) da β MÁS alto y MÁS angosto en fc → más
+  amortiguamiento SOLO cerca de fc, menos en las colas (correcto para un resonador poco amortiguado, pero puede
+  sorprender: "abiertos" no siempre amortigua más un modo lejos de fc). (2) sigue siendo SOLO Re(β) (Im(β)/shift
+  de fₙ no se aplica, igual que v2.49). (3) el estado "con subs (drive)" del waterfall sigue sin carga de cono
+  (modelo parcial declarado, v2.49).
+- **UI/persistencia:** Sd ahora se carga desde la GUI (antes ts_sd solo se copiaba al duplicar → la carga del
+  cono era inalcanzable sin editar el .room a mano). ts_qms/ts_qes/ts_amp_state/ts_df en OmniSource + dict "ts"
+  del .room (aditivo, loader con defaults históricos). Round-trip verificado headless; default = "short"/None.
 
 ## v2.49 — C2: el cono del sub como parche de impedancia → Δξ_n modal (23 Sep 2026, NÚCLEO NUEVO EN ALCANCE — VERIFICAR)
 

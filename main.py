@@ -1220,7 +1220,8 @@ class MainWindow(QMainWindow):
                 # bump: un .room viejo carga con "baffle" (look historico).
                 "render_kind": str(getattr(s, "render_kind", "baffle")),
                 "ts": {k: getattr(s, "ts_" + k, None)
-                       for k in ("fs", "qts", "vas", "vb", "sd")},
+                       for k in ("fs", "qts", "vas", "vb", "sd",
+                                 "qms", "qes", "amp_state", "df")},
                 "position": [float(s.position[0]),
                               float(s.position[1]),
                               float(s.position[2])],
@@ -1689,10 +1690,14 @@ class MainWindow(QMainWindow):
             # Render/limite (17 Sep 2026). Default "baffle" si el .room es viejo.
             kwargs["render_kind"] = str(s.get("render_kind", "baffle") or "baffle")
             _ts = s.get("ts") or {}
-            for _k in ("fs", "qts", "vas", "vb", "sd"):
+            for _k in ("fs", "qts", "vas", "vb", "sd", "qms", "qes", "df"):
                 _v = _ts.get(_k)
                 if _v is not None:
                     kwargs["ts_" + _k] = float(_v)
+            # C2: estado de bornes (string, no float). Default "short" (histórico).
+            _amp = _ts.get("amp_state")
+            if _amp:
+                kwargs["ts_amp_state"] = str(_amp)
             if sens is not None:
                 kwargs["sensitivity_dB"] = float(sens)
             # v6: bafle (T4)

@@ -2950,6 +2950,24 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.50 (el amplificador entra en la admitancia del sub: estado de los bornes)
+
+**Cambios v2.50** (23 de septiembre 2026): refina la carga del cono de v2.49. Hasta ahora el amortiguamiento que el sub agrega a los modos suponía el driver **conectado a un amplificador ideal** (bornes en corto). En la práctica el amplificador tiene una impedancia de salida y su **factor de amortiguamiento** DF cambia cuánto se opone al movimiento de la bobina, y con eso cambia la admitancia superficial del cono. Ahora se puede elegir el estado eléctrico de los bornes.
+
+### La física
+
+El freno del cono tiene dos aportes: uno **mecánico** (la suspensión) y uno **eléctrico** (el motor, a través del amplificador). En caja sellada ambos se leen como Q que escalan por $f_c/f_s$: $Q_{mc}=Q_{ms}\,(f_c/f_s)$ (mecánico, bornes abiertos) y $Q_{ec}=Q_{es}\,(f_c/f_s)$ (eléctrico, amplificador ideal). Un amplificador real presenta una resistencia de salida $R_g$ (factor de amortiguamiento $DF=R_E/R_g$) que se suma en serie con la bobina y afloja solo el eléctrico: $Q_{ec}(DF)=Q_{ec}\,(1+1/DF)$. El Q total de la caja combina las pérdidas en paralelo, $1/Q_{tc}=1/Q_{mc}+1/Q_{ec}$, y ese Q es el que fija la admitancia $\beta_{cono}$ y por lo tanto el $\Delta\xi_n$ de v2.49.
+
+Tres estados: **bornes en corto** (amplificador ideal de tensión) = máximo freno eléctrico, el $Q_{tc}$ histórico; **bornes abiertos** (driver desconectado) = solo el mecánico $Q_{mc}$, mínimo freno, absorbedor más agudo y alto en $f_c$; **amplificador real** = intermedio según DF. Es lo que se conversó con el profesor: el amplificador, al oponerse al movimiento libre de la bobina, altera la impedancia acústica superficial del parlante. Referencias: Small, JAES 20 (1972) y Beranek & Mellow, *Sound Fields and Transducers*, cap. 6 (efecto de $R_g$ sobre $Q_{es}$).
+
+### En el programa
+
+En el editor de fuente, grupo **«Driver físico (Thiele-Small)»**, se agregaron el área **Sd** (antes no se cargaba desde la interfaz) y **Q_ms / Q_es** (de la ficha técnica). Un subgrupo **«Carga del cono / amortiguamiento modal»** tiene el combo **«Estado de los bornes»** (en corto / amplificador real / abiertos) y, para el amplificador real, el **factor de amortiguamiento DF**. El waterfall de v2.49 usa el estado elegido y lo muestra en el rótulo de la curva («+carga cono (1, abiertos)»).
+
+**No se duplica información:** el estado de los bornes fija la **admitancia** del cono (cuánto amortigua los modos); la **fuerza** que radia el sub la siguen dando la sensibilidad o el CLF/FRD, que son datos aparte. Los estados «abiertos» y «amplificador real» necesitan Q_ms y Q_es (para separar mecánico de eléctrico); si faltan, el programa **cae honestamente a «en corto»** (que solo necesita Q_ts) y lo avisa, en vez de inventar un reparto.
+
+*Manual actualizado al 23 de Septiembre de 2026 — v2.50.*
+
 ## Cambios v2.49 (el cono del sub como absorbedor: amortiguamiento modal real Δξₙ)
 
 **Cambios v2.49** (23 de septiembre 2026): la versión rigurosa del punto 3 del profesor. En v2.48 el waterfall mostraba cómo el array de subs **redistribuye** la energía modal (sin cambiar el amortiguamiento de los modos). Ahora se modela el fenómeno de fondo: **el cono de cada sub, como frontera de impedancia finita, agrega amortiguamiento REAL a los modos** y acorta su decaimiento.

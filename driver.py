@@ -292,15 +292,85 @@ def moving_mass_from_ts(fs: float, Vas: float, Sd: float,
     return 1.0 / ((2.0 * np.pi * float(fs)) ** 2 * Cms)
 
 
+def box_terminal_Q(fc: float, fs: float, Qms: float, Qes: float,
+                   *, state: str = "short", DF: float | None = None) -> float:
+    """Q TOTAL de la caja sellada segun el ESTADO ELECTRICO de los bornes.
+
+    El amortiguamiento del cono tiene dos aportes. En caja sellada ambos Q de
+    aire libre escalan por f_c/f_s (Small, JAES 20 (1972)):
+
+        Q_mc = Q_ms (f_c/f_s)      mecanico   (bornes ABIERTOS, minimo freno)
+        Q_ec = Q_es (f_c/f_s)      electrico  (bornes en CORTO / amp ideal de tension)
+
+    Un amplificador real presenta impedancia de salida R_g (factor de amortiguamiento
+    DF = R_E/R_g) que se suma en serie con la bobina y escala SOLO el electrico
+    (Beranek & Mellow, Sound Fields and Transducers, cap. 6; efecto de R_g sobre Q_es):
+
+        Q_ec(DF) = Q_ec (1 + 1/DF)     (R_g finito -> menos freno electrico)
+
+    y el Q total combina las perdidas en paralelo:
+
+        1/Q_tc = 1/Q_mc + 1/Q_ec(estado)
+
+    Estados:
+      "open"  bornes abiertos    -> Q_ec -> inf, Q_tc = Q_mc          (min amortiguamiento)
+      "amp"   amplificador real  -> DF finito (obligatorio)           (intermedio)
+      "short" bornes en corto    -> DF -> inf, Q_tc = [1/Q_mc+1/Q_ec] (max amortiguamiento)
+
+    Consistencia: el estado "short" reproduce EXACTO el Q_tc historico de
+    sealed_box_params (Q_tc = Q_ts f_c/f_s), asi que no hay regresion. El limite
+    DF->inf de "amp" tiende continuamente a "short"; DF->0 (R_g->inf) tiende a "open".
+    """
+    r = float(fc) / float(fs)
+    Qmc = float(Qms) * r
+    Qec0 = float(Qes) * r
+    if state == "open":
+        return Qmc
+    if state == "amp":
+        if DF is None or float(DF) <= 0.0:
+            raise ValueError("estado 'amp' requiere factor de amortiguamiento DF>0")
+        Qec = Qec0 * (1.0 + 1.0 / float(DF))
+    elif state == "short":
+        Qec = Qec0
+    else:
+        raise ValueError(f"estado de bornes desconocido: {state!r} (open|amp|short)")
+    return 1.0 / (1.0 / Qmc + 1.0 / Qec)
+
+
+def qms_qes_from_qts(Qts: float, *, Qms: float | None = None,
+                     Qes: float | None = None) -> Tuple[float, float]:
+    """Devuelve (Q_ms, Q_es) coherentes con 1/Q_ts = 1/Q_ms + 1/Q_es.
+
+    Si el usuario dio ambos, se respetan (se ignora Q_ts, que es derivado). Si dio
+    solo uno, se completa el otro por la relacion. Si no dio ninguno NO se puede
+    separar mecanico de electrico: se lanza ValueError (el llamador debe caer al
+    caso 'short', que solo necesita Q_ts). Sin datos, cualquier reparto seria una
+    conclusion falsa (norte del proyecto: no inventar amortiguamiento)."""
+    if Qms is not None and Qes is not None:
+        return float(Qms), float(Qes)
+    if Qes is not None:
+        qe = float(Qes)
+        if qe <= float(Qts):
+            raise ValueError("Q_es debe ser > Q_ts")
+        return 1.0 / (1.0 / float(Qts) - 1.0 / qe), qe
+    if Qms is not None:
+        qm = float(Qms)
+        if qm <= float(Qts):
+            raise ValueError("Q_ms debe ser > Q_ts")
+        return qm, 1.0 / (1.0 / float(Qts) - 1.0 / qm)
+    raise ValueError("sin Q_ms ni Q_es no se puede separar mecanico/electrico")
+
+
 def cone_specific_admittance(freq, fc: float, Qtc: float, Sd: float, Mms: float,
                              *, c: float = C0, rho0: float = RHO0) -> np.ndarray:
     """beta_cono(f) = rho0 c S_d / Z_mech(f), admitancia especifica del cono como
     frontera (adimensional, compleja, e^{-iwt}). Ver cabecera de seccion.
 
-    Q_tc es el Q TOTAL de la caja (mecanico + electrico reflejado por el amplificador
-    con impedancia de salida ~0, o sea bornes en corto): es el caso realista de un
-    sub conectado a un amplificador. Con bornes ABIERTOS habria que pasar Q_mc (solo
-    mecanico), tipicamente mayor -> menos amortiguamiento."""
+    Q_tc es el Q TOTAL de la caja (mecanico + electrico segun el estado de los
+    bornes). Usar box_terminal_Q(fc, fs, Qms, Qes, state=...) para obtenerlo: "short"
+    (amp ideal, impedancia de salida ~0) reproduce el Q_tc historico, "amp" modela un
+    ampli real con factor de amortiguamiento DF finito, y "open" (bornes abiertos)
+    deja solo Q_mc -> menos amortiguamiento, absorbedor mas agudo."""
     w = 2.0 * np.pi * np.asarray(freq, dtype=float)
     wc = 2.0 * np.pi * float(fc)
     Zmech = float(Mms) * (wc / float(Qtc) + 1j * (w - wc * wc / np.maximum(w, 1e-9)))

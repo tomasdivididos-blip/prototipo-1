@@ -365,6 +365,15 @@ class OmniSource:
     ts_vas: "float | None" = None
     ts_vb:  "float | None" = None
     ts_sd:  "float | None" = None
+    # C2 (carga del cono como absorbedor de frontera): Q_ms/Q_es (ficha tecnica)
+    # separan el amortiguamiento mecanico del electrico; ts_amp_state = estado de
+    # los bornes ("short"|"amp"|"open") y ts_df = factor de amortiguamiento del
+    # ampli. None/"short" = comportamiento historico (Q_tc, amp ideal). Ver
+    # driver.box_terminal_Q y acoustic_panel._cone_delta_xi.
+    ts_qms: "float | None" = None
+    ts_qes: "float | None" = None
+    ts_amp_state: str = "short"
+    ts_df:  "float | None" = None
     # Configuración por sensibilidad de altavoz
     sensitivity_dB: float | None = None   # dB SPL @ 1W/1m  (None = modo directo)
     power_W:        float        = 1.0    # potencia electrica de entrada [W]
