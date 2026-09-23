@@ -3607,7 +3607,10 @@ bien.
     (habilitado solo en "amp real"), nota sensibilidad≠admitancia. Persiste en `.room` (dict "ts" ampliado,
     aditivo sin bump de versión; loader con defaults históricos). `OmniSource`: campos ts_qms/ts_qes/ts_amp_state/ts_df.
   Sin regresión: bench_perturbation_xi 21/21, smoke_test_dba_dialog verde, round-trip .room OK, default histórico
-  (amp_state="short", df=None) intacto. **Recap: MANUAL v2.50 + notas + auditor_contexto + commit/push. dist PENDIENTE.**
+  (amp_state="short", df=None) intacto. **Test visual PASÓ (23 Sep 2026): T1-T8 OK** (campos nuevos + Sd visibles,
+  DF enable/disable sigue al combo, persistencia editor y .room, waterfall rotula el estado y la curva cambia
+  open↔short, caída honesta sin Qms/Qes, default histórico sin 3er estado). Commit b3b019d.
+  **Recap: MANUAL v2.50 + notas + auditor_contexto + commit/push (b3b019d). dist-exe/zips PENDIENTES.**
 
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug

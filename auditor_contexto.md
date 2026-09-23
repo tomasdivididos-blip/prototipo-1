@@ -41,6 +41,9 @@ AES 129 (2010), Convention Paper 8313** (CSA, corrección de modos); **Backman, 
 - **UI/persistencia:** Sd ahora se carga desde la GUI (antes ts_sd solo se copiaba al duplicar → la carga del
   cono era inalcanzable sin editar el .room a mano). ts_qms/ts_qes/ts_amp_state/ts_df en OmniSource + dict "ts"
   del .room (aditivo, loader con defaults históricos). Round-trip verificado headless; default = "short"/None.
+  **Test visual PASÓ (23 Sep 2026, T1-T8):** UI/enable-disable/persistencia/waterfall verificados por el usuario.
+  Esto valida el WIRING/UI, NO la física (el auditor debe seguir verificando box_terminal_Q y el knob Re(β) contra
+  la fuente y el QEP; la etiqueta "VERIFICAR" sigue vigente para el núcleo).
 
 ## v2.49 — C2: el cono del sub como parche de impedancia → Δξ_n modal (23 Sep 2026, NÚCLEO NUEVO EN ALCANCE — VERIFICAR)
 
