@@ -14,8 +14,9 @@ Física NUEVA (la versión rigurosa del punto 3). AFIRMACIONES del autor, audit�
 
 **Refs de auditoría:** Z_mech del driver = **Small, JAES 20 (1972)**; **Beranek & Mellow, _Sound Fields and
 Transducers_, cap. 6**. Perturbación de frontera = **Morse & Ingard 9.4.14**, **Kuttruff 3.34**. DSP del IR/
-decaimiento (C1) = **Oppenheim & Schafer, _Discrete-Time Signal Processing_** y **Pohlmann, _Principles of
-Digital Audio_** (cargados en `C:\Users\aceve\Tomas\UNTREF\`, conviene copiarlos a `referencias/`).
+decaimiento (C1: IFFT de H, ventaneo, causalidad, leakage, CSD) = **Oppenheim & Schafer, _Discrete-Time
+Signal Processing_** y **Pohlmann, _Principles of Digital Audio_** (ambos YA en `referencias/`). El hueco DSP
+de v2.48 quedó cubierto.
 
 - **C2a `driver.cone_specific_admittance`:** β_cono(f)=ρ₀c·Sd/Z_mech, Z_mech(ω)=Mms[ωc/Qtc+i(ω−ωc²/ω)].
   `moving_mass_from_ts`: Mms=1/((2πfs)²·Cms), Cms=Vas/(ρ₀c²Sd²). A auditar: (1) ¿Z_mech de caja sellada con
