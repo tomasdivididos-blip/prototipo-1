@@ -2950,6 +2950,26 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.49 (el cono del sub como absorbedor: amortiguamiento modal real Δξₙ)
+
+**Cambios v2.49** (23 de septiembre 2026): la versión rigurosa del punto 3 del profesor. En v2.48 el waterfall mostraba cómo el array de subs **redistribuye** la energía modal (sin cambiar el amortiguamiento de los modos). Ahora se modela el fenómeno de fondo: **el cono de cada sub, como frontera de impedancia finita, agrega amortiguamiento REAL a los modos** y acorta su decaimiento.
+
+### La física
+
+El cono es un pistón (área S_d) con impedancia mecánica de caja sellada (Thiele-Small). Ante una presión sobre su cara se mueve, y presenta a la sala una admitancia de frontera $\beta_{cono}(f)=\rho_0 c\,S_d/Z_{mech}(f)$: un **absorbedor resonante** con pico en la frecuencia de caja $f_c$, ancho $f_c/Q_{tc}$. Esa admitancia entra a la fórmula de perturbación de frontera que el programa ya usa para las paredes (la misma que da el ξ de cada modo), como un parche en la posición del sub, y suma un $\Delta\xi_n$ a los modos que tienen presión en el cono. Es el mecanismo que el profesor intuía: un sub montado es, además de fuente, un tratamiento de baja frecuencia sintonizado.
+
+Referencias: Small, JAES 20 (1972) y Beranek & Mellow, *Sound Fields and Transducers*, cap. 6 (impedancia del driver); Morse & Ingard, *Theoretical Acoustics*, Ec. 9.4.14 y Kuttruff, *Room Acoustics*, Ec. 3.34 (perturbación de frontera). El $\Delta\xi_n$ se validó contra el problema de autovalores complejos EXACTO (con el término de amortiguamiento del cono): error < 0.11 % hasta admitancias apreciables.
+
+### En el programa
+
+En el diálogo **«Decaimiento con subs (waterfall)»** aparece un tercer estado, **«con subs + carga cono»**, además de «sin subs» y «con subs (drive)». Muestra el decaimiento (EDC + waterfall) con el amortiguamiento extra de los conos y el RT resultante, para leer de un vistazo cuánto se acorta la cola por la absorción de los subs.
+
+Para que aparezca, cada sub tiene que traer sus **Thiele-Small** (fs, Qts, Vas, volumen de caja Vb y área efectiva Sd), que se cargan en el editor de fuente (grupo **«Driver físico (Thiele-Small)»**). Se modela el sub **conectado al amplificador** (bornes en corto: el amortiguamiento eléctrico ya está incluido en el Q de caja). Sin los Thiele-Small, el waterfall muestra igual los otros dos estados y avisa que falta cargarlos.
+
+**Distinción honesta:** «con subs (drive)» = la respuesta cambia porque el array excita distinto los modos (no cambia el amortiguamiento propio). «con subs + carga cono» = el amortiguamiento de los modos cambia de verdad (los «polos» de la sala se mueven). Son dos efectos físicos distintos y el diálogo los separa.
+
+*Manual actualizado al 23 de Septiembre de 2026 — v2.49.*
+
 ## Cambios v2.48 (bug de la «recta −500» al optimizar, parches que reaparecen, decaimiento con subs)
 
 **Cambios v2.48** (22 de septiembre 2026): tres correcciones sobre `Control Ale.room` (recinto con techo a dos aguas), pedidas por el profesor. Dos son arreglos de bugs, la tercera una herramienta nueva.

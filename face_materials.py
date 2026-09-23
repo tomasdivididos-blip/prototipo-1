@@ -926,6 +926,49 @@ def perturbation_xi_shift_extended(
     return xi, f_new
 
 
+def cone_xi_shift_per_mode(freqs, phis, locator, cones, c: float = 343.0):
+    """Delta xi_n por la CARGA PASIVA de conos de parlante (C2, punto 3 riguroso).
+
+    Cada cono es un ABSORBEDOR INTERIOR de area S_d en x_s con admitancia especifica
+    beta_cono(f) (driver.cone_specific_admittance, Thiele-Small). Por proyeccion modal
+    de la admitancia puntual a 1er orden (misma forma que la perturbacion de frontera,
+    Morse & Ingard 9.4.14; derivacion: (k_n^2 - k^2) a_n = -i w rho0 Y phi_n^2(x_s) a_n
+    con Y = beta S_d/(rho0 c)):
+
+        Delta delta_n = (c/2) sum_s Re(beta_s(f_n)) S_d,s phi_n^2(x_s)      [Np/s]
+        Delta xi_n    = Delta delta_n / omega_n
+
+    (phi M-ortonormal, INT phi^2 dV = 1). SOLO amortiguamiento (Re beta): el corrimiento
+    de f_n por Im(beta) es secundario y no entra al decaimiento. Es ADITIVO al xi de las
+    paredes (los polos se suman a 1er orden). Validado vs el QEP complejo EXACTO con el
+    termino de amortiguamiento interior en bench_cone_damping.py.
+
+    `cones`: lista de dicts {"pos": (3,), "Sd": float, "beta": callable(f)->complex}.
+    Devuelve Delta xi (Nm,) >= 0, o None si no hay conos/modos."""
+    if phis is None or locator is None or not cones:
+        return None
+    freqs = np.asarray(freqs, dtype=float)
+    Nm = int(phis.shape[1])
+    if Nm == 0 or freqs.size < Nm:
+        return None
+    dxi = np.zeros(Nm, dtype=float)
+    for cone in cones:
+        pos = np.asarray(cone["pos"], dtype=float)
+        Sd = float(cone["Sd"])
+        beta_fn = cone["beta"]
+        # phi_n(x_s) por modo (M-normalizado). Punto fuera de malla -> 0 (no acopla).
+        phi_s = np.empty(Nm, dtype=float)
+        for n in range(Nm):
+            val = locator.evaluate_one(phis[:, n], pos)
+            phi_s[n] = 0.0 if val is None else float(np.real(val))
+        for n in range(Nm):
+            fn = float(freqs[n])
+            beta = complex(np.atleast_1d(beta_fn(fn))[0])
+            delta = 0.5 * c * beta.real * Sd * (phi_s[n] ** 2)     # Np/s
+            dxi[n] += delta / max(2.0 * np.pi * fn, 1e-9)
+    return dxi
+
+
 # Categorias de la libreria de materiales (material_library / carpeta materials/).
 # Porosos/fibrosos operan sobre la VELOCIDAD de particula; perforados/membrana
 # sobre la PRESION. Ver criterio B27 de criterios_room_geom_fuente.md.

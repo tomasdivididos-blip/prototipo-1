@@ -255,6 +255,59 @@ class DriverModel:
 
 
 # ---------------------------------------------------------------------------
+# C2 — el cono como PARCHE DE IMPEDANCIA de frontera (amortiguamiento modal)
+#
+# Un cono pasivo (o manejado, por superposicion) es un piston de area S_d con
+# impedancia mecanica de caja sellada
+#
+#     Z_mech(w) = M_ms [ w_c/Q_tc + i (w - w_c^2/w) ]                    [kg/s]
+#
+# (Thiele-Small; Small, JAES 20 (1972); Beranek & Mellow, Sound Fields and
+# Transducers, cap. 6). Ante una presion p sobre su cara, v_n = p S_d / Z_mech,
+# asi que presenta una ADMITANCIA ESPECIFICA de frontera
+#
+#     beta_cono(w) = rho0 c v_n/p = rho0 c S_d / Z_mech(w)     (adimensional)
+#
+# la MISMA beta que consume la perturbacion de frontera (face_materials, Ec.
+# 9.4.14 de Morse & Ingard). Es un absorbedor RESONANTE: pico en f_c con
+# beta_max = rho0 c S_d Q_tc/(M_ms w_c) y ancho ~ f_c/Q_tc. Alimentar esa beta a
+# la suma de perturbacion como un parche en la posicion del sub da el Delta xi_n
+# del modo (C2b, en face_materials). Aca solo se produce beta_cono(f) y su M_ms.
+#
+# Convencion de tiempo: se devuelve en e^{-iwt} (Re(Z)>0 = disipa, Im(Z)>0 sobre
+# w_c = dominado por masa). El consumidor (perturbacion) ya maneja el conj para
+# el solver e^{+iwt} (mismo gotcha que impedance.py).
+# ---------------------------------------------------------------------------
+def moving_mass_from_ts(fs: float, Vas: float, Sd: float,
+                        *, c: float = C0, rho0: float = RHO0) -> float:
+    """M_ms [kg] del sistema movil desde TS de aire libre.
+
+        C_ms = Vas / (rho0 c^2 S_d^2)           [m/N]  (compliance suspension+aire)
+        M_ms = 1 / ((2 pi fs)^2 C_ms)           [kg]
+
+    Vas en m^3, Sd en m^2. La MASA no cambia con la caja (la caja cambia la
+    compliance -> f_c, Q_tc); por eso se usa fs (aire libre) aca. Ref: Small,
+    JAES 20 (1972); Beranek & Mellow cap. 6."""
+    Cms = float(Vas) / (rho0 * c * c * float(Sd) ** 2)
+    return 1.0 / ((2.0 * np.pi * float(fs)) ** 2 * Cms)
+
+
+def cone_specific_admittance(freq, fc: float, Qtc: float, Sd: float, Mms: float,
+                             *, c: float = C0, rho0: float = RHO0) -> np.ndarray:
+    """beta_cono(f) = rho0 c S_d / Z_mech(f), admitancia especifica del cono como
+    frontera (adimensional, compleja, e^{-iwt}). Ver cabecera de seccion.
+
+    Q_tc es el Q TOTAL de la caja (mecanico + electrico reflejado por el amplificador
+    con impedancia de salida ~0, o sea bornes en corto): es el caso realista de un
+    sub conectado a un amplificador. Con bornes ABIERTOS habria que pasar Q_mc (solo
+    mecanico), tipicamente mayor -> menos amortiguamiento."""
+    w = 2.0 * np.pi * np.asarray(freq, dtype=float)
+    wc = 2.0 * np.pi * float(fc)
+    Zmech = float(Mms) * (wc / float(Qtc) + 1j * (w - wc * wc / np.maximum(w, 1e-9)))
+    return rho0 * c * float(Sd) / Zmech
+
+
+# ---------------------------------------------------------------------------
 # Demo / autotest minimo
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":

@@ -6,7 +6,40 @@
 > cada cosa contra la fuente física, un oráculo, o una cuenta propia. Que este archivo
 > diga "resuelto/PASA" no prueba nada; es un puntero a qué mirar.
 
-**Última actualización:** 2026-09-22 (v2.48: fix dominio inside_fn/tets + reconciliación de parches + `modal_decay`).
+**Última actualización:** 2026-09-23 (v2.49: cono como absorbedor de frontera → Δξ_n modal; + v2.48).
+
+## v2.49 — C2: el cono del sub como parche de impedancia → Δξ_n modal (23 Sep 2026, NÚCLEO NUEVO EN ALCANCE — VERIFICAR)
+
+Física NUEVA (la versión rigurosa del punto 3). AFIRMACIONES del autor, auditá contra la fuente.
+
+**Refs de auditoría:** Z_mech del driver = **Small, JAES 20 (1972)**; **Beranek & Mellow, _Sound Fields and
+Transducers_, cap. 6**. Perturbación de frontera = **Morse & Ingard 9.4.14**, **Kuttruff 3.34**. DSP del IR/
+decaimiento (C1) = **Oppenheim & Schafer, _Discrete-Time Signal Processing_** y **Pohlmann, _Principles of
+Digital Audio_** (cargados en `C:\Users\aceve\Tomas\UNTREF\`, conviene copiarlos a `referencias/`).
+
+- **C2a `driver.cone_specific_admittance`:** β_cono(f)=ρ₀c·Sd/Z_mech, Z_mech(ω)=Mms[ωc/Qtc+i(ω−ωc²/ω)].
+  `moving_mass_from_ts`: Mms=1/((2πfs)²·Cms), Cms=Vas/(ρ₀c²Sd²). A auditar: (1) ¿Z_mech de caja sellada con
+  Q_tc TOTAL es la carga correcta para un sub CONECTADO al amplificador (bornes en corto, amortiguamiento
+  eléctrico Bl²/Re incluido en Q_tc)? Para bornes abiertos habría que usar Q_mc (mecánico); NO implementado.
+  (2) β adimensional, e^{−iωt} (Im Z>0 arriba de ωc → Im β<0); el consumidor de perturbación usa e^{+iωt} y
+  ya conjuga para las paredes, pero C2b usa SOLO Re(β) (invariante al conj) para el amortiguamiento → el
+  corrimiento de fₙ por Im(β) NO se aplica (secundario, declarado). (3) se ignora la resistencia de radiación
+  del cono (2º orden). bench_cone_damping 7/7 (C2a).
+- **C2b `face_materials.cone_xi_shift_per_mode`:** Δδ_n=(c/2)Re(β(f_n))·Sd·φ_n²(x_s), Δξ_n=Δδ_n/ω_n. El cono
+  es un absorbedor INTERIOR (no de pared); la derivación (proyección modal de la admitancia puntual,
+  (k_n²−k²)a_n=−iω ρ₀ Y φ_n²(x_s) a_n con Y=βSd/(ρ₀c)) da la MISMA forma que la perturbación de frontera. A
+  auditar con dureza: (1) **1er orden para un absorbedor CONCENTRADO** — el acople inter-modal (off-diagonal)
+  se desprecia; el bench mide <0.11% vs el QEP exacto (C_cono=Sd·e_j e_jᵀ en el nodo) hasta β=0.15, pero
+  para β grande o modos casi-degenerados podría degradarse. (2) el oráculo pone el cono EXACTAMENTE en un
+  nodo de la malla (para que C_cono sea rango-1 limpio); una posición arbitraria interpola φ vía el locator
+  (mismo κ que la fuente) → el bench NO cubre el error de interpolación fuera de nodo. (3) φ_n²(x_s) usa el
+  MISMO locator que el acople de fuente (validado). Aditividad ξ_total=ξ_pared+Δξ_cono a 1er orden. bench 10/10.
+- **C2c (UI, `acoustic_panel`):** tercer estado del waterfall «con carga cono» = IR modal con ξ_walls+Δξ_cono.
+  A auditar: (1) el estado «con subs (drive)» usa ξ_walls (sin la carga del cono) → es un modelo PARCIAL
+  (mientras el sub suena, el cono TAMBIÉN carga); se muestra a propósito para AISLAR el efecto C2, la nota lo
+  aclara. (2) damping puede ser escalar (0.03) o array por modo (_xi_per_mode); ξ_total=damping+Δξ_cono por
+  broadcast. (3) requiere TS completos por sub; sin ellos no grafica el 3er estado (Control Ale los tiene en
+  null → se usaron TS de prueba para el render). El núcleo de C1 (IR por IFFT, EDC, CSD) intacto.
 
 ## v2.48 — dominio del optimizador, parches y decaimiento con subs (22 Sep 2026, EN ALCANCE — VERIFICAR)
 

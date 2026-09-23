@@ -1241,10 +1241,14 @@ class DecayWaterfallDialog(QDialog):
             v.addWidget(QLabel("matplotlib no disponible. pip install matplotlib"))
             return
         import matplotlib.gridspec as gridspec
-        fig = plt.figure(figsize=(10.2, 7.0), dpi=96)
+        # Estados a mostrar: sin subs (a), con subs (b) y, si hay TS, con carga del
+        # cono (c). El nº de columnas de waterfall se adapta.
+        has_c = "edc_c" in data
+        ncol = 3 if has_c else 2
+        fig = plt.figure(figsize=(3.6 * ncol + 0.8, 7.0), dpi=96)
         fig.patch.set_facecolor('#f0f0f0')
-        gs = gridspec.GridSpec(2, 2, height_ratios=[1.0, 1.2], hspace=0.32,
-                               wspace=0.22, figure=fig)
+        gs = gridspec.GridSpec(2, ncol, height_ratios=[1.0, 1.2], hspace=0.32,
+                               wspace=0.28, figure=fig)
         self._fig = fig
 
         edc = fig.add_subplot(gs[0, :])
@@ -1254,7 +1258,12 @@ class DecayWaterfallDialog(QDialog):
         edc.plot(ta, ea, color='#9aa0a6', linewidth=1.8,
                  label=f"sin subs · {data['lbl_a']}")
         edc.plot(tb, eb, color='#1f6fbf', linewidth=1.8,
-                 label=f"con subs · {data['lbl_b']}")
+                 label=f"con subs (drive) · {data['lbl_b']}")
+        rtc = None
+        if has_c:
+            tc, ec, rtc = data["edc_c"]
+            edc.plot(tc, ec, color='#c0392b', linewidth=1.8,
+                     label=f"con subs + carga cono · {data['lbl_c']}")
         for lvl in (-10, -20, -30):
             edc.axhline(lvl, color='#dddddd', linewidth=0.7, zorder=0)
         edc.set_xlabel("Tiempo (s)", fontsize=10)
@@ -1265,17 +1274,21 @@ class DecayWaterfallDialog(QDialog):
         def _rt_txt(rt):
             return ("—" if not np.isfinite(rt.rt60)
                     else f"{rt.rt60:.2f} s ({rt.method}{'' if rt.ok else '?'})")
-        edc.set_title(
-            f"Curva de decaimiento de energía (Schroeder) · banda ≤ {data['f_hi']:.0f} Hz"
-            f"    |    RT sin subs = {_rt_txt(rta)}   ·   con subs = {_rt_txt(rtb)}",
-            fontweight='bold', fontsize=10, pad=8)
+        ttl = (f"Curva de decaimiento (Schroeder) · banda ≤ {data['f_hi']:.0f} Hz"
+               f"    |    RT sin={_rt_txt(rta)} · con drive={_rt_txt(rtb)}")
+        if rtc is not None:
+            ttl += f" · con cono={_rt_txt(rtc)}"
+        edc.set_title(ttl, fontweight='bold', fontsize=9.5, pad=8)
         edc.grid(True, axis='y', linewidth=0.6, alpha=0.5, color='#cccccc')
         edc.legend(fontsize=9, framealpha=0.9, loc='upper right')
         edc.tick_params(labelsize=9)
 
-        # Waterfalls (CSD): sin (izq) y con (der) subs, misma escala de color.
+        # Waterfalls (CSD): misma escala de color. Columnas segun estados.
         vmin = -42.0
-        for col, key, ttl in ((0, "csd_a", "sin subs"), (1, "csd_b", "con subs")):
+        cols = [("csd_a", "sin subs"), ("csd_b", "con subs (drive)")]
+        if has_c:
+            cols.append(("csd_c", "con subs + carga cono"))
+        for col, (key, ttl2) in enumerate(cols):
             ax = fig.add_subplot(gs[1, col])
             fr, ts, Z = data[key]
             T, F = np.meshgrid(ts, fr, indexing="ij")
@@ -1283,7 +1296,7 @@ class DecayWaterfallDialog(QDialog):
                                 vmin=vmin, vmax=0.0, shading="auto")
             ax.set_xlabel("Frecuencia (Hz)", fontsize=9)
             ax.set_ylabel("Tiempo (s)", fontsize=9)
-            ax.set_title(f"Waterfall — {ttl}", fontsize=9, fontweight='bold')
+            ax.set_title(f"Waterfall — {ttl2}", fontsize=8.5, fontweight='bold')
             ax.tick_params(labelsize=8)
             fig.colorbar(pcm, ax=ax, shrink=0.85, label="dB")
 
@@ -1292,11 +1305,13 @@ class DecayWaterfallDialog(QDialog):
         v.addWidget(canvas, 1)
 
         note = QLabel(
-            "Decaimiento del campo TOTAL en el receptor con cada configuración. El "
-            "array de subs redistribuye la energía modal (por su delay/polaridad) y "
-            "cambia el decaimiento efectivo por debajo de f_S. NO es un cambio del ξ "
-            "propio de los modos (la impedancia del cono como frontera → Δξₙ es la "
-            "versión rigurosa, pendiente).")
+            "Decaimiento del campo TOTAL en el receptor. «con subs (drive)»: el array "
+            "redistribuye la energía modal por su delay/polaridad (NO cambia el ξ de "
+            "los modos). «con subs + carga cono»: además el cono de cada sub actúa como "
+            "absorbedor resonante de frontera (β_cono = ρ₀c·Sd/Z_mech, Thiele-Small) y "
+            "agrega amortiguamiento REAL Δξₙ a los modos (perturbación validada vs "
+            "autovalor complejo exacto) → acorta el decaimiento. Requiere cargar los "
+            "Thiele-Small del sub (editor de fuente → «Driver físico»).")
         note.setWordWrap(True)
         note.setStyleSheet("color:#11111b; font-size:9pt;")
         v.addWidget(note)
@@ -6073,6 +6088,38 @@ class AcousticPanel(QWidget):
                          modal_db=modal_db, f_schroeder=f_s, eqc=eqc)
         dlg.exec_()
 
+    def _cone_delta_xi(self, subs):
+        """C2 (punto 3 riguroso): Δξ_n por la CARGA PASIVA de los conos de los subs
+        que tengan Thiele-Small completo (fs, Qts, Vas, Vb, Sd). Cada cono es un
+        absorbedor de frontera con β_cono(f)=ρ₀c·Sd/Z_mech (driver.py), que entra a
+        la perturbación como un parche en la posición del sub → Δξ_n (validado vs
+        autovalor complejo exacto, bench_cone_damping). Devuelve (Δξ, n_conos) o
+        (None, 0) si ningún sub trae TS. amp-conectado → Q_tc (bornes en corto)."""
+        mr = getattr(self, "modal_result", None)
+        if mr is None:
+            return None, 0
+        import driver
+        import face_materials as fm_mod
+        cones = []
+        for s in subs:
+            fs_ = getattr(s, "ts_fs", None); qts = getattr(s, "ts_qts", None)
+            vas = getattr(s, "ts_vas", None); vb = getattr(s, "ts_vb", None)
+            sd = getattr(s, "ts_sd", None)
+            if None in (fs_, qts, vas, vb, sd) or not (sd and sd > 0):
+                continue
+            fc, qtc = driver.sealed_box_params(float(fs_), float(qts),
+                                               float(vas), float(vb))
+            mms = driver.moving_mass_from_ts(float(fs_), float(vas), float(sd))
+            beta = (lambda f, fc=fc, qtc=qtc, sd=float(sd), mms=mms:
+                    driver.cone_specific_admittance(f, fc, qtc, sd, mms))
+            cones.append({"pos": np.asarray(s.position, dtype=float),
+                          "Sd": float(sd), "beta": beta})
+        if not cones:
+            return None, 0
+        mf = self._effective_modal_freqs()
+        dxi = fm_mod.cone_xi_shift_per_mode(mf, mr.phis, mr.locator, cones, c=C0)
+        return dxi, len(cones)
+
     def _open_decay_waterfall(self):
         """Punto 3 del profesor: compara el DECAIMIENTO del campo total en el receptor
         SIN vs CON los subwoofers (EDC de Schroeder + waterfall), por debajo de f_S.
@@ -6134,6 +6181,25 @@ class AcousticPanel(QWidget):
                 "csd_a": mdk.cumulative_spectral_decay(ir_a, fs, f_hi=f_hi),
                 "csd_b": mdk.cumulative_spectral_decay(ir_b, fs, f_hi=f_hi),
             }
+            # C2: tercer estado = con la CARGA PASIVA del cono (ξ_walls + Δξ_cono),
+            # si los subs traen Thiele-Small. Aísla el efecto del profesor: los conos
+            # como absorbedores resonantes acortan el decaimiento de los modos.
+            dxi_cone, n_cone = self._cone_delta_xi(subs)
+            if dxi_cone is not None:
+                dmp_loaded = np.asarray(damping, dtype=float) + np.asarray(dxi_cone)
+                _, ir_c, _ = mdk.modal_impulse_response(
+                    self.modal_result, mk(mains + subs), self.receiver,
+                    f_hi=f_hi, dur=3.0, damping=dmp_loaded, modal_freqs=mf)
+                data["edc_c"] = (*mdk.energy_decay_db(ir_c, fs),
+                                 mdk.decay_time(ir_c, fs))
+                data["csd_c"] = mdk.cumulative_spectral_decay(ir_c, fs, f_hi=f_hi)
+                data["lbl_c"] = f"+carga cono ({n_cone})"
+                self._log(f"C2: carga pasiva del cono aplicada ({n_cone} sub(s) con "
+                          f"Thiele-Small); Δξ modal máx={float(np.max(dxi_cone)):.4f}.")
+            else:
+                self._log("C2: ningún sub tiene Thiele-Small completo (fs/Qts/Vas/"
+                          "Vb/Sd); no se grafica la carga del cono. Cargalos en el "
+                          "editor de fuente (grupo «Driver físico»).")
         except Exception as e:
             QMessageBox.critical(self, "Error decaimiento", str(e))
             return

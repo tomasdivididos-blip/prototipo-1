@@ -3563,7 +3563,28 @@ bien.
     modal por delay/polaridad), NO cambia ξₙ propio (eso es **C2**, PENDIENTE = impedancia del cono → Δξₙ con
     la perturbación validada). `bench_modal_decay.py` 9/9 (FFT(IR)↔FRF err 2e-16; T30 de 1 modo=6.908/(ξωₙ)
     err 1.6%). Sobre Control Ale con drive CABS: RT 0.735→0.673 s.
-  **Recap: MANUAL v2.48 + notas + auditor_contexto + commit/push. dist-exe/zips PENDIENTES (avisar al usuario).**
+  **Recap: MANUAL v2.48 + notas + auditor_contexto + commit/push (db480f1, d3a1aca). dist-exe/zips PENDIENTES.**
+
+- **23 Sep 2026 (v2.49) — C2: el cono del sub como absorbedor de frontera → Δξ_n modal REAL.**
+  Versión rigurosa del punto 3 (v2.48 C1 mostraba redistribución de energía; C2 cambia los polos). Física
+  nueva, validada brick-by-brick con oráculo exacto (norte). Detalle en [[bug-recta-500-dominio]].
+  - **C2a** (`driver.py`): `cone_specific_admittance(f, fc, Qtc, Sd, Mms)` = ρ₀c·Sd/Z_mech con
+    Z_mech(ω)=Mms[ωc/Qtc + i(ω−ωc²/ω)] (Thiele-Small caja sellada; Small JAES 1972; Beranek & Mellow cap.6).
+    `moving_mass_from_ts(fs,Vas,Sd)`=1/((2πfs)²·Cms), Cms=Vas/(ρ₀c²Sd²). Absorbedor resonante: pico en fc,
+    β_max=ρ₀c·Sd·Qtc/(Mms·ωc), ancho fc/Qtc, resistivo puro en fc, masa-dominado (Im β<0) arriba. Q_tc =
+    amp conectado (bornes en corto, elección del profesor).
+  - **C2b** (`face_materials.cone_xi_shift_per_mode`): el cono es un absorbedor INTERIOR; la proyección modal
+    de la admitancia puntual (k_n²−k²)a_n=−iω ρ₀ Y φ_n²(x_s) a_n, Y=βSd/(ρ₀c), da la MISMA forma que la
+    perturbación de frontera: Δδ_n=(c/2)Re(β(f_n))·Sd·φ_n²(x_s), Δξ_n=Δδ_n/ω_n (solo Re β; el shift por Im β
+    es secundario). ADITIVO al ξ de paredes. Validado vs QEP complejo EXACTO (C_cono=Sd·e_j e_jᵀ en el nodo):
+    <0.11% error hasta β=0.15 (10 modos). bench_cone_damping.py 10/10.
+  - **C2c** (UI): tercer estado en el waterfall de C1 = «con subs + carga cono» (ξ_walls + Δξ_cono), lee los
+    TS del sub (`OmniSource.ts_fs/qts/vas/vb/sd`, el editor ya tenía el grupo «Driver físico»).
+    `AcousticPanel._cone_delta_xi` + `_open_decay_waterfall` extendido + `DecayWaterfallDialog` con 3 estados.
+    Nota honesta separa drive (redistribución) de carga cono (Δξ real). Control Ale con TS de prueba:
+    RT con drive 0.842 → con cono 0.820 s.
+  Sin regresión: bench_perturbation_xi 21/21 (solo agregué función, no toqué las existentes), C1 9/9, A 18/18.
+  **Recap: MANUAL v2.49 + notas + auditor_contexto + commit/push. dist-exe/zips PENDIENTES.**
 
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
