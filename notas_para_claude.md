@@ -3612,6 +3612,14 @@ bien.
   open↔short, caída honesta sin Qms/Qes, default histórico sin 3er estado). Commit b3b019d.
   **Recap: MANUAL v2.50 + notas + auditor_contexto + commit/push (b3b019d). dist-exe/zips PENDIENTES.**
 
+- **29 Sep 2026 (v2.51) — batch de UI/UX (sin física).** Pedidos del usuario, todo en `viewer.py`/`style.py`/`acoustic_panel.py`/`main.py`.
+  - **Botón «todas» (SourceEditDialog, fila Optimizar):** toggle no-checkable; si todas tildadas → limpia, si no → todas. Etiqueta «todas»/«ninguna». Saqué el `setMaximumWidth(56)` que recortaba.
+  - **Ventanas min/max/cerrar:** en `style.apply_dialog_theme` (lo llaman todos los diálogos) se agregan `WindowMinimizeButtonHint|WindowMaximizeButtonHint` y se saca `WindowContextHelpButtonHint`. Guardado con `isWindow()`.
+  - **Botones P/I/L/? del visor:** 26→30 px + font-size/padding explícitos (se recortaban en la escala del usuario).
+  - **Arrastre en Z desde Lateral (item 5):** en preset `lateral`, `_drag_mode="vplane"` → `_pick_vertical_plane` (raycast contra el plano vertical fronto-paralelo por el punto ancla; usa `_view_dir_horizontal` derivado de la MATRIZ DE VISTA real, no `_camera_position` que usa convención de azimut opuesta y quedaba 90° cruzado). **Límite:** en `main._on_source_moved_from_viewer`/`_on_receiver_moved_from_viewer`, tras el clamp AABB se aplica `_snap_source_into_domain` (A2), que ahora tiene FALLBACK por superficie (`points_inside_surface`) cuando no hay `modal_result` → frena escapes groseros sin FEM (la cáscara del alero no-convexo sí necesita FEM). Muebles ya tenían su containment.
+  - **Grillas de coordenadas XZ/YZ (`_update_vertical_grid`, `GLLinePlotItem` `_vgrid`):** dos planos verticales que nacen del CENTRO del recinto (origen común con el piso), tamaño de la grilla del piso, alineados en fase, pasando por el centro (recinto en el centro exacto del XY). Botón toggle **▦** (`_btn_planes`, checkable) en la fila P/I/L, `_show_coord_planes` DEFAULT FALSE. La grilla del PISO (`_grid`) ahora se traslada al centro del recinto en `fit_grid_to_aabb` (antes fija en el origen del mundo → con CAD corrido no coincidía). `_grid_center` guardado. Gotcha resuelto: GLGridItem con transform no renderizaba fiable → se dibuja con segmentos en mundo. `_camera_position` tiene convención de azimut (x=sin,y=cos) OPUESTA a `_build_view_proj` (el render): usar siempre `_view_dir_horizontal` para orientar/pickear.
+  Solo headless (los tests GL segfaultean): compila, toggle OFF→oculto/ON→visible, planos centrados en el recinto corrido. Falta test visual del usuario. **Recap: MANUAL v2.51 + notas + auditor + commit/push + SOLO Mac zip (sin dist-exe).**
+
 Si en una sesión futura querés actualizar este archivo (porque cambió un
 patrón de trabajo, una decisión de diseño, o se descubrió un nuevo bug
 histórico), editá la sección correspondiente y agregá la fecha acá.

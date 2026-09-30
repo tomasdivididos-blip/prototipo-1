@@ -2950,6 +2950,18 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.51 (batch de UI/UX: ventanas, arrastre en Z y grillas de coordenadas)
+
+**Cambios v2.51** (29 de septiembre 2026): un conjunto de mejoras de interfaz, sin tocar la física.
+
+- **Botón «todas» del editor de fuente (fila «Optimizar»):** ahora es un interruptor real. Un clic selecciona todas las variables optimizables; si ya están todas, las deselecciona. La etiqueta anticipa la acción («todas» / «ninguna»). Antes el texto quedaba recortado y el estado confundía.
+- **Todas las ventanas con minimizar / maximizar / cerrar:** los diálogos ya no traen solo «cerrar»: se agregaron los botones de minimizar y maximizar en la barra de título (y se sacó el «?» de ayuda contextual que no se usaba), así cualquier ventana puede ocupar la pantalla completa.
+- **Botones de vista P / I / L y «?» más grandes:** las letras ya no se recortan (pasaron de 26 a 30 px con tamaño de fuente explícito).
+- **Mover fuentes y muebles en altura (Z) desde la vista Lateral:** con el preset **L** activo, arrastrar (Shift + arrastrar) mueve en el plano vertical de la pared (costado + altura), sin necesidad de mantener Ctrl. «Subir el mouse = subir Z», directo. El movimiento se **traba dentro del recinto**: si el objeto se iría fuera de la sala (incluso sobre el alero de un techo a dos aguas), vuelve al interior real (usa la malla FEM cuando hay modos calculados; sin modos, frena los escapes groseros contra la superficie del recinto).
+- **Grillas de coordenadas XZ / YZ (nuevo, opcional):** además del piso (plano XY), se pueden mostrar los dos planos de grilla verticales (XZ e YZ), que nacen del **centro del recinto** (el mismo origen que el piso, con el recinto en el centro exacto del plano XY) y son grandes como la grilla del piso. Sirven de referencia para mover fuentes/muebles a los costados y en altura. Se activan/desactivan con el botón **▦** (junto a P / I / L), y vienen **desactivadas por default**. La grilla del piso ahora también se centra en el recinto (antes quedaba fija en el origen del mundo, y con un CAD corrido del origen no coincidía).
+
+*Manual actualizado al 29 de Septiembre de 2026 — v2.51.*
+
 ## Cambios v2.50 (el amplificador entra en la admitancia del sub: estado de los bornes)
 
 **Cambios v2.50** (23 de septiembre 2026): refina la carga del cono de v2.49. Hasta ahora el amortiguamiento que el sub agrega a los modos suponía el driver **conectado a un amplificador ideal** (bornes en corto). En la práctica el amplificador tiene una impedancia de salida y su **factor de amortiguamiento** DF cambia cuánto se opone al movimiento de la bobina, y con eso cambia la admitancia superficial del cono. Ahora se puede elegir el estado eléctrico de los bornes.

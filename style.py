@@ -556,5 +556,16 @@ def apply_dialog_theme(widget):
     Se llama al final del __init__ de cada QDialog. El stylesheet se setea
     sobre la instancia del diálogo, así cascada a todos sus hijos y anula el
     DARK_QSS global solo para ese subárbol (la ventana principal queda oscura).
+
+    Además agrega a la barra de título los botones de MINIMIZAR y MAXIMIZAR
+    (Qt da a un QDialog solo cerrar + ayuda por defecto) y saca el botón de
+    ayuda contextual «?», que no usamos. Así toda ventana puede ocupar la
+    pantalla completa. Los diálogos con tamaño fijo dejan maximizar en gris solo.
     """
     widget.setStyleSheet(LIGHT_QSS)
+    if widget.isWindow():
+        from PyQt5.QtCore import Qt
+        flags = widget.windowFlags()
+        flags |= Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint
+        flags &= ~Qt.WindowContextHelpButtonHint
+        widget.setWindowFlags(flags)

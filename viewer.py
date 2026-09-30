@@ -162,6 +162,16 @@ class IsoViewer(gl.GLViewWidget):
         self._grid.setColor((137, 180, 250, 70))
         self.addItem(self._grid)
 
+        # Grilla VERTICAL de altura (item 5, preset Lateral): parada en la pared
+        # del fondo, continua con la del piso, para dar referencia de Z al mover
+        # fuentes/muebles hacia arriba. Se dibuja como segmentos en coordenadas de
+        # MUNDO (GLLinePlotItem) calculados en _update_vertical_grid: asi no depende
+        # de transforms de GLGridItem ni de _grid_size. Oculta salvo en vista Lateral.
+        self._vgrid = gl.GLLinePlotItem(mode="lines", antialias=True,
+                                        color=(0.54, 0.71, 0.98, 0.5), width=1.0)
+        self._vgrid.setVisible(False)
+        self.addItem(self._vgrid)
+
         self._add_axes(length=4.0, arrow=0.45)
 
         # Resaltado de un grupo de caras (hover en la tabla de materiales)
@@ -275,12 +285,12 @@ class IsoViewer(gl.GLViewWidget):
         # atajos de teclado y gestos de mouse.
         self._help_btn = QPushButton("?", self)
         self._help_btn.setCursor(Qt.PointingHandCursor)
-        self._help_btn.setFixedSize(26, 26)
+        self._help_btn.setFixedSize(30, 30)
         self._help_btn.setToolTip(self._shortcuts_html())
         self._help_btn.setStyleSheet(
             "QPushButton { background-color: #45475a; color: #cdd6f4;"
-            " border: none; border-radius: 13px; font-weight: 800;"
-            " font-size: 13pt; }"
+            " border: none; border-radius: 15px; font-weight: 800;"
+            " font-size: 13pt; padding: 0px; }"
             "QPushButton:hover { background-color: #89b4fa; color: #11111b; }")
         self._help_btn.clicked.connect(self._show_shortcuts_popup)
         self._reposition_help_btn()
@@ -301,18 +311,37 @@ class IsoViewer(gl.GLViewWidget):
                 ("lateral", "L", "Lateral (de frente a una pared)")):
             b = QPushButton(label, self._cam_preset_row)
             b.setCheckable(True)
-            b.setFixedSize(26, 26)
+            b.setFixedSize(30, 30)
             b.setCursor(Qt.PointingHandCursor)
             b.setToolTip(f"{tip}.\nFija la cámara y bloquea el orbitar. "
                          "Re-clic o arrastrar la vista para liberar.")
             b.setStyleSheet(
                 "QPushButton { background-color: #45475a; color: #cdd6f4;"
-                " border: none; border-radius: 5px; font-weight: 800; }"
+                " border: none; border-radius: 5px; font-weight: 800;"
+                " font-size: 12pt; padding: 0px; }"
                 "QPushButton:hover { background-color: #585b70; }"
                 "QPushButton:checked { background-color: #89b4fa; color: #11111b; }")
             b.clicked.connect(lambda _c, k=key: self._on_cam_preset_clicked(k))
             _cp_lay.addWidget(b)
             self._cam_preset_btns[key] = b
+        # Toggle de los planos de referencia XZ/YZ (default DESACTIVADOS). Mismo
+        # estilo que P/I/L, checkable. Activa/desactiva las dos grillas verticales.
+        self._show_coord_planes = False
+        self._btn_planes = QPushButton("▦", self._cam_preset_row)
+        self._btn_planes.setCheckable(True)
+        self._btn_planes.setChecked(False)
+        self._btn_planes.setFixedSize(30, 30)
+        self._btn_planes.setCursor(Qt.PointingHandCursor)
+        self._btn_planes.setToolTip("Planos de referencia XZ / YZ: activar/desactivar "
+                                    "(para mover fuentes/muebles a los costados y en Z).")
+        self._btn_planes.setStyleSheet(
+            "QPushButton { background-color: #45475a; color: #cdd6f4;"
+            " border: none; border-radius: 5px; font-weight: 800;"
+            " font-size: 12pt; padding: 0px; }"
+            "QPushButton:hover { background-color: #585b70; }"
+            "QPushButton:checked { background-color: #89b4fa; color: #11111b; }")
+        self._btn_planes.clicked.connect(self._on_toggle_coord_planes)
+        _cp_lay.addWidget(self._btn_planes)
         self._cam_preset_row.adjustSize()
         self._reposition_cam_presets()
 
@@ -383,10 +412,22 @@ class IsoViewer(gl.GLViewWidget):
                 spacing = 50.0
             self._grid.setSize(x=size, y=size, z=0)
             self._grid.setSpacing(x=spacing, y=spacing, z=0)
-            # Re-encuadrar camara al centroide horizontal del AABB
+            # Centrar la grilla del PISO en el recinto (antes quedaba en el origen
+            # del mundo -> con un CAD corrido del origen, el recinto caia fuera del
+            # centro del piso y las paredes no coincidian). Ahora piso + paredes
+            # comparten un unico origen: el centro del recinto en planta.
             cx = 0.5 * (mn[0] + mx[0])
             cy = 0.5 * (mn[1] + mx[1])
             cz = 0.5 * (mn[2] + mx[2])
+            self._grid.resetTransform()
+            self._grid.translate(float(cx), float(cy), 0.0)
+            self._grid_center = np.array([float(cx), float(cy)])
+            self._grid_size = float(size)
+            self._grid_spacing = float(spacing)
+            self._aabb_min = mn.copy()
+            self._aabb_max = mx.copy()
+            self._update_vertical_grid()      # re-ubica las paredes (mismo centro)
+            # Re-encuadrar camara al centroide horizontal del AABB
             self.opts["center"] = self._make_center(cx, cy, cz)
             # Ajustar distancia para que el AABB quepa comodo en el viewport
             diag = float(np.linalg.norm(mx - mn))
@@ -689,6 +730,153 @@ class IsoViewer(gl.GLViewWidget):
         """Raycast contra el plano z=0 (piso). Devuelve (x,y,0) o None."""
         return self._pick_horizontal_plane(px, py, z=0.0)
 
+    def _pick_vertical_plane(self, px, py, p0):
+        """Raycast contra el PLANO VERTICAL fronto-paralelo a la vista que pasa
+        por p0 (normal = direccion HORIZONTAL de la camara). Devuelve (x,y,z) o
+        None. Usado en el preset Lateral: la 'profundidad' (eje a lo largo de la
+        vista) queda fija en p0, y el objeto se mueve en el eje horizontal
+        tangente a la pared + Z. Mapeo directo 'subir el mouse = subir Z', sin la
+        ambiguedad de proyectar sobre una recta (el problema de _pick_vertical_line
+        en perspectiva)."""
+        orig, dirn = self._ray_from_pixel(px, py)
+        if orig is None or dirn is None:
+            return None
+        n = self._view_dir_horizontal()
+        if n is None:
+            return None                       # camara casi cenital: sin plano util
+        p0 = np.asarray(p0, dtype=float)
+        o = np.asarray(orig, dtype=float); d = np.asarray(dirn, dtype=float)
+        denom = float(np.dot(d, n))
+        if abs(denom) < 1e-9:
+            return None
+        t = float(np.dot(p0 - o, n) / denom)
+        if t < 0:
+            return None
+        hit = o + t * d
+        return (float(hit[0]), float(hit[1]), float(hit[2]))
+
+    def _view_dir_horizontal(self):
+        """Direccion horizontal en la que MIRA la camara, derivada de la MATRIZ DE
+        VISTA real (`_build_view_proj`), no de `_camera_position` (que usa otra
+        convencion de azimut y quedaria 90° cruzada respecto del render). Es el eje
+        -Z de la camara en mundo, proyectado al plano horizontal y normalizado.
+        Devuelve un np.array (3,) o None si la camara mira casi cenital."""
+        view, _p, _w, _h = self._build_view_proj()
+        r2 = view.row(2)                       # 3ra fila = eje Z de camara en mundo
+        fwd = -np.array([r2.x(), r2.y(), 0.0])  # -Z = direccion de vista, sin Z
+        nrm = float(np.linalg.norm(fwd))
+        if nrm < 1e-9:
+            return None
+        return fwd / nrm
+
+    def _room_aabb(self):
+        """AABB del recinto (min, max) en metros. Prefiere el guardado por
+        fit_grid_to_aabb; si no, lo deriva de los vertices; si tampoco, del centro
+        de camara. Devuelve (amin, amax) np.array (3,) o None."""
+        amin = getattr(self, "_aabb_min", None)
+        amax = getattr(self, "_aabb_max", None)
+        if amin is not None and amax is not None:
+            return np.asarray(amin, float), np.asarray(amax, float)
+        v = getattr(self, "_vertices", None)
+        if v is not None and len(v):
+            vv = np.asarray(v, dtype=float)
+            return vv.min(axis=0), vv.max(axis=0)
+        c = self.opts["center"]
+        ctr = np.array([c.x(), c.y(), c.z()])
+        return ctr - np.array([2., 2., 1.5]), ctr + np.array([2., 2., 1.5])
+
+    @staticmethod
+    def _grid_wall_segments(fixed_axis, fixed_val, span_lo, span_hi, z_top, spacing):
+        """Segmentos (lista de puntos, de a pares) de UNA pared de grilla del box.
+
+        fixed_axis: 0 => pared YZ en x=fixed_val; 1 => pared XZ en y=fixed_val.
+        span_lo/hi: rango del recinto en el eje horizontal restante.
+        Lineas internas en MULTIPLOS de `spacing` desde el origen (misma fase que el
+        piso), mas los bordes exactos del recinto y z=0..z_top."""
+        span_axis = 1 - fixed_axis
+        k0 = int(np.ceil(span_lo / spacing)); k1 = int(np.floor(span_hi / spacing))
+        svals = [k * spacing for k in range(k0, k1 + 1)]
+        if not svals or svals[0] > span_lo + 1e-6:
+            svals = [span_lo] + svals
+        if svals[-1] < span_hi - 1e-6:
+            svals = svals + [span_hi]
+        jz = int(np.floor(z_top / spacing))
+        zvals = [j * spacing for j in range(0, jz + 1)]
+        if not zvals or zvals[-1] < z_top - 1e-6:
+            zvals = zvals + [z_top]
+
+        def _P(s, z):
+            p = [0.0, 0.0, float(z)]
+            p[fixed_axis] = float(fixed_val)
+            p[span_axis] = float(s)
+            return np.array(p, dtype=float)
+        segs = []
+        for s in svals:                        # lineas VERTICALES (span const)
+            segs.append(_P(s, 0.0)); segs.append(_P(s, zvals[-1]))
+        for z in zvals:                        # lineas HORIZONTALES (z const)
+            segs.append(_P(svals[0], z)); segs.append(_P(svals[-1], z))
+        return segs
+
+    def _update_vertical_grid(self):
+        """Los DOS planos de coordenadas verticales (XZ e YZ) que, junto con el piso
+        (plano XY, GLGridItem aparte), nacen de UN origen comun: el centro del recinto
+        en planta. Son mucho mas grandes que cualquier recinto (lado = el de la grilla
+        del piso) y pasan por ese centro (el recinto queda en el centro exacto del
+        plano XY). Siempre visibles, sin culling. Segmentos en MUNDO, alineados en fase
+        con la grilla del piso (mismas lineas, mismo centro)."""
+        vg = getattr(self, "_vgrid", None)
+        if vg is None:
+            return
+        if not getattr(self, "_show_coord_planes", False):
+            vg.setVisible(False); self.update(); return
+        gc = getattr(self, "_grid_center", None)
+        if gc is None:                          # antes del fit: centro del AABB
+            amin, amax = self._room_aabb()
+            gc = 0.5 * (amin[:2] + amax[:2])
+        gc = np.asarray(gc, dtype=float).ravel()[:2]
+        amin, amax = self._room_aabb()
+        half = 0.5 * (amax - amin)
+        spacing = getattr(self, "_grid_spacing", None)
+        if not spacing:
+            big = max(2.0 * half[0], 2.0 * half[1], 1.0)
+            ts = big * 1.5 / 20.0
+            spacing = next((s for s in (0.5, 1.0, 2.0, 5.0, 10.0, 20.0) if ts <= s), 50.0)
+        spacing = float(spacing)
+        hf = (0.5 * float(self._grid_size)
+              if getattr(self, "_grid_size", None) else max(2.0 * half[0], 2.0 * half[1], 20.0))
+        z_top = hf                              # tan alto como el semilado del piso
+
+        def _plane(fixed_axis):
+            # fixed_axis=1 -> plano XZ (Y fijo en el centro, span en X); 0 -> YZ.
+            span_axis = 1 - fixed_axis
+            c_fix = float(gc[fixed_axis]); c_span = float(gc[span_axis])
+            n = int(np.floor(hf / spacing))
+            svals = [c_span - hf] + [c_span + k * spacing for k in range(-n, n + 1)] + [c_span + hf]
+            jz = int(np.floor(z_top / spacing))
+            zvals = [j * spacing for j in range(0, jz + 1)] + [z_top]
+
+            def _P(s, z):
+                p = [0.0, 0.0, float(z)]
+                p[fixed_axis] = c_fix
+                p[span_axis] = float(s)
+                return np.array(p, dtype=float)
+            segs = []
+            for s in svals:                     # lineas VERTICALES (span const)
+                segs.append(_P(s, 0.0)); segs.append(_P(s, zvals[-1]))
+            for z in zvals:                     # lineas HORIZONTALES (z const)
+                segs.append(_P(svals[0], z)); segs.append(_P(svals[-1], z))
+            return segs
+
+        pts = np.asarray(_plane(1) + _plane(0), dtype=float)   # XZ + YZ
+        vg.setData(pos=pts, color=(0.54, 0.71, 0.98, 0.4), width=1.0, mode="lines")
+        vg.setVisible(True)
+        self.update()
+
+    def _on_toggle_coord_planes(self, _checked=None):
+        """Botón ▦: activa/desactiva los planos de referencia XZ/YZ (default OFF)."""
+        self._show_coord_planes = bool(self._btn_planes.isChecked())
+        self._update_vertical_grid()
+
     def _pick_source(self, px, py, radius_px: int = 28) -> int:
         """Devuelve el indice de la fuente mas cercana (>=0), -2 para el receptor, -1 si no hay nada."""
         best_d2 = radius_px ** 2
@@ -818,6 +1006,10 @@ class IsoViewer(gl.GLViewWidget):
             self._drag_anchor_y = float(y0)
             ctrl_held = bool(ev.modifiers() & Qt.ControlModifier)
             self._drag_mode = "z" if ctrl_held else "xy"
+            # Item 5: en preset Lateral, arrastrar mueve en el PLANO VERTICAL
+            # fronto-paralelo (horizontal tangente + Z), sin necesidad de Ctrl.
+            if getattr(self, "_cam_preset", None) == "lateral":
+                self._drag_mode = "vplane"
             return
 
         # Alt+Ctrl+Left -> ORIENTAR el bafle bajo el cursor mientras se mantenga
@@ -959,7 +1151,15 @@ class IsoViewer(gl.GLViewWidget):
 
         # Arrastre de fuente o receptor (Shift+LeftButton sostenido).
         if self._dragging_source_idx != -1 and (btns & Qt.LeftButton):
-            if self._drag_mode == "z":
+            if self._drag_mode == "vplane":
+                # Lateral: mover en el plano vertical fronto-paralelo (tangente + Z).
+                pt = self._pick_vertical_plane(
+                    int(lpos.x()), int(lpos.y()),
+                    (self._drag_anchor_x, self._drag_anchor_y, self._drag_source_z))
+                if pt is None:
+                    return
+                new_x, new_y, new_z = pt
+            elif self._drag_mode == "z":
                 # Solo z: proyectar cursor sobre la linea vertical que pasa
                 # por la posicion original (xy fijos).
                 new_z = self._pick_vertical_line(
@@ -990,7 +1190,14 @@ class IsoViewer(gl.GLViewWidget):
         # Arrastre de mueble (Shift+LeftButton sostenido; misma mecanica que la
         # fuente: XY sobre el plano z=cte, o solo Z con Ctrl).
         if self._dragging_furn_idx != -1 and (btns & Qt.LeftButton):
-            if self._drag_mode == "z":
+            if self._drag_mode == "vplane":
+                pt = self._pick_vertical_plane(
+                    int(lpos.x()), int(lpos.y()),
+                    (self._drag_anchor_x, self._drag_anchor_y, self._drag_source_z))
+                if pt is None:
+                    return
+                new_x, new_y, new_z = pt
+            elif self._drag_mode == "z":
                 new_z = self._pick_vertical_line(
                     int(lpos.x()), int(lpos.y()),
                     self._drag_anchor_x, self._drag_anchor_y)
@@ -1133,6 +1340,7 @@ class IsoViewer(gl.GLViewWidget):
         self._refresh_arch_ribs(arch_ribs or [])
         center = self._vertices.mean(axis=0)
         self.opts["center"] = self._make_center(*center)
+        self._update_vertical_grid()          # planos XZ/YZ (siempre visibles)
         self.update()
 
     def set_view_mode(self, mode: str):
@@ -1617,6 +1825,7 @@ class IsoViewer(gl.GLViewWidget):
         self._apply_cam_preset(name)
         self._refresh_cam_preset_btns()
         self._refresh_cam_arrows()
+        self._update_vertical_grid()
 
     def _clear_camera_preset(self):
         """Destraba la camara (sin moverla). Lo llama el orbit-drag y el re-clic."""
@@ -1625,6 +1834,7 @@ class IsoViewer(gl.GLViewWidget):
         self._cam_preset = None
         self._refresh_cam_preset_btns()
         self._refresh_cam_arrows()
+        self._update_vertical_grid()
 
     # ---------- Flechas de ciclo de vista (4b) ----------
     def _refresh_cam_arrows(self):
@@ -1654,6 +1864,7 @@ class IsoViewer(gl.GLViewWidget):
         if self._cam_preset not in ("lateral", "iso"):
             return
         self.opts["azimuth"] = (float(self.opts["azimuth"]) + float(delta)) % 360.0
+        self._update_vertical_grid()
         self.update()
 
     @staticmethod

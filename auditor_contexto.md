@@ -6,7 +6,13 @@
 > cada cosa contra la fuente física, un oráculo, o una cuenta propia. Que este archivo
 > diga "resuelto/PASA" no prueba nada; es un puntero a qué mirar.
 
-**Última actualización:** 2026-09-23 (v2.50: el amplificador en la admitancia del sub, estado de bornes; + v2.49 + v2.48).
+**Última actualización:** 2026-09-29 (v2.51: batch UI/UX + fallback del snap de dominio; + v2.50 + v2.49 + v2.48).
+
+## v2.51 — batch de UI/UX (29 Sep 2026, MAYORÍA FUERA DE ALCANCE FÍSICO; un punto a mirar)
+
+Casi todo es interfaz (botones, ventanas, arrastre en Z, grillas de coordenadas XZ/YZ como referencia visual, todo `viewer.py`/`style.py`). NO toca el solver, ni la FRF, ni el campo, ni los modos. El único punto con relevancia para el auditor:
+
+- **`acoustic_panel._snap_source_into_domain` ganó un FALLBACK por superficie.** Antes: si no había `modal_result` (FEM), devolvía la posición sin tocar. Ahora: sin FEM cae a `points_inside_surface` (rayo 1-dirección) para frenar que una fuente arrastrada se vaya lejos del recinto. A auditar: (1) `points_inside_surface` da FALSOS "adentro" en techo NO-convexo (es la causa raíz del bug -500, ver v2.48) → el fallback NO clampa bien la cáscara del alero; solo el camino FEM (con modos) lo hace. Está declarado en el docstring y en el MANUAL. (2) El snap solo se dispara en el DRAG interactivo del visor (`main._on_source_moved_from_viewer`), no en el optimizador ni en el cálculo de FRF/campo (esos usan el `inside_fn` de tets de v2.48, intacto). Así que este fallback no puede reintroducir la recta -500 en la FRF (esa sigue guardada por A1/A3). (3) el `centroid` del march en el caso superficie es la media de vértices de superficie, que para un recinto muy no-convexo podría caer fuera; el march igual solo devuelve un punto que pasa el test `_in`, así que no empeora respecto de no clampar.
 
 ## v2.50 — el amplificador en la admitancia del cono: estado eléctrico de los bornes (23 Sep 2026, NÚCLEO NUEVO EN ALCANCE — VERIFICAR)
 

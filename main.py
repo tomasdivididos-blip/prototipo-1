@@ -896,6 +896,11 @@ class MainWindow(QMainWindow):
         Se traba en los limites del recinto segun el modo de render (bafle -> caras
         de la caja; esfera -> centro)."""
         x, y, z = self.acoustic._clamp_source_to_room(idx, x, y, z)
+        # Recinto NO-convexo (p.ej. techo a dos aguas): el clamp al AABB puede dejar
+        # la fuente sobre el cielorraso inclinado, AFUERA de la sala real (visible al
+        # subir en Z con el drag lateral). Snap al dominio FEM real (mismo A2 que
+        # evita la recta -500): si el punto quedo fuera de los tets, vuelve adentro.
+        (x, y, z), _snapped = self.acoustic._snap_source_into_domain((x, y, z))
         # Colision-stop contra muebles: frena al contacto en vez de atravesarlos.
         # Si YA estaba en conflicto (p.ej. se agrego un mueble encima), se deja
         # mover para que pueda salir -- mismo criterio de escape que los muebles.
@@ -946,6 +951,9 @@ class MainWindow(QMainWindow):
         """Shift+drag sobre la cruz del receptor: moverlo a nueva posicion.
         Se traba en los limites del recinto (clamp al bbox)."""
         x, y, z = self.acoustic._clamp_to_room_bbox(x, y, z)
+        # Igual que la fuente: en techo no-convexo el AABB deja subir el receptor
+        # sobre el alero; snap al dominio FEM real para que no salga de la sala.
+        (x, y, z), _snapped = self.acoustic._snap_source_into_domain((x, y, z))
         # El receptor tampoco puede entrar en un mueble: ahi no hay malla y el
         # campo evalua NaN. Escape permitido si ya estaba adentro.
         ap = self.acoustic

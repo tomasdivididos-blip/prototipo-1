@@ -142,15 +142,13 @@ class SourceEditDialog(QDialog):
         _free = getattr(source, "free_vars", frozenset()) if source else frozenset()
         self.chk_free = {}
         _frow = QHBoxLayout()
-        # Boton "todas": tilda/destilda de un saque las 6 variables optimizables
-        # (comodidad para liberar toda la fuente al optimizador). Checkable: un clic
-        # tilda todas, otro las limpia.
+        # Boton "todas": un clic SELECCIONA todas las variables optimizables; si ya
+        # estan todas seleccionadas, las DESELECCIONA (toggle). No es checkable (el
+        # estado "pressed" confundia); su etiqueta refleja la accion siguiente.
         self.btn_free_all = QPushButton("todas")
-        self.btn_free_all.setCheckable(True)
-        self.btn_free_all.setMaximumWidth(56)
         self.btn_free_all.setToolTip(
-            "Tilda (o destilda) de un saque todas las variables optimizables de "
-            "esta fuente.")
+            "Selecciona todas las variables optimizables de esta fuente; si ya "
+            "están todas, las deselecciona.")
         _frow.addWidget(self.btn_free_all)
         for _key, _lbl in (("pos", "posición"), ("delay", "delay"),
                            ("fc", "corte"), ("polarity", "polaridad"),
@@ -160,17 +158,17 @@ class SourceEditDialog(QDialog):
             self.chk_free[_key] = cb
             _frow.addWidget(cb)
 
-        def _toggle_all_free(on):
-            for _cb in self.chk_free.values():
-                _cb.setChecked(bool(on))
-
         def _sync_free_all():
-            # el boton refleja "todas tildadas" sin re-disparar el toggle
+            # La etiqueta anticipa la accion: "todas" (falta alguna) / "ninguna"
+            # (estan todas). Asi el usuario sabe que hara el proximo clic.
             allc = all(c.isChecked() for c in self.chk_free.values())
-            self.btn_free_all.blockSignals(True)
-            self.btn_free_all.setChecked(allc)
-            self.btn_free_all.blockSignals(False)
-        self.btn_free_all.toggled.connect(_toggle_all_free)
+            self.btn_free_all.setText("ninguna" if allc else "todas")
+
+        def _toggle_all_free():
+            allc = all(c.isChecked() for c in self.chk_free.values())
+            for _cb in self.chk_free.values():
+                _cb.setChecked(not allc)      # todas -> limpia; si no -> todas
+        self.btn_free_all.clicked.connect(_toggle_all_free)
         for _cb in self.chk_free.values():
             _cb.toggled.connect(lambda _v: _sync_free_all())
         _sync_free_all()
@@ -6660,27 +6658,46 @@ class AcousticPanel(QWidget):
         NO-convexo, o el AABB es mas grande que la planta), la proyecta al nodo
         INTERIOR mas cercano de la malla, empujado un epsilon hacia el centroide
         para caer estrictamente adentro. Asi la fuente SIEMPRE acopla (evita la
-        recta -500). Sin malla FEM (base analitica / caja convexa) -> `pos` sin
-        tocar. Devuelve (pos_nueva, movida:bool)."""
+        recta -500). Sin malla FEM cae al poligono de superficie (frena escapes
+        groseros; no clampa la cascara del alero no-convexo, que necesita el FEM).
+        Devuelve (pos_nueva, movida:bool)."""
         p = tuple(float(x) for x in pos)
         mr = getattr(self, "modal_result", None)
         loc = getattr(mr, "locator", None) if mr is not None else None
-        if loc is None:
-            return p, False
-        ones = np.ones(np.asarray(mr.phis).shape[0], dtype=complex)
+        # Test de "adentro" y centroide interior. Preferir el DOMINIO FEM (tets):
+        # es el unico correcto en techo NO-convexo (el poligono por rayo da falsos
+        # "adentro" sobre el alero, la causa del -500). Sin modos, caer al poligono
+        # de superficie: no clampa la cascara del alero pero SI frena los escapes
+        # groseros (el objeto no se va lejos de la sala).
+        _in = None
+        centroid = None
+        if loc is not None:
+            ones = np.ones(np.asarray(mr.phis).shape[0], dtype=complex)
 
-        def _in(q):
-            v = loc.evaluate_many(ones, np.asarray(q, dtype=float).reshape(1, 3))
-            return bool(np.isfinite(np.real(np.asarray(v)[0])))
+            def _in(q, _loc=loc, _ones=ones):
+                v = _loc.evaluate_many(_ones, np.asarray(q, dtype=float).reshape(1, 3))
+                return bool(np.isfinite(np.real(np.asarray(v)[0])))
+            centroid = np.asarray(mr.nodes, dtype=float).mean(axis=0)
+        else:
+            try:
+                from acoustic_mesh import points_inside_surface as _pis
+                verts, tris = self.get_surface()
+                verts = np.asarray(verts, dtype=float)
+                tris = np.asarray(tris, dtype=int)
+                if verts.size == 0 or tris.size == 0:
+                    return p, False
+
+                def _in(q, _v=verts, _t=tris):
+                    return bool(_pis(np.asarray(q, float).reshape(1, 3), _v, _t)[0])
+                centroid = verts.mean(axis=0)
+            except Exception:
+                return p, False
         try:
             if _in(p):
                 return p, False                      # ya esta adentro
-            # MARCHA hacia el centroide de la malla (interior por construccion): el
-            # primer punto del segmento pos->centroide que cae en los tets queda lo
-            # mas cerca posible de la posicion pedida y estrictamente adentro. Es
-            # robusto (no depende de nodos de frontera/cumbrera, que pueden ser
-            # vertices degenerados que el localizador falla).
-            centroid = np.asarray(mr.nodes, dtype=float).mean(axis=0)
+            # MARCHA hacia el centroide (interior): el primer punto del segmento
+            # pos->centroide que cae adentro queda lo mas cerca posible del pedido y
+            # estrictamente adentro. Robusto (no depende de nodos de frontera).
             pv = np.asarray(p, dtype=float)
             for t in np.linspace(0.0, 1.0, 41)[1:]:
                 q = pv + t * (centroid - pv)
