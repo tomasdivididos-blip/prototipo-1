@@ -3111,7 +3111,7 @@ class ConstructionEditorDialog(QDialog):
     def __init__(self, spec=None, parent=None):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
-        self.setWindowTitle("Construcción de pared")
+        self.setWindowTitle("Impedancia de superficie")
         self.resize(720, 460)
         self.spec = None
         root = QHBoxLayout(self)
@@ -3467,7 +3467,7 @@ class ConstructionEditorDialog(QDialog):
             spec = self._current_spec()
             imp.build_surface(spec)          # valida
         except Exception as e:
-            QMessageBox.warning(self, "Construcción inválida", str(e))
+            QMessageBox.warning(self, "Impedancia inválida", str(e))
             return
         # microperforado: marcar el subtipo para la etiqueta
         if self._kind() == "Microperforado (MPP)":
@@ -3487,7 +3487,7 @@ class WallConstructionsDialog(QDialog):
                  patches=None, furniture=None, auto_tags=None):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
-        self.setWindowTitle("Construcciones (paredes, parches y muebles)")
+        self.setWindowTitle("Impedancias (paredes, parches y muebles)")
         self.resize(700, 540)
         self.result_map = dict(construction_map or {})
         # Z por default del MATERIAL de cada superficie (clave -> texto): se
@@ -3508,13 +3508,17 @@ class WallConstructionsDialog(QDialog):
         root = QVBoxLayout(self)
 
         help_lbl = QLabel(
-            "Asigná una construcción (panel perforado, membrana, poroso con "
-            "cámara, resonador de Helmholtz o pila multicapa) a una o varias "
-            "superficies: paredes, parches (⬒) o muebles (▣). Da la impedancia "
-            "en la banda modal (amortiguamiento + corrimiento de fₙ). Las "
-            "superficies sin construcción usan la <b>Z por default de su "
-            "material</b> (mostrada en gris): reactancia auto si es poroso, β "
-            "real si es duro. Asignar una construcción la pisa.")
+            "Asigná una impedancia de superficie (panel perforado, membrana, "
+            "poroso con cámara, resonador de Helmholtz o pila multicapa) a una o "
+            "varias superficies: paredes, parches (⬒) o muebles (▣). Da la "
+            "impedancia en la banda modal (amortiguamiento + corrimiento de fₙ). "
+            "Las superficies sin impedancia asignada usan la <b>Z por default de "
+            "su material</b> (mostrada en gris): reactancia auto si es poroso, β "
+            "real si es duro. Asignar una impedancia la pisa. Un <b>parche</b> "
+            "(⬒) sobre una cara con impedancia <b>compone</b>: su acabado aplica "
+            "en su huella y la impedancia en el resto de la cara. Para que la "
+            "impedancia cubra también el parche, asignale la misma impedancia al "
+            "parche.")
         help_lbl.setWordWrap(True)
         help_lbl.setStyleSheet("color:#11111b; font-size:9pt;")
         root.addWidget(help_lbl)
@@ -3950,17 +3954,17 @@ class AcousticPanel(QWidget):
         fmat.addRow(self.lbl_patch_summary)
 
         # Capa 0 (Etapa 5b): construccion de pared por cara (impedancia Z).
-        self.btn_open_constructions = QPushButton("Construcciones de pared…")
+        self.btn_open_constructions = QPushButton("Impedancias…")
         self.btn_open_constructions.setToolTip(
-            "Asigna una construcción (panel perforado, membrana, poroso con\n"
-            "cámara, resonador de Helmholtz o pila multicapa) a caras. Da la\n"
-            "impedancia de pared en la banda modal: amortiguamiento por banda\n"
-            "MÁS el corrimiento de las frecuencias modales por la reactancia\n"
-            "(efecto que la pared rígida no ve). Las caras sin construcción\n"
-            "siguen usando el α del material.")
+            "Asigna una impedancia de superficie (panel perforado, membrana,\n"
+            "poroso con cámara, resonador de Helmholtz o pila multicapa) a\n"
+            "caras. Da la impedancia de pared en la banda modal: amortiguamiento\n"
+            "por banda MÁS el corrimiento de las frecuencias modales por la\n"
+            "reactancia (efecto que la pared rígida no ve). Las caras sin\n"
+            "impedancia asignada siguen usando el α del material.")
         self.btn_open_constructions.clicked.connect(self._open_constructions_dialog)
         fmat.addRow(self.btn_open_constructions)
-        self.lbl_constr_summary = QLabel("Sin construcciones")
+        self.lbl_constr_summary = QLabel("Sin impedancias asignadas")
         self.lbl_constr_summary.setStyleSheet("color: #94a3b8; font-size: 9pt;")
         self.lbl_constr_summary.setWordWrap(True)
         fmat.addRow(self.lbl_constr_summary)
@@ -8002,9 +8006,12 @@ class AcousticPanel(QWidget):
     def _on_patches_applied(self, patches):
         """Adopta la lista de parches editada y recomputa xi/RT."""
         self._patches = list(patches or [])
-        # Exclusion mutua geometrica: un parche nuevo dibujado sobre una cara con
-        # construccion crea un doble-spec; resolver antes de recomputar.
-        self._resolve_patch_finish_conflicts(interactive=True)
+        # Composicion (item 2): un parche sobre una cara con construccion NO es un
+        # doble-spec, es una sub-region. Su acabado (material o construccion propia)
+        # aplica en su huella y la construccion de la cara en el resto: la
+        # perturbacion los integra por separado (particion de area exacta). Solo se
+        # avisa, no se fuerza a heredar.
+        self._note_composing_patches()
         self._refresh_patches_summary()
         self._refresh_abs_choice_label()   # los parches tambien mueven el RT
         if self.modal_result is not None:
@@ -8045,12 +8052,13 @@ class AcousticPanel(QWidget):
     def _on_constructions_applied(self, cmap):
         """Adopta el mapa de construcciones y recomputa xi (y el corrimiento)."""
         self._construction_map = dict(cmap or {})
-        # Exclusion mutua geometrica: si alguna cara con construccion tiene
-        # parches encima, resolver el doble-spec antes de calcular.
-        self._resolve_patch_finish_conflicts(interactive=True)
+        # Composicion (item 2): los parches sobre una cara con construccion
+        # componen (huella del parche con su acabado, resto de la cara con la
+        # construccion). No se fuerza herencia; solo se avisa.
+        self._note_composing_patches()
         self._refresh_constructions_summary()
         if self._construction_map and self._damping_model != "perturbation":
-            self._log("Aviso: las construcciones de pared solo actúan con el "
+            self._log("Aviso: las impedancias asignadas solo actúan con el "
                       "modelo de amortiguamiento «Perturbación de frontera».")
         if self.modal_result is not None:
             self._xi_per_mode = self._compute_xi_from_materials()
@@ -8063,11 +8071,11 @@ class AcousticPanel(QWidget):
     def _refresh_constructions_summary(self):
         n = len(self._construction_map)
         if n == 0:
-            self.lbl_constr_summary.setText("Sin construcciones")
+            self.lbl_constr_summary.setText("Sin impedancias asignadas")
         else:
             self.lbl_constr_summary.setText(
-                f"{n} cara(s) con construcción de pared (impedancia Z; "
-                f"amortiguamiento + corrimiento de fₙ)")
+                f"{n} superficie(s) con impedancia asignada "
+                f"(amortiguamiento + corrimiento de fₙ)")
 
     def _patches_blocked_by_furniture(self):
         """Etiquetas de los muebles que tapan algún parche (AABB del prisma del
@@ -8634,13 +8642,16 @@ class AcousticPanel(QWidget):
         construccion-Z. La UI de materiales las bloquea (un acabado por region)."""
         return set(self._construction_map.keys())
 
-    def _patch_finish_conflicts(self):
-        """Exclusion mutua GEOMETRICA: parches cuyo material-alpha pisa la
-        construccion-Z de su cara anfitriona. Un parche dibujado sobre una cara
-        con construccion sobrescribe esa impedancia en su huella = doble spec
-        sobre la misma region fisica. Un parche que YA tiene su propia
-        construccion NO entra (esa es su terminacion, no hay contradiccion).
-        Devuelve la lista de parches en conflicto."""
+    def _composing_patches(self):
+        """Parches que COMPONEN sobre una cara con construccion: estan sobre una
+        cara que tiene construccion-Z y mantienen su PROPIO acabado (su material
+        alpha, es decir NO tienen una construccion propia en el mapa). Su huella
+        usa ese material y el resto de la cara usa la construccion; la
+        perturbacion (compute_xi_shift_with_impedance) integra cada slot por
+        separado, con particion de area exacta y sin doble conteo. Un parche con
+        su PROPIA construccion tampoco es doble-spec (esa es su terminacion), pero
+        no se lista aca porque ya no usa el material de fondo. Devuelve la lista de
+        parches que componen con su material."""
         cmap = self._construction_map
         if not cmap or not self._patches:
             return []
@@ -8648,43 +8659,19 @@ class AcousticPanel(QWidget):
                 if getattr(p, "face_signature", None) in cmap
                 and getattr(p, "key", None) not in cmap]
 
-    def _resolve_patch_finish_conflicts(self, interactive=True):
-        """Resuelve el conflicto parche-alpha vs cara-construccion. Ofrece
-        heredar la construccion de la cara al parche (misma Z, sin override) o
-        mantener el material del parche (override local explicito). Sin GUI
-        (tests) hereda por defecto (coherente: un acabado por region).
-        Devuelve True si modifico `_construction_map`."""
-        conflicts = self._patch_finish_conflicts()
-        if not conflicts:
-            return False
-        if not interactive:
-            for p in conflicts:
-                self._construction_map[p.key] = dict(
-                    self._construction_map[p.face_signature])
-            return True
-        n = len(conflicts)
-        box = QMessageBox(self)
-        box.setWindowTitle("Parche sobre una construcción")
-        box.setIcon(QMessageBox.Warning)
-        box.setText(
-            f"{n} parche(s) están sobre una cara con construcción de pared.\n\n"
-            f"El material (α) del parche sobrescribe la impedancia de la "
-            f"construcción en esa zona: son dos definiciones sobre la misma "
-            f"superficie. ¿Qué hago?")
-        b_inherit = box.addButton("Heredar la construcción al parche",
-                                  QMessageBox.AcceptRole)
-        box.addButton("Mantener el material del parche", QMessageBox.RejectRole)
-        box.setDefaultButton(b_inherit)
-        box.exec_()
-        if box.clickedButton() is b_inherit:
-            for p in conflicts:
-                self._construction_map[p.key] = dict(
-                    self._construction_map[p.face_signature])
-            self._log(f"{n} parche(s) heredaron la construcción de su cara.")
-            return True
-        self._log(f"{n} parche(s) mantienen su material "
-                  f"(override local de la construcción).")
-        return False
+    def _note_composing_patches(self):
+        """Avisa (no-modal, al log) cuando hay parches que componen sobre una
+        construccion, para que el usuario sepa que su material NO fue pisado. Para
+        que una construccion cubra tambien la huella del parche, se le asigna la
+        misma construccion al parche en «Impedancias…» (aparece como ⬒ en la
+        lista). No fuerza nada ni abre popups."""
+        comp = self._composing_patches()
+        if comp:
+            self._log(f"{len(comp)} parche(s) componen sobre una impedancia: su "
+                      "material aplica en su huella y la impedancia en el resto "
+                      "de la cara. Para cubrir también el parche, asignale la misma "
+                      "impedancia en «Impedancias…».")
+        return comp
 
     def _construction_surfaces(self, groups, g2m):
         """Superficies de Capa 0 por GRUPO y por PARCHE para la perturbacion
@@ -8707,7 +8694,7 @@ class AcousticPanel(QWidget):
                     surf_g[g.signature] = imp.build_surface(spec)
                     continue
                 except Exception as e:
-                    self._log(f"Construccion invalida ({g.signature[:8]}): {e}")
+                    self._log(f"Impedancia inválida ({g.signature[:8]}): {e}")
             mat = g2m.get(g.signature)
             if mat is not None:
                 surf_g[g.signature] = self._material_surface(mat, wr)
@@ -8720,7 +8707,7 @@ class AcousticPanel(QWidget):
                     surf_p[p.key] = imp.build_surface(spec)
                     continue
                 except Exception as e:
-                    self._log(f"Construccion de parche invalida: {e}")
+                    self._log(f"Impedancia de parche inválida: {e}")
             mat = p2m.get(p.key)
             if mat is not None:
                 surf_p[p.key] = self._material_surface(mat, wr)

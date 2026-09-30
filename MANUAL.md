@@ -2536,11 +2536,11 @@ La ventana **«Ver RT60 calculado»** se limpia al cerrarla (cómodo para trabaj
 
 **Cambios v2.27** (26 de agosto 2026): **construcciones de pared** (impedancia por superficie). Un eje.
 
-### Construcciones de pared: modelar la impedancia de cada superficie
+### Impedancias: modelar la impedancia de cada superficie
 
 Hasta ahora la absorción de una superficie se resumía en su coeficiente α (medido con incidencia aleatoria, ISO 354). Eso alcanza para el tiempo de reverberación, pero en la banda modal (por debajo de la frecuencia de Schroeder) una pared real hace dos cosas que el α solo no captura: **amortigua** cada modo según cuánto absorbe en esa frecuencia, y **corre la frecuencia** del modo según la reactancia de la construcción (una cámara de aire, la masa de un panel, el resorte de un resonador). Una pared perfectamente rígida no corre nada; una construcción resonante sí, y ese corrimiento es audible.
 
-El botón **«Construcciones de pared…»** (en el grupo de Materiales) abre una ventana donde asignás una **construcción** a una o varias superficies: **paredes, parches y muebles**, todo en la misma lista. Con **«Nueva construcción y asignar…»** se abre un editor con seis tipos:
+El botón **«Impedancias…»** (en el grupo de Materiales) abre una ventana donde asignás una **impedancia de superficie** a una o varias superficies: **paredes, parches y muebles**, todo en la misma lista. Con **«Nueva construcción y asignar…»** se abre un editor con seis tipos:
 
 - **Panel perforado**: una placa con orificios sobre una cámara de aire (resonador de Helmholtz distribuido). Parámetros: espesor de la placa, diámetro del orificio, porcentaje de perforación y profundidad de la cámara.
 - **Microperforado (MPP)**: lo mismo con orificios de menos de 1 mm, que dan absorción de banda ancha sin material poroso (modelo de Maa).
@@ -2549,7 +2549,9 @@ El botón **«Construcciones de pared…»** (en el grupo de Materiales) abre un
 - **Helmholtz (cuello + cavidad)**: un resonador concentrado (una botella acústica: un cuello que conecta a una cavidad), típico de bass trap sintonizado. Parámetros: área del cuello (cm²), largo del cuello (mm), volumen de la cavidad (L) y el área de pared sobre la que se distribuye (m²). La resonancia es $f_0 = (c/2\pi)\sqrt{S/(l_{ef}V)}$, con $l_{ef}$ el largo del cuello más la corrección de extremo. Internamente se mapea al panel perforado equivalente (Cox & D'Antonio cap. 8; Kinsler & Frey cap. 10).
 - **Multicapa (pila TMM)**: una pila general de capas (poroso o aire) de la superficie hacia el fondo rígido, resuelta por matriz de transferencia (Cox Ec. 5.24-5.25). Se arma con «Agregar capa» / «Quitar» / «↑ ↓»: cada capa porosa lleva su resistividad σ y modelo (Miki / Delany-Bazley). Permite combinaciones que el «Poroso + cámara» de una sola capa no cubre, por ejemplo poroso 50 mm + aire 100 mm + poroso 30 mm (dos absorbentes con una cámara intermedia).
 
-Mientras editás, el panel de la derecha muestra en vivo la curva de **absorción** de esa construcción y su **frecuencia de resonancia**, así ves de una qué controla. Al aceptar, la superficie queda con esa construcción (en azul en la lista) y el cálculo de los modos usa su impedancia: el amortiguamiento por banda **más** el corrimiento de las frecuencias modales, que se ve reflejado en la respuesta en frecuencia. Las superficies sin construcción siguen usando el α de su material como siempre, así que un proyecto que no toca esto no cambia en nada.
+Mientras editás, el panel de la derecha muestra en vivo la curva de **absorción** de esa impedancia y su **frecuencia de resonancia**, así ves de una qué controla. Al aceptar, la superficie queda con esa impedancia (en azul en la lista) y el cálculo de los modos la usa: el amortiguamiento por banda **más** el corrimiento de las frecuencias modales, que se ve reflejado en la respuesta en frecuencia. Las superficies sin impedancia asignada siguen usando el α de su material como siempre, así que un proyecto que no toca esto no cambia en nada.
+
+Un **parche** sobre una cara que tiene impedancia **compone** con ella: el acabado del parche (su material, o su propia impedancia) aplica en su huella y la impedancia de la cara en el resto. El cálculo integra cada zona por separado (partición de área exacta, sin doble conteo), así que podés tener una pared con una impedancia y un parche de otro material encima sin que se pisen. Si querés que la impedancia de la cara cubra también el parche, asignale esa misma impedancia al parche.
 
 Las construcciones **solo actúan con el modelo de amortiguamiento «Perturbación de frontera»** (el que deriva el amortiguamiento de la admitancia de la pared); con Sabine se avisa. Se guardan en el archivo `.room`. Nota: en esta versión la impedancia se evalúa a incidencia normal (pared de reacción local), que es el supuesto habitual para paneles perforados y membranas.
 
@@ -2951,6 +2953,17 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 ### Exportar el CAD curado
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
+
+## Cambios v2.53 (composición de parches, renombre a «Impedancias», mover parches y hover de α)
+
+**Cambios v2.53** (30 de septiembre 2026): cuatro mejoras de modelado y de interfaz.
+
+- **Los parches componen con la impedancia de la cara** (antes la impedancia pisaba al parche y avisaba). Un parche sobre una cara con impedancia aplica su propio acabado en su huella y deja la impedancia de la cara en el resto; el cálculo los integra por separado (partición de área exacta, sin doble conteo). La física ya lo resolvía bien; lo que se sacó fue la política que forzaba al parche a heredar la impedancia de la cara.
+- **«Construcción de pared» pasó a llamarse «Impedancias»** en toda la interfaz (botón, títulos de ventana, resúmenes y avisos). Es el mismo modelo (impedancia de superficie por cara/parche/mueble), con un nombre más directo.
+- **Mover parches en el editor**: además de dibujarlos, ahora se puede **arrastrar un parche existente** para reubicarlo. Queda **confinado a la cara** (no se puede sacar del borde) y **no se puede solapar** con otro parche (se dibuja en rojo y, al soltar, no se mueve).
+- **Curva de α en hover en el editor de parches**: al pasar el mouse por un material (en el selector o en la lista de parches de la cara) aparece el mini-gráfico de absorción α(f), con la misma estética que el de la ventana de Materiales (fondo blanco, curva azul, eje de frecuencias en bandas de octava 63–8000 Hz, eje de α de 0 a 1 en pasos de 0.2). El dibujo es único y compartido por los dos lugares.
+
+*Manual actualizado al 30 de Septiembre de 2026 — v2.53.*
 
 ## Cambios v2.52 (dos modelos nuevos de construcción de pared: Helmholtz y multicapa)
 

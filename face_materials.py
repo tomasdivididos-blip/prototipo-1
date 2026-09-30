@@ -1369,8 +1369,8 @@ if _HAS_QT:
                 "detectan automaticamente por orientacion y conectividad. "
                 "Las asignaciones se guardan al cerrar el dialogo y se "
                 "restauran cuando lo abras de nuevo. Las superficies con una "
-                "construcción de pared (Capa 0) aparecen «definido por "
-                "construcción»: su impedancia reemplaza al α (un acabado por "
+                "impedancia asignada (Capa 0) aparecen «definido por "
+                "impedancia»: su impedancia reemplaza al α (un acabado por "
                 "superficie)."
             )
             help_lbl.setWordWrap(True)
@@ -1539,21 +1539,8 @@ if _HAS_QT:
                                    QCursor.pos())
 
         def _draw_alpha_popup(self, mat):
-            ax = self._alpha_pax
-            ax.clear()
-            fa = np.array([40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400,
-                           500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150,
-                           4000, 5000, 6300, 8000], dtype=float)
-            a = np.array([float(mat.alpha(float(x))) for x in fa])
-            ax.plot(fa, a, '-o', color='#1f6fbf', markersize=3, linewidth=1.4)
-            ax.set_title(f"α — {mat.name}", fontsize=8)
-            ax.set_xscale('log')
-            ax.set_xlim(40, 8000)
-            ax.set_ylim(0.0, 1.0)
-            ax.set_xlabel('Hz', fontsize=7)
-            ax.set_ylabel('α', fontsize=7)
-            ax.grid(True, alpha=0.3)
-            ax.tick_params(labelsize=6)
+            import plot_utils
+            plot_utils.draw_alpha_curve(self._alpha_pax, mat)   # estetica unica
             try:
                 self._alpha_pfig.tight_layout(pad=0.4)
             except Exception:
@@ -1723,13 +1710,13 @@ if _HAS_QT:
             """Celda de material bloqueada: la region tiene una construccion-Z
             (Capa 0), que es su acabado acustico. El alpha no aplica; para
             cambiarlo hay que quitar la construccion en su dialogo."""
-            lbl = QLabel("→ definido por construcción")
+            lbl = QLabel("→ definido por impedancia")
             lbl.setStyleSheet("color:#1e66f5; font-size:9pt; font-style:italic;")
             lbl.setToolTip(
-                "Esta superficie tiene una construcción de pared (impedancia Z).\n"
+                "Esta superficie tiene una impedancia asignada (Capa 0).\n"
                 "El material (α) no se usa acá: un acabado por superficie.\n"
-                "Para volver a un material, quitá la construcción en\n"
-                "«Construcciones de pared…».")
+                "Para volver a un material, quitá la impedancia en\n"
+                "«Impedancias…».")
             return lbl
 
         def _on_combo_changed(self, signature: str, material_name: str):

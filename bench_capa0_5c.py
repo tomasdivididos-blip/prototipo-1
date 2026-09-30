@@ -177,40 +177,42 @@ check("T8 sin shift -> dfreq 0", np.allclose(d2["dfreq"], 0.0))
 check("T8 sin construcciones -> constructions False", d2["constructions"] is False)
 check("T8 modelo a36 legible", d2["model"] == "Sabine por modo (A36)", d2["model"])
 
-# --- T9: exclusion mutua alpha vs construccion (logica del panel) ---
+# --- T9: COMPOSICION parche sobre construccion (item 2, logica del panel) ---
+# Un parche sobre una cara con construccion COMPONE (no es conflicto): su acabado
+# aplica en su huella, la construccion en el resto de la cara. El panel avisa pero
+# NO fuerza herencia (no mete el parche al construction_map).
 pk = AcousticPanel.__new__(AcousticPanel)
-spec_wall = {"kind": "membrane", "mass_per_area": 5.0, "cavity_depth": 0.1}
+pk._log = lambda *a, **k: None                 # silenciar el aviso no-modal
+spec_wall = {"type": "membrane", "mass_per_area": 5.0, "cavity_depth": 0.1}
 pk._construction_map = {"wallA": dict(spec_wall)}
-# tres parches: sobre wallA sin construccion propia (CONFLICTO), sobre wallB
-# (ok), y sobre wallA pero con su propia construccion (NO conflicto).
-p_confl = SimpleNamespace(face_signature="wallA", key="patchA1")
+# tres parches: sobre wallA con su MATERIAL (compone), sobre wallB (otra cara),
+# y sobre wallA con su PROPIA construccion (su terminacion, no usa el fondo).
+p_comp = SimpleNamespace(face_signature="wallA", key="patchA1")
 p_ok = SimpleNamespace(face_signature="wallB", key="patchB1")
 p_own = SimpleNamespace(face_signature="wallA", key="patchA2")
-pk._construction_map["patchA2"] = {"kind": "perforated"}
-pk._patches = [p_confl, p_ok, p_own]
+pk._construction_map["patchA2"] = {"type": "perforated"}
+pk._patches = [p_comp, p_ok, p_own]
 
 check("T9 construction_keys", pk._construction_keys() == {"wallA", "patchA2"},
       str(pk._construction_keys()))
-confl = pk._patch_finish_conflicts()
-check("T9 detecta solo el parche que pisa la construccion",
-      confl == [p_confl], str([getattr(c, "key", None) for c in confl]))
-changed = pk._resolve_patch_finish_conflicts(interactive=False)
-check("T9 resolver (no interactivo) hereda", changed is True)
-check("T9 parche heredo la construccion de su cara",
-      pk._construction_map.get("patchA1") == spec_wall,
-      str(pk._construction_map.get("patchA1")))
-check("T9 herencia es COPIA (no alias)",
-      pk._construction_map["patchA1"] is not pk._construction_map["wallA"])
-check("T9 idempotente: sin conflicto tras heredar",
-      pk._resolve_patch_finish_conflicts(interactive=False) is False)
+comp = pk._composing_patches()
+check("T9 detecta el parche-material que compone",
+      comp == [p_comp], str([getattr(c, "key", None) for c in comp]))
+before = dict(pk._construction_map)
+noted = pk._note_composing_patches()
+check("T9 avisa sin forzar herencia (mapa intacto)",
+      pk._construction_map == before, str(pk._construction_map))
+check("T9 el parche que compone NO entra al construction_map",
+      "patchA1" not in pk._construction_map)
+check("T9 note devuelve los compositores", noted == [p_comp])
 
-# sin construcciones -> sin claves ni conflictos
+# sin construcciones -> sin claves ni compositores
 pk2 = AcousticPanel.__new__(AcousticPanel)
 pk2._construction_map = {}
 pk2._patches = [p_ok]
 check("T9 sin construcciones -> keys vacio", pk2._construction_keys() == set())
-check("T9 sin construcciones -> sin conflicto",
-      pk2._patch_finish_conflicts() == [])
+check("T9 sin construcciones -> sin compositores",
+      pk2._composing_patches() == [])
 
 # --- Resumen ---
 print()

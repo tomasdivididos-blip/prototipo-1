@@ -80,6 +80,51 @@ def draw_correctability_overlay(ax, eqc):
 
 
 # ---------------------------------------------------------------------------
+# Curva de alpha(f) de un material (estetica UNICA, compartida)
+# ---------------------------------------------------------------------------
+# Centros nominales de banda de OCTAVA (ISO) para los xticks del grafico de alpha.
+_ALPHA_OCTAVE_CENTERS = [63, 125, 250, 500, 1000, 2000, 4000, 8000]
+
+
+def _octave_tick_label(f: float) -> str:
+    return f"{int(round(f / 1000))}k" if f >= 1000 else str(int(round(f)))
+
+
+def draw_alpha_curve(ax, mat, *, title: bool = True) -> None:
+    """Dibuja alpha(f) de un material en `ax` (matplotlib) con la estetica UNICA
+    del soft, compartida por el popup de Materiales y el de Parches:
+      - fondo blanco, curva AZUL con marcadores;
+      - eje X log con las bandas de OCTAVA (63..8000 Hz), etiquetas 63/125/.../8k;
+      - eje Y de 0 a 1 en pasos de 0.2 (0, 0.2, 0.4, 0.6, 0.8, 1).
+    La curva se traza sobre una grilla fina (interpolada) para suavidad; los ticks
+    quedan en las bandas de octava."""
+    ax.clear()
+    ax.set_facecolor('#ffffff')
+    try:
+        ax.figure.patch.set_facecolor('#ffffff')
+    except Exception:
+        pass
+    fa = np.array([63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800,
+                   1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000],
+                  dtype=float)
+    a = np.array([float(mat.alpha(float(x))) for x in fa])
+    ax.plot(fa, a, '-o', color='#1f6fbf', markersize=3, linewidth=1.4)
+    if title:
+        ax.set_title(f"α — {getattr(mat, 'name', 'material')}", fontsize=8)
+    ax.set_xscale('log')
+    ax.set_xlim(63, 8000)
+    ax.set_ylim(0.0, 1.0)
+    ax.set_yticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
+    ax.set_xticks(_ALPHA_OCTAVE_CENTERS)
+    ax.set_xticklabels([_octave_tick_label(f) for f in _ALPHA_OCTAVE_CENTERS])
+    ax.minorticks_off()                       # sin 10^2/10^3 del log por defecto
+    ax.set_xlabel('Hz', fontsize=7)
+    ax.set_ylabel('α', fontsize=7)
+    ax.grid(True, alpha=0.3)
+    ax.tick_params(labelsize=6)
+
+
+# ---------------------------------------------------------------------------
 # Smoke test
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":

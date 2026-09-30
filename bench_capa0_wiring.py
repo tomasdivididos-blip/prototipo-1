@@ -234,6 +234,48 @@ check("W7b parche con construccion: corrimiento observable",
       f"max |df| {np.max(np.abs(f_pc-freqs)):.2f} Hz")
 
 
+print("\nW8  COMPOSICION: parche sobre una PARED CON CONSTRUCCION (item 2)")
+# Host wall = construccion (unica pared con reactancia); resto = material (Im beta=0).
+# Un parche PARCIAL sobre el host wall compone: su huella usa su material (beta real),
+# el resto de la pared la construccion. La perturbacion integra cada slot por separado.
+surf_host = {g.signature: material_surface(mat2) for g in gr}
+surf_host[gwall.signature] = con_p
+p_half = apx.make_patch(gwall, 0.0, 0.0, 10.0, 10.0, material_name="", label="mitad")
+# (full) pared toda construccion, sin parche
+_, f_full = apx.compute_xi_shift_with_impedance(
+    freqs, phis, loc, vr, tr, gr, surf_host, [], {}, Vr)
+# (compone) huella del parche con material (beta real), resto construccion
+_, f_comp = apx.compute_xi_shift_with_impedance(
+    freqs, phis, loc, vr, tr, gr, surf_host, [p_half],
+    {p_half.key: material_surface(mat2)}, Vr)
+# (override) el parche hereda la construccion de la pared (misma Z en toda la pared)
+_, f_over = apx.compute_xi_shift_with_impedance(
+    freqs, phis, loc, vr, tr, gr, surf_host, [p_half],
+    {p_half.key: con_p}, Vr)
+# Solo el host wall aporta Im(beta) -> Im(delta_n) = (freqs - f_new)*2pi es todo de esa
+# pared. Con material en el resto (Im=0), Im(delta_compone)/Im(delta_full) = fraccion de
+# la pared NO cubierta por el parche, en [0,1] por modo (particion exacta, sin fuga).
+Imd_full = (freqs - f_full) * 2.0 * np.pi
+Imd_comp = (freqs - f_comp) * 2.0 * np.pi
+sig = np.abs(Imd_full) > 1e-3
+ratio = Imd_comp[sig] / Imd_full[sig]
+check("W8a compone: sigue habiendo corrimiento (el resto es construccion)",
+      np.max(np.abs(f_comp - freqs)) > 0.1,
+      f"max |df| compone = {np.max(np.abs(f_comp-freqs)):.2f} Hz")
+check("W8b PARTICION exacta: Im(delta_compone)/Im(delta_full) in [0,1] por modo",
+      bool(sig.any()) and np.all(ratio > -1e-6) and np.all(ratio < 1 + 1e-6),
+      f"ratio in [{ratio.min():.3f},{ratio.max():.3f}] sobre {int(sig.sum())} modos")
+check("W8c parche PARCIAL (fraccion interior, no cubre 0 ni toda la pared)",
+      0.02 < float(np.mean(ratio)) < 0.98,
+      f"mean(ratio no cubierto) = {float(np.mean(ratio)):.3f}")
+check("W8d override (parche hereda la construccion) == pared toda construccion",
+      np.allclose(f_over, f_full, atol=0.03),
+      f"max |df over-full| = {np.max(np.abs(f_over-f_full)):.3f} Hz")
+check("W8e composicion != override (el material del parche cambia el resultado)",
+      np.max(np.abs(f_comp - f_over)) > 0.05,
+      f"max |df comp-over| = {np.max(np.abs(f_comp-f_over)):.2f} Hz")
+
+
 print()
 print("=" * 64)
 print(f" RESULTADO: {len(_PASS)} OK, {len(_FAIL)} FAIL")

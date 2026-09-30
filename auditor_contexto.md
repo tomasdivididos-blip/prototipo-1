@@ -6,7 +6,14 @@
 > cada cosa contra la fuente física, un oráculo, o una cuenta propia. Que este archivo
 > diga "resuelto/PASA" no prueba nada; es un puntero a qué mirar.
 
-**Última actualización:** 2026-09-30 (v2.52: dos modelos nuevos en el editor de construcción; + v2.51 + v2.50 + v2.49 + v2.48).
+**Última actualización:** 2026-09-30 (v2.53: composición de parches + renombre a «Impedancias» + editor de parches; + v2.52 + v2.51 + v2.50 + v2.49 + v2.48).
+
+## v2.53 — composición parche↔impedancia, renombre y editor de parches (30 Sep 2026, un punto físico, resto GUI)
+
+- **Composición parche↔impedancia de cara (EN ALCANCE pero SIN cambio de solver — VERIFICAR el claim):** el autor afirma que la física YA componía correctamente y que solo se removió una política de UI. A auditar contra `absorption_patch.compute_xi_shift_with_impedance`: cada punto del teselado se asigna a UN solo slot (huella del parche → Z del parche; resto de la cara → Z de la cara), con peso `area·φ²·cover`. (1) ¿la partición es realmente disjunta (ningún punto cuenta dos veces, ninguna área se pierde)? el bench W8 mide, con solo el host wall aportando Im(β), que Im(δ_compone)/Im(δ_full) ∈ [0,1] por modo y que override(parche hereda)==pared-entera |Δf|=0 (partición exacta), pero eso NO prueba el caso multi-pared con varias Im simultáneas. (2) el camino unificado sigue a incidencia NORMAL (θ=0), como desde 5b. (3) se quitó `_resolve_patch_finish_conflicts` (forzaba herencia); ahora un parche-material sobre cara-impedancia compone por default → el resultado por default de un .room viejo con esa combinación CAMBIA (el parche ya no se descarta). Verificar que eso es lo deseado y no una regresión silenciosa para proyectos previos.
+- **Renombre «Construcción de pared» → «Impedancias»:** solo strings de UI; `_construction_map` y el wiring intactos. Fuera de alcance físico.
+- **Editor de parches (mover + hover α):** `patch_dialog` geométrico/IO (clamp al bbox de la cara + rechazo de solape via `polys_overlap`, traslación por `AbsorptionPatch.translate`) y de presentación (mini-α con `plot_utils.draw_alpha_curve`). NO toca la física; el α que entra al modelo no cambia por mover el parche (misma geometría u-v, solo trasladada). `bench_patch_move_hover` 15/15, `bench_capa0_all` 190/190.
+- **Planeado (NO implementado):** `plan_impedancias_default.md` (material→impedancia por default, keyword-driven, inespecíficos sin modelo). Cuando se implemente, el punto caliente para el auditor será la ESTIMACIÓN de parámetros (espesor/σ/densidad) y que la reactancia resultante NO reintroduzca el sesgo M1 (solo con evidencia textual, etiquetada, editable; Re(β)=α exacto).
 
 ## v2.52 — Helmholtz y multicapa expuestos en la GUI (30 Sep 2026, FUERA DE ALCANCE DE SOLVER, un punto físico a mirar)
 

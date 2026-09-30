@@ -29,12 +29,12 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal
-from PyQt5.QtGui import QPainter, QPen, QColor, QBrush, QFont, QPolygonF
+from PyQt5.QtGui import QPainter, QPen, QColor, QBrush, QFont, QPolygonF, QCursor
 from style import apply_dialog_theme
 from PyQt5.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QComboBox,
     QListWidget, QListWidgetItem, QDialogButtonBox, QGroupBox, QAbstractItemView,
-    QDoubleSpinBox,
+    QDoubleSpinBox, QToolTip,
 )
 
 import absorption_patch as ap
@@ -52,6 +52,35 @@ _AXIS_COS = 0.966
 def _is_axis_aligned(normal) -> bool:
     n = np.abs(np.asarray(normal, dtype=float))
     return float(n.max()) >= _AXIS_COS
+
+
+def _alpha_tip_html(mat) -> str:
+    """HTML de tooltip con el mini-grafico de alpha(f) del material, con la MISMA
+    estetica que el popup de Materiales (fondo blanco, curva azul, X en bandas de
+    octava, Y 0..1 paso 0.2): se dibuja con `plot_utils.draw_alpha_curve` sobre una
+    figura Agg y se embebe como PNG base64. Best-effort: sin matplotlib -> ''."""
+    if mat is None:
+        return ""
+    try:
+        import io
+        import base64
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        import plot_utils
+        fig = Figure(figsize=(3.1, 1.6), dpi=90)
+        fig.patch.set_facecolor('#ffffff')
+        ax = fig.add_subplot(111)
+        plot_utils.draw_alpha_curve(ax, mat)
+        try:
+            fig.tight_layout(pad=0.4)
+        except Exception:
+            pass
+        buf = io.BytesIO()
+        FigureCanvasAgg(fig).print_png(buf)
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+        return f'<img src="data:image/png;base64,{b64}">'
+    except Exception:
+        return ""
 
 
 def _axis_label(axis: int) -> str:
@@ -84,6 +113,7 @@ class PatchCanvas(QWidget):
     polyDrawn = pyqtSignal(list)                          # [(u, v), ...]
     selectionChanged = pyqtSignal(int)                   # indice o -1
     deleteRequested = pyqtSignal(int)                    # indice
+    patchMoved = pyqtSignal(int, float, float)           # indice, du, dv (local)
     rejected = pyqtSignal(str)                            # mensaje de rechazo
 
     PICK_PX = 12
@@ -110,6 +140,12 @@ class PatchCanvas(QWidget):
         self._poly_pts: List[Tuple[float, float]] = []
         self._poly_hover: Optional[Tuple[float, float]] = None
         self._invalid = False               # el candidato solaparia
+        # mover un parche existente (arrastre): indice + punto de agarre + uv original
+        self._move_idx = -1
+        self._move_grab: Optional[Tuple[float, float]] = None   # mundo (u,v) al presionar
+        self._move_uv0: Optional[List[Tuple[float, float]]] = None
+        self._move_cur: Optional[List[Tuple[float, float]]] = None   # uv desplazado (preview)
+        self._move_delta = (0.0, 0.0)
 
     # ---- API ----
     def set_face(self, u_min, u_max, v_min, v_max, u_label, v_label):
@@ -139,6 +175,9 @@ class PatchCanvas(QWidget):
         self._poly_pts = []
         self._poly_hover = None
         self._invalid = False
+        self._move_idx = -1
+        self._move_grab = self._move_uv0 = self._move_cur = None
+        self._move_delta = (0.0, 0.0)
 
     # ---- Transformacion (anclada al centro, con zoom + pan) ----
     def _xform(self):
@@ -183,6 +222,25 @@ class PatchCanvas(QWidget):
             if ap.polys_overlap(cand_uv, r["uv"]):
                 return True
         return False
+
+    def _would_overlap_excluding(self, cand_uv, exclude: int) -> bool:
+        for i, r in enumerate(self._rects):
+            if i == exclude:
+                continue
+            if ap.polys_overlap(cand_uv, r["uv"]):
+                return True
+        return False
+
+    def _clamp_delta_to_face(self, uv0, du, dv):
+        """Recorta (du, dv) para que el bbox del parche `uv0` desplazado quede
+        DENTRO de la cara (confinamiento). Devuelve (du, dv) recortados."""
+        u0, u1, v0, v1 = self._bbox
+        us = [u for (u, _v) in uv0]; vs = [v for (_u, v) in uv0]
+        pu0, pu1 = min(us), max(us)
+        pv0, pv1 = min(vs), max(vs)
+        du = min(max(du, u0 - pu0), u1 - pu1)
+        dv = min(max(dv, v0 - pv0), v1 - pv1)
+        return du, dv
 
     @staticmethod
     def _rect_uv(a, b):
@@ -235,8 +293,14 @@ class PatchCanvas(QWidget):
         if self._mode == "rect":
             i = self._rect_under(sx, sy)
             if i >= 0:
+                # Seleccionar Y armar el arrastre para MOVER el parche.
                 self._sel = i
                 self.selectionChanged.emit(i)
+                self._move_idx = i
+                self._move_grab = self._s2w(sx, sy)         # mundo (u,v) sin snap
+                self._move_uv0 = list(self._rects[i]["uv"])
+                self._move_cur = list(self._move_uv0)
+                self._move_delta = (0.0, 0.0)
                 self.update()
                 return
             u, v = self._s2w(sx, sy)
@@ -255,7 +319,20 @@ class PatchCanvas(QWidget):
             self.update()
 
     def mouseMoveEvent(self, ev):
-        if self._mode == "rect" and self._drag_start is not None:
+        if self._mode == "rect" and self._move_idx >= 0:
+            # Mover el parche: delta desde el agarre, snapeado a la grilla,
+            # confinado a la cara y con rechazo de solape (preview en rojo).
+            u, v = self._s2w(ev.x(), ev.y())
+            g = self._grid
+            du = round((u - self._move_grab[0]) / g) * g
+            dv = round((v - self._move_grab[1]) / g) * g
+            du, dv = self._clamp_delta_to_face(self._move_uv0, du, dv)
+            self._move_delta = (du, dv)
+            self._move_cur = [(uu + du, vv + dv) for (uu, vv) in self._move_uv0]
+            self._invalid = self._would_overlap_excluding(self._move_cur,
+                                                          self._move_idx)
+            self.update()
+        elif self._mode == "rect" and self._drag_start is not None:
             u, v = self._s2w(ev.x(), ev.y())
             self._drag_cur = self._snap(u, v)
             self._invalid = self._would_overlap(
@@ -268,6 +345,23 @@ class PatchCanvas(QWidget):
             self.update()
 
     def mouseReleaseEvent(self, ev):
+        if (ev.button() == Qt.LeftButton and self._mode == "rect"
+                and self._move_idx >= 0):
+            idx = self._move_idx
+            du, dv = self._move_delta
+            cur = self._move_cur
+            self._move_idx = -1
+            self._move_grab = self._move_uv0 = self._move_cur = None
+            self._move_delta = (0.0, 0.0)
+            self._invalid = False
+            if cur is not None and (abs(du) > 1e-9 or abs(dv) > 1e-9):
+                if self._would_overlap_excluding(cur, idx):
+                    self.rejected.emit(
+                        "El parche se solaparia con otro. No se movio.")
+                else:
+                    self.patchMoved.emit(idx, float(du), float(dv))
+            self.update()
+            return
         if (ev.button() == Qt.LeftButton and self._mode == "rect"
                 and self._drag_start is not None):
             u0, v0 = self._drag_start
@@ -376,6 +470,13 @@ class PatchCanvas(QWidget):
             qp.setPen(QPen(QColor(166, 227, 161), 2)); qp.setBrush(Qt.NoBrush)
             qp.drawEllipse(s0, self.PICK_PX / 2, self.PICK_PX / 2)
 
+        # Parche en movimiento (preview): destino punteado, rojo si solaparia.
+        if self._mode == "rect" and self._move_cur is not None:
+            c = invalid if self._invalid else ok
+            qp.setBrush(QBrush(QColor(c.red(), c.green(), c.blue(), 90)))
+            qp.setPen(QPen(c, 2, Qt.DashLine))
+            qp.drawPolygon(QPolygonF([self._w2s(u, v) for (u, v) in self._move_cur]))
+
         # Ejes
         qp.setPen(QPen(QColor(147, 153, 178)))
         qp.drawText(int(self.width() - 40), int(self.height() - 12),
@@ -411,6 +512,7 @@ class PatchEditorDialog(QDialog):
         ]
         self._cur_group = None
         self._sel_patch = -1
+        self._alpha_tip_cache: Dict[str, str] = {}   # nombre -> HTML del mini-α
 
         self._build_ui()
         if self._groups:
@@ -424,9 +526,11 @@ class PatchEditorDialog(QDialog):
 
         help_lbl = QLabel(
             "Elegi una cara y dibuja un parche. Modo Rectangulo: arrastra con el "
-            "boton izquierdo. Modo Poligono: click por vertice, cerra cerca del "
-            "primer punto (o Enter / doble click); boton derecho o Esc deshace. "
-            "Rueda = zoom. Los parches no pueden solaparse. Alcance v1: caras "
+            "boton izquierdo en un lugar vacio. Para MOVER un parche existente, "
+            "arrastralo (queda confinado a la cara y no se puede solapar con "
+            "otro). Modo Poligono: click por vertice, cerra cerca del primer "
+            "punto (o Enter / doble click); boton derecho o Esc deshace. Rueda = "
+            "zoom. Los parches no pueden solaparse. Alcance v1: caras "
             "perpendiculares a un eje."
         )
         help_lbl.setWordWrap(True)
@@ -460,6 +564,7 @@ class PatchEditorDialog(QDialog):
         self.canvas.polyDrawn.connect(self._on_poly_drawn)
         self.canvas.selectionChanged.connect(self._on_canvas_selection)
         self.canvas.deleteRequested.connect(self._on_delete)
+        self.canvas.patchMoved.connect(self._on_patch_moved)
         self.canvas.rejected.connect(self._on_rejected)
         body.addWidget(self.canvas, 1)
 
@@ -480,6 +585,9 @@ class PatchEditorDialog(QDialog):
         self.combo_mat = QComboBox()
         self.combo_mat.addItems(list(self._mat_lib.names))
         self.combo_mat.currentTextChanged.connect(self._on_material_changed)
+        # Hover sobre un item del desplegable -> mini-grafico de alpha(f).
+        self.combo_mat.highlighted.connect(self._on_mat_highlighted)
+        self.combo_mat.setToolTip(self._alpha_tip_for(self.combo_mat.currentText()))
         mv.addWidget(self.combo_mat)
         right.addWidget(gb_mat)
 
@@ -574,8 +682,12 @@ class PatchEditorDialog(QDialog):
         cps = self._cur_patches()
         for (_gi, p) in cps:
             shape = "poligono" if p.poly else "rect"
-            self.patch_list.addItem(
+            it = QListWidgetItem(
                 f"{p.material_name or '(sin material)'}  -  {p.area:.2f} m2 ({shape})")
+            tip = self._alpha_tip_for(p.material_name)
+            if tip:
+                it.setToolTip(tip)
+            self.patch_list.addItem(it)
         for li, (gi, _p) in enumerate(cps):
             if gi == self._sel_patch:
                 self.patch_list.setCurrentRow(li)
@@ -593,6 +705,29 @@ class PatchEditorDialog(QDialog):
         self._refresh_patch_list()
         self._refresh_info(extra)
         self.changed.emit(list(self._patches))    # preview 3D en vivo
+
+    # ---- Mini-grafico de alpha(f) en hover ----
+    def _material_by_name(self, name):
+        names = self._mat_lib.names
+        if name in names:
+            return self._mat_lib[names.index(name)]
+        return None
+
+    def _alpha_tip_for(self, name: str) -> str:
+        """HTML (cacheado) del mini-grafico de alpha(f) del material `name`."""
+        if not name:
+            return ""
+        if name not in self._alpha_tip_cache:
+            mat = self._material_by_name(name)
+            self._alpha_tip_cache[name] = _alpha_tip_html(mat) if mat else ""
+        return self._alpha_tip_cache[name]
+
+    def _on_mat_highlighted(self, idx: int):
+        """Al pasar el mouse por un item del combo, muestra el mini-α como tooltip."""
+        name = self.combo_mat.itemText(idx)
+        html = self._alpha_tip_for(name)
+        if html:
+            QToolTip.showText(QCursor.pos(), html, self.combo_mat)
 
     # ---- Slots ----
     def _on_face_changed(self, row):
@@ -626,6 +761,21 @@ class PatchEditorDialog(QDialog):
         self._patches.append(p)
         self._sel_patch = len(self._patches) - 1
         self._refresh_all()
+
+    def _on_patch_moved(self, local_idx, du, dv):
+        """Mueve el parche `local_idx` (de la cara actual) por (du, dv) en coords
+        locales de la cara. El canvas ya confinó y rechazó solapes; acá se aplica
+        vía AbsorptionPatch.translate (delta en MUNDO, con du/dv en sus ejes)."""
+        cps = self._cur_patches()
+        if not (0 <= local_idx < len(cps)):
+            return
+        gi, p = cps[local_idx]
+        d3 = np.zeros(3)
+        d3[p.u_axis] = float(du)
+        d3[p.v_axis] = float(dv)
+        p.translate(d3)
+        self._sel_patch = gi
+        self._refresh_all("Parche movido.")
 
     def _on_rejected(self, msg):
         self._refresh_info(msg)
@@ -666,6 +816,7 @@ class PatchEditorDialog(QDialog):
                 self._patches[self._sel_patch].depth = float(d)
         if 0 <= self._sel_patch < len(self._patches):
             self._patches[self._sel_patch].material_name = name
+        self.combo_mat.setToolTip(self._alpha_tip_for(name))   # mini-α del actual
         self._update_depth_note()
         self._refresh_all()
 
