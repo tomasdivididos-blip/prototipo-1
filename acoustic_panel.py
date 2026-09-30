@@ -3104,6 +3104,8 @@ class ConstructionEditorDialog(QDialog):
         ("Microperforado (MPP)", "perforated"),
         ("Membrana / panel", "membrane"),
         ("Poroso + cámara", "porous"),
+        ("Helmholtz (cuello+cavidad)", "helmholtz"),
+        ("Multicapa (pila TMM)", "multilayer"),
     ]
 
     def __init__(self, spec=None, parent=None):
@@ -3179,6 +3181,56 @@ class ConstructionEditorDialog(QDialog):
         fpo.addRow("Long. térmica Λ':", self.po_lamp)
         self._jca_widgets = [self.po_phi, self.po_ainf, self.po_lam, self.po_lamp]
         left.addWidget(self.grp_por)
+
+        # Helmholtz (cuello + cavidad) -> facing perforado equivalente
+        self.grp_helm = QGroupBox("Resonador de Helmholtz (cuello + cavidad)")
+        fh = QFormLayout(self.grp_helm)
+        self.h_S = _spin(0.5, 2000.0, 20.0, 1, 1.0, "cm²")
+        self.h_l = _spin(1.0, 500.0, 50.0, 0, 1.0, "mm")
+        self.h_V = _spin(0.05, 500.0, 5.0, 2, 0.1, "L")
+        self.h_A = _spin(0.05, 50.0, 1.0, 2, 0.05, "m²")
+        fh.addRow("Área de cuello S:", self.h_S)
+        fh.addRow("Largo de cuello l:", self.h_l)
+        fh.addRow("Volumen de cavidad V:", self.h_V)
+        fh.addRow("Área de pared A:", self.h_A)
+        left.addWidget(self.grp_helm)
+
+        # Multicapa: pila general de capas (poroso/aire) por TMM, superficie->backing
+        self.grp_multi = QGroupBox("Multicapa (pila TMM, superficie → fondo rígido)")
+        fml = QVBoxLayout(self.grp_multi)
+        self.ml_list = QListWidget()
+        self.ml_list.setMaximumHeight(96)
+        self.ml_list.currentRowChanged.connect(lambda *_: self._update_preview())
+        fml.addWidget(self.ml_list)
+        edit_row = QFormLayout()
+        self.ml_type = QComboBox()
+        self.ml_type.addItems(["Poroso", "Aire"])
+        self.ml_type.currentIndexChanged.connect(self._ml_sync_row)
+        self.ml_th = _spin(1.0, 1000.0, 50.0, 0, 5.0, "mm")
+        self.ml_sigma = _spin(1000.0, 200000.0, 15000.0, 0, 1000.0, "Pa·s/m²")
+        self.ml_model = QComboBox()
+        self.ml_model.addItems(["Miki", "Delany-Bazley"])
+        edit_row.addRow("Capa:", self.ml_type)
+        edit_row.addRow("Espesor:", self.ml_th)
+        edit_row.addRow("Resistividad σ:", self.ml_sigma)
+        edit_row.addRow("Modelo:", self.ml_model)
+        fml.addLayout(edit_row)
+        btn_row = QHBoxLayout()
+        self.ml_add = QPushButton("Agregar capa")
+        self.ml_add.clicked.connect(self._ml_add_layer)
+        self.ml_del = QPushButton("Quitar")
+        self.ml_del.clicked.connect(self._ml_del_layer)
+        self.ml_up = QPushButton("↑")
+        self.ml_up.setMaximumWidth(30)
+        self.ml_up.clicked.connect(lambda: self._ml_move(-1))
+        self.ml_down = QPushButton("↓")
+        self.ml_down.setMaximumWidth(30)
+        self.ml_down.clicked.connect(lambda: self._ml_move(+1))
+        for b in (self.ml_add, self.ml_del, self.ml_up, self.ml_down):
+            btn_row.addWidget(b)
+        fml.addLayout(btn_row)
+        self._ml_layers = []          # list[dict] superficie -> backing
+        left.addWidget(self.grp_multi)
         left.addStretch(1)
 
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -3206,7 +3258,8 @@ class ConstructionEditorDialog(QDialog):
             w.currentIndexChanged.connect(self._sync)
         for w in (self.p_t, self.p_d, self.p_ratio, self.p_D, self.m_mass,
                   self.m_D, self.m_damp, self.po_sigma, self.po_th, self.po_gap,
-                  self.po_phi, self.po_ainf, self.po_lam, self.po_lamp):
+                  self.po_phi, self.po_ainf, self.po_lam, self.po_lamp,
+                  self.h_S, self.h_l, self.h_V, self.h_A):
             w.valueChanged.connect(self._update_preview)
 
         if spec:
@@ -3224,11 +3277,60 @@ class ConstructionEditorDialog(QDialog):
         self.grp_perf.setVisible(kind in ("Panel perforado", "Microperforado (MPP)"))
         self.grp_memb.setVisible(kind == "Membrana / panel")
         self.grp_por.setVisible(kind == "Poroso + cámara")
+        self.grp_helm.setVisible(kind == "Helmholtz (cuello+cavidad)")
+        self.grp_multi.setVisible(kind == "Multicapa (pila TMM)")
         is_jca = self.po_model.currentText().startswith("JCA")
         for w in self._jca_widgets:
             w.setVisible(is_jca)
+        self._ml_sync_row()
         # microperforado: preset de orificio chico la primera vez
         self._update_preview()
+
+    # ---- Multicapa: edicion de la pila ----
+    def _ml_sync_row(self):
+        """Para una capa de AIRE, sigma/modelo no aplican (se ocultan)."""
+        is_por = self.ml_type.currentText() == "Poroso"
+        self.ml_sigma.setEnabled(is_por)
+        self.ml_model.setEnabled(is_por)
+
+    def _ml_layer_label(self, ly):
+        if ly["type"] == "air":
+            return f"Aire {ly['thickness']*1e3:.0f} mm"
+        mdl = "DB" if ly.get("model") == "db" else "Miki"
+        return (f"Poroso {mdl} σ={ly['sigma']:.0f} "
+                f"{ly['thickness']*1e3:.0f} mm")
+
+    def _ml_refresh(self):
+        self.ml_list.clear()
+        for i, ly in enumerate(self._ml_layers):
+            self.ml_list.addItem(f"{i+1}. {self._ml_layer_label(ly)}")
+        self._update_preview()
+
+    def _ml_add_layer(self):
+        if self.ml_type.currentText() == "Aire":
+            ly = {"type": "air", "thickness": self.ml_th.value() * 1e-3}
+        else:
+            model = "db" if self.ml_model.currentText().startswith("Delany") else "miki"
+            ly = {"type": "porous", "sigma": self.ml_sigma.value(),
+                  "thickness": self.ml_th.value() * 1e-3, "model": model}
+        self._ml_layers.append(ly)
+        self._ml_refresh()
+        self.ml_list.setCurrentRow(len(self._ml_layers) - 1)
+
+    def _ml_del_layer(self):
+        r = self.ml_list.currentRow()
+        if 0 <= r < len(self._ml_layers):
+            self._ml_layers.pop(r)
+            self._ml_refresh()
+
+    def _ml_move(self, delta):
+        r = self.ml_list.currentRow()
+        j = r + delta
+        if 0 <= r < len(self._ml_layers) and 0 <= j < len(self._ml_layers):
+            self._ml_layers[r], self._ml_layers[j] = \
+                self._ml_layers[j], self._ml_layers[r]
+            self._ml_refresh()
+            self.ml_list.setCurrentRow(j)
 
     def _current_spec(self):
         kind = self._kind()
@@ -3243,6 +3345,17 @@ class ConstructionEditorDialog(QDialog):
                     "mass_per_area": self.m_mass.value(),
                     "cavity_depth": self.m_D.value() * 1e-3,
                     "damping": self.m_damp.value()}
+        if kind == "Helmholtz (cuello+cavidad)":
+            return {"type": "helmholtz",
+                    "neck_area": self.h_S.value() * 1e-4,      # cm² -> m²
+                    "neck_length": self.h_l.value() * 1e-3,    # mm -> m
+                    "cavity_volume": self.h_V.value() * 1e-3,  # L  -> m³
+                    "wall_area": self.h_A.value()}             # m²
+        if kind == "Multicapa (pila TMM)":
+            if not self._ml_layers:
+                raise ValueError("Agregá al menos una capa a la pila.")
+            return {"type": "multilayer",
+                    "layers": [dict(ly) for ly in self._ml_layers]}
         # Poroso
         model_txt = self.po_model.currentText()
         gap = self.po_gap.value() * 1e-3
@@ -3270,6 +3383,16 @@ class ConstructionEditorDialog(QDialog):
         if t == "membrane":
             f0 = 60.0 / np.sqrt(max(spec["mass_per_area"] * spec["cavity_depth"], 1e-9))
             return f"Resonancia masa-resorte f₀ ≈ {f0:.0f} Hz"
+        if t == "helmholtz":
+            S, V, l = spec["neck_area"], spec["cavity_volume"], spec["neck_length"]
+            d = 2.0 * np.sqrt(S / np.pi)
+            l_eff = l + 0.85 * d                       # correccion de extremo (Maa)
+            f0 = (c / (2 * np.pi)) * np.sqrt(S / (l_eff * V))
+            return f"Resonancia de Helmholtz f₀ ≈ {f0:.0f} Hz"
+        if t == "multilayer":
+            n = len(spec.get("layers", []))
+            tot = sum(float(ly.get("thickness", 0.0)) for ly in spec.get("layers", []))
+            return f"Multicapa: {n} capa(s), espesor total {tot*1e3:.0f} mm"
         gap = spec.get("air_gap", 0.0)
         if gap and gap > 0:
             return f"Cámara de aire: pico λ/4 ≈ {c/(4*gap):.0f} Hz"
@@ -3328,6 +3451,16 @@ class ConstructionEditorDialog(QDialog):
             else:
                 self.po_model.setCurrentIndex(
                     1 if spec.get("model") == "db" else 0)
+        elif t == "helmholtz":
+            self.combo_type.setCurrentIndex(4)
+            self.h_S.setValue(spec.get("neck_area", 20e-4) * 1e4)
+            self.h_l.setValue(spec.get("neck_length", 0.05) * 1e3)
+            self.h_V.setValue(spec.get("cavity_volume", 5e-3) * 1e3)
+            self.h_A.setValue(spec.get("wall_area", 1.0))
+        elif t == "multilayer":
+            self.combo_type.setCurrentIndex(5)
+            self._ml_layers = [dict(ly) for ly in spec.get("layers", [])]
+            self._ml_refresh()
 
     def _on_accept(self):
         try:
@@ -3376,11 +3509,12 @@ class WallConstructionsDialog(QDialog):
 
         help_lbl = QLabel(
             "Asigná una construcción (panel perforado, membrana, poroso con "
-            "cámara) a una o varias superficies: paredes, parches (⬒) o muebles "
-            "(▣). Da la impedancia en la banda modal (amortiguamiento + "
-            "corrimiento de fₙ). Las superficies sin construcción usan la <b>Z "
-            "por default de su material</b> (mostrada en gris): reactancia auto "
-            "si es poroso, β real si es duro. Asignar una construcción la pisa.")
+            "cámara, resonador de Helmholtz o pila multicapa) a una o varias "
+            "superficies: paredes, parches (⬒) o muebles (▣). Da la impedancia "
+            "en la banda modal (amortiguamiento + corrimiento de fₙ). Las "
+            "superficies sin construcción usan la <b>Z por default de su "
+            "material</b> (mostrada en gris): reactancia auto si es poroso, β "
+            "real si es duro. Asignar una construcción la pisa.")
         help_lbl.setWordWrap(True)
         help_lbl.setStyleSheet("color:#11111b; font-size:9pt;")
         root.addWidget(help_lbl)
@@ -3819,10 +3953,11 @@ class AcousticPanel(QWidget):
         self.btn_open_constructions = QPushButton("Construcciones de pared…")
         self.btn_open_constructions.setToolTip(
             "Asigna una construcción (panel perforado, membrana, poroso con\n"
-            "cámara) a caras. Da la impedancia de pared en la banda modal:\n"
-            "amortiguamiento por banda MÁS el corrimiento de las frecuencias\n"
-            "modales por la reactancia (efecto que la pared rígida no ve).\n"
-            "Las caras sin construcción siguen usando el α del material.")
+            "cámara, resonador de Helmholtz o pila multicapa) a caras. Da la\n"
+            "impedancia de pared en la banda modal: amortiguamiento por banda\n"
+            "MÁS el corrimiento de las frecuencias modales por la reactancia\n"
+            "(efecto que la pared rígida no ve). Las caras sin construcción\n"
+            "siguen usando el α del material.")
         self.btn_open_constructions.clicked.connect(self._open_constructions_dialog)
         fmat.addRow(self.btn_open_constructions)
         self.lbl_constr_summary = QLabel("Sin construcciones")

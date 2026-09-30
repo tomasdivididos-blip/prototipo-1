@@ -2540,12 +2540,14 @@ La ventana **«Ver RT60 calculado»** se limpia al cerrarla (cómodo para trabaj
 
 Hasta ahora la absorción de una superficie se resumía en su coeficiente α (medido con incidencia aleatoria, ISO 354). Eso alcanza para el tiempo de reverberación, pero en la banda modal (por debajo de la frecuencia de Schroeder) una pared real hace dos cosas que el α solo no captura: **amortigua** cada modo según cuánto absorbe en esa frecuencia, y **corre la frecuencia** del modo según la reactancia de la construcción (una cámara de aire, la masa de un panel, el resorte de un resonador). Una pared perfectamente rígida no corre nada; una construcción resonante sí, y ese corrimiento es audible.
 
-El botón **«Construcciones de pared…»** (en el grupo de Materiales) abre una ventana donde asignás una **construcción** a una o varias superficies: **paredes, parches y muebles**, todo en la misma lista. Con **«Nueva construcción y asignar…»** se abre un editor con cuatro tipos:
+El botón **«Construcciones de pared…»** (en el grupo de Materiales) abre una ventana donde asignás una **construcción** a una o varias superficies: **paredes, parches y muebles**, todo en la misma lista. Con **«Nueva construcción y asignar…»** se abre un editor con seis tipos:
 
 - **Panel perforado**: una placa con orificios sobre una cámara de aire (resonador de Helmholtz distribuido). Parámetros: espesor de la placa, diámetro del orificio, porcentaje de perforación y profundidad de la cámara.
 - **Microperforado (MPP)**: lo mismo con orificios de menos de 1 mm, que dan absorción de banda ancha sin material poroso (modelo de Maa).
 - **Membrana / panel**: una placa impermeable que vibra sobre una cámara (resonador masa-resorte), típico para graves. Parámetros: masa por metro cuadrado, profundidad de la cámara y pérdidas internas.
 - **Poroso + cámara**: un material poroso (lana, espuma) sobre una cámara de aire opcional, con los modelos Miki, Delany-Bazley o JCA.
+- **Helmholtz (cuello + cavidad)**: un resonador concentrado (una botella acústica: un cuello que conecta a una cavidad), típico de bass trap sintonizado. Parámetros: área del cuello (cm²), largo del cuello (mm), volumen de la cavidad (L) y el área de pared sobre la que se distribuye (m²). La resonancia es $f_0 = (c/2\pi)\sqrt{S/(l_{ef}V)}$, con $l_{ef}$ el largo del cuello más la corrección de extremo. Internamente se mapea al panel perforado equivalente (Cox & D'Antonio cap. 8; Kinsler & Frey cap. 10).
+- **Multicapa (pila TMM)**: una pila general de capas (poroso o aire) de la superficie hacia el fondo rígido, resuelta por matriz de transferencia (Cox Ec. 5.24-5.25). Se arma con «Agregar capa» / «Quitar» / «↑ ↓»: cada capa porosa lleva su resistividad σ y modelo (Miki / Delany-Bazley). Permite combinaciones que el «Poroso + cámara» de una sola capa no cubre, por ejemplo poroso 50 mm + aire 100 mm + poroso 30 mm (dos absorbentes con una cámara intermedia).
 
 Mientras editás, el panel de la derecha muestra en vivo la curva de **absorción** de esa construcción y su **frecuencia de resonancia**, así ves de una qué controla. Al aceptar, la superficie queda con esa construcción (en azul en la lista) y el cálculo de los modos usa su impedancia: el amortiguamiento por banda **más** el corrimiento de las frecuencias modales, que se ve reflejado en la respuesta en frecuencia. Las superficies sin construcción siguen usando el α de su material como siempre, así que un proyecto que no toca esto no cambia en nada.
 
@@ -2949,6 +2951,17 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 ### Exportar el CAD curado
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
+
+## Cambios v2.52 (dos modelos nuevos de construcción de pared: Helmholtz y multicapa)
+
+**Cambios v2.52** (30 de septiembre 2026): se agregan dos modelos de impedancia al editor de **«Construcciones de pared…»**, que ya existían en el núcleo pero no estaban a la vista. Ahora el editor ofrece **seis** tipos en vez de cuatro. La física del solver no cambia: el editor solo produce la definición (el *spec*) y todo el cálculo (respuesta en frecuencia, campo, amortiguamiento y corrimiento de las frecuencias modales) sigue pasando por el mismo punto de reconstrucción de la impedancia, así que los modelos nuevos se propagan solos.
+
+- **Resonador de Helmholtz (cuello + cavidad):** para modelar un bass trap sintonizado (botella acústica) directamente por sus dimensiones físicas (área y largo del cuello, volumen de la cavidad, área de pared), en vez de traducirlo a mano a un panel perforado. Muestra la resonancia $f_0$ en vivo.
+- **Multicapa (pila TMM):** un armador de pilas de capas (poroso / aire, de la superficie al fondo rígido), con agregar / quitar / reordenar. Cubre construcciones de varias capas (por ejemplo dos porosos con una cámara de aire entre medio) que el «Poroso + cámara» de una capa no podía representar.
+
+Ambos se guardan en el `.room` (formato v9, sin bump: son definiciones aditivas) y se validan con `bench_capa0_5d.py` (22 verificaciones: conversión de unidades de la interfaz, reconstrucción, resonancia/absorción física, edición de la pila, ida y vuelta, y la equivalencia exacta de una multicapa de una sola capa porosa con el poroso simple). La suite completa de Capa 0 quedó en 186 verificaciones.
+
+*Manual actualizado al 30 de Septiembre de 2026 — v2.52.*
 
 ## Cambios v2.51 (batch de UI/UX: ventanas, arrastre en Z y grillas de coordenadas)
 

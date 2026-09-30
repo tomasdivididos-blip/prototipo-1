@@ -6,7 +6,15 @@
 > cada cosa contra la fuente física, un oráculo, o una cuenta propia. Que este archivo
 > diga "resuelto/PASA" no prueba nada; es un puntero a qué mirar.
 
-**Última actualización:** 2026-09-29 (v2.51: batch UI/UX + fallback del snap de dominio; + v2.50 + v2.49 + v2.48).
+**Última actualización:** 2026-09-30 (v2.52: dos modelos nuevos en el editor de construcción; + v2.51 + v2.50 + v2.49 + v2.48).
+
+## v2.52 — Helmholtz y multicapa expuestos en la GUI (30 Sep 2026, FUERA DE ALCANCE DE SOLVER, un punto físico a mirar)
+
+Solo se tocó `ConstructionEditorDialog` (acoustic_panel.py): se agregaron al editor de «Construcciones de pared…» dos modelos que YA existían en `impedance.py` y ya estaban dentro del alcance de auditoría (`helmholtz(...)`, `multilayer(specs)`). El solver, el ensamblaje FEM, la perturbación y `build_surface` NO cambiaron. La GUI solo produce el `spec` dict; la física lo consume por el único punto `imp.build_surface(spec)` (sin whitelist), igual que perforado/membrana/poroso. Puntos para el auditor:
+
+- **Helmholtz distribuido sobre `wall_area` (afirmación del autor, verificar):** el editor pide área de cuello S, largo l, volumen V y **área de pared A**, y mapea al facing perforado equivalente con `ratio=S/A`, `D=V/A` (impedance.helmholtz). La resonancia f₀=(c/2π)√(S/(l_ef·V)) es **independiente de A** (correcto para un Helmholtz concentrado), pero la MAGNITUD de la admitancia superficial sí escala con 1/A: el modelo reparte un dispositivo concentrado como impedancia uniforme sobre A. A auditar: (1) ¿es física esa uniformización cuando el resonador es chico frente a A y frente a la longitud de onda modal? es la misma hipótesis del panel perforado, pero acá el «orificio» es un solo cuello; (2) el bench nuevo mide el pico de α cerca de f₀ (117 vs 113 Hz), NO valida el nivel de absorción contra un Helmholtz medido (no hay oráculo de dato propio).
+- **Multicapa (pila TMM):** el editor arma `layers` (poroso/aire, superficie→fondo) que van a `multilayer()` → `_surface_Z_tmm` (Cox 5.24-5.25, YA auditado en Etapa 1a/2a). El bench nuevo verifica que una multicapa de **1 sola capa porosa ≡ `porous()`** (max|Δβ|=0, atadura al camino validado) y que α∈[0,1]. A auditar: el ORDEN de las capas (la UI dice «superficie→fondo»; `_surface_Z_tmm` procesa `reversed(layers)` con la más profunda viendo el backing rígido) → confirmar que «capa 1 en la lista» = la que da a la sala.
+- **Bench `bench_capa0_5d.py` (22/22)** integrado a `bench_capa0_all` (Etapa 5d); total Capa 0 **186/186**. Es GUI-level (QApplication offscreen), no reemplaza la auditoría física de `helmholtz`/`multilayer` contra la fuente, que sigue siendo la de Etapa 1a/2a/3.
 
 ## v2.51 — batch de UI/UX (29 Sep 2026, MAYORÍA FUERA DE ALCANCE FÍSICO; un punto a mirar)
 
