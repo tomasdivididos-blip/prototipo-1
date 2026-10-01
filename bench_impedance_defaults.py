@@ -1,10 +1,25 @@
 """
 bench_impedance_defaults.py - link material -> impedancia por default (feature 1-2)
 ===================================================================================
-Valida el nucleo `impedance_defaults`: el mapeo keyword -> tipo de modelo, la
-estimacion de parametros (espesor/densidad/camara), la deteccion de
-inespecificos (usuario / alpha plano / sin keyword), y que cada spec propuesto
-reconstruye una SurfaceImpedance valida via impedance.build_surface.
+Valida `impedance_defaults` bajo el contrato de la ETAPA 2 (1 Oct 2026, decisión
+del usuario "elegir qué modelo le toca a cada α"): el TIPO lo elige la FORMA del α
+(+ keyword como prior) y los PARAMS se AJUSTAN para que el amortiguamiento del
+modelo (Re β a θ=0) reproduzca el del catálogo; si ningún modelo lo logra, o el α
+es plano, cae a β real (α exacto). Esto reemplaza el contrato viejo (keyword →
+params leídos del nombre), que metía modelos cuyo α contradecía el catálogo y
+disparaba un f_Schroeder falso (ver bug-material-no-resuelto-rigido / diagnóstico
+Control Ale.room).
+
+Secciones:
+  P  parsers (espesor/densidad/cámara) — sin cambios.
+  N  caminos SIN modelo (usuario / audiencia / duro / inespecífico) — sin cambios.
+  R  recuperación por ORÁCULO: α generado de un modelo conocido -> el clasificador
+     recupera el TIPO y el modelo reproduce el α (damping-match).
+  S  selección por FORMA del α (rising->poroso, low_peak->membrana aun con keyword
+     poroso, plano->β real).
+  D  INVARIANTE anti-bug: el Re(β) efectivo (modelo o β real) reproduce el del
+     catálogo en graves -> el amortiguamiento NUNCA colapsa (incl. 4 materiales
+     reales del profesor).
 
 Correr:  PYTHONIOENCODING=utf-8 python bench_impedance_defaults.py
 """
@@ -13,6 +28,7 @@ import numpy as np
 
 import impedance as imp
 import impedance_defaults as idf
+import face_materials as fm
 
 _PASS, _FAIL = [], []
 
@@ -22,19 +38,18 @@ def check(name, cond, detail=""):
     print(f"  [{'OK ' if cond else 'FAIL'}] {name}" + (f"  -> {detail}" if detail else ""))
 
 
-_POROUS = {63: 0.10, 125: 0.30, 250: 0.60, 500: 0.80,
-           1000: 0.85, 2000: 0.90, 4000: 0.90, 8000: 0.90}
+_OCT = (63, 125, 250, 500, 1000, 2000, 4000, 8000)
 _HARD = {63: 0.02, 125: 0.02, 250: 0.03, 500: 0.03,
          1000: 0.04, 2000: 0.05, 4000: 0.05, 8000: 0.06}
-_FLAT = {b: 0.5 for b in (63, 125, 250, 500, 1000, 2000, 4000, 8000)}
+_FLAT = {b: 0.5 for b in _OCT}
 
 
 class FM:
-    def __init__(self, name, bands=None, category="Catálogo", description=""):
+    def __init__(self, name, bands, category="Catálogo", description=""):
         self.name = name
         self.category = category
         self.description = description
-        self._b = dict(bands or _POROUS)
+        self._b = dict(bands)
 
     def alpha_bands(self):
         return dict(self._b)
@@ -45,6 +60,13 @@ class FM:
         return float(np.interp(np.log(f), np.log(ks), [self._b[k] for k in ks]))
 
 
+def _alpha_from_spec(spec):
+    """α_random por banda de octava de un modelo conocido (oráculo)."""
+    s = imp.build_surface(spec)
+    return {b: float(np.asarray(s.alpha_random(np.array([float(b)]))).ravel()[0])
+            for b in _OCT}
+
+
 def _builds(spec):
     try:
         b = imp.build_surface(spec).beta(np.geomspace(30, 500, 40))
@@ -53,151 +75,137 @@ def _builds(spec):
         return f"build fallo: {e}"
 
 
-# ---------------------------------------------------------------- parsers
+_FBLOW = np.array([63.0, 125.0, 250.0])
+
+
+def _eff_beta_re(res, mat):
+    """Re(β) a θ=0 que usaría la simulación: del modelo si hay, o β real (Paris)."""
+    if res.has_model and res.spec:
+        return idf._model_beta_re(res.spec, _FBLOW)
+    ab = np.array([mat.alpha(float(f)) for f in _FBLOW])
+    return np.asarray(fm.beta_from_alpha_random(ab), dtype=float)
+
+
+def _target_beta_re(mat):
+    ab = np.array([mat.alpha(float(f)) for f in _FBLOW])
+    return np.asarray(fm.beta_from_alpha_random(ab), dtype=float)
+
+
+def _damping_ok(res, mat, tol=0.03, floor=0.4):
+    """El amortiguamiento efectivo reproduce el del catálogo en graves y NO
+    colapsa (eff >= floor*target). Es el invariante que evita el f_S falso."""
+    eff = _eff_beta_re(res, mat)
+    tgt = _target_beta_re(mat)
+    close = float(np.max(np.abs(eff - tgt))) <= tol
+    # colapso: target apreciable pero el efectivo muy por debajo
+    collapse = bool(np.any((tgt > 0.02) & (eff < floor * tgt)))
+    return close and not collapse, f"eff={np.round(eff,3)} tgt={np.round(tgt,3)}"
+
+
+# ============================================================ P  parsers
 check("P1 espesor mm", abs(idf.parse_thickness("Lana 40 mm") - 0.040) < 1e-9)
 check("P1 espesor cm", abs(idf.parse_thickness("panel 3 cm") - 0.030) < 1e-9)
-check("P1 espesor coma decimal", abs(idf.parse_thickness("placa 12,5 mm") - 0.0125) < 1e-9)
+check("P1 espesor coma", abs(idf.parse_thickness("placa 12,5 mm") - 0.0125) < 1e-9)
 check("P1 sin espesor -> None", idf.parse_thickness("lana mineral") is None)
 check("P2 densidad kg", abs(idf.parse_density("lana 70 kg") - 70.0) < 1e-9)
 check("P3 camara mm", abs(idf.parse_air_gap("con cámara de 100 mm") - 0.100) < 1e-9)
 check("P3 sin camara -> None", idf.parse_air_gap("poroso solo") is None)
 
-# ---------------------------------------------------------------- poroso
-r = idf.classify_material(FM("Lana de vidrio 50 mm, 70 kg"))
-check("A1 lana -> porous con modelo", r.kind == "porous" and r.has_model
-      and not r.nonspecific, r.reason)
-check("A1 espesor leido 50 mm", abs(r.spec["thickness"] - 0.050) < 1e-9, str(r.spec))
-check("A1 sigma del alpha (confianza alta)", r.confidence == "alta", r.confidence)
-check("A1 spec porous construye", _builds(r.spec) is True, str(_builds(r.spec)))
-
-# corcho / alfombra / cortina
-rc = idf.classify_material(FM("Panel de corcho de 30 mm de espesor"))
-check("A2 corcho -> porous 30 mm", rc.kind == "cork"
-      and abs(rc.spec["thickness"] - 0.030) < 1e-9, str(rc.spec))
-ra = idf.classify_material(FM("Alfombra gruesa (pelo largo)"))
-check("A3 alfombra -> porous fino 10 mm", ra.kind == "carpet"
-      and abs(ra.spec["thickness"] - 0.010) < 1e-9, str(ra.spec))
-rcu = idf.classify_material(FM("Cortina de terciopelo pesado drapeado"))
-check("A4 cortina -> porous + camara 50 mm por default",
-      rcu.kind == "curtain" and abs(rcu.spec["air_gap"] - 0.050) < 1e-9, str(rcu.spec))
-
-# ---------------------------------------------------------------- perforado
-rp = idf.classify_material(FM("Panel perforado de madera, cámara 100 mm", _HARD))
-check("B1 perforado -> Maa, cavidad 100 mm", rp.kind == "perforated"
-      and rp.spec["type"] == "perforated"
-      and abs(rp.spec["cavity_depth"] - 0.100) < 1e-9, str(rp.spec))
-check("B1 espesor NO confunde la camara (default, no 100 mm)",
-      rp.spec["thickness"] < 0.02, str(rp.spec["thickness"]))
-check("B1 perforado confianza baja (subdeterminado)", rp.confidence == "baja")
-check("B1 spec perforado construye", _builds(rp.spec) is True)
-rm = idf.classify_material(FM("Absorbedor microperforado MPP", _POROUS))
-check("B2 microperforado -> d<1mm", rm.kind == "perforated"
-      and rm.spec["hole_diam"] < 1e-3, str(rm.spec))
-
-# ---------------------------------------------------------------- membrana
-rme = idf.classify_material(FM("Placa de yeso 12 mm sobre cámara 48 mm", _HARD))
-check("C1 placa yeso -> membrana, m=espesor*densidad", rme.kind == "membrane"
-      and abs(rme.spec["mass_per_area"] - 0.012 * 800.0) < 1e-6, str(rme.spec))
-check("C1 membrana camara 48 mm", abs(rme.spec["cavity_depth"] - 0.048) < 1e-9)
-check("C1 membrana confianza media (t y rho)", rme.confidence == "media", rme.confidence)
-check("C1 spec membrana construye", _builds(rme.spec) is True)
-
-# ---------------------------------------------------------------- duro / asientos
+# ============================================================ N  sin modelo
 rh = idf.classify_material(FM("Hormigón visto", _HARD))
-check("D1 hormigon -> sin modelo pero ESPECIFICO (no avisa)",
+check("N1 hormigon (duro _HARD) -> sin modelo, especifico (no avisa)",
       rh.kind == "hard" and not rh.has_model and not rh.nonspecific, rh.reason)
-# Asientos tapizados (con o sin gente) -> POROSO sin cámara.
-rs = idf.classify_material(FM("Asientos tapizados", _POROUS))
-check("D2 asientos tapizados -> poroso sin cámara", rs.kind == "upholstered"
-      and rs.has_model and rs.spec["type"] == "porous"
-      and rs.spec["air_gap"] == 0.0, str(rs.spec))
-rso = idf.classify_material(FM("Asientos de teatro ocupados", _POROUS))
-check("D2b asientos ocupados -> poroso (con gente)", rso.kind == "upholstered")
-rsi = idf.classify_material(FM("Sillas de concierto muy tapizadas", _POROUS))
-check("D2c sillas tapizadas -> poroso", rsi.kind == "upholstered")
-# Audiencia -> beta real (personas).
-rau = idf.classify_material(FM("Audiencia de pie (1 persona/m2)", _POROUS))
-check("D3 audiencia -> beta real", rau.kind == "audiencia"
+check("N1 duro nunca trae spec", rh.spec is None)
+rau = idf.classify_material(FM("Audiencia de pie (1 persona/m2)", _HARD))
+check("N2 audiencia -> beta real (personas)", rau.kind == "audiencia"
       and not rau.has_model and not rau.nonspecific, rau.reason)
-rad = idf.classify_material(FM("Audiencia sobre asientos de madera (1/m2)", _POROUS))
-check("D3b audiencia sobre asientos -> audiencia (beta real, no silla)",
-      rad.kind == "audiencia", rad.reason)
-# Sillas de madera/plastico -> duro.
 rsm = idf.classify_material(FM("Sillas de madera", _HARD))
-check("D4 sillas de madera -> duro (beta real)", rsm.kind == "hard"
+check("N3 sillas de madera -> duro (beta real)", rsm.kind == "hard"
       and not rsm.has_model, rsm.reason)
-
-# ---------------------------------------------------------------- vidrios
-rdv = idf.classify_material(FM("Doble vidrio de 2-3 mm, cámara de aire de 10 mm", _HARD))
-check("V1 doble vidrio -> membrana + cámara 10 mm", rdv.kind == "doble_vidrio"
-      and rdv.spec["type"] == "membrane"
-      and abs(rdv.spec["cavity_depth"] - 0.010) < 1e-9, str(rdv.spec))
-check("V1 doble vidrio spec construye", _builds(rdv.spec) is True)
-rvi = idf.classify_material(FM("Vidrio de 6 mm", _HARD))
-check("V2 vidrio solo -> membrana rígida", rvi.kind == "vidrio"
-      and rvi.spec["type"] == "membrane"
-      and abs(rvi.spec["mass_per_area"] - 0.006 * 2500) < 1e-6, str(rvi.spec))
-rlv = idf.classify_material(FM("Cielorraso de lana de vidrio 40 mm, suspendido a 100 mm"))
-check("V3 lana de vidrio NO es membrana (es poroso)", rlv.kind == "porous"
-      and rlv.spec["type"] == "porous", rlv.reason)
-check("V3 suspendido a 100 mm -> cámara 100 mm", abs(rlv.spec["air_gap"] - 0.100) < 1e-9,
-      str(rlv.spec))
-
-# ---------------------------------------------------------------- estriado / placa+lana
-res = idf.classify_material(FM(
-    "Panel estriado, franjas de 12,0 mm a intervalos de 20,0 mm, "
-    "absorbente de 40 mm a 81 kg/m3, cavidad de 100,0 mm", _POROUS))
-check("W1 estriado -> poroso, espesor del absorbente (40 mm, NO franjas 12 mm)",
-      res.kind == "porous" and abs(res.spec["thickness"] - 0.040) < 1e-9, str(res.spec))
-check("W1 estriado cavidad 100 mm", abs(res.spec["air_gap"] - 0.100) < 1e-9)
-rpz = idf.classify_material(FM(
-    "Placa de yeso de 10 mm sobre bastidor, 100 mm de lana mineral por detras", _HARD))
-check("W2 placa+lana -> membrana con relleno poroso", rpz.kind == "membrane"
-      and "porous_fill" in rpz.spec
-      and abs(rpz.spec["porous_fill"]["thickness"] - 0.100) < 1e-9, str(rpz.spec))
-check("W2 placa: m = 10mm x 800", abs(rpz.spec["mass_per_area"] - 0.010 * 800) < 1e-6)
-check("W2 placa+lana spec construye", _builds(rpz.spec) is True)
-# Terciopelo en contacto con la pared -> sin cámara.
-rtc = idf.classify_material(FM("Terciopelo liviano colgado recto en contacto con la pared", _POROUS))
-check("W3 terciopelo en contacto -> cortina SIN cámara",
-      rtc.kind == "curtain" and rtc.spec["air_gap"] == 0.0, str(rtc.spec))
-rtd = idf.classify_material(FM("Terciopelo pesado drapeado a mitad de area", _POROUS))
-check("W3b terciopelo drapeado -> cortina CON cámara (default)",
-      rtd.kind == "curtain" and rtd.spec["air_gap"] > 0.0, str(rtd.spec))
-
-# ---------------------------------------------------------------- inespecificos
-ru = idf.classify_material(FM("Lana de vidrio 50 mm", _POROUS,
-                              category="Personalizado"))
-check("E1 material del usuario -> nonspecific aunque tenga keyword",
+ru = idf.classify_material(FM("Lana de vidrio 50 mm", _FLAT, category="Personalizado"))
+check("N4 material del usuario -> nonspecific aunque tenga keyword",
       ru.nonspecific and not ru.has_model and ru.kind == "usuario", ru.reason)
 rf = idf.classify_material(FM("Absorbente genérico 50%", _FLAT))
-check("E2 alpha plano sin keyword -> nonspecific (flat)",
+check("N5 alpha plano sin keyword -> nonspecific (flat)",
       rf.nonspecific and rf.kind == "flat", rf.reason)
-rn = idf.classify_material(FM("Material raro XZ", _POROUS))
-check("E3 sin keyword, no plano -> nonspecific (unknown)",
-      rn.nonspecific and rn.kind == "unknown", rn.reason)
-# Regresion: "plana" NO debe matchear "lana" (limite de palabra).
-rpl = idf.classify_material(FM("Absorción del 50%", _FLAT,
-                               category="Otros", description="Absorción plana del 50%"))
-check("E4 'absorcion plana' NO es porous (plana != lana)",
+rpl = idf.classify_material(FM("Absorción del 50%", _FLAT, category="Otros",
+                               description="Absorción plana del 50%"))
+check("N6 'absorcion plana' NO es porous (plana != lana)",
       rpl.nonspecific and rpl.kind == "flat" and not rpl.has_model, rpl.reason)
 
-# ---------------------------------------------------------------- honestidad
-# Ningun material DURO recibe reactancia (spec None).
-check("F1 duro nunca trae spec",
-      idf.classify_material(FM("Hormigón visto", _HARD)).spec is None)
-# Un inespecifico nunca trae spec.
-check("F1 inespecifico nunca trae spec", rn.spec is None and rf.spec is None)
+# ============================================================ R  recuperacion (oraculo)
+# Poroso conocido -> alpha rising -> clasifica porous y reproduce.
+sp_por = {"type": "porous", "sigma": 20000.0, "thickness": 0.05,
+          "model": "miki", "air_gap": 0.0}
+mp = FM("Lana de vidrio 50 mm, 70 kg", _alpha_from_spec(sp_por))
+rp = idf.classify_material(mp)
+check("R1 poroso (α de un poroso real) -> type porous + modelo",
+      rp.has_model and rp.spec["type"] == "porous", rp.reason)
+check("R1 poroso reproduce el amortiguamiento (damping-match)", *(_damping_ok(rp, mp)))
+check("R1 spec porous construye", _builds(rp.spec) is True)
 
-# ---------------------------------------------------------------- justificacion
-_all = [r, rc, ra, rcu, rp, rm, rme, rh, rs, ru, rf, rn, rpl]
+# Membrana conocida (pico grave) -> clasifica membrane y reproduce.
+sp_mem = {"type": "membrane", "mass_per_area": 4.0, "cavity_depth": 0.10,
+          "damping": 0.35}
+mm_ = FM("Panel membrana sobre cámara", _alpha_from_spec(sp_mem))
+rm = idf.classify_material(mm_)
+check("R2 membrana (α de una membrana real) -> type membrane + modelo",
+      rm.has_model and rm.spec["type"] == "membrane", rm.reason)
+check("R2 membrana reproduce el amortiguamiento", *(_damping_ok(rm, mm_)))
+
+# Perforado conocido (pico medio) -> clasifica perforated.
+sp_perf = {"type": "perforated", "thickness": 0.005, "hole_diam": 0.008,
+           "ratio": 0.08, "cavity_depth": 0.08}
+mpf = FM("Panel perforado de madera", _alpha_from_spec(sp_perf))
+rpf = idf.classify_material(mpf)
+check("R3 perforado (α de un perforado real) -> modelo que reproduce",
+      rpf.has_model and _damping_ok(rpf, mpf)[0], rpf.reason)
+
+# ============================================================ S  seleccion por forma
+# keyword 'lana' (poroso) pero α con PICO GRAVE (membrana) -> la forma manda.
+mem_alpha = _alpha_from_spec({"type": "membrane", "mass_per_area": 3.0,
+                              "cavity_depth": 0.12, "damping": 0.3})
+mov = FM("Panel con lana de vidrio detrás", mem_alpha)
+rov = idf.classify_material(mov)
+check("S1 keyword poroso + α pico-grave -> la FORMA elige membrana",
+      rov.has_model and rov.spec["type"] == "membrane", rov.reason)
+check("S1 override reproduce el amortiguamiento", *(_damping_ok(rov, mov)))
+# keyword 'membrana' pero α PLANO -> β real (reactancia no justificada).
+fmflat = FM("Placa de yeso (absorción plana)", {b: 0.20 for b in _OCT})
+rfl = idf.classify_material(fmflat)
+check("S2 keyword membrana + α plano -> β real (sin modelo espurio)",
+      not rfl.has_model and rfl.spec is None, rfl.reason)
+check("S2 β real reproduce el α exacto (damping-match)", *(_damping_ok(rfl, fmflat)))
+
+# ============================================================ D  invariante anti-bug
+# Materiales REALES del profesor (α de octava, del diagnóstico Control Ale.room):
+_REAL = {
+    "Emplacado del Control Room SMA": {63: 0.10, 125: 0.22, 250: 0.23, 500: 0.23,
+                                       1000: 0.24, 2000: 0.22, 4000: 0.20, 8000: 0.20},
+    "Techo de madera machihembrada y chapa": {63: 0.53, 125: 0.45, 250: 0.24,
+                                              500: 0.12, 1000: 0.08, 2000: 0.06,
+                                              4000: 0.05, 8000: 0.05},
+    "Ventana de vidrios DVH": {63: 0.16, 125: 0.11, 250: 0.07, 500: 0.04,
+                               1000: 0.03, 2000: 0.02, 4000: 0.02, 8000: 0.02},
+    "Bass Trap pistonico 30 a 70 Hz": {63: 0.50, 125: 0.20, 250: 0.10, 500: 0.05,
+                                       1000: 0.04, 2000: 0.03, 4000: 0.03, 8000: 0.03},
+}
+for nm, bands in _REAL.items():
+    mat = FM(nm, bands, category="Tabiques y cerramientos multicapa")
+    res = idf.classify_material(mat)
+    ok, det = _damping_ok(res, mat)
+    check(f"D [{nm[:24]}] amortiguamiento NO colapsa", ok,
+          f"{'modelo '+res.spec['type'] if res.has_model else 'β real'} | {det}")
+
+# ============================================================ honestidad + justif
+check("F1 inespecifico/flat nunca trae spec",
+      rf.spec is None and rpl.spec is None and ru.spec is None)
+_allj = [rh, rau, rsm, ru, rf, rpl, rp, rm, rpf, rov, rfl]
 check("G1 toda clasificacion trae justificacion no vacia",
-      all(len(x.justification) > 20 for x in _all),
-      str([x.kind for x in _all if len(x.justification) <= 20]))
-check("G2 justificacion de poroso menciona la keyword «lana»",
-      "lana" in idf.classify_material(FM("Lana de vidrio 50 mm")).justification.lower())
-check("G2 justificacion de perforado menciona «perforado»",
-      "perforado" in rp.justification.lower(), rp.justification[:60])
+      all(len(x.justification) > 20 for x in _allj),
+      str([x.kind for x in _allj if len(x.justification) <= 20]))
+check("G2 justificacion de poroso menciona «lana»",
+      "lana" in rp.justification.lower())
 check("G3 justificacion de flat menciona el coef. de variacion",
       "variaci" in rpl.justification.lower())
 

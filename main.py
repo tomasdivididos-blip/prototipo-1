@@ -1287,27 +1287,50 @@ class MainWindow(QMainWindow):
         # cualquier maquina sin instalar los .json). Solo el .room guarda el NOMBRE;
         # sin esto, un material propio del profe se ve como default en otra maquina.
         embedded_materials = []
+        lost_materials = []
         try:
             lib = getattr(ap, "_mat_lib", None)
-            if lib is not None:
-                used = set(face_mat.get("assignments", {}).values())
-                used.add(face_mat.get("default", ""))
-                used.update(str(nm) for nm in
-                            (getattr(ap, "_furniture_mat_names", {}) or {}).values()
-                            if nm)
-                # Materiales de los parches de absorcion (tambien por nombre).
-                used.update(str(getattr(p, "material_name", "") or "")
-                            for p in (getattr(ap, "_patches", []) or []))
-                by_name = {m.name: m for m in lib.materials}
-                for nm in sorted(n for n in used if n):
-                    m = by_name.get(nm)
-                    if m is not None:
-                        try:
-                            embedded_materials.append(m.to_dict())
-                        except Exception:
-                            pass
+            used = set(face_mat.get("assignments", {}).values())
+            used.add(face_mat.get("default", ""))
+            used.update(str(nm) for nm in
+                        (getattr(ap, "_furniture_mat_names", {}) or {}).values()
+                        if nm)
+            # Materiales de los parches de absorcion (tambien por nombre).
+            used.update(str(getattr(p, "material_name", "") or "")
+                        for p in (getattr(ap, "_patches", []) or []))
+            by_name = ({m.name: m for m in lib.materials}
+                       if lib is not None else {})
+            # Definiciones que ESTE .room trajo embebidas (aunque no se hayan
+            # cargado a la biblioteca): red de seguridad para no perder la
+            # portabilidad al re-guardar. Ver bug-material-no-resuelto-rigido (B).
+            cache = getattr(ap, "_embedded_mat_cache", {}) or {}
+            for nm in sorted(n for n in used if n):
+                m = by_name.get(nm)
+                if m is not None:
+                    try:
+                        embedded_materials.append(m.to_dict())
+                        continue
+                    except Exception:
+                        pass
+                md = cache.get(nm)
+                if md:
+                    embedded_materials.append(dict(md))
+                    continue
+                # Material usado que no esta ni en la biblioteca ni embebido: no se
+                # puede hacer autocontenido. Se avisa (no se pierde en silencio).
+                lost_materials.append(nm)
         except Exception:
             embedded_materials = []
+        if lost_materials:
+            try:
+                self.status.setText(
+                    "Aviso: no se pudo embeber "
+                    f"{len(lost_materials)} material(es) ("
+                    + ", ".join(lost_materials) +
+                    "); cargá su carpeta desde «Materiales…» para que el .room "
+                    "sea autocontenido.")
+            except Exception:
+                pass
         return {
             "mesh_engine": ap.get_engine_override(),
             "h_target":    float(ap.sb_htarget.value()),
@@ -1632,6 +1655,12 @@ class MainWindow(QMainWindow):
         try:
             lib = getattr(ap, "_mat_lib", None)
             emb = ac.get("embedded_materials") or []
+            # Cache de las definiciones embebidas, por nombre: se usa al RE-GUARDAR
+            # para re-embeber un material que este .room trajo pero que no esta en
+            # la biblioteca local (portabilidad lossless aunque nunca se cargue la
+            # carpeta). Ver bug-material-no-resuelto-rigido (arreglo B).
+            ap._embedded_mat_cache = {str(md.get("name", "")): dict(md)
+                                      for md in emb if md.get("name")}
             if lib is not None and emb:
                 from material_library import Material
                 added = 0
@@ -1645,7 +1674,7 @@ class MainWindow(QMainWindow):
                     self.status.setText(
                         f"Materiales propios embebidos cargados: {added}")
         except Exception:
-            pass
+            ap._embedded_mat_cache = {}
         # Override de motor (combo del panel)
         engine = (ac.get("mesh_engine") or "auto").lower()
         ap.set_engine_override(engine)
@@ -1795,6 +1824,28 @@ class MainWindow(QMainWindow):
                     ap.combo_damping.blockSignals(False)
         except Exception:
             ap._damping_model = "a36"
+
+        # Aviso FUERTE si quedaron materiales asignados sin resolver (ni en la
+        # biblioteca local ni embebidos): esas caras usan alpha=0.03 por default.
+        # Antes se volvian RIGIDAS en silencio en el camino de perturbacion y
+        # disparaban un f_Schroeder falso (ver bug-material-no-resuelto-rigido).
+        try:
+            if hasattr(ap, "_unresolved_material_names"):
+                missing = sorted(ap._unresolved_material_names())
+                ap._last_unresolved_warned = set(missing)   # no re-avisar en el log
+                if missing:
+                    lst = "\n  • ".join(missing)
+                    QMessageBox.warning(
+                        self, "Materiales sin cargar",
+                        f"{len(missing)} material(es) asignado(s) no se "
+                        f"encuentran en la biblioteca ni vienen embebidos en el "
+                        f".room:\n\n  • {lst}\n\n"
+                        "Esas caras usan absorción por defecto (α=0.03) hasta que "
+                        "cargues su carpeta desde «Materiales…». Mientras tanto "
+                        "el RT60 y la frecuencia de Schroeder pueden salir "
+                        "sobrestimados.")
+        except Exception:
+            pass
 
     def _update_title(self):
         base = "Prototipo 1 - Modelador de Recintos 3D"

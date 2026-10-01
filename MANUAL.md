@@ -2954,6 +2954,16 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.55 (modelo de impedancia por la forma del α + material no resuelto deja de romper el f_Schroeder)
+
+**Cambios v2.55** (1 de octubre 2026): un arreglo de robustez de materiales y una mejora grande de las sugerencias de impedancia (continuación de v2.54), motivados por un recinto real cuyos materiales propios hacían saltar la frecuencia de Schroeder.
+
+- **Material no resuelto ya no vuelve la cara rígida.** Si una cara tiene asignado un material que no está en la biblioteca cargada (ni embebido en el `.room`), ahora usa la absorción por defecto (α = 0.03, hormigón sin tratar) en TODOS los caminos de cálculo, igual que ya hacía el camino simple. Antes, en el camino de perturbación, esa cara quedaba perfectamente reflectante (β = 0) y el RT60 y la frecuencia de Schroeder salían enormes (un recinto de ~180 Hz reales podía mostrar ~1100 Hz). Además, al abrir un `.room` con materiales sin resolver aparece el aviso **«Materiales sin cargar»** con la lista, y la barra de estado lo recuerda en cada cálculo.
+- **Portabilidad del `.room` reforzada.** Al guardar, si un material usado no está en la biblioteca pero vino embebido en el `.room` que abriste, se vuelve a embeber (así no se pierde al re-guardar en otra máquina). Si un material no se puede embeber (no está ni en la biblioteca ni embebido), se avisa en la barra de estado en vez de perderlo en silencio.
+- **Las sugerencias de impedancia eligen el modelo por la forma del α y ajustan los parámetros para reproducir la absorción medida.** El tipo de modelo (poroso, membrana, perforado) se decide por la forma del coeficiente de absorción del material (pico en graves → membrana; sube con la frecuencia → poroso; plano → sin modelo), no solo por la palabra clave del nombre, y los parámetros se ajustan por mínimos cuadrados para que el amortiguamiento del modelo coincida con el del catálogo. Si ningún modelo reproduce la absorción medida (o el α es casi plano), la superficie usa **β real** (la absorción exacta del material, sin reactancia). Con esto, **aplicar las sugerencias ya no distorsiona la frecuencia de Schroeder**: en el recinto de prueba pasó de un valor falso de ~1135 Hz a ~215 Hz, consistente con el valor por materiales. El criterio está documentado en `plan_impedancias_default.md` (sección «Etapa 2»).
+
+*Manual actualizado al 1 de Octubre de 2026 — v2.55.*
+
 ## Cambios v2.54 (impedancia por default por material + hover 3D en «Impedancias»)
 
 **Cambios v2.54** (1 de octubre 2026): al elegir materiales, el panel «Impedancias» ahora **sugiere un modelo de impedancia por cada superficie**, derivado del material, y se puede aplicar con un botón.

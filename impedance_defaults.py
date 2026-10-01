@@ -35,6 +35,7 @@ from typing import Optional, Dict, Tuple
 import numpy as np
 
 import impedance as imp
+import face_materials as _fm
 
 
 # ---------------------------------------------------------------------------
@@ -290,7 +291,263 @@ def _is_user_material(mat) -> bool:
     return cat in ("personalizado", "custom", "propio", "usuario", "default")
 
 
+# ---------------------------------------------------------------------------
+# Ajuste de params del modelo al alpha de catalogo (feature 1-2, etapa 2)
+# ---------------------------------------------------------------------------
+# Decision del usuario (1 Oct 2026): "elegir que modelo le toca a cada alpha",
+# o sea el modelo propuesto debe REPRODUCIR el alpha medido. El keyword fija el
+# TIPO (prior); los PARAMS se AJUSTAN para que el amortiguamiento del modelo
+# coincida con el del catalogo. Objetivo del ajuste = Re(beta) a incidencia
+# NORMAL (theta=0), que es LO QUE USA el kernel de perturbacion
+# (absorption_patch.compute_xi_shift_with_impedance) y lo que fija el RT/f_S. El
+# blanco es beta_from_alpha_random(alpha_cat), identico a lo que usa el camino de
+# material (face_materials). Si NINGUN ajuste reproduce ese amortiguamiento
+# (residuo alto), se cae a beta REAL (alpha exacto, sin reactancia): no se falsea
+# la absorcion por meter un modelo que no corresponde. Esto frena el f_S falso que
+# aparecia al aplicar sugerencias con modelos mal ajustados (membrana con Re(beta)
+# ~0 -> paredes casi rigidas -> RT explota). Ref: Cox & D'Antonio cap. 5-7
+# (inversion de params), Bies & Hansen (sigma). Fit = minimos cuadrados (scipy).
+
+_FIT_FB = np.array([63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0])  # bandas de ajuste
+_FIT_CACHE: Dict[tuple, "MaterialImpedance"] = {}
+
+
+def _beta_re_target(mat, fb: np.ndarray) -> np.ndarray:
+    """Re(beta) objetivo = inversion de Paris del alpha de catalogo, igual que el
+    camino de material (face_materials.beta_from_alpha_random). Es el
+    amortiguamiento 'correcto' que el modelo debe reproducir."""
+    ab = np.array([float(mat.alpha(float(f))) for f in fb], dtype=float)
+    return np.asarray(_fm.beta_from_alpha_random(ab), dtype=float)
+
+
+def _model_beta_re(spec: dict, fb: np.ndarray) -> np.ndarray:
+    """Re(beta(theta=0)) del modelo por banda (lo que consume el kernel)."""
+    s = imp.build_surface(spec)
+    return np.array([(imp.Z0 / complex(np.atleast_1d(s.Z(float(f), 0.0))[0])).real
+                     for f in fb], dtype=float)
+
+
+# Layout de ajuste por tipo de spec: (claves, lo, hi, grilla de arranques).
+_FIT_LAYOUT = {
+    "porous": (["sigma", "thickness", "air_gap"],
+               [1e3, 0.005, 0.0], [5e5, 0.3, 0.3],
+               [[s, d, g] for s in (2e4, 8e4) for d in (0.02, 0.08)
+                for g in (0.0, 0.1)]),
+    "membrane": (["mass_per_area", "cavity_depth", "damping"],
+                 [0.5, 0.01, 0.01], [60.0, 0.4, 0.6],
+                 [[m, D, 0.15] for m in (3, 10, 25) for D in (0.05, 0.15)]),
+    "perforated": (["thickness", "hole_diam", "ratio", "cavity_depth"],
+                   [5e-4, 3e-4, 5e-3, 0.01], [0.02, 0.02, 0.4, 0.3],
+                   [[0.003, dd, r, c] for dd in (0.001, 0.008)
+                    for r in (0.03, 0.15) for c in (0.05, 0.10)]),
+}
+
+
+def _fit_spec_to_alpha(mat, spec: dict) -> Tuple[Optional[dict], Optional[float]]:
+    """Ajusta los params del `spec` (segun su type) para que Re(beta(theta=0))
+    reproduzca beta_from_alpha_random(alpha_cat). Devuelve (spec_ajustado,
+    residuo_rms) o (spec, None) si el tipo no se ajusta (helmholtz/multilayer/
+    duro). El ajuste pesa mas las bandas graves (donde vive el f_S)."""
+    t = str(spec.get("type", "")).lower()
+    layout = _FIT_LAYOUT.get(t)
+    if layout is None:
+        return spec, None
+    from scipy.optimize import least_squares
+    keys, lo, hi, grid = layout
+    fb = _FIT_FB
+    bt = _beta_re_target(mat, fb)
+    w = np.sqrt(fb[0] / fb)                     # enfasis en graves (sub-Schroeder)
+
+    def mk(p):
+        s = dict(spec)                          # preserva extras (p.ej. porous_fill, model)
+        for k, val in zip(keys, p):
+            s[k] = float(val)
+        return s
+
+    def resid(p):
+        try:
+            return w * (_model_beta_re(mk(p), fb) - bt)
+        except Exception:
+            return np.full(fb.size, 1e3)
+
+    best = None
+    for g0 in grid:
+        try:
+            r = least_squares(resid, g0, bounds=(lo, hi), max_nfev=60)
+            c = float(np.sqrt(np.mean(r.fun ** 2)))
+            if best is None or c < best[0]:
+                best = (c, mk(r.x))
+        except Exception:
+            continue
+    if best is None:
+        return spec, None
+    return best[1], best[0]
+
+
+def _fit_is_acceptable(mat, resid: Optional[float]) -> bool:
+    """El modelo ajustado se acepta solo si su amortiguamiento (Re beta)
+    reproduce el del catalogo dentro de una tolerancia RELATIVA a la escala de
+    beta. Si no, se usa beta real (alpha exacto). Umbral calibrado con los
+    materiales reales del profesor (Techo membrana residuo 0.016 pasa; Emplacado
+    plano residuo 0.019 no pasa y cae a beta real)."""
+    if resid is None:
+        return False
+    bt = _beta_re_target(mat, _FIT_FB)
+    scale = max(float(np.sqrt(np.mean(bt ** 2))), 5e-3)
+    return resid <= 0.40 * scale
+
+
+def _betareal_result(kind: str, base: "MaterialImpedance") -> "MaterialImpedance":
+    """Resultado 'beta real' (alpha exacto, sin reactancia) para cuando el modelo
+    no reproduce el amortiguamiento. has_model=False, nonspecific=False (beta real
+    es fisicamente correcto: no falta un modelo, el modelo candidato no servia)."""
+    head = (base.reason.split(":")[0] if base.reason else kind)
+    return MaterialImpedance(
+        has_model=False, nonspecific=False, kind=kind,
+        reason=f"{head}: el modelo no reproduce α → β real (α exacto)",
+        justification=(base.justification + " Sin embargo, con params ajustados el "
+                       "modelo NO reproduce el amortiguamiento del α de catálogo "
+                       "(Re β, residuo alto): se usa α→β real (absorción EXACTA, sin "
+                       "reactancia) para no falsear la física. Elegí un modelo a mano "
+                       "si querés su corrimiento de fₙ."))
+
+
+def _material_fit_key(mat):
+    try:
+        bands = mat.alpha_bands()
+        at = tuple(round(float(bands[b]), 4) for b in sorted(bands))
+    except Exception:
+        at = None
+    return (str(getattr(mat, "name", "")), str(getattr(mat, "category", "")), at)
+
+
+def _alpha_shape(mat) -> str:
+    """Forma del α de catálogo (feature 1-2 etapa 2): decide el TIPO de modelo.
+      - 'flat'     : α casi plano (cv bajo) -> β real (resistivo, sin reactancia).
+      - 'low_peak' : pico en graves que cae -> resonante (membrana/panel).
+      - 'mid_peak' : pico en medios -> perforado/membrana.
+      - 'rising'   : sube con f -> poroso.
+      - 'other'    : indefinido -> se confía en el keyword.
+    """
+    fb = _FIT_FB
+    ab = np.array([float(mat.alpha(float(f))) for f in fb])
+    mean = float(np.mean(ab))
+    if mean <= 1e-9:
+        return "flat"
+    cv = float(np.std(ab) / mean)
+    pk = int(np.argmax(ab))
+    if cv < 0.30:
+        return "flat"
+    if fb[pk] <= 125.0 and ab[-1] < 0.6 * ab[pk]:
+        return "low_peak"
+    if ab[-1] > 1.3 * ab[0] and pk >= fb.size - 2:
+        return "rising"
+    if ab[pk] > 1.3 * ab[0] and ab[pk] > 1.3 * ab[-1]:
+        return "mid_peak"
+    return "other"
+
+
+_SHAPE_TYPES = {
+    "low_peak": ["membrane"],
+    "mid_peak": ["perforated", "membrane"],
+    "rising": ["porous"],
+    "other": [],
+}
+
+
+def _base_spec_for(t: str, kw_spec: Optional[dict]) -> dict:
+    """Spec base de un tipo para el ajuste. Si el keyword dio ESE mismo tipo, se
+    reusa (preserva extras como porous_fill/model); si no, genérico (el multi-start
+    del fit mueve los params)."""
+    if kw_spec is not None and str(kw_spec.get("type", "")).lower() == t:
+        return dict(kw_spec)
+    return {
+        "porous": {"type": "porous", "sigma": 15000.0, "thickness": 0.05,
+                   "model": "miki", "air_gap": 0.0},
+        "membrane": {"type": "membrane", "mass_per_area": 5.0,
+                     "cavity_depth": 0.1, "damping": 0.1},
+        "perforated": {"type": "perforated", "thickness": 0.005,
+                       "hole_diam": 0.008, "ratio": 0.10, "cavity_depth": 0.05},
+    }[t]
+
+
 def classify_material(mat) -> MaterialImpedance:
+    """Clasifica un material y propone (o no) un spec de impedancia por default,
+    eligiendo el TIPO por la FORMA del α y AJUSTANDO los params para reproducir el
+    α de catálogo (feature 1-2 etapa 2, decisión del usuario 1 Oct 2026).
+
+    Flujo: el keyword/categoría resuelve primero los casos sin modelo (usuario,
+    audiencia, duro) e inespecíficos. Para el resto, la FORMA del α (`_alpha_shape`)
+    + el keyword fijan los TIPOS candidatos; cada uno se AJUSTA (`_fit_spec_to_alpha`,
+    Re β a θ=0 ↔ α de catálogo) y se elige el de menor residuo que PASA la
+    tolerancia. Si ninguno reproduce el amortiguamiento, o el α es plano, cae a β
+    real (α exacto). Cacheado por (nombre, categoría, α)."""
+    key = _material_fit_key(mat)
+    if key[2] is not None and key in _FIT_CACHE:
+        return _FIT_CACHE[key]
+    mi = _classify_impl(mat)
+
+    def _cache(m):
+        if key[2] is not None:
+            _FIT_CACHE[key] = m
+        return m
+
+    # Sin modelo del keyword (usuario/audiencia/duro/inespecífico): no se toca.
+    if not (mi.has_model and mi.spec):
+        return _cache(mi)
+    # Helmholtz/multilayer explícitos: params con dimensiones, no se re-elige tipo.
+    kw_type = str(mi.spec.get("type", "")).lower()
+    if kw_type not in ("porous", "membrane", "perforated"):
+        return _cache(mi)
+
+    shape = _alpha_shape(mat)
+    # α plano -> β real (resistivo): la reactancia de un modelo no está justificada
+    # y un resonante metería un pico espurio (caso Emplacado: sándwich amortiguado).
+    if shape == "flat":
+        return _cache(_betareal_result(mi.kind, mi))
+
+    # Tipos candidatos: los que sugiere la FORMA + el del keyword (como alternativa).
+    cand_types = list(_SHAPE_TYPES.get(shape, []))
+    if kw_type not in cand_types:
+        cand_types.append(kw_type)
+
+    bt_scale = max(float(np.sqrt(np.mean(_beta_re_target(mat, _FIT_FB) ** 2))), 5e-3)
+    strong = 0.15 * bt_scale        # ajuste "muy bueno": corta la búsqueda
+    best = None            # (resid, spec, type)
+    for t in cand_types:
+        spec0 = _base_spec_for(t, mi.spec)
+        spec_fit, resid = _fit_spec_to_alpha(mat, spec0)
+        if resid is None or not _fit_is_acceptable(mat, resid):
+            continue
+        if best is None or resid < best[0]:
+            best = (resid, spec_fit, t)
+        if resid <= strong:
+            break
+
+    if best is None:
+        # ningún modelo reproduce el amortiguamiento -> β real (α exacto)
+        return _cache(_betareal_result(mi.kind, mi))
+
+    resid, spec_fit, t = best
+    mi.spec = spec_fit
+    # Conserva la etiqueta fina (cork/carpet/curtain/upholstered/vidrio/…) si el
+    # tipo no cambió respecto del keyword; si la FORMA forzó otro tipo, usa ese y
+    # actualiza el `reason` (si no, quedaría el texto del tipo viejo, p.ej. poroso).
+    if t != kw_type:
+        mi.kind = t
+        try:
+            mi.reason = f"{t} (tipo por forma del α, ajustado): {imp.spec_label(spec_fit)}"
+        except Exception:
+            mi.reason = f"{t} (tipo por forma del α, ajustado al α de catálogo)"
+    mi.confidence = "ajustada al α (forma + β-match)"
+    mi.justification += (
+        f" Tipo elegido por la forma del α ({shape}); params AJUSTADOS por mínimos "
+        f"cuadrados para que Re(β) reproduzca el α de catálogo (modelo «{t}», "
+        f"residuo β={resid:.3f}; Cox & D'Antonio cap. 5-7).")
+    return _cache(mi)
+
+
+def _classify_impl(mat) -> MaterialImpedance:
     """Clasifica un material y propone (o no) un spec de impedancia por default.
 
     Ver el criterio en la cabecera del modulo. NUNCA inventa reactancia sin

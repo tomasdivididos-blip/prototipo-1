@@ -8711,6 +8711,75 @@ class AcousticPanel(QWidget):
         return imp.SurfaceImpedance(zf, is_locally_reacting=True, label=lbl)
 
     @staticmethod
+    def _default_alpha_surface(alpha: float = 0.03):
+        """SurfaceImpedance resistiva por DEFAULT (beta REAL) para caras SIN
+        material resuelto en el camino de perturbacion UNIFICADO.
+
+        Hace ese camino CONSISTENTE con el simple (face_materials._alpha_for y
+        compute_xi_per_mode_with_patches, ambos default_alpha=0.03) y con la
+        Sabine por cara: una cara cuyo material NO resuelve en el catalogo (o que
+        quedo sin asignar) absorbe alpha=0.03 (hormigon sin tratar), NO se vuelve
+        RIGIDA (beta=0) en silencio. El default rigido disparaba un f_Schroeder
+        falso (Control Ale.room: ~1100 Hz vs ~180 real). Ver
+        bug-material-no-resuelto-rigido.
+
+        beta real => sin corrimiento de f_n (Im(beta)=0), igual que
+        _material_surface con la reactancia auto apagada (default desde la
+        auditoria M1): el default no introduce reactancia espuria. El puente
+        imp.resistive(beta).alpha_random == Paris(beta) (ver impedance.resistive).
+        """
+        beta = float(fm.beta_from_alpha_random(np.array([float(alpha)]))[0])
+        return imp.resistive(beta if beta > 1e-12 else 1e-12)
+
+    def _unresolved_material_names(self):
+        """Nombres de material ASIGNADOS (a cara, parche o mueble) que NO resuelven
+        en la biblioteca actual.
+
+        Son los que, de no avisar, caerian al default en silencio (y antes volvian
+        la cara RIGIDA en el camino unificado -> f_S falso). NO incluye las caras
+        SIN asignar: esas usan el default legitimo (alpha=0.03) sin que falte nada.
+        Devuelve un set de nombres (strings) ordenable. Ver
+        bug-material-no-resuelto-rigido.
+        """
+        try:
+            names = set(getattr(self._mat_lib, "names", []))
+        except Exception:
+            names = set()
+        missing = set()
+        try:
+            for nm in self._face_mat_map.to_dict().values():
+                if nm and nm not in names:
+                    missing.add(str(nm))
+        except Exception:
+            pass
+        for p in (getattr(self, "_patches", None) or []):
+            nm = getattr(p, "material_name", "") or ""
+            if nm and nm not in names:
+                missing.add(str(nm))
+        for nm in (getattr(self, "_furniture_mat_names", {}) or {}).values():
+            if nm and nm not in names:
+                missing.add(str(nm))
+        return missing
+
+    def _warn_unresolved_materials(self):
+        """Avisa (al log, sin popup) cuando hay materiales asignados que NO
+        resuelven: esas caras usan alpha=0.03 por default. Gated: solo re-avisa si
+        el conjunto de faltantes cambio, para no spamear en cada recomputo (esta
+        funcion la llama el calculo de xi, que corre seguido). El popup 'fuerte' lo
+        da MainWindow al cargar el .room (una vez). Ver
+        bug-material-no-resuelto-rigido."""
+        missing = self._unresolved_material_names()
+        prev = getattr(self, "_last_unresolved_warned", None)
+        if missing == prev:
+            return
+        self._last_unresolved_warned = set(missing)
+        if missing:
+            lst = ", ".join(sorted(missing))
+            self._log(f"AVISO: {len(missing)} material(es) no resuelto(s) "
+                      f"({lst}); esas caras usan α=0.03 por default. "
+                      "Cargá su carpeta para la absorción real.")
+
+    @staticmethod
     def _material_ztag(mat, with_reactance: bool = False) -> str:
         """Texto corto de la Z por default de un material (para el panel de
         construcciones). Con la reactancia auto APAGADA (default), toda cara sin
@@ -9037,10 +9106,16 @@ class AcousticPanel(QWidget):
             if model == "perturbation":
                 import absorption_patch as ap
                 surf_g, surf_p = self._construction_surfaces(groups, g2m)
+                # Default CONSISTENTE con el camino simple: una cara sin surface
+                # (material no resuelto o sin asignar) absorbe alpha=0.03, NO se
+                # vuelve rigida. Sin esto, default_surf=None la hacia beta=0 y el
+                # f_S explotaba (bug-material-no-resuelto-rigido).
+                self._warn_unresolved_materials()
                 res = ap.compute_xi_shift_with_impedance(
                     self.modal_result.freqs, self.modal_result.phis,
                     self.modal_result.locator, verts, tris, groups, surf_g,
-                    self._patches, surf_p, V, default_surf=None)
+                    self._patches, surf_p, V,
+                    default_surf=self._default_alpha_surface())
                 if res is not None:
                     xi_c, f_new = res
                     self._freq_shift_per_mode = np.asarray(f_new, dtype=float)

@@ -90,3 +90,57 @@ Keywords normalizados (sin acento, minúsculas) sobre nombre+descripción:
 - No inventa params de Helmholtz (subdeterminado) salvo dimensiones explícitas.
 - No usa la forma-del-α para ELEGIR modelo (solo para validar σ del poroso).
 - No toca el solver ni el ensamblaje FEM.
+
+---
+
+## ETAPA 2 (1 Oct 2026) — selección por forma del α + ajuste de params (IMPLEMENTADA)
+
+**Motivo (bug real, Control Ale.room):** la etapa 1 (keyword-only, params del
+nombre) producía modelos cuyo α CONTRADECÍA el catálogo. Al APLICAR sugerencias,
+el α del modelo reemplaza al medido; en los materiales del profesor los modelos
+daban α≈0 en las paredes (membrana del «Emplacado» con Re(β)≈0) y forma invertida
+en el techo (poroso Miki para un absorbedor de pico grave) → el amortiguamiento
+colapsaba → RT explotaba → **f_S 188 → 1135 Hz**. Ver
+[[bug-material-no-resuelto-rigido]] y el diagnóstico en `auditor_contexto.md`.
+
+**Decisión del usuario:** "el plan era para elegir qué modelo le toca a cada α".
+Se REVISA la regla etapa-1 "keyword-only, sin mirar la forma del α": ahora la
+FORMA del α elige el TIPO y los PARAMS se AJUSTAN para reproducir el α.
+
+**Diseño (en `impedance_defaults.py`):**
+- Objetivo de ajuste = Re(β) a incidencia NORMAL (θ=0), que es LO QUE USA el kernel
+  de perturbación (`compute_xi_shift_with_impedance`) y fija el RT/f_S. El blanco
+  es `beta_from_alpha_random(α_cat)` (idéntico al camino de material). Ajuste en
+  β-space = barato (sin integral de θ) y exacto para el amortiguamiento.
+- `_alpha_shape(mat)`: flat (cv<0.30) / low_peak (pico ≤125 Hz que cae) / mid_peak
+  / rising / other. La forma + el keyword fijan los TIPOS candidatos
+  (`_SHAPE_TYPES`): low_peak→membrana, mid_peak→perforado/membrana, rising→poroso;
+  el tipo del keyword se agrega como alternativa.
+- `_fit_spec_to_alpha`: `scipy.least_squares` multi-start (grillas chicas + salida
+  temprana) ajusta los params del tipo (poroso σ/d/gap; membrana m/D/η; perforado
+  t/d/ratio/cavidad) con peso a graves (sub-Schroeder).
+- Se elige el candidato de menor residuo que PASA la tolerancia (`_fit_is_acceptable`,
+  relativa a la escala de β). Si ninguno reproduce el amortiguamiento, o el α es
+  PLANO, cae a **β real (α exacto, sin reactancia)**: no se falsea la absorción.
+- Re(β)=α sigue siendo el invariante: o exacto (β real), o bien-ajustado (modelo).
+  La reactancia (Im β, corrimiento de fₙ) solo aparece con un modelo que PASA.
+- Cacheado por (nombre, categoría, α). `classify_material` conserva la etiqueta
+  fina (cork/carpet/…) si la forma no cambió el tipo.
+
+**Resultado (Control Ale, sugerencias aplicadas):** Techo→membrana ajustada,
+Emplacado→β real (plano), mármol→β real → **f_S = 215 Hz** (vs 1135). xi no
+colapsa.
+
+**Validación:** `bench_impedance_defaults.py` reescrito al nuevo contrato (32/32):
+parsers + caminos sin-modelo intactos; recuperación por ORÁCULO (α generado de un
+modelo conocido → recupera tipo + damping-match); selección por forma
+(rising→poroso, low_peak→membrana aun con keyword poroso, plano→β real); e
+INVARIANTE anti-bug: el Re(β) efectivo reproduce el del catálogo en graves para
+los 4 materiales reales (nunca colapsa). `bench_impedance_defaults_wiring` 14/14,
+`bench_capa0_all` 190/190 sin regresión. Ref: Cox & D'Antonio cap. 5-7.
+
+**Pendiente/limitaciones:** (a) materiales SIN keyword con forma resonante clara
+siguen quedando inespecíficos (no se propone modelo por forma pura, conservador);
+extensión futura. (b) el ajuste del Techo mueve el pico de 63→125 Hz (membrana
+simple no captura exacto un compuesto); el β en graves sí matchea. (c) FALTA test
+visual del usuario (T7 en `TEST_VISUAL_material_fallback.md`).
