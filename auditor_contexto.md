@@ -6,7 +6,12 @@
 > cada cosa contra la fuente física, un oráculo, o una cuenta propia. Que este archivo
 > diga "resuelto/PASA" no prueba nada; es un puntero a qué mirar.
 
-**Última actualización:** 2026-09-30 (v2.53: composición de parches + renombre a «Impedancias» + editor de parches; + v2.52 + v2.51 + v2.50 + v2.49 + v2.48).
+**Última actualización:** 2026-10-01 (v2.54: material→impedancia por default + hover-3D + BUG f_S material no resuelto; + v2.53 + v2.52 + v2.51 + v2.50).
+
+## v2.54 — impedancia por default por material + BUG de f_S con material no resuelto (1 Oct 2026)
+
+- **BUG EN ALCANCE (importante, NO arreglado — VERIFICAR y corregir):** una cara con material que NO resuelve en el catálogo se vuelve RÍGIDA (β=0) en el camino de perturbación UNIFICADO (`absorption_patch.compute_xi_shift_with_impedance`, el que corre con modelo=perturbación), porque `_construction_surfaces` no agrega esa cara a `surf_g` y el kernel usa `default_surf=None` → β=0. El camino SIMPLE (`face_materials.perturbation_xi_per_mode`/`_alpha_for`) usa α=0.03 para lo no resuelto → los dos caminos son INCONSISTENTES. Impacto medido (Control Ale.room, gable 4.8×3.9×3.1, V=69): con 2 materiales custom sin cargar, paredes+techo quedan rígidas → RT explota → **f_S ~1100 Hz (falso)**; el f_S correcto con materiales resueltos es **~180 Hz** (Sabine 174 / perturbación 182, coinciden). A auditar/arreglar: (A) material no resuelto debe caer al default del mapa (o α=0.03) y AVISAR, no volverse rígido en silencio; (B) el guardado del `.room` debe embeber los materiales usados (`embedded_materials` salió vacío). Ver [[bug-material-no-resuelto-rigido]] en memoria.
+- **Material→impedancia por default (FUERA del solver — es wiring + criterio):** `impedance_defaults.classify_material` propone un spec por material (keyword-driven); los specs entran a la física solo si el usuario los APLICA (pasan a `_construction_map` → `build_surface`, el camino ya auditado). Re(β)=α del material sigue intacto para lo no aplicado. Criterio del usuario: modelo solo con evidencia textual; inespecíficos sin modelo. A auditar si se vuelve default-ON algún día: la estimación de σ (de `sigma_from_alpha` o típica) y que la reactancia estimada no reintroduzca el sesgo M1. `bench_impedance_defaults` 52/52, `bench_impedance_defaults_wiring` 14/14. El hover-3D y las sugerencias son GUI.
 
 ## v2.53 — composición parche↔impedancia, renombre y editor de parches (30 Sep 2026, un punto físico, resto GUI)
 

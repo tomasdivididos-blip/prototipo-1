@@ -56,6 +56,7 @@ from material_library import (MaterialLibrary, compute_sabine_rt60,
 import material_library as ml
 import face_materials as fm
 import impedance as imp
+import impedance_defaults as imp_def
 
 
 # ---------------------------------------------------------------------------
@@ -3483,28 +3484,41 @@ class WallConstructionsDialog(QDialog):
     alpha->beta real). Devuelve self.result_map (clave: firma de grupo, patch.key
     o __furniture_i__)."""
 
+    hovered = pyqtSignal(object)      # cara/parche bajo el mouse (None = ninguno)
+
     def __init__(self, groups, construction_map, parent=None,
-                 patches=None, furniture=None, auto_tags=None):
+                 patches=None, furniture=None, auto_tags=None,
+                 default_specs=None, default_info=None):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Impedancias (paredes, parches y muebles)")
-        self.resize(700, 540)
+        self.resize(720, 560)
         self.result_map = dict(construction_map or {})
+        # Sugerencias AUTOMATICAS por material (clave -> spec) y su info
+        # (clave -> MaterialImpedance, para justificacion/no-especifico). Son
+        # candidatos editables; entran a la fisica solo al «Aplicar» (o editarlas).
+        self._default_specs = dict(default_specs or {})
+        self._default_info = dict(default_info or {})
         # Z por default del MATERIAL de cada superficie (clave -> texto): se
         # muestra read-only cuando la cara no tiene construccion explicita, para
         # que el panel refleje el material actual y su reactancia auto (poroso) o
         # su beta real (duro). Fuente de verdad = la asignacion de material.
         self._auto_tags = dict(auto_tags or {})
-        # Entradas unificadas: (clave, etiqueta, tipo, area).
+        # Entradas unificadas: (clave, etiqueta, tipo, area). `_obj_by_key` guarda
+        # el objeto real (FaceGroup/AbsorptionPatch/mueble) para resaltar en el 3D.
         self._entries = []
+        self._obj_by_key = {}
         for g in groups:
             self._entries.append((g.signature, g.label, "pared", g.area))
+            self._obj_by_key[g.signature] = g
         for p in (patches or []):
             lbl = getattr(p, "label", "") or "parche"
             self._entries.append((p.key, f"⬒ {lbl}", "parche", getattr(p, "area", 0.0)))
+            self._obj_by_key[p.key] = p
         for i, fu in enumerate(furniture or []):
             lbl = getattr(fu, "label", "") or f"mueble {i+1}"
             self._entries.append((f"__furniture_{i}__", f"▣ {lbl}", "mueble", None))
+            self._obj_by_key[f"__furniture_{i}__"] = fu
         root = QVBoxLayout(self)
 
         help_lbl = QLabel(
@@ -3525,6 +3539,10 @@ class WallConstructionsDialog(QDialog):
 
         self.list_faces = QListWidget()
         self.list_faces.setSelectionMode(QListWidget.ExtendedSelection)
+        # Hover sobre una fila -> resaltar la cara/parche en el render 3D.
+        self.list_faces.setMouseTracking(True)
+        self.list_faces.itemEntered.connect(self._on_item_hovered)
+        self.list_faces.viewport().installEventFilter(self)
         root.addWidget(self.list_faces, 1)
         self._refresh_list()
 
@@ -3542,28 +3560,113 @@ class WallConstructionsDialog(QDialog):
         row.addWidget(self.btn_clear)
         root.addLayout(row)
 
+        # Sugerencias automaticas por material (feature material->impedancia).
+        row2 = QHBoxLayout()
+        self.btn_apply_sug = QPushButton("Aplicar sugerencias automáticas")
+        self.btn_apply_sug.setToolTip(
+            "Convierte en impedancias asignadas las sugerencias automáticas "
+            "(⟲, en teal) derivadas del material de cada superficie. Quedan "
+            "editables y se pueden quitar como cualquier otra. Las superficies "
+            "sin modelo específico (⚠) no se tocan: elegilas a mano.")
+        self.btn_apply_sug.clicked.connect(self._apply_suggestions)
+        row2.addWidget(self.btn_apply_sug)
+        self.btn_apply_sug_sel = QPushButton("Aplicar a seleccionadas")
+        self.btn_apply_sug_sel.clicked.connect(
+            lambda: self._apply_suggestions(only_selected=True))
+        row2.addWidget(self.btn_apply_sug_sel)
+        root.addLayout(row2)
+
+        self.lbl_sug = QLabel("")
+        self.lbl_sug.setStyleSheet("color:#179299; font-size:9pt;")
+        self.lbl_sug.setWordWrap(True)
+        root.addWidget(self.lbl_sug)
+        self._refresh_list()          # re-pinta ahora que lbl_sug existe
+
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         bb.accepted.connect(self.accept)
         bb.rejected.connect(self.reject)
         root.addWidget(bb)
 
+    def _apply_suggestions(self, only_selected=False):
+        """Copia las sugerencias automaticas (`_default_specs`) al mapa de
+        asignadas, para las superficies sin construccion explicita. Con
+        `only_selected`, solo las de la seleccion."""
+        keys = (set(self._selected_sigs()) if only_selected
+                else {k for k, *_ in self._entries})
+        n = 0
+        for key in keys:
+            if key in self.result_map:
+                continue                       # ya tiene una asignada, no pisar
+            spec = self._default_specs.get(key)
+            if spec:
+                self.result_map[key] = dict(spec)
+                n += 1
+        if n == 0 and only_selected:
+            QMessageBox.information(self, "Sugerencias",
+                                    "Las seleccionadas no tienen sugerencia "
+                                    "automática (o ya tienen una impedancia).")
+        self._refresh_list()
+
     def _refresh_list(self):
         self.list_faces.clear()
+        n_sug = n_avisa = 0
         for key, label, kind, area in self._entries:
             spec = self.result_map.get(key)
+            tip = ""
             if spec:
                 tag = imp.spec_label(spec)
+                color = QColor("#1e66f5")          # asignada (azul)
+            elif key in self._default_specs:
+                # sugerencia automatica por material (aun no aplicada)
+                tag = "⟲ sugerido: " + imp.spec_label(self._default_specs[key])
+                color = QColor("#179299")          # teal = sugerencia
+                info = self._default_info.get(key)
+                tip = getattr(info, "justification", "") if info else ""
+                n_sug += 1
             else:
-                # sin construccion -> Z por default del material (read-only)
-                tag = self._auto_tags.get(key) or "— (usa el material)"
+                info = self._default_info.get(key)
+                if info is not None and getattr(info, "nonspecific", False):
+                    base = self._auto_tags.get(key) or "material"
+                    tag = f"{base}  ⚠ sin modelo (elegí a mano)"
+                    color = QColor("#d97706")      # ambar = inespecifico
+                    tip = getattr(info, "justification", "")
+                    n_avisa += 1
+                else:
+                    # duro/asientos: beta real, no necesita modelo (o sin info)
+                    tag = self._auto_tags.get(key) or "— (usa el material)"
+                    color = QColor("#8c8fa1")
+                    if info is not None:
+                        tip = getattr(info, "justification", "")
             area_txt = f"{area:.1f} m²   " if area is not None else ""
             it = QListWidgetItem(f"{label}   ·   {area_txt}→   {tag}")
             it.setData(Qt.UserRole, key)
-            it.setForeground(QColor("#89b4fa") if spec else QColor("#8c8fa1"))
+            it.setForeground(color)
+            if tip:
+                it.setToolTip(tip)
             self.list_faces.addItem(it)
+        if hasattr(self, "lbl_sug"):
+            parts = []
+            if n_sug:
+                parts.append(f"{n_sug} sugerencia(s) automática(s) sin aplicar")
+            if n_avisa:
+                parts.append(f"{n_avisa} sin modelo específico (elegí a mano)")
+            self.lbl_sug.setText("   ·   ".join(parts) if parts else
+                                 "Sin sugerencias automáticas pendientes.")
 
     def _selected_sigs(self):
         return [it.data(Qt.UserRole) for it in self.list_faces.selectedItems()]
+
+    def _on_item_hovered(self, item):
+        """Emite el objeto (cara/parche/mueble) de la fila bajo el mouse para que
+        el panel lo resalte en el 3D."""
+        key = item.data(Qt.UserRole) if item is not None else None
+        self.hovered.emit(self._obj_by_key.get(key))
+
+    def eventFilter(self, obj, ev):
+        from PyQt5.QtCore import QEvent
+        if obj is self.list_faces.viewport() and ev.type() == QEvent.Leave:
+            self.hovered.emit(None)        # el mouse salio de la lista -> apagar
+        return super().eventFilter(obj, ev)
 
     def _new_and_assign(self):
         sigs = self._selected_sigs()
@@ -3898,6 +4001,13 @@ class AcousticPanel(QWidget):
         # f_n por Im); el material sigue dando alpha para bandas > f_S (difuso).
         # Vacio = comportamiento historico (alpha->beta real, sin corrimiento).
         self._construction_map = {}       # Dict[str signature, dict spec]
+        # Sugerencias AUTOMATICAS de impedancia por material (feature 1-2): al
+        # asignar materiales se derivan (impedance_defaults) un spec por default
+        # y su info. NO entran a la fisica hasta que el usuario las «aplica» en el
+        # panel «Impedancias» (pasan a _construction_map). Mapas por clave
+        # (firma de grupo / patch.key / __furniture_i__).
+        self._material_default_spec = {}  # Dict[str, dict spec]
+        self._material_default_info = {}  # Dict[str, imp_def.MaterialImpedance]
         # Reactancia AUTO del material (corrimiento de f_n por Im(beta) sintetizada
         # de un poroso Miki ajustado al alpha): OPT-IN, apagada por default desde la
         # auditoria 2026-09-04 (hallazgo M1: modelo no medido + Miki extrapolado,
@@ -8031,11 +8141,17 @@ class AcousticPanel(QWidget):
         if not groups:
             self._log("No hay caras para asignar construcciones.")
             return
+        self._refresh_material_defaults()      # sugerencias frescas del material
         dlg = WallConstructionsDialog(
             groups, self._construction_map, parent=self,
             patches=self._patches, furniture=getattr(self, "furniture", None),
-            auto_tags=self._material_auto_tags(groups))
-        if dlg.exec_():
+            auto_tags=self._material_auto_tags(groups),
+            default_specs=self._material_default_spec,
+            default_info=self._material_default_info)
+        dlg.hovered.connect(self._on_materials_hovered)   # resaltar en el 3D
+        ok = dlg.exec_()
+        self._on_materials_hovered(None)                  # apagar al cerrar
+        if ok:
             self._on_constructions_applied(dlg.result_map)
 
     def _on_auto_reactance_toggled(self, checked):
@@ -8672,6 +8788,60 @@ class AcousticPanel(QWidget):
                       "de la cara. Para cubrir también el parche, asignale la misma "
                       "impedancia en «Impedancias…».")
         return comp
+
+    def _refresh_material_defaults(self):
+        """Deriva las sugerencias de impedancia por default desde el material de
+        cada superficie (impedance_defaults.classify_material). Puebla
+        `_material_default_spec` (clave -> spec, solo los que tienen modelo) y
+        `_material_default_info` (clave -> MaterialImpedance, con justificacion y
+        el flag de inespecifico). NO toca la fisica: son candidatos para el panel
+        «Impedancias» hasta que el usuario los aplique."""
+        self._material_default_spec = {}
+        self._material_default_info = {}
+        try:
+            groups, _v, _t = self._get_face_groups()
+        except Exception:
+            return
+        g2m = self._group_to_material_dict(groups)
+        for g in groups:
+            mat = g2m.get(g.signature)
+            if mat is None:
+                continue
+            try:
+                info = imp_def.classify_material(mat)
+            except Exception:
+                continue
+            self._material_default_info[g.signature] = info
+            if info.has_model and info.spec:
+                self._material_default_spec[g.signature] = info.spec
+        if self._patches:
+            p2m = self._patch_to_material_dict()
+            for p in self._patches:
+                mat = p2m.get(p.key)
+                if mat is None:
+                    continue
+                try:
+                    info = imp_def.classify_material(mat)
+                except Exception:
+                    continue
+                self._material_default_info[p.key] = info
+                if info.has_model and info.spec:
+                    self._material_default_spec[p.key] = info.spec
+        # Muebles (▣): la cara aire-mueble usa el material del mueble.
+        if getattr(self, "furniture", None):
+            f2m = self._furniture_mat_by_index()
+            for i in range(len(self.furniture)):
+                mat = f2m.get(i)
+                if mat is None:
+                    continue
+                key = f"__furniture_{i}__"
+                try:
+                    info = imp_def.classify_material(mat)
+                except Exception:
+                    continue
+                self._material_default_info[key] = info
+                if info.has_model and info.spec:
+                    self._material_default_spec[key] = info.spec
 
     def _construction_surfaces(self, groups, g2m):
         """Superficies de Capa 0 por GRUPO y por PARCHE para la perturbacion

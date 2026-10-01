@@ -2954,6 +2954,15 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.54 (impedancia por default por material + hover 3D en «Impedancias»)
+
+**Cambios v2.54** (1 de octubre 2026): al elegir materiales, el panel «Impedancias» ahora **sugiere un modelo de impedancia por cada superficie**, derivado del material, y se puede aplicar con un botón.
+
+- **Sugerencias automáticas por material:** al abrir «Impedancias…», cada superficie (pared, parche, mueble) cuyo material se identifica por nombre con un tipo constructivo claro muestra una sugerencia editable (teal, «⟲ sugerido: …»): poroso (lana, espuma, corcho, alfombra, cortina, estriado), perforado/microperforado, membrana (placa de yeso, vidrio, doble vidrio), con los parámetros estimados del nombre (espesor, cámara) o típicos. Los materiales duros (hormigón, mármol, asientos de madera) y la audiencia quedan en β real (no necesitan modelo). Los inespecíficos (porcentaje fijo de absorción, materiales propios cargados por el usuario, o sin palabra clave) avisan en ámbar («⚠ sin modelo, elegí a mano»). Botones **«Aplicar sugerencias automáticas»** (todas o a las seleccionadas) las convierten en impedancias asignadas, editables. Sin aplicar, no cambian el cálculo. El criterio y el mapeo material→modelo están documentados en `plan_impedancias_default.md` y revisables en `impedancias_por_material.md` (tabla de los 428 materiales del catálogo con su modelo y justificación).
+- **Resaltado en el 3D al pasar el mouse:** en «Impedancias…», al pasar el mouse por una fila se **ilumina esa cara o parche en el render 3D**, para identificar cuál es cada una (igual que el diálogo de Materiales).
+
+*Manual actualizado al 1 de Octubre de 2026 — v2.54.*
+
 ## Cambios v2.53 (composición de parches, renombre a «Impedancias», mover parches y hover de α)
 
 **Cambios v2.53** (30 de septiembre 2026): cuatro mejoras de modelado y de interfaz.
