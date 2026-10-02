@@ -6,7 +6,16 @@
 > cada cosa contra la fuente física, un oráculo, o una cuenta propia. Que este archivo
 > diga "resuelto/PASA" no prueba nada; es un puntero a qué mirar.
 
-**Última actualización:** 2026-10-02 (v2.57: EXPLORACIÓN front↔rear + QEP, NÚCLEO NUEVO EN ALCANCE como prototipos headless; + Fazenda/«?» FUERA de alcance; + v2.56 + v2.55 + v2.54 + v2.53 + v2.52 + v2.51 + v2.50).
+**Última actualización:** 2026-10-02 (v2.58: norte front↔rear cableado a evaluate/optimize/GUI, NÚCLEO NUEVO EN ALCANCE; + v2.57 exploración front↔rear + QEP; + Fazenda/«?» FUERA de alcance; + v2.56 … v2.50).
+
+## v2.58 — norte de optimización «front_rear» cableado (E4b) + readout (2 Oct 2026, EN ALCANCE — VERIFICAR)
+
+Lleva la R̄ de E1b/E4a al optimizador/evaluador reales y a la GUI. TODO son AFIRMACIONES del autor; auditá. El QEP de E3 (opción (b), movimiento de polos) **NO** entró a la app todavía: esto es el camino (a) feedforward juzgado por la reflexión del frente de onda, no por Δξₙ.
+
+- **`dba_evaluate.rear_reflection(basis, kappa, Q_spec, dims, origin, axis, fa, xi)`:** campo modal p(y) sobre una línea del eje (via `_modal_frf_grid`, la MISMA H del solver) descompuesto por mínimos cuadrados en 2 ondas viajeras A₊e^{−iky}+A₋e^{+iky} (k=ω/c); R(f)=|A₋|/|A₊|; R̄ = promedio PONDERADO POR f sobre la banda `_axis_transverse_band` = [c/2L_axis, min_j c/2L_j]. A AUDITAR: (1) **la banda** — es [axial fundamental, primer modo transversal]; si el eje de subs NO es el más largo, hi≤lo → banda VACÍA → R̄=NaN (reproducido con Control Ale: subs en Y=3.9 con X=4.8 más largo → f_trans 35.7 < f_ax 44 → NaN, es FÍSICO no bug). (2) **el muestreo** usa una línea al centro transversal (dims[a]/2, dims[b]/2) en coords caja; para FEM (recinto irregular) los puntos pueden caer fuera de la malla → NaN (filtrado). (3) **clamp R a 1.5** y peso ∝ f: ¿sesga? (4) la R̄ es del campo FEEDFORWARD (no mueve polos); es un DESCRIPTOR de cuán viajera es la onda, no un Δξₙ.
+- **`_reflection_penalty_db(R)` = 20log10((1+R)/(1−R))** (clamp R≤0.99): rizado de onda estacionaria en dB, para sumarlo con planitud/varianza (misma unidad). A auditar: ¿es la conversión correcta R→rizado pico-a-valle? (es la fórmula del SWR en dB).
+- **`composite_cost` rama "front_rear"** = `_reflection_penalty_db(R̄) + flat + spatial`. Si R̄=NaN el penalty es 0 → el coste cae a flat+spatial (el término de reflexión DESAPARECE en silencio; la GUI lo avisa en el readout, pero el OPTIMIZADOR no). A auditar: ¿debería el optimizador rechazar/avisar front_rear cuando la banda es vacía en vez de optimizar solo flat+spatial sin decirlo?
+- **Wiring:** `wants_reflection`, gate `want_reflection` en `_config_metrics`, propagado en `cabs_optimize` (`_cost`/`_metrics`/`suggest_layouts`), `rear_reflection_real/ideal` en `evaluate_cabs`, y lectura en `dba_dialog._show_eval` (badge + mensaje de «no aplica» para banda vacía / «fuera de malla»). `best_axis` para front_rear (no-array) elige el eje por `opposed`=min(subs enfrentados). Benches existentes sin regresión: bench_norte_criterios 33/33, bench_cabs_criterion 14/14, bench_source_opt 29/29. Prototipo del norte: `bench_front_rear_opt.py` 4/4 (E4a). **FALTA test visual del usuario** (en Control Ale sale «no aplica», correcto; para verlo activo hay que subs en el eje más largo).
 
 ## v2.57 — frente de onda opuesto + admitancia (E1-E3) + Fazenda + «?» (2 Oct 2026)
 

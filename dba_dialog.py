@@ -168,6 +168,7 @@ class DBADialog(QDialog):
             self.combo_criterion.addItem("Transferencia compuesta plana", "flat")
             self.combo_criterion.addItem("Uniformidad espacial (asiento a asiento)", "spatial")
             self.combo_criterion.addItem("Mínimo SBIR (peine de bordes)", "sbir")
+            self.combo_criterion.addItem("Front↔rear: mínima reflexión trasera + planitud", "front_rear")
             self.combo_criterion.addItem("Combinado (por caso de uso)", "combined")
             self.combo_criterion.addItem("CABS (par de subs en una pared, manejada)", "cabs")
             self.combo_criterion.addItem("DBA (pares de subs en dos paredes opuestas)", "dba")
@@ -177,7 +178,12 @@ class DBADialog(QDialog):
                 "(mains + subs) en la banda; es el norte general, sin esquema de "
                 "array.\n• Uniformidad espacial: minimizar la varianza asiento a "
                 "asiento.\n• Mínimo SBIR: minimizar el peine de reflexiones de borde "
-                "en el punto de escucha (20-200 Hz).\n• Combinado: score 0..100 que "
+                "en el punto de escucha (20-200 Hz).\n• Front↔rear: minimizar la "
+                "reflexión de la pared trasera (que el array trasero absorba el frente "
+                "de onda del frontal) + planitud; R̄ se mide por debajo del primer modo "
+                "transversal, donde vale la onda plana. REQUIERE que los subs estén "
+                "enfrentados en el eje MÁS LARGO de la sala (si no, no hay banda de "
+                "onda plana y el norte no aplica).\n• Combinado: score 0..100 que "
                 "pesa planitud + espacial + SBIR según el caso de uso (música/voz/"
                 "mixto), con los mismos umbrales que Predicción.\n• CABS: un par de subs en una "
                 "pared (manejada) + una fuente enfrente; drive libre.\n• DBA: dos "
@@ -383,6 +389,7 @@ class DBADialog(QDialog):
         "flat": "Transferencia compuesta plana",
         "spatial": "Uniformidad espacial",
         "sbir": "Mínimo SBIR",
+        "front_rear": "Front↔rear (reflexión trasera)",
         "combined": "Combinado por caso de uso",
         "cabs": "CABS", "dba": "DBA",
     }
@@ -918,6 +925,59 @@ class DBADialog(QDialog):
                 f"(ideal {sb_i:.2f}) · Planitud compuesta: {fr_real:.2f} dB",
                 f"&nbsp;&nbsp;<span style='color:#555;'>(receptor, "
                 f"{r['n_modes']} modos)</span>"]
+        elif crit_key == "front_rear":
+            # Veredicto sobre la REFLEXION de la pared trasera (interaccion
+            # front<->rear): menor R = mejor absorcion del frente de onda. Se compara
+            # con el ideal (array LS) y se muestra el rizado de onda estacionaria.
+            import dba_evaluate as _dev
+            from sources import C0 as _C0
+            rr_r = r.get("rear_reflection_real", float("nan"))
+            rr_i = r.get("rear_reflection_ideal", float("nan"))
+            ax = r["axis"]
+            lo, hi = _dev._axis_transverse_band(self._dims, ax, _C0, r["freq"])
+            if not np.isfinite(rr_r):
+                # R̄ no evaluable. Causa tipica: el eje front<->rear NO es el mas
+                # largo, asi que el primer modo transversal (del eje perpendicular
+                # mas largo) cae POR DEBAJO del fundamental axial -> no hay banda de
+                # onda plana 1-D en este eje. El norte cae a planitud + varianza.
+                if hi <= lo:
+                    others = [self._dims[i] for i in range(3) if i != ax]
+                    f_tr = _C0 / (2.0 * max(others))
+                    f_ax = _C0 / (2.0 * self._dims[ax])
+                    lines = [
+                        "<b>Front↔rear — <span style='color:#b45309;'>no aplica en "
+                        "este eje</span></b>",
+                        f"&nbsp;&nbsp;Los subs están enfrentados en el eje "
+                        f"<b>{_AXIS_NAMES[ax]}</b>, pero un eje perpendicular es más "
+                        f"largo: su 1er modo transversal (~{f_tr:.0f} Hz) cae por "
+                        f"debajo del fundamental axial (~{f_ax:.0f} Hz), así que no "
+                        f"hay banda de onda plana donde medir R̄.",
+                        f"&nbsp;&nbsp;<span style='color:#555;'>Poné los subs "
+                        f"enfrentados en el eje MÁS LARGO de la sala, o usá otro "
+                        f"norte (planitud / espacial / SBIR). Se evaluó por planitud "
+                        f"{fr_real:.2f} dB · varianza {sp_real:.2f} dB.</span>"]
+                else:
+                    lines = [
+                        "<b>Front↔rear — <span style='color:#b45309;'>R̄ no "
+                        "evaluable</span></b>",
+                        f"&nbsp;&nbsp;<span style='color:#555;'>El campo sobre el eje "
+                        f"no se pudo muestrear (recinto irregular / fuera de malla). "
+                        f"Planitud {fr_real:.2f} dB · varianza {sp_real:.2f} dB.</span>"]
+            else:
+                rip_r = _dev._reflection_penalty_db(rr_r)
+                ok = (not np.isfinite(rr_i)) or rr_r <= rr_i + 0.1
+                badge = ("<span style='color:#2e7d32;'><b>frente absorbido</b></span>"
+                         if ok else
+                         "<span style='color:#b45309;'><b>reflexión trasera alta</b></span>")
+                rr_itxt = f"{rr_i:.2f}" if np.isfinite(rr_i) else "n/d"
+                lines = [
+                    f"<b>{crit} — absorción del frente de onda trasero:</b> {badge}",
+                    f"&nbsp;&nbsp;Reflexión trasera R̄: <b>{rr_r:.2f}</b> (ideal "
+                    f"{rr_itxt}) → rizado <b>{rip_r:.1f}</b> dB · Planitud: "
+                    f"{fr_real:.2f} dB · Varianza: {sp_real:.2f} dB",
+                    f"&nbsp;&nbsp;<span style='color:#555;'>(eje {_AXIS_NAMES[ax]}, "
+                    f"R̄ en {lo:.0f}-{hi:.0f} Hz &lt; primer modo transversal, "
+                    f"{r['n_modes']} modos)</span>"]
         else:
             collapse_ok = (fr_real <= fr_id + 1.5) and (sp_real <= sp_id + 1.5)
             badge = ("<span style='color:#2e7d32;'><b>respuesta plana</b></span>"

@@ -59,6 +59,7 @@ def suggest_layouts(dims, origin, receiver, *, walls=None, criterion="flat",
         axis = int(np.argmax(dims))
     f_s = dev._schroeder_guess(dims, xi)
     want_sbir = dev.wants_sbir(criterion)
+    want_refl = dev.wants_reflection(criterion)
     layouts = _lo.seed_layouts(origin, origin + np.asarray(dims), baffle=baffle)
 
     def _inside(pos):
@@ -76,7 +77,8 @@ def suggest_layouts(dims, origin, receiver, *, walls=None, criterion="flat",
                 for p in pos]
         m = dev._config_metrics(srcs, dims, origin, walls, receiver, axis=axis,
                                 fa=fa, xi=xi_eff, c=c, f_s=f_s, basis=basis,
-                                with_decay=False, want_sbir=want_sbir)
+                                with_decay=False, want_sbir=want_sbir,
+                                want_reflection=want_refl)
         scored.append({
             "label": lay.label, "positions": pos.tolist(),
             "cost": float(dev.composite_cost(m, criterion, weights)),
@@ -214,7 +216,8 @@ def _cost(x, sources, dofs, dims, origin, walls, receiver, axis, fa, xi, c, f_s,
     cand = apply_vector(sources, dofs, x)
     m = dev._config_metrics(cand, dims, origin, walls, receiver, axis=axis, fa=fa,
                             xi=xi, c=c, f_s=f_s, basis=basis, with_decay=False,
-                            zone_box=zone_box, want_sbir=dev.wants_sbir(criterion))
+                            zone_box=zone_box, want_sbir=dev.wants_sbir(criterion),
+                            want_reflection=dev.wants_reflection(criterion))
     pen = 0.0
     # Restriccion dura: ninguna fuente MOVIDA puede quedar fuera del recinto
     # real. Las cotas de caja son el AABB; en un recinto irregular el AABB es mas
@@ -325,12 +328,13 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
     # el que se juzga "mejoro" es el MISMO `composite_cost` que usa `_cost` (coherencia
     # evaluar<->optimizar). El peine SBIR solo se computa si el norte lo pide.
     _ws = dev.wants_sbir(criterion)
+    _wr = dev.wants_reflection(criterion)
 
     def _metrics(src_list):
         return dev._config_metrics(src_list, dims, origin, walls, receiver,
                                    axis=axis, fa=fa, xi=xi, c=c, f_s=f_s,
                                    basis=basis, with_decay=False, zone_box=zone_box,
-                                   want_sbir=_ws)
+                                   want_sbir=_ws, want_reflection=_wr)
 
     def _obj(mm):
         return dev.composite_cost(mm, criterion, weights)

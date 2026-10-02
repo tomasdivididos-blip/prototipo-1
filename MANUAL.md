@@ -2954,6 +2954,15 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.58 (norte de optimización «Front↔rear»: absorción del frente de onda trasero)
+
+**Cambios v2.58** (2 de octubre 2026): un norte nuevo en «Optimización de fuentes…» para la interacción entre los subs delanteros y los traseros, con respaldo físico (Nelson & Elliott, *Active Control of Sound*, cap. 5; CABS de Celestinos & Nielsen; Santillán, JASA 110, 2001).
+
+- **Nuevo norte «Front↔rear: mínima reflexión trasera + planitud».** En el modo «Optimizar mis fuentes», el combo «Norte (criterio)» suma esta opción. Mide cuánto **absorbe el array trasero el frente de onda** que impone el frontal: descompone el campo sobre el eje que enfrenta los subs en dos ondas viajeras y calcula la **reflexión R̄ de la pared trasera** (R̄ = 0 → onda viajera, trasero matcheado; R̄ ≈ 1 → onda estacionaria, pared rígida). El coste a minimizar combina el **rizado de onda estacionaria** que mete esa reflexión (en dB) con la **planitud** y la **varianza espacial**. El readout muestra el badge «frente absorbido» / «reflexión trasera alta», R̄ real vs el ideal (array LS) y el rizado en dB.
+- **Dónde aplica:** R̄ se mide por debajo del primer modo transversal, donde el campo es una onda plana. Esto **requiere que los subs estén enfrentados en el eje MÁS LARGO de la sala**; si están en un eje más corto (p.ej. subs en el eje de 3.9 m cuando el ancho es 4.8 m), un modo transversal del eje perpendicular entra antes que el axial y no hay banda de onda plana: el panel lo avisa con «no aplica en este eje» y sugiere poner los subs en el eje más largo o usar otro norte (planitud / espacial / SBIR).
+
+*Manual actualizado al 2 de Octubre de 2026 — v2.58.*
+
 ## Cambios v2.57 (ayuda «?» en todas las ventanas + umbral perceptual de decaimiento modal)
 
 **Cambios v2.57** (2 de octubre 2026): se completa la ayuda por ventana y se agrega un criterio perceptual a la tabla de modos. Sin cambios en la física del solver.

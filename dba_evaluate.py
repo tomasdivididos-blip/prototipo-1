@@ -70,6 +70,24 @@ def is_array_criterion(criterion) -> bool:
     return str(criterion) in ARRAY_CRITERIA
 
 
+def wants_reflection(criterion) -> bool:
+    """El norte 'front_rear' (interaccion front<->rear = absorcion del frente de
+    onda por el array trasero) necesita la reflexion R de la pared trasera."""
+    return str(criterion) == "front_rear"
+
+
+def _reflection_penalty_db(R) -> float:
+    """Convierte la reflexion R (0..1) de la pared trasera en un rizado de onda
+    estacionaria en dB: 20 log10((1+R)/(1-R)). Es el pico-a-valle que la reflexion
+    mete en la respuesta -> escala COMPARABLE a planitud/varianza (dB). R=0 -> 0 dB
+    (onda viajera, matcheado); R->1 -> infinito (estacionaria, pared rigida)."""
+    r = float(R)
+    if not np.isfinite(r):
+        return 0.0
+    r = min(max(r, 0.0), 0.99)
+    return float(20.0 * np.log10((1.0 + r) / (1.0 - r)))
+
+
 def wants_sbir(criterion) -> bool:
     """True si el norte necesita el peine SBIR como objetivo (evitar computarlo
     en el loop del optimizador cuando no hace falta). SBIR y Combinado lo usan."""
@@ -120,6 +138,11 @@ def composite_cost(metrics, criterion, weights=None) -> float:
         return float(v) if np.isfinite(v) else 0.0
     if c == "combined":
         return float(100.0 - combined_score(metrics, weights))
+    if c == "front_rear":
+        # Interaccion front<->rear: rizado por la reflexion trasera (R̄ ponderado
+        # por banda, en dB) + planitud + varianza espacial. Todo en dB -> sumable.
+        pen = _reflection_penalty_db(metrics.get("rear_reflection", float("nan")))
+        return float(pen + metrics["flat"] + metrics["spatial"])
     w_f, w_s = objective_weights(c)
     return float(w_f * metrics["flat"] + w_s * metrics["spatial"])
 
@@ -373,6 +396,64 @@ def flatness_and_spatial(freq_axis, total_db_grid):
 
 
 # ---------------------------------------------------------------------------
+# Reflexion de la pared trasera (interaccion front<->rear, norte 'front_rear')
+# ---------------------------------------------------------------------------
+def _axis_transverse_band(dims, axis, c, fa):
+    """[lo, hi] donde la descomposicion 1-D en el eje vale: del axial fundamental
+    (c/2L) al primer modo TRANSVERSAL (min c/2L' de los otros ejes), recortado a la
+    banda fa. Arriba del transversal el campo deja de ser onda plana (E1b)."""
+    L = float(dims[axis])
+    others = [float(dims[i]) for i in range(3) if i != axis]
+    f_ax1 = c / (2.0 * L)
+    f_trans = min(c / (2.0 * o) for o in others) if others else float("inf")
+    lo = max(f_ax1, float(fa[0]))
+    hi = min(0.98 * f_trans, float(fa[-1]))
+    return lo, hi
+
+
+def rear_reflection(basis, kappa, Q_spec, dims, origin, axis, fa, *,
+                    xi, npts: int = 101) -> float:
+    """R̄ = reflexion de la pared trasera, PROMEDIO PONDERADO POR BANDA sobre la
+    banda donde la descomposicion 1-D vale ([axial1, primer transversal]).
+
+    El campo p(y) sobre una linea del eje se descompone en 2 ondas viajeras
+    (k=w/c, metodo de bench_front_rear_room/E1b): R(f)=|A-|/|A+|. El peso crece con
+    la frecuencia (w ~ kL), donde la onda plana esta mas establecida. R=0 (onda
+    viajera, trasero matcheado) es lo ideal; R~1 (estacionaria, pared rigida) lo
+    peor. NaN si no hay banda valida o el campo no es evaluable (FEM fuera de malla).
+    """
+    L = float(dims[axis])
+    a, b = tuple(i for i in (0, 1, 2) if i != axis)
+    fa = np.asarray(fa, dtype=float)
+    lo, hi = _axis_transverse_band(dims, axis, basis.c, fa)
+    if not (hi > lo):
+        return float("nan")
+    ys = np.linspace(0.25 * L, 0.75 * L, npts)
+    pts = np.zeros((npts, 3))
+    pts[:, axis] = ys
+    pts[:, a] = float(dims[a]) / 2.0
+    pts[:, b] = float(dims[b]) / 2.0
+    H = _modal_frf_grid(basis, kappa, Q_spec, pts, fa, xi=xi)      # (npts, Nf)
+    idx = np.where((fa >= lo) & (fa <= hi))[0]
+    if len(idx) < 3:
+        return float("nan")
+    Rs, ws = [], []
+    for i in idx:
+        col = H[:, i]
+        if not np.all(np.isfinite(col)):
+            continue
+        k = 2.0 * np.pi * fa[i] / basis.c
+        M = np.column_stack([np.exp(-1j * k * ys), np.exp(+1j * k * ys)])
+        coef, *_ = np.linalg.lstsq(M, col, rcond=None)
+        R = abs(coef[1]) / max(abs(coef[0]), 1e-30)
+        Rs.append(min(R, 1.5)); ws.append(fa[i])     # clamp R, peso ~ f (kL)
+    if len(Rs) < 3:
+        return float("nan")
+    Rs = np.asarray(Rs); ws = np.asarray(ws)
+    return float(np.sum(ws * Rs) / np.sum(ws))
+
+
+# ---------------------------------------------------------------------------
 # Decay ventaneado (tolera drives no causales como el LS)
 # ---------------------------------------------------------------------------
 def _windowed_t_decay(t, h, xi, *, level_db=-15.0):
@@ -507,7 +588,7 @@ def _sbir_span(sources_world, walls, receiver_world, fa,
 
 def _config_metrics(sources_world, dims, origin, walls, receiver_world, *,
                     axis, fa, xi, c, f_s, basis=None, with_decay=True,
-                    zone_box=None, want_sbir=False) -> dict:
+                    zone_box=None, want_sbir=False, want_reflection=False) -> dict:
     """Total (SBIR+modal) + metricas de una lista de fuentes (coords mundo).
 
     `basis` opcional (la base solo depende de dims, no de las fuentes -> se puede
@@ -546,8 +627,11 @@ def _config_metrics(sources_world, dims, origin, walls, receiver_world, *,
              if with_decay else float("nan"))
     sbir_span = (_sbir_span(active, walls, receiver_world, fa)
                  if want_sbir else float("nan"))
+    rear_refl = (rear_reflection(basis, kappa, Q_spec, dims, origin, axis, fa, xi=xi)
+                 if want_reflection else float("nan"))
     return {"flat": flat, "spatial": spatial, "decay": decay, "L_bar": L_bar,
             "n_modes": basis.n_modes, "sbir_span": sbir_span,
+            "rear_reflection": rear_refl,
             "freqs": np.asarray(basis.omega_n, dtype=float) / (2.0 * np.pi)}
 
 
@@ -621,11 +705,12 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
     # sobre FEM se saltea (no entra en el veredicto planitud+varianza). decay=NaN.
     wd = fem is None
     ws = wants_sbir(criterion)     # el peine SBIR solo se computa si el norte lo usa
+    wr = wants_reflection(criterion)   # R de la pared trasera solo para 'front_rear'
 
     # --- metricas de la config REAL ---
     real = _config_metrics(active, dims, origin, walls, receiver,
                            axis=axis, fa=fa, xi=xi_eff, c=c, f_s=f_s, basis=basis,
-                           with_decay=wd, want_sbir=ws)
+                           with_decay=wd, want_sbir=ws, want_reflection=wr)
 
     # --- metricas del IDEAL (mismo pipeline; array LS materializado) ---
     n_front = len(fronts)
@@ -636,7 +721,7 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
     ideal_srcs = _ideal_sources(dims, origin, axis, na, nb, fmin, fmax, xi, c)
     ideal = _config_metrics(ideal_srcs, dims, origin, walls, receiver,
                             axis=axis, fa=fa, xi=xi_eff, c=c, f_s=f_s, basis=basis,
-                            with_decay=wd, want_sbir=ws)
+                            with_decay=wd, want_sbir=ws, want_reflection=wr)
 
     # --- banda de validez CABS (aliasing del array real) ---
     f_max_alias = _alias_fmax_from_roles(fronts, dims, axis, c)
@@ -669,6 +754,8 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
         # uniformidad modal Bolt (informativa, propiedad de la sala).
         "sbir_real": real.get("sbir_span", float("nan")),
         "sbir_ideal": ideal.get("sbir_span", float("nan")),
+        "rear_reflection_real": real.get("rear_reflection", float("nan")),
+        "rear_reflection_ideal": ideal.get("rear_reflection", float("nan")),
         "smoothness": modal_smoothness(real.get("freqs")),
         # Norte combinado (0..100, mayor=mejor): score real vs el ideal de la sala.
         "combined_real": (combined_score(real, weights)

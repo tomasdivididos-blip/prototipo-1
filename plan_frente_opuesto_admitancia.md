@@ -5,9 +5,10 @@
 > `bench_front_rear_room.py` T1-T4) y E1c (admitancia β_rear extraída, T5-T6) →
 > `bench_front_rear_room.py` 6/6. E1c redirige E3 al QEP (β_rear no es
 > perturbativo). **E3 (opción (b), QEP exacto) HECHO: `bench_front_rear_qep.py`
-> 4/4 — el RT60 del 1er axial colapsa ×1107 con la pared matcheada (C2 genuino).**
-> Falta E4-E5 (wiring al núcleo y a la GUI) y el E3 opcional (QEP sobre FEM nodal
-> real + β compleja). NO codear E4-E5 ni el wiring sin OK.** Nota: el quick-win perceptual
+> 4/4 — el RT60 del 1er axial colapsa ×1107 con la pared matcheada (C2 genuino).
+> E4a (norte de optimización = minimizar R de la pared trasera) HECHO:
+> `bench_front_rear_opt.py` 4/4.** Falta E4b/E5 (wiring al núcleo y a la GUI) y el E3
+> opcional (QEP sobre FEM nodal real + β compleja). NO codear el wiring sin OK.** Nota: el quick-win perceptual
 > de Fazenda (umbral de decaimiento modal en la tabla de modos, `perceptual.py`) es
 > una mejora del panel EXISTENTE, independiente de este plan, y ya está hecho.
 > Vara del proyecto: exactitud por debajo de Schroeder manda; respetar las
@@ -187,11 +188,34 @@ Es la **misma forma** que ya usa el cono del sub como absorbedor interior
   existente. **PENDIENTE de E3 (opcional):** QEP sobre el FEM nodal real (no solo
   modal-analítico) para salas no rectangulares, reusando `build_KM` + la C de
   superficie; y β compleja (Im(β)→Δfₙ).
-- **E4 — Interacción front↔rear como norte de optimización.** Exponer en el panel
-  «Optimización de fuentes» (`dba_dialog`) una métrica «amortiguamiento modal del eje
-  por el array trasero» (Σ Δξₙ sobre los modos axiales objetivo) junto a
-  flat/spatial/sbir/cabs/dba, y optimizar pos/nivel/delay/polaridad del trasero para
-  maximizarla sin degradar la planitud.
+- **E4 — Interacción front↔rear como norte de optimización (REDEFINIDO por E3).**
+  El norte original (maximizar Σ Δξₙ) **NO aplica a fuentes reales**: el drive
+  feedforward (`dba.py`) NO mueve polos (E3). El norte correcto y alcanzable por
+  fuentes reales es **minimizar la reflexión R de la pared trasera** (= absorber el
+  frente de onda; R→0 es el techo matcheado del QEP de E3).
+  - **E4a — HECHO.** `bench_front_rear_opt.py` 4/4. Define el coste = R promedio en la
+    banda axial (R vía la descomposición viajera de E1b) para una config del trasero
+    (retardo, polaridad, nivel). Resultados: (T1) rígido R̄=0.998 → CABS 0.483 (el
+    norte discrimina); (T2) el óptimo del retardo cae en ≈L/c (tránsito); (T3) sin
+    inversión R̄=2.72 vs 0.48 (polaridad crítica); (T4) optimizar (retardo,nivel) da
+    R̄=0.398, casi igual al CABS canónico (el CABS es ~óptimo). El R̄ mínimo no es 0
+    porque a baja f (< axial fundamental) la onda plana no está establecida (coherente
+    con E1b/E1c).
+  - **E4b — HECHO (wiring núcleo + GUI).** Norte nuevo `"front_rear"` = **R̄ ponderado
+    por banda (peso ~f, solo en [axial1, primer transversal] donde vale la onda plana)
+    convertido a rizado en dB `20·log10((1+R̄)/(1−R̄))` + planitud + varianza espacial**
+    (la elección del usuario). `dba_evaluate`: `wants_reflection`,
+    `_reflection_penalty_db`, `_axis_transverse_band`, `rear_reflection` (descomposición
+    viajera de E1b sobre una línea del eje), rama en `composite_cost`, gate
+    `want_reflection` en `_config_metrics`, `rear_reflection_real/ideal` en
+    `evaluate_cabs`. `cabs_optimize`: `want_reflection` propagado en los 3 sitios
+    (`suggest_layouts`, `_cost`, `_metrics`). `dba_dialog`: ítem de combo, label,
+    tooltip, y lectura en `_show_eval` (badge «frente absorbido» / «reflexión trasera
+    alta» + R̄ real vs ideal + rizado dB). Verificado headless: `evaluate_cabs`
+    distingue (front-only R̄=0.91/coste 35.8 → CABS con trasero L/c+invertido
+    R̄=0.36/coste 16.0, elige el eje front↔rear solo); `optimize_cabs` corre sin error;
+    `_show_eval` muestra el readout (R_real 0.35 vs ideal LS 0.20). **FALTA test visual
+    del usuario en el diálogo real.**
 - **E5 — Panel de decaimiento riguroso (C2).** Alimentar ξ_total = ξ_pared + Δξ_rear
   al waterfall → mostrar que la estacionaria del eje decae más rápido (polos movidos),
   no solo redistribución. Etiquetar C1 vs C2 en la UI (honestidad).
