@@ -93,7 +93,13 @@ class DBADialog(QDialog):
         # dict: sources() -> [OmniSource], walls_fn(freq) -> [Wall],
         # receiver_world, origin, f_schroeder.
         self._eval_ctx = eval_context
-        self._last = None
+        self._last = None            # curva del modo DISEÑO (_calc): freq/Hb_db/Ha_db
+        self._last_eval = None       # curva del modo EVALUAR (_calc_eval): real/ideal
+        self._last_opt = None        # ultimo resultado de optimizacion
+        # Qué está dibujado ahora ("calc" | "eval" | None) -> habilita el export del
+        # gráfico. Antes el export se guardaba solo con `_last` (modo diseño), así que
+        # tras EVALUAR u OPTIMIZAR no exportaba nada (bug reportado por el profesor).
+        self._last_plot_kind = None
 
         # Contenido en un QScrollArea (el diálogo puede ser alto: config + gráfico
         # + export) para que Aplicar/Close queden SIEMPRE alcanzables abajo y no
@@ -833,6 +839,14 @@ class DBADialog(QDialog):
                     apply_cb(r["optimized"])
                     QMessageBox.information(self, "Optimización aplicada",
                                             "Fuentes libres reubicadas/ajustadas.")
+                    # Re-evaluar con las fuentes ya optimizadas -> el gráfico pasa a
+                    # ser el de la config optimizada y queda EXPORTABLE (el profesor
+                    # no podía exportar nada tras optimizar).
+                    try:
+                        if self._canvas is not None and self._mode() == "eval":
+                            self._calc_eval()
+                    except Exception:
+                        pass
                 except Exception as e:
                     QMessageBox.warning(self, "Optimización",
                                         f"No se pudo aplicar:\n{e}")
@@ -991,6 +1005,7 @@ class DBADialog(QDialog):
         self._ax.legend(fontsize=8)
         self._fig.tight_layout()
         self._canvas.draw()
+        self._last_plot_kind = "eval"
 
     def _apply(self):
         from dba import build_dba_sources
@@ -1115,23 +1130,53 @@ class DBADialog(QDialog):
         self._ax.legend(fontsize=8)
         self._fig.tight_layout()
         self._canvas.draw()
+        self._last_plot_kind = "calc"
 
     def _export(self, fmt: str):
-        if self._last is None:
+        """Exporta el gráfico ACTUAL (diseño o evaluación). PNG/SVG/PDF guardan la
+        imagen; CSV guarda la curva con las columnas del modo dibujado. Antes solo
+        exportaba el modo diseño (`_last`) -> tras evaluar/optimizar no salía nada
+        (bug del profesor)."""
+        kind = self._last_plot_kind
+        if kind is None or not _HAS_MPL or self._canvas is None:
+            QMessageBox.information(
+                self, "Exportar",
+                "Primero calculá o evaluá para generar un gráfico.")
+            return
+        # datos de curva para CSV segun el modo dibujado
+        if kind == "calc" and self._last is not None:
+            r = self._last
+            csv_header = ["freq_hz", "cabs_off_db", "cabs_on_db"]
+            csv_cols = ("freq", "Hb_db", "Ha_db")
+        elif kind == "eval" and self._last_eval is not None:
+            r = self._last_eval
+            csv_header = ["freq_hz", "total_real_db", "cabs_ideal_db"]
+            csv_cols = ("freq", "total_db_mean_real", "total_db_mean_ideal")
+        else:
+            r, csv_header, csv_cols = None, None, None
+        if fmt == "csv" and r is None:
+            QMessageBox.information(
+                self, "Exportar CSV",
+                "El gráfico actual no tiene una curva exportable a CSV. "
+                "Podés exportar la imagen (PNG/SVG/PDF).")
             return
         path, _ = QFileDialog.getSaveFileName(
             self, f"Exportar como {fmt.upper()}", f"dba.{fmt}",
             f"{fmt.upper()} (*.{fmt})")
         if not path:
             return
-        if fmt == "csv":
-            r = self._last
-            import csv
-            with open(path, "w", newline="", encoding="utf-8") as fh:
-                w = csv.writer(fh)
-                w.writerow(["freq_hz", "cabs_off_db", "cabs_on_db"])
-                for i in range(len(r["freq"])):
-                    w.writerow([f"{r['freq'][i]:.3f}", f"{r['Hb_db'][i]:.4f}",
-                                f"{r['Ha_db'][i]:.4f}"])
-        elif _HAS_MPL:
-            self._fig.savefig(path, dpi=300, bbox_inches="tight", facecolor="white")
+        try:
+            if fmt == "csv":
+                import csv
+                with open(path, "w", newline="", encoding="utf-8") as fh:
+                    w = csv.writer(fh)
+                    w.writerow(csv_header)
+                    n = len(r[csv_cols[0]])
+                    for i in range(n):
+                        w.writerow([f"{float(r[csv_cols[0]][i]):.3f}"]
+                                   + [f"{float(r[c][i]):.4f}" for c in csv_cols[1:]])
+            else:
+                self._fig.savefig(path, dpi=300, bbox_inches="tight",
+                                  facecolor="white")
+        except Exception as e:
+            QMessageBox.warning(self, "Exportar", f"No se pudo exportar:\n{e}")

@@ -234,15 +234,11 @@ class IsoViewer(gl.GLViewWidget):
         self._label_font.setPointSize(8)
         self._label_font.setBold(True)
 
-        # --- Rotacion con eje fijo (Ctrl+Shift+Alt+X/Y/Z o click en el overlay) ---
+        # --- Rotacion con eje fijo (Ctrl+Shift+Alt+X/Y/Z) ---
         self._locked_axis: str | None = None  # None | "x" | "y" | "z"
-        # Overlay flotante en la esquina inferior derecha
-        self.axis_indicator = AxisIndicator(self)
-        # Click en un cuadrado equivale al atajo Ctrl+Shift+Alt+<eje>.
-        self.axis_indicator.axisClicked.connect(self.set_locked_axis)
-        self.axis_indicator.show()
-        self.axis_indicator.raise_()
-        self._reposition_axis_indicator()
+        # Los cuadrados X/Y/Z clicables de la esquina se quitaron (pedido del
+        # usuario): ensuciaban la zona de render al lado de P/I/L. El bloqueo de
+        # eje sigue disponible por teclado (Ctrl+Shift+Alt+X/Y/Z -> set_locked_axis).
 
         self._inclining_wall = None
         self._incline_press_y = None
@@ -1928,7 +1924,8 @@ class IsoViewer(gl.GLViewWidget):
         if new is not None and new not in ("x", "y", "z"):
             return
         self._locked_axis = new
-        self.axis_indicator.set_active(new)
+        if hasattr(self, "axis_indicator"):      # el overlay X/Y/Z se quitó
+            self.axis_indicator.set_active(new)
 
     def get_locked_axis(self):
         return self._locked_axis

@@ -569,3 +569,78 @@ def apply_dialog_theme(widget):
         flags |= Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint
         flags &= ~Qt.WindowContextHelpButtonHint
         widget.setWindowFlags(flags)
+
+
+# ---------------------------------------------------------------------------
+# Botón de ayuda «?» por ventana (pedido del usuario): cada diálogo muestra un
+# «?» flotante arriba a la derecha que abre un popup con «para qué sirve + cómo
+# usarla». Mecanismo reutilizable (el contenido lo pasa cada diálogo).
+# ---------------------------------------------------------------------------
+def show_help_popup(parent, html, title="Cómo usar esta ventana"):
+    """Popup de ayuda con texto rico (HTML), temado claro + scroll."""
+    from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QLabel, QScrollArea,
+                                 QDialogButtonBox)
+    from PyQt5.QtCore import Qt
+    dlg = QDialog(parent)
+    dlg.setWindowTitle(title)
+    lay = QVBoxLayout(dlg)
+    lbl = QLabel(html)
+    lbl.setWordWrap(True)
+    lbl.setTextInteractionFlags(Qt.TextBrowserInteraction)
+    lbl.setOpenExternalLinks(True)
+    lbl.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+    sa = QScrollArea()
+    sa.setWidgetResizable(True)
+    sa.setFrameShape(QScrollArea.NoFrame)
+    sa.setWidget(lbl)
+    lay.addWidget(sa)
+    bb = QDialogButtonBox(QDialogButtonBox.Ok)
+    bb.accepted.connect(dlg.accept)
+    lay.addWidget(bb)
+    dlg.resize(500, 440)
+    apply_dialog_theme(dlg)
+    dlg.exec_()
+
+
+class _HelpButtonReposition:
+    """Event filter que mantiene el «?» pegado arriba a la derecha del diálogo
+    (se reposiciona al mostrar/redimensionar). Es un QObject envuelto para no
+    importar QtCore a nivel de módulo."""
+    def __new__(cls, dialog, btn, margin=6):
+        from PyQt5.QtCore import QObject, QEvent
+
+        class _Filter(QObject):
+            def eventFilter(self, obj, ev):
+                if ev.type() in (QEvent.Resize, QEvent.Show):
+                    s = btn.width()
+                    btn.move(max(0, dialog.width() - s - margin), margin)
+                    btn.raise_()
+                return False
+
+        return _Filter(dialog)
+
+
+def add_help_button(dialog, html, title="Cómo usar esta ventana", size=26):
+    """Agrega un «?» flotante (arriba a la derecha) al `dialog` que abre un popup
+    con `html`. Llamar al final del __init__, después de apply_dialog_theme.
+    Devuelve el botón."""
+    from PyQt5.QtWidgets import QPushButton
+    from PyQt5.QtCore import Qt
+    btn = QPushButton("?", dialog)
+    btn.setObjectName("helpBtn")
+    btn.setCursor(Qt.PointingHandCursor)
+    btn.setFixedSize(size, size)
+    btn.setToolTip("Ayuda: cómo usar esta ventana")
+    btn.setStyleSheet(
+        "QPushButton#helpBtn { background-color:#5b6d9e; color:#ffffff;"
+        f" border:none; border-radius:{size // 2}px; font-weight:800;"
+        " font-size:13pt; padding:0px; }"
+        "QPushButton#helpBtn:hover { background-color:#1e66f5; color:#ffffff; }")
+    btn.clicked.connect(lambda: show_help_popup(dialog, html, title))
+    filt = _HelpButtonReposition(dialog, btn)
+    dialog.installEventFilter(filt)
+    dialog._help_btn = btn            # referencias vivas
+    dialog._help_btn_filter = filt
+    btn.show()
+    btn.raise_()
+    return btn

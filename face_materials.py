@@ -1160,7 +1160,7 @@ def summarize_zone_areas(groups: List[FaceGroup]) -> Dict[str, float]:
 try:
     from PyQt5.QtCore import Qt, pyqtSignal, QEvent
     from PyQt5.QtGui import QColor, QBrush, QDoubleValidator
-    from style import apply_dialog_theme
+    from style import apply_dialog_theme, add_help_button
     from PyQt5.QtWidgets import (
         QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
         QTableWidget, QTableWidgetItem, QComboBox, QDialogButtonBox,
@@ -1174,6 +1174,20 @@ except ImportError:
 
 
 if _HAS_QT:
+    _HELP_MATERIALS = (
+        "<b>Materiales por cara.</b> Asignás un material (coeficiente de absorción α "
+        "por banda) a cada cara del recinto. De estas asignaciones salen el RT60 y la "
+        "frecuencia de Schroeder.<br><br>"
+        "<b>Asignar a todos… / Preset piso·techo·paredes… / Preset nombrado…:</b> "
+        "asignación rápida a todas las caras, por zona, o cargando un preset "
+        "guardado.<br>"
+        "<b>Crear material… / Cargar tu material…:</b> armá un material propio (α por "
+        "tercio de octava, sin escribir JSON) o cargá tus archivos .json.<br>"
+        "<b>Recalcular RT60:</b> actualiza el RT60 con las asignaciones actuales.<br>"
+        "Una cara con un material que no está en la biblioteca usa α = 0.03 por "
+        "defecto (y se avisa). Las caras con una impedancia asignada aparecen como "
+        "«→ definido por impedancia» y se editan en la ventana «Impedancias…».")
+
     # Color deterministico por kind (consistente entre aperturas).
     _KIND_COLORS = {
         "floor":   QColor(120, 200, 130, 220),   # verde
@@ -1335,6 +1349,7 @@ if _HAS_QT:
             super().__init__(parent)
             apply_dialog_theme(self)  # tema claro (fondo blanco)
             self.setWindowTitle("Materiales por cara")
+            add_help_button(self, _HELP_MATERIALS, "Materiales — ayuda")
             self.setModal(True)
             self.resize(740, 520)
 

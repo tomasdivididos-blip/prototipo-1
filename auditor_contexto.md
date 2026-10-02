@@ -6,7 +6,14 @@
 > cada cosa contra la fuente física, un oráculo, o una cuenta propia. Que este archivo
 > diga "resuelto/PASA" no prueba nada; es un puntero a qué mirar.
 
-**Última actualización:** 2026-10-01 (v2.55: fallback α=0.03 para material no resuelto + embebido robusto + feature 1-2 etapa 2 = modelo por forma del α + ajuste; + v2.54 + v2.53 + v2.52 + v2.51 + v2.50).
+**Última actualización:** 2026-10-02 (v2.56: UI/IO, FUERA de alcance físico; + v2.55: fallback α=0.03 + embebido robusto + feature 1-2 etapa 2; + v2.54 + v2.53 + v2.52 + v2.51 + v2.50).
+
+## v2.56 — export tras optimizar + «?» de ayuda + sacar X/Y/Z del visor (2 Oct 2026, FUERA DE ALCANCE FÍSICO)
+
+Nada de esto toca el solver, el ensamblaje FEM, la perturbación, la impedancia ni las métricas. Es UI/IO; no requiere auditoría física. Para contexto:
+- **`dba_dialog.DBADialog._export`:** antes solo exportaba el modo diseño (`_last`); ahora exporta el gráfico actual según `_last_plot_kind` ("calc"|"eval") — imagen siempre, CSV con columnas por modo. El CSV de evaluación sale de `_last_eval` (`freq`, `total_db_mean_real`, `total_db_mean_ideal`), que son los MISMOS arrays que ya dibujaba `_draw_eval` y que produce `dba_evaluate.evaluate_cabs` (núcleo YA en alcance desde PR #19, sin cambios acá). No se recomputa nada nuevo: solo se serializa lo ya calculado. Único efecto de cálculo: al APLICAR una optimización se re-llama `_calc_eval()` (re-evalúa la config optimizada con la misma `evaluate_cabs`, sin lógica nueva).
+- **`style.add_help_button` / `show_help_popup`:** botón «?» + popup de texto. Puro Qt.
+- **`viewer.py`:** se quitó el widget `AxisIndicator` (cuadrados X/Y/Z). El bloqueo de eje (rotación restringida) sigue por teclado; la matemática de rotación no cambió.
 
 ## v2.55 — material no resuelto → α=0.03 (no rígido) + modelo de impedancia por forma del α + ajuste (1 Oct 2026, EN ALCANCE — VERIFICAR)
 

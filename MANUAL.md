@@ -2954,6 +2954,16 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.56 (exportar el gráfico tras optimizar fuentes + ayuda «?» por ventana + visor más limpio)
+
+**Cambios v2.56** (2 de octubre 2026): un arreglo reportado por un usuario y dos mejoras de interfaz.
+
+- **Ahora se puede exportar el gráfico después de optimizar o evaluar fuentes.** En la ventana «Optimización de fuentes», los botones Exportar (PNG / SVG / PDF / CSV) antes solo funcionaban en el modo «diseñar el array DBA ideal»; después de **evaluar tus fuentes** o de **optimizar**, no exportaban nada (hacían clic sin efecto). Ahora exportan el gráfico que está a la vista: la imagen siempre, y el CSV con las columnas del modo dibujado (diseño: CABS off/on; evaluación: respuesta real vs CABS ideal). Si todavía no hay gráfico, avisa en vez de no hacer nada. Además, al **aplicar** una optimización, el gráfico se recalcula con las fuentes ya optimizadas y queda listo para exportar.
+- **Botón de ayuda «?» por ventana.** Cada ventana puede mostrar un «?» arriba a la derecha (pegado a los botones de minimizar/maximizar/cerrar) que abre una explicación de «para qué sirve y cómo usarla». En esta versión está en el editor de fuente, en «Impedancias» y en «Materiales»; se irá agregando al resto. (Nota: el «?» va dentro de la ventana, no en la barra de título del sistema, porque Windows no permite un botón propio ahí junto a minimizar/maximizar.)
+- **Visor 3D más limpio:** se quitaron los cuadrados X / Y / Z de la esquina (al lado de P/I/L). El bloqueo de rotación alrededor de un eje sigue disponible por teclado con Ctrl+Shift+Alt+X / Y / Z.
+
+*Manual actualizado al 2 de Octubre de 2026 — v2.56.*
+
 ## Cambios v2.55 (modelo de impedancia por la forma del α + material no resuelto deja de romper el f_Schroeder)
 
 **Cambios v2.55** (1 de octubre 2026): un arreglo de robustez de materiales y una mejora grande de las sugerencias de impedancia (continuación de v2.54), motivados por un recinto real cuyos materiales propios hacían saltar la frecuencia de Schroeder.

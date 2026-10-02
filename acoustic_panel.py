@@ -26,7 +26,7 @@ from typing import Callable, Optional
 import pyqtgraph as pg
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QDoubleValidator, QColor
-from style import apply_dialog_theme
+from style import apply_dialog_theme, add_help_button
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QLabel,
     QPushButton, QListWidget, QListWidgetItem, QDoubleSpinBox, QSpinBox,
@@ -90,6 +90,48 @@ def _write_tabular(path: str, header: list, rows: list, fmt: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Textos de ayuda «?» por ventana (mecanismo en style.add_help_button).
+# ---------------------------------------------------------------------------
+_HELP_SOURCE_EDIT = (
+    "<b>Editor de fuente acústica.</b> Definís una fuente (parlante o subwoofer) "
+    "del recinto y cómo participa del cálculo.<br><br>"
+    "<b>Lo básico:</b> nombre, tipo (full range / subwoofer / genérico), posición "
+    "(x, y, z), nivel/Q y la casilla «Activa».<br>"
+    "<b>Optimizar (fila «todas»):</b> tildá qué variables puede mover el "
+    "optimizador de fuentes (posición, delay, polaridad, nivel…). «todas» las "
+    "activa o limpia de golpe.<br>"
+    "<b>Respuesta en frecuencia Q(f):</b> cargá la curva real del parlante "
+    "(FRD / TRF / CLF) o dejala plana.<br>"
+    "<b>Driver físico (Thiele-Small):</b> parámetros del driver (fs, Qts, Vas, Vb, "
+    "Sd, Qms, Qes) para el modelo exacto. «Carga del cono» (subs) agrega el "
+    "amortiguamiento que el cono le suma a los modos según el estado de los bornes "
+    "(corto / amplificador / abierto).<br>"
+    "<b>Modelo de radiación y Bafle:</b> cómo irradia (caja, dipolo, baffle-step) y "
+    "el bafle visual. «Pegar a pared más cercana» ancla la fuente a la pared.<br>"
+    "<b>Filtro (crossover / EQ):</b> filtro por fuente (Butterworth, Linkwitz-Riley, "
+    "Bessel, Chebyshev, elíptico).")
+
+_HELP_IMPEDANCES = (
+    "<b>Impedancias de superficie.</b> Asignás un modelo de impedancia a cada cara, "
+    "parche o mueble. Un modelo aporta reactancia → corrimiento de las frecuencias "
+    "modales fₙ, además del amortiguamiento. Sin asignar, cada superficie usa la "
+    "absorción α de su material (β real, solo amortiguamiento).<br><br>"
+    "<b>Sugerencias automáticas:</b> derivada del material de cada superficie, "
+    "aparece una sugerencia en <span style='color:#179299'><b>teal «⟲ sugerido»</b>"
+    "</span> (el tipo se elige por la forma del α y los parámetros se ajustan para "
+    "reproducir la absorción medida) o en <span style='color:#d97706'><b>ámbar «⚠ "
+    "sin modelo»</b></span> cuando no corresponde un modelo (usa β real, α exacto). "
+    "Pasá el mouse por una fila para resaltar esa cara en el 3D; el tooltip explica "
+    "el porqué.<br>"
+    "<b>Aplicar sugerencias automáticas / a seleccionadas:</b> convierte las "
+    "sugerencias teal en impedancias asignadas (quedan editables). Las ámbar no se "
+    "tocan.<br>"
+    "<b>Nueva construcción y asignar… / Editar / Quitar:</b> definí a mano un modelo "
+    "(poroso, perforado, membrana, Helmholtz, multicapa) para las superficies "
+    "seleccionadas, editá el asignado, o quitalo.")
+
+
+# ---------------------------------------------------------------------------
 # Dialog para anadir / editar una fuente
 # ---------------------------------------------------------------------------
 class SourceEditDialog(QDialog):
@@ -109,6 +151,7 @@ class SourceEditDialog(QDialog):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Fuente acústica")
+        add_help_button(self, _HELP_SOURCE_EDIT, "Fuente acústica — ayuda")
         # Callback opcional -> lista de (centroide(3,), normal(3,)) de las paredes
         # (para "Pegar a pared más cercana"). El panel lo arma con los face groups.
         self._get_walls = get_walls
@@ -3492,6 +3535,7 @@ class WallConstructionsDialog(QDialog):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Impedancias (paredes, parches y muebles)")
+        add_help_button(self, _HELP_IMPEDANCES, "Impedancias — ayuda")
         self.resize(720, 560)
         self.result_map = dict(construction_map or {})
         # Sugerencias AUTOMATICAS por material (clave -> spec) y su info
