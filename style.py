@@ -604,8 +604,16 @@ def show_help_popup(parent, html, title="Cómo usar esta ventana"):
 
 class _HelpButtonReposition:
     """Event filter que mantiene el «?» pegado arriba a la derecha del diálogo
-    (se reposiciona al mostrar/redimensionar). Es un QObject envuelto para no
-    importar QtCore a nivel de módulo."""
+    (se reposiciona al mostrar/redimensionar) y RESERVA una franja superior en
+    el layout del diálogo para que ningún texto quede debajo del «?» al agrandar
+    la ventana. Es un QObject envuelto para no importar QtCore a nivel de módulo.
+
+    La reserva se hace acá (y no en `add_help_button`) porque este se llama al
+    principio del __init__, cuando el layout del diálogo todavía no existe; el
+    primer evento Show llega con el layout ya armado. El margen superior se sube
+    a `margin + size + margin`: el contenido arranca debajo del botón, así el
+    «?» vive solo en esa franja y el texto se justifica dentro del resto de la
+    ventana (idempotente por el `max`, no reflota en cada resize)."""
     def __new__(cls, dialog, btn, margin=6):
         from PyQt5.QtCore import QObject, QEvent
 
@@ -615,14 +623,24 @@ class _HelpButtonReposition:
                     s = btn.width()
                     btn.move(max(0, dialog.width() - s - margin), margin)
                     btn.raise_()
+                    lay = dialog.layout()
+                    if lay is not None:
+                        m = lay.contentsMargins()
+                        need = margin + s + margin
+                        if m.top() < need:
+                            lay.setContentsMargins(
+                                m.left(), need, m.right(), m.bottom())
                 return False
 
         return _Filter(dialog)
 
 
-def add_help_button(dialog, html, title="Cómo usar esta ventana", size=26):
+def add_help_button(dialog, html, title="Cómo usar esta ventana", size=26,
+                    margin=6):
     """Agrega un «?» flotante (arriba a la derecha) al `dialog` que abre un popup
     con `html`. Llamar al final del __init__, después de apply_dialog_theme.
+    Reserva una franja superior de `margin + size + margin` px en el layout para
+    que el texto no quede tapado por el «?» (ver `_HelpButtonReposition`).
     Devuelve el botón."""
     from PyQt5.QtWidgets import QPushButton
     from PyQt5.QtCore import Qt
@@ -637,7 +655,7 @@ def add_help_button(dialog, html, title="Cómo usar esta ventana", size=26):
         " font-size:13pt; padding:0px; }"
         "QPushButton#helpBtn:hover { background-color:#1e66f5; color:#ffffff; }")
     btn.clicked.connect(lambda: show_help_popup(dialog, html, title))
-    filt = _HelpButtonReposition(dialog, btn)
+    filt = _HelpButtonReposition(dialog, btn, margin)
     dialog.installEventFilter(filt)
     dialog._help_btn = btn            # referencias vivas
     dialog._help_btn_filter = filt

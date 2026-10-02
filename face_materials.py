@@ -1186,7 +1186,24 @@ if _HAS_QT:
         "<b>Recalcular RT60:</b> actualiza el RT60 con las asignaciones actuales.<br>"
         "Una cara con un material que no está en la biblioteca usa α = 0.03 por "
         "defecto (y se avisa). Las caras con una impedancia asignada aparecen como "
-        "«→ definido por impedancia» y se editan en la ventana «Impedancias…».")
+        "«→ definido por impedancia» y se editan en la ventana «Impedancias…».<br><br>"
+        "<b>Ejemplo:</b> con «Preset piso·techo·paredes…» ponés «hormigón» en las "
+        "paredes y el piso y «placa de yeso» en el techo; apretás «Recalcular RT60» y "
+        "el RT60 por banda y la frecuencia de Schroeder se actualizan. Si una cara "
+        "quedó con un material que borraste de la biblioteca, se marca con α = 0.03 "
+        "y un aviso.")
+
+    _HELP_MATERIAL_FORM = (
+        "<b>Crear material propio.</b> Armás un material sin escribir JSON: una "
+        "casilla de coeficiente de absorción α por tercio de octava (50-5000 Hz), un "
+        "nombre y notas de procedencia. Las bandas que dejes vacías se interpolan o "
+        "extrapolan a partir de las cargadas.<br><br>"
+        "<b>Cómo usarla:</b> completá las bandas que tengas de la ficha o de tu "
+        "medición, poné nombre y «Guardar»; el material queda disponible para "
+        "asignarlo a las caras.<br><br>"
+        "<b>Ejemplo:</b> un panel de lana cargás α = 0.35 @125, 0.70 @250, 0.95 @500 "
+        "y de ahí para arriba; nombre «Panel lana 50 mm (medido)», procedencia «cámara "
+        "reverberante, mi medición».")
 
     # Color deterministico por kind (consistente entre aperturas).
     _KIND_COLORS = {
@@ -1214,6 +1231,7 @@ if _HAS_QT:
             super().__init__(parent)
             apply_dialog_theme(self)  # tema claro (fondo blanco)
             self.setWindowTitle("Crear material propio (α por tercio de octava)")
+            add_help_button(self, _HELP_MATERIAL_FORM, "Crear material — ayuda")
             self.resize(560, 660)
             self.result_data = None
             self._cells = {}       # band(int) -> QLineEdit

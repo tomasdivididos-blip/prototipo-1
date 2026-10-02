@@ -3,7 +3,26 @@
 Vara: `ux_principios.md`. Cada item cierra con test visual en checklist. Orden
 acordado con el usuario: **6 -> (9, 1, 8) -> (2, 5) -> (3, 7) -> 4**.
 
-Estado: NADA implementado. Este .md es para aprobar y ejecutar por tandas.
+Estado: **CERRADO (2 Oct 2026).** Los 9 items (incluidas las etapas 4a y 4b del
+item 4) estan implementados y probados en GUI (21-22 Sep 2026). Entregado en
+**v2.47** (ejecucion del plan) y pulido en **v2.51** (botón «todas», ventanas
+min/max/cerrar, arrastre en Z desde Lateral, grillas de coordenadas XZ/YZ). Este
+.md queda como registro historico del plan; no hay nada pendiente.
+
+Verificacion en codigo (item -> evidencia):
+- **6** puntos de campo escalados al recinto: `acoustic_viewer._field_point_size_world`
+  + `pxMode=False` (~743, ~801, ~806).
+- **9** letras X/Y/Z en el 3D: `viewer._add_axis_letter` (~1281).
+- **1** Ctrl+I importa CAD directo: `main._quick_import_cad` + `_add_shortcut("Ctrl+I")`
+  (~352, ~1032).
+- **8** panel FEM con dos botones + config en dialogo: `acoustic_panel._fem_cfg_dialog`
+  «Configuración de FEM» (~4353).
+- **2** render Auto/Manual: combo + logica «Item 2» en `acoustic_panel` (~4549, ~4700).
+- **5** mini-preview en cortes (pared en rojo): `section_dialog` (~308, ~451).
+- **3** Alt+Enter borra el campo: `acoustic_panel` (~7378) + `main` (~1078).
+- **7** Ctrl+Alt + click derecho rota la fuente 90°: `main` (~195).
+- **4a/4b** botones de camara P/I/L con lock + flechas para ciclar pared/esquina:
+  `viewer` presets (~294) + flechas de 90° (~345).
 
 ---
 

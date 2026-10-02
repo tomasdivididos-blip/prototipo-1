@@ -30,7 +30,7 @@ import numpy as np
 
 from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal
 from PyQt5.QtGui import QPainter, QPen, QColor, QBrush, QFont, QPolygonF, QCursor
-from style import apply_dialog_theme
+from style import apply_dialog_theme, add_help_button
 from PyQt5.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QComboBox,
     QListWidget, QListWidgetItem, QDialogButtonBox, QGroupBox, QAbstractItemView,
@@ -38,6 +38,20 @@ from PyQt5.QtWidgets import (
 )
 
 import absorption_patch as ap
+
+_HELP_PATCH = (
+    "<b>Parches de absorción por cara.</b> Dibujás una región dentro de una cara "
+    "(pared, piso o techo) y le asignás su propio material, para modelar tratamiento "
+    "parcial (un panel, una alfombra, una banda de difusores) sin cambiar el material "
+    "de toda la cara.<br><br>"
+    "<b>Cómo usarla:</b> elegí una cara de la lista; en el canvas (plano u-v de la "
+    "cara) dibujás el parche en modo «Rectángulo (arrastrar)» o «Polígono (clicks)»; "
+    "elegís el material del combo. Botón derecho sobre un parche lo borra; la rueda "
+    "hace zoom. Los parches no pueden solaparse (el candidato se dibuja en rojo si "
+    "pisaría a otro).<br><br>"
+    "<b>Ejemplo:</b> en la pared frontal dibujás un rectángulo de 1.2×2.0 m detrás "
+    "del parlante y le asignás «Panel lana 50 mm»; el resto de la pared sigue con su "
+    "material original.")
 
 
 GRID_STEPS = [0.1, 0.25, 0.5, 1.0]
@@ -499,6 +513,7 @@ class PatchEditorDialog(QDialog):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Parches de absorcion por cara")
+        add_help_button(self, _HELP_PATCH, "Parches — ayuda")
         self.setModal(True)
         self.resize(940, 640)
 

@@ -109,7 +109,11 @@ _HELP_SOURCE_EDIT = (
     "<b>Modelo de radiación y Bafle:</b> cómo irradia (caja, dipolo, baffle-step) y "
     "el bafle visual. «Pegar a pared más cercana» ancla la fuente a la pared.<br>"
     "<b>Filtro (crossover / EQ):</b> filtro por fuente (Butterworth, Linkwitz-Riley, "
-    "Bessel, Chebyshev, elíptico).")
+    "Bessel, Chebyshev, elíptico).<br><br>"
+    "<b>Ejemplo:</b> un subwoofer en la pared frontal, posición (0.5, 1.8, 0.3) m, "
+    "tipo «subwoofer», nivel 90 dB SPL, con TS cargados (fs 25 Hz, Qts 0.4) y «Carga "
+    "del cono» en estado «amplificador»; luego en «todas» se tilda solo «posición» "
+    "para que el optimizador lo reubique sin cambiar nivel ni polaridad.")
 
 _HELP_IMPEDANCES = (
     "<b>Impedancias de superficie.</b> Asignás un modelo de impedancia a cada cara, "
@@ -128,7 +132,129 @@ _HELP_IMPEDANCES = (
     "tocan.<br>"
     "<b>Nueva construcción y asignar… / Editar / Quitar:</b> definí a mano un modelo "
     "(poroso, perforado, membrana, Helmholtz, multicapa) para las superficies "
-    "seleccionadas, editá el asignado, o quitalo.")
+    "seleccionadas, editá el asignado, o quitalo.<br><br>"
+    "<b>Ejemplo:</b> una pared con «lana de roca 50 mm» muestra la sugerencia teal "
+    "«⟲ sugerido: poroso»; apretás «Aplicar sugerencias automáticas» y queda como "
+    "impedancia porosa editable. Para una trampa de graves hecha a mano, seleccionás "
+    "la cara del fondo y en «Nueva construcción…» elegís «membrana» (f₀ ≈ 60 Hz) "
+    "para sumar corrimiento de fₙ, no solo absorción.")
+
+_HELP_FURNITURE = (
+    "<b>Editor de mueble.</b> Definís un objeto del recinto (caja o cilindro) que "
+    "obstruye el campo: talla un hueco en la malla (afecta los modos) y, según su "
+    "material, agrega absorción (RT60/ξ) y reflexiones (SBIR).<br><br>"
+    "<b>Cómo usarla:</b> elegí el tipo, el centro (x, y, z) y el tamaño en metros; "
+    "orientación/inclinación/vuelco para rotarlo; el material («Rígido» = obstáculo "
+    "sin absorción, α 0.03) y una etiqueta. «Importar CAD (OBJ)…» trae una malla "
+    "escaneada como mueble.<br><br>"
+    "<b>Ejemplo:</b> un rack de equipos → tipo «Caja», centro (2.0, 0.5, 0.4), tamaño "
+    "0.6×0.5×0.8 m, material «Rígido»; o un sofá contra la pared trasera con un "
+    "material absorbente del catálogo para que sume amortiguamiento.")
+
+_HELP_DECAY = (
+    "<b>Decaimiento del campo total.</b> Compara cómo decae el sonido en el receptor "
+    "SIN y CON los subwoofers (y, si hay datos Thiele-Small, con la carga del cono). "
+    "Muestra la curva de energía (EDC de Schroeder) superpuesta y los waterfalls "
+    "(CSD), por debajo de la frecuencia de Schroeder.<br><br>"
+    "<b>Honestidad física:</b> es el decaimiento del campo TOTAL; el array de subs "
+    "redistribuye la energía modal (qué modos excita y con qué fase), no cambia el ξ "
+    "propio de cada modo (los polos del recinto no se tocan).<br><br>"
+    "<b>Ejemplo:</b> con dos subs enfrentados bien driveados, la cola de graves "
+    "(curva «con subs») cae más rápido y parejo que la curva «sin subs», señal de "
+    "que el modo axial largo quedó menos excitado.")
+
+_HELP_FRF = (
+    "<b>Respuesta en frecuencia (FRF).</b> Muestra el SPL (dB re 20 µPa) en el "
+    "receptor vs frecuencia, de la superposición modal (FEM). La curva «Total: modal "
+    "+ SBIR» agrega el peine de reflexiones por encima de f_S. Por encima de la banda "
+    "válida la curva va en gris punteado (no confiable: cola modal truncada).<br><br>"
+    "<b>Cómo usarla:</b> los picos marcan modos; «▶ Escuchar» filtra ruido rosa con "
+    "la FRF para oír la coloración; «Exportar PNG/SVG/PDF/CSV/TXT» guarda gráfico o "
+    "datos.<br><br>"
+    "<b>Ejemplo:</b> ves un pico de +8 dB a 43 Hz y un valle profundo a 68 Hz; movés "
+    "el receptor o agregás una trampa de graves y recalculás para ver si se aplanan.")
+
+_HELP_SBIR = (
+    "<b>SBIR (interferencia fuente-frontera).</b> El peine de interferencia entre el "
+    "sonido directo y las reflexiones de 1er orden de las paredes/piso/techo en el "
+    "punto de escucha, por fuente y para la suma, en SPL absoluto (misma escala que "
+    "la FRF).<br><br>"
+    "<b>Cómo usarla:</b> los valles son cancelaciones por distancia a las fronteras; "
+    "el toggle «modal» superpone la transferencia modal de la sala (híbrido en f_S) "
+    "cuando hay modos calculados.<br><br>"
+    "<b>Ejemplo:</b> un sub a 0.9 m de la pared trasera mete un valle SBIR cerca de "
+    "95 Hz; acercándolo a la pared (0.3 m) el primer valle sube fuera de la banda "
+    "crítica.")
+
+_HELP_SLICE = (
+    "<b>Mapa de calor del plano de corte.</b> Visualiza en 2D un plano (XY, XZ o YZ) "
+    "del recinto: la forma modal (normalizada, colormap divergente) o la presión |p| "
+    "en dB SPL. Los marcadores ○ (fuentes) y ✕ (receptores) cercanos al plano se "
+    "dibujan sólidos; los lejanos, semi-transparentes.<br><br>"
+    "<b>Cómo usarla:</b> la barra de herramientas de matplotlib hace zoom/pan; "
+    "«Exportar PNG/SVG/PDF/CSV/TXT» guarda imagen o la grilla de valores.<br><br>"
+    "<b>Ejemplo:</b> el plano XY a z = 1.2 m del modo (1,1,0) muestra un nodo (línea "
+    "azul de presión nula) cruzando el centro: ahí un receptor no escucharía ese modo.")
+
+_HELP_RT = (
+    "<b>Tiempo de reverberación — comparativa.</b> Grafica el RT60 por banda "
+    "calculado con distintos métodos (Sabine, Eyring) a partir de los materiales "
+    "asignados. Podés agregar y quitar curvas para comparar asignaciones.<br><br>"
+    "<b>Nota física:</b> los modelos teóricos asumen decaimiento exponencial puro, "
+    "así que T20 = T30 = T60; la diferencia entre esas métricas solo aparece en "
+    "mediciones reales.<br><br>"
+    "<b>Ejemplo:</b> agregás una curva «Sabine» con la sala actual (RT 0.9 s a 63 Hz) "
+    "y otra tras poner alfombra, y ves cuánto baja el RT en graves entre las dos.")
+
+_HELP_COMPARE = (
+    "<b>Comparar puntos de escucha.</b> Evalúa varios asientos con las fuentes "
+    "activas y los pone lado a lado. Pestañas: figuras de mérito (planitud, desvío, "
+    "varianza espacial VSA, MSV por banda), respuesta en frecuencia y SBIR "
+    "superpuestas.<br><br>"
+    "<b>Cómo usarla:</b> cada pestaña tiene su export (tabla CSV/TXT/PNG; curvas "
+    "PNG/CSV).<br><br>"
+    "<b>Ejemplo:</b> comparás «butaca central» vs «butaca lateral» y ves que la "
+    "lateral tiene 4 dB más de desvío en 50-80 Hz: candidata a tratamiento o a mover "
+    "el sub.")
+
+_HELP_MODES = (
+    "<b>Tabla de modos.</b> Lista, por modo n: la frecuencia rígida fₙ, la efectiva "
+    "(tras la reactancia Im(β) de las construcciones/materiales), el corrimiento "
+    "Δfₙ, el amortiguamiento modal ξₙ que la app usa en la dinámica (FRF/campo/FoM) y "
+    "el RT60ₙ del modo aislado.<br><br>"
+    "<b>Cómo leerla:</b> con construcciones (Capa 0) o materiales con reactancia, "
+    "Δfₙ ≠ 0; sin ellos, Δfₙ ≈ 0 y solo hay amortiguamiento.<br><br>"
+    "<b>Ejemplo:</b> el modo axial a 43.0 Hz rígido aparece a 41.6 Hz efectivo "
+    "(Δfₙ = −1.4 Hz) por una membrana en la pared, con ξₙ = 0.03 y RT60ₙ ≈ 0.85 s.")
+
+_HELP_ABSORPTION = (
+    "<b>Absorción del recinto.</b> Aparece cuando ninguna cara tiene material "
+    "asignado: la frecuencia de Schroeder y la densidad de malla dependen de la "
+    "absorción (f_S ∝ α^(−1/2)), así que hay que decir de dónde sale.<br><br>"
+    "<b>Tres caminos:</b> coeficiente α uniforme (sin tocar materiales); un preset "
+    "piso·paredes·techo; o un material del catálogo para todas las caras. Los dos "
+    "últimos asignan de verdad y el aviso no vuelve a salir.<br><br>"
+    "<b>Ejemplo:</b> para una sala viva sin tratar elegís α uniforme = 0.05; para un "
+    "control room, el preset con paredes tratadas.")
+
+_HELP_CONSTRUCTION = (
+    "<b>Impedancia de superficie (construcción).</b> Definís a mano un modelo de "
+    "impedancia para una o varias caras y ves el preview de α(f) y la resonancia. "
+    "Tipos: panel perforado, microperforado (MPP), membrana/panel, poroso + cámara, "
+    "Helmholtz (cuello + cavidad) y multicapa (pila TMM).<br><br>"
+    "<b>Cómo usarla:</b> elegí el tipo y ajustá los parámetros; el gráfico de α(f) se "
+    "actualiza y marca la frecuencia de resonancia.<br><br>"
+    "<b>Ejemplo:</b> una trampa de membrana con panel de 4 kg/m² y cámara de 10 cm "
+    "resuena cerca de 55 Hz; el preview muestra el pico de absorción ahí.")
+
+_HELP_FEM_CFG = (
+    "<b>Configuración de FEM.</b> Parámetros del mallado para el cálculo modal: Nº de "
+    "modos a resolver, densidad del voxel (npm, nodos por longitud de onda), tamaño "
+    "característico h de gmsh y el motor de mallado.<br><br>"
+    "<b>Cómo usarla:</b> más modos y malla más fina = más exactitud y más tiempo. El "
+    "npm es un piso derivado de f_S; bajarlo por debajo degrada la banda válida.<br><br>"
+    "<b>Ejemplo:</b> para una sala chica tratada, 20 modos y h = 0.30 m alcanzan; "
+    "para una viva y grande, subí npm y el Nº de modos (Weyl sugiere el tope).")
 
 
 # ---------------------------------------------------------------------------
@@ -1092,6 +1218,7 @@ class FurnitureEditDialog(QDialog):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Editar mueble" if furn is not None else "Añadir mueble")
+        add_help_button(self, _HELP_FURNITURE, "Mueble — ayuda")
         mat_names = list(mat_names or [])
         Lx, Ly, _Lz = dims_hint or (5.0, 4.0, 3.0)
         # Un preset (compound) tiene forma fija: se edita posición/orientación/
@@ -1353,6 +1480,7 @@ class DecayWaterfallDialog(QDialog):
         super().__init__(parent)
         apply_dialog_theme(self)
         self.setWindowTitle("Decaimiento del campo total — sin vs con subs")
+        add_help_button(self, _HELP_DECAY, "Decaimiento — ayuda")
         self.resize(1040, 720)
         v = QVBoxLayout(self)
         if not _HAS_MPL:
@@ -1444,6 +1572,7 @@ class FRFDialog(QDialog):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle(f"FRF — {frf_result.method.upper()}")
+        add_help_button(self, _HELP_FRF, "FRF — ayuda")
         self.resize(980, 580)
         self._fig = None
         self._H   = frf_result.H              # guardar para audio
@@ -1717,6 +1846,7 @@ class SBIRDialog(QDialog):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("SBIR — interferencia fuente-frontera")
+        add_help_button(self, _HELP_SBIR, "SBIR — ayuda")
         # Diagnóstico de corregibilidad EQ (C13/C21) de la sala, para el overlay.
         self._eqc = eqc
         self.resize(980, 600)
@@ -1950,6 +2080,7 @@ class SliceHeatmapDialog(QDialog):
         #           "receivers": [(nombre, (x,y,z)), ...]}  (v2.16)
         self._markers = markers or {}
         self._setup_layout()
+        add_help_button(self, _HELP_SLICE, "Mapa de calor — ayuda")
         if field_slice is not None:
             self.update_slice(field_slice, mode_name, kind)
 
@@ -2187,6 +2318,7 @@ class RTComparisonDialog(QDialog):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Tiempo de reverberacion — comparativa de metodos")
+        add_help_button(self, _HELP_RT, "RT60 — ayuda")
         self.resize(1080, 580)
         self._panel = panel
         self._fig = None
@@ -2714,6 +2846,7 @@ class CompareDialog(QDialog):
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         from PyQt5.QtWidgets import QTabWidget
         self.setWindowTitle("Comparar puntos de escucha")
+        add_help_button(self, _HELP_COMPARE, "Comparar — ayuda")
         self.resize(880, 600)
         self._data = data
         v = QVBoxLayout(self)
@@ -2881,13 +3014,18 @@ class ModeTableDialog(QDialog):
     """
 
     COLS = ["Modo n", "fₙ rígida [Hz]", "f efectiva [Hz]",
-            "Δfₙ [Hz]", "ξₙ", "RT60ₙ [s]"]
+            "Δfₙ [Hz]", "ξₙ", "RT60ₙ [s]", "Umbral [s]", "¿Audible?"]
+
+    # Estímulo del umbral perceptual de Fazenda (ver perceptual.py).
+    _STIMULI = [("Sine-burst (umbral absoluto)", "artificial"),
+                ("Música (ecológico)", "music")]
 
     def __init__(self, data: dict, parent=None):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
         self.setWindowTitle("Modos: corrimiento Δfₙ y amortiguamiento ξₙ")
+        add_help_button(self, _HELP_MODES, "Modos — ayuda")
         self.resize(720, 560)
         self._data = data
         v = QVBoxLayout(self)
@@ -2910,7 +3048,11 @@ class ModeTableDialog(QDialog):
             f"<b>{data['model']}</b>.<br>{cap0}<br>"
             f"f efectiva = frecuencia de resonancia que usa la dinámica "
             f"(FRF/campo/FoM); la <i>forma</i> modal no cambia (perturbación "
-            f"de 1er orden). RT60ₙ = 6.908/(ξₙ·2π·f) del modo aislado.")
+            f"de 1er orden). RT60ₙ = 6.908/(ξₙ·2π·f) del modo aislado.<br>"
+            f"<b>Umbral / ¿Audible?</b>: umbral perceptual de decaimiento modal "
+            f"(Fazenda, Stephenson &amp; Goldberg, JASA 137, 2015). Un modo con "
+            f"RT60ₙ por encima del umbral de su frecuencia es candidato a ser "
+            f"audible (rojo); por debajo, su cola no debería oírse (verde).")
         note.setWordWrap(True)
         note.setStyleSheet("color: #6c6f85; font-size: 9pt;")
         v.addWidget(note)
@@ -2918,20 +3060,29 @@ class ModeTableDialog(QDialog):
         if has_shift:
             v.addWidget(self._shift_summary_label(data))
 
-        rows = self._rows()
+        self._stimulus = "artificial"
+        srow = QHBoxLayout()
+        srow.addWidget(QLabel("Umbral perceptual:"))
+        self.combo_stim = QComboBox()
+        for label, key in self._STIMULI:
+            self.combo_stim.addItem(label, key)
+        self.combo_stim.setToolTip(
+            "Sine-burst: umbral ABSOLUTO (sin enmascaramiento), el más estricto.\n"
+            "Música: umbral ECOLÓGICO, más permisivo (los eventos musicales\n"
+            "enmascaran la cola modal). Fuente: Fazenda et al., JASA 137 (2015).")
+        self.combo_stim.currentIndexChanged.connect(self._on_stim_changed)
+        srow.addWidget(self.combo_stim)
+        srow.addStretch()
+        v.addLayout(srow)
+
+        rows = self._rows(self._stimulus)
         self.table = QTableWidget(len(rows), len(self.COLS))
         self.table.setHorizontalHeaderLabels(self.COLS)
         self.table.verticalHeader().setVisible(False)
-        for r, row in enumerate(rows):
-            for c, txt in enumerate(row):
-                it = QTableWidgetItem(txt)
-                it.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                if c == 3 and txt not in ("0.00", "—"):
-                    fnt = it.font(); fnt.setBold(True); it.setFont(fnt)
-                self.table.setItem(r, c, it)
         hdr = self.table.horizontalHeader()
         for c in range(len(self.COLS)):
             hdr.setSectionResizeMode(c, QHeaderView.Stretch)
+        self._fill_table()
         v.addWidget(self.table, 1)
 
         row = QHBoxLayout()
@@ -2968,10 +3119,33 @@ class ModeTableDialog(QDialog):
         d = xi * 2.0 * np.pi * f
         return 6.908 / d if d > 1e-12 else float("inf")
 
-    def _rows(self):
+    def _on_stim_changed(self):
+        self._stimulus = self.combo_stim.currentData() or "artificial"
+        self._fill_table()
+
+    def _fill_table(self):
+        """(Re)puebla la tabla con el estímulo de umbral actual y colorea el
+        veredicto de audibilidad (rojo=audible, verde=no)."""
+        from PyQt5.QtWidgets import QTableWidgetItem
+        rows = self._rows(self._stimulus)
+        self.table.setRowCount(len(rows))
+        for r, row in enumerate(rows):
+            audible = self._audible_flags[r]   # True/False/None (sin dato)
+            for c, txt in enumerate(row):
+                it = QTableWidgetItem(txt)
+                it.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                if c == 3 and txt not in ("0.00", "—"):
+                    fnt = it.font(); fnt.setBold(True); it.setFont(fnt)
+                if c in (5, 7) and audible is not None:
+                    it.setForeground(QColor("#d20f39" if audible else "#179299"))
+                self.table.setItem(r, c, it)
+
+    def _rows(self, stimulus="artificial"):
+        import perceptual
         d = self._data
         xi = d["xi"]
         rows = []
+        self._audible_flags = []       # paralelo a rows, para el coloreo/veredicto
         for i in range(len(d["f_rig"])):
             f0 = float(d["f_rig"][i]); f1 = float(d["f_eff"][i])
             df = f1 - f0
@@ -2980,11 +3154,17 @@ class ModeTableDialog(QDialog):
                 xi_txt = f"{xv:.5f}"
                 rt = self._rt60_from_xi(f1, xv)
                 rt_txt = "∞" if not np.isfinite(rt) else f"{rt:.3f}"
+                thr = perceptual.modal_decay_threshold(f1, stimulus)
+                thr_txt = f"{thr:.3f}"
+                audible = (not np.isfinite(rt)) or (rt > thr)
+                verdict = "Sí" if audible else "No"
             else:
-                xi_txt = "—"; rt_txt = "—"
+                xi_txt = "—"; rt_txt = "—"; thr_txt = "—"; verdict = "—"
+                audible = None
+            self._audible_flags.append(audible)
             rows.append((str(i), f"{f0:.2f}", f"{f1:.2f}",
                          f"{df:+.2f}" if abs(df) >= 5e-3 else "0.00",
-                         xi_txt, rt_txt))
+                         xi_txt, rt_txt, thr_txt, verdict))
         return rows
 
     def _export(self, fmt: str):
@@ -2997,16 +3177,19 @@ class ModeTableDialog(QDialog):
             self.table.grab().save(path, "PNG")
             return
         hdr = ["modo_n", "f_rigida_hz", "f_efectiva_hz",
-               "delta_f_hz", "xi_n", "rt60_n_s"]
-        rows = self._rows()
+               "delta_f_hz", "xi_n", "rt60_n_s",
+               "umbral_fazenda_s", "audible"]
+        rows = self._rows(getattr(self, "_stimulus", "artificial"))
         # En CSV/TXT sacamos los signos unicode raros: infinito y guion largo.
         def clean(x):
-            return {"∞": "inf", "—": ""}.get(x, x).replace("+", "")
+            return {"∞": "inf", "—": "", "Sí": "si", "No": "no"}.get(x, x).replace("+", "")
         if fmt == "csv":
-            lines = [",".join(hdr)]
+            lines = [f"# umbral perceptual: {getattr(self, '_stimulus', 'artificial')}"
+                     " (Fazenda et al., JASA 137, 2015)"]
+            lines.append(",".join(hdr))
             lines += [",".join(clean(x) for x in r) for r in rows]
         else:
-            widths = [8, 14, 15, 12, 12, 12]
+            widths = [8, 14, 15, 12, 12, 12, 14, 10]
             lines = ["".join(h.rjust(w) for h, w in zip(hdr, widths))]
             lines += ["".join(clean(x).rjust(w)
                               for x, w in zip(r, widths)) for r in rows]
@@ -3037,6 +3220,7 @@ class AbsorptionChoiceDialog(QDialog):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Absorción del recinto")
+        add_help_button(self, _HELP_ABSORPTION, "Absorción — ayuda")
         self.setMinimumWidth(520)
         lay = QVBoxLayout(self)
 
@@ -3156,6 +3340,7 @@ class ConstructionEditorDialog(QDialog):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Impedancia de superficie")
+        add_help_button(self, _HELP_CONSTRUCTION, "Construcción — ayuda")
         self.resize(720, 460)
         self.spec = None
         root = QHBoxLayout(self)
@@ -4216,6 +4401,7 @@ class AcousticPanel(QWidget):
         self._fem_cfg_dialog = QDialog(self)
         self._fem_cfg_dialog.setWindowTitle("Configuración de FEM")
         apply_dialog_theme(self._fem_cfg_dialog)   # tema claro (fondo blanco)
+        add_help_button(self._fem_cfg_dialog, _HELP_FEM_CFG, "FEM — ayuda")
         dff = QFormLayout(self._fem_cfg_dialog)
 
         self.btn_fem_config = QPushButton("Configuración de FEM…")

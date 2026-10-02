@@ -14,7 +14,19 @@ Grilla:
 
 from PyQt5.QtCore import Qt, QPointF, QRectF, pyqtSignal
 from PyQt5.QtGui import QPainter, QPen, QColor, QPolygonF
-from style import apply_dialog_theme
+from style import apply_dialog_theme, add_help_button
+
+_HELP_SHAPE = (
+    "<b>Dibujar / editar la forma del recinto.</b> Definís la planta (vista desde "
+    "arriba) del recinto haciendo clic para poner vértices sobre la grilla. La planta "
+    "se extruye luego en altura; con «Cortes laterales…» le das un perfil de techo "
+    "distinto a cada pared (dos aguas, techo inclinado).<br><br>"
+    "<b>Cómo usarla:</b> clic para agregar vértices, «Cerrar polígono» para terminar, "
+    "«Deshacer» y «Limpiar» para corregir. La «Grilla» fija el paso de enganche en "
+    "metros; también podés editar longitudes de arista en forma numérica exacta.<br><br>"
+    "<b>Ejemplo:</b> una sala en L: ponés 6 vértices sobre la grilla de 0.5 m, cerrás "
+    "el polígono y queda la planta; después en «Cortes laterales…» subís la pared del "
+    "fondo a 3.2 m y dejás el frente a 2.6 m.")
 from PyQt5.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QComboBox,
 )
@@ -472,6 +484,7 @@ class ShapeDrawDialog(QDialog):
         self.setWindowTitle("Dibujar / editar forma del recinto")
         self.resize(720, 860)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
+        add_help_button(self, _HELP_SHAPE, "Forma del recinto — ayuda")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 14, 14, 14)

@@ -2954,6 +2954,15 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.57 (ayuda «?» en todas las ventanas + umbral perceptual de decaimiento modal)
+
+**Cambios v2.57** (2 de octubre 2026): se completa la ayuda por ventana y se agrega un criterio perceptual a la tabla de modos. Sin cambios en la física del solver.
+
+- **Ayuda «?» en todas las ventanas.** El botón «?» (arriba a la derecha, que abre «para qué sirve + cómo usarla» con un **ejemplo** concreto) pasó de 3 ventanas a ~23: editor de fuente, mueble, FRF, SBIR, decaimiento, mapa de calor, RT60, comparar puntos, tabla de modos, absorción del recinto, construcción/impedancia de superficie, «Impedancias», materiales, crear material, optimización de fuentes, configuración de FEM, escalar/importar CAD, parches, forma del recinto, cortes laterales y los diálogos de absorción/forma de Predicción. **El texto informativo de cada ventana ahora respeta un margen superior** para que el «?» no tape ningún rótulo al agrandar la ventana (antes el texto se estiraba hasta el borde y quedaba debajo del botón).
+- **¿Un modo decae audiblemente de más? (umbral de Fazenda).** La ventana «Modos: corrimiento Δfₙ y amortiguamiento ξₙ» suma dos columnas: **«Umbral [s]»** y **«¿Audible?»**. Comparan el RT60 de cada modo con el umbral perceptual de decaimiento modal de Fazenda, Stephenson y Goldberg (JASA 137, 2015): si el RT60 del modo supera el umbral de su frecuencia, el modo es candidato a ser audible (se marca en rojo); si está por debajo, su cola no debería oírse (verde). Un selector permite elegir el umbral **sine-burst** (absoluto, estricto) o **música** (ecológico, más permisivo, porque los eventos musicales enmascaran la cola). El criterio también se exporta en el CSV de la tabla.
+
+*Manual actualizado al 2 de Octubre de 2026 — v2.57.*
+
 ## Cambios v2.56 (exportar el gráfico tras optimizar fuentes + ayuda «?» por ventana + visor más limpio)
 
 **Cambios v2.56** (2 de octubre 2026): un arreglo reportado por un usuario y dos mejoras de interfaz.

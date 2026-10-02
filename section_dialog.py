@@ -26,7 +26,18 @@ import numpy as np
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPainter, QPen, QColor, QPolygonF, QBrush
 from PyQt5.QtCore import QPointF, QRectF
-from style import apply_dialog_theme
+from style import apply_dialog_theme, add_help_button
+
+_HELP_SECTION = (
+    "<b>Cortes laterales — perfil de cada pared.</b> Dibujás el perfil de tope "
+    "(la línea del techo) de cada pared de la planta, para darle al recinto un techo "
+    "no plano: a dos aguas, inclinado, con quiebres.<br><br>"
+    "<b>Cómo usarla:</b> se recorre pared por pared; arrastrás la altura de cada "
+    "esquina y agregás puntos intermedios sobre la grilla para quebrar el perfil. La "
+    "altura por defecto parte de la del recinto.<br><br>"
+    "<b>Ejemplo:</b> un techo a dos aguas: en las dos paredes largas dejás el perfil "
+    "plano a 2.4 m, y en las dos cortas subís el punto central a 3.6 m formando el "
+    "caballete.")
 from PyQt5.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QCheckBox, QDoubleSpinBox, QComboBox,
@@ -382,6 +393,7 @@ class SectionWizard(QDialog):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Cortes laterales — perfil de cada pared")
+        add_help_button(self, _HELP_SECTION, "Cortes laterales — ayuda")
         self.resize(680, 520)
 
         poly = [(float(x), float(y)) for x, y in base_polygon]

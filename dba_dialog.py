@@ -32,14 +32,32 @@ except Exception:
     _HAS_MPL = False
 
 try:
-    from style import apply_dialog_theme
+    from style import apply_dialog_theme, add_help_button
 except Exception:
     def apply_dialog_theme(w):
         pass
 
+    def add_help_button(*_a, **_k):
+        return None
+
 from dba import compute_dba
 
 _AXIS_NAMES = ["X (ancho)", "Y (largo)", "Z (alto)"]
+
+_HELP_DBA = (
+    "<b>Optimización de fuentes (DBA / CABS).</b> Evaluá u optimizá las fuentes "
+    "cargadas sobre la caja de la sala, o diseñá un array de subs enfrentados desde "
+    "cero. Las métricas se miden en la banda válida [fmin, f_max = c/d]; arriba de "
+    "f_max hay aliasing espacial y el DBA no aplica.<br><br>"
+    "<b>Norte (criterio):</b> qué se minimiza — transferencia compuesta plana, "
+    "uniformidad espacial asiento a asiento, mínimo SBIR, combinado por caso de uso, "
+    "o los esquemas CABS/DBA. El mismo norte se usa para evaluar y para optimizar.<br>"
+    "<b>Modo:</b> «Optimizar mis fuentes» mueve lo que tildaste en cada fuente; "
+    "«Diseñar un array» arma Nx·Nz subs por pared con un drive (mínimos cuadrados de "
+    "Santillán o retardo+inversión).<br><br>"
+    "<b>Ejemplo:</b> con dos subs en la pared frontal y dos en la trasera, norte "
+    "«DBA», eje «Auto»: optimizás y el array trasero reproduce al frontal retardado "
+    "L/c e invertido, cancelando el modo axial largo.")
 
 
 class _OptimizeWorker(QThread):
@@ -86,6 +104,7 @@ class DBADialog(QDialog):
         super().__init__(parent)
         apply_dialog_theme(self)
         self.setWindowTitle("Optimización de fuentes")
+        add_help_button(self, _HELP_DBA, "Optimización de fuentes — ayuda")
         self._dims = tuple(float(x) for x in dims)
         self._receiver = tuple(float(x) for x in receiver)
         self._apply_callback = apply_callback

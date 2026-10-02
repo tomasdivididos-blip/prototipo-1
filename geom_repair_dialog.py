@@ -26,7 +26,7 @@ import numpy as np
 import pyqtgraph.opengl as gl
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
-from style import apply_dialog_theme
+from style import apply_dialog_theme, add_help_button
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QPlainTextEdit, QSplitter,
@@ -36,6 +36,30 @@ from PyQt5.QtWidgets import (
 )
 
 import geom_import as gi
+
+_HELP_VERTEX = (
+    "<b>Editar vértice del hueco.</b> Mueve un vértice del contorno de un hueco a una "
+    "posición nueva, para cerrar manualmente agujeros que el cierre automático no "
+    "resuelve bien (por ejemplo cuando dos bordes deberían coincidir y están "
+    "separados).<br><br>"
+    "<b>Cómo usarla:</b> elegí el vértice del ciclo en la lista y escribí su nueva "
+    "coordenada (x, y, z).<br><br>"
+    "<b>Ejemplo:</b> una esquina del techo quedó a 0.02 m de la pared; movés ese "
+    "vértice para que coincida y el hueco se cierra solo.")
+
+_HELP_MESH_IMPORT = (
+    "<b>Configuración de CAD: diagnóstico, curado y exportar.</b> Revisa una malla "
+    "importada y la deja apta para simular. Una malla cerrada (watertight) es "
+    "condición necesaria para que el dominio acústico sea el recinto real y no su "
+    "caja envolvente.<br><br>"
+    "<b>Cómo usarla:</b> la lista de la izquierda muestra los problemas (huecos, "
+    "componentes sueltos); el visor 3D resalta el actual en rojo. Botones: cerrar el "
+    "hueco automáticamente, soldar a vértices cercanos, editar un vértice, omitir, o "
+    "«Reparar todo automáticamente». También podés borrar caras sueltas o quedarte "
+    "con el componente más grande.<br><br>"
+    "<b>Ejemplo:</b> un plano exportado de EASE llega con 300 componentes disconexos; "
+    "«Quedarse con el más grande» + «Reparar todo» lo deja en un sólido cerrado "
+    "simulable.")
 
 
 class _MeshPreview(gl.GLViewWidget):
@@ -256,6 +280,7 @@ class _VertexEditDialog(QDialog):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Editar vertice del hueco")
+        add_help_button(self, _HELP_VERTEX, "Editar vértice — ayuda")
         self._mesh = mesh
         self._hole = hole
         self._chosen_vertex = hole.boundary_vertex_indices[0]
@@ -335,6 +360,7 @@ class MeshImportDialog(QDialog):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Configuración de CAD — diagnóstico, curado, exportar")
+        add_help_button(self, _HELP_MESH_IMPORT, "Importar CAD — ayuda")
         self.resize(1180, 680)         # +100 px para acomodar el panel izq
         self._mesh = mesh.copy() if mesh is not None else None
         self._diag = diagnosis

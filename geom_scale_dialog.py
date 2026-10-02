@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import numpy as np
 from PyQt5.QtCore import Qt
-from style import apply_dialog_theme
+from style import apply_dialog_theme, add_help_button
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
     QLabel, QPushButton, QDoubleSpinBox, QRadioButton, QButtonGroup,
@@ -25,6 +25,18 @@ from PyQt5.QtWidgets import (
 )
 
 import geom_import as gi
+
+_HELP_SCALE = (
+    "<b>Escalar y orientar geometría importada.</b> Aparece cuando una malla CAD "
+    "parece venir en otra unidad (mm, cm, pulgadas) o con un eje «arriba» distinto al "
+    "del software (Z+). Fija el factor de escala a metros y la orientación antes de "
+    "usarla como recinto.<br><br>"
+    "<b>Cómo usarla:</b> aceptá la sugerencia automática, elegí un preset de unidad, "
+    "o escribí un factor manual; el preview muestra las dimensiones resultantes. "
+    "Ajustá el eje «up» si el modelo queda acostado.<br><br>"
+    "<b>Ejemplo:</b> un OBJ de Blender entra midiendo 5000×4000×3000 (está en mm y con "
+    "Y+ arriba); elegís «Milímetros → metros (/1000)» y «Y+ up» y queda 5×4×3 m "
+    "parado.")
 
 
 class ImportScaleDialog(QDialog):
@@ -63,6 +75,7 @@ class ImportScaleDialog(QDialog):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("Escalar y orientar geometria importada")
+        add_help_button(self, _HELP_SCALE, "Escalar geometría — ayuda")
         self.resize(640, 640)
         self._mesh = mesh
         self._suggestion = suggestion

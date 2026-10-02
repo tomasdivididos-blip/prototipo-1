@@ -31,9 +31,31 @@ from PyQt5.QtWidgets import (
 import prediction as pr
 import location_opt as lo
 import material_library as ml
-from style import apply_dialog_theme
+from style import apply_dialog_theme, add_help_button
 from material_library import MaterialLibrary
 from pathlib import Path
+
+_HELP_PRED_ABSORPTION = (
+    "<b>Absorción de las superficies.</b> La predicción necesita cuánta absorción "
+    "tendrá la sala para estimar el RT60 (y de ahí los modos audibles, la frecuencia "
+    "de Schroeder, etc.). Elegí de dónde sale.<br><br>"
+    "<b>Tres caminos:</b> que elija el programa (RT60 típico para el uso), un "
+    "coeficiente α uniforme para todas las caras, o materiales por superficie (un "
+    "preset o el que armes).<br><br>"
+    "<b>Ejemplo:</b> para predecir un home-studio todavía sin tratar, «coeficiente "
+    "uniforme α = 0.08»; para una sala de la que ya conocés los materiales, "
+    "«materiales por superficie».")
+
+_HELP_PRED_SHAPE = (
+    "<b>Forma irregular.</b> El score de geometría (proporciones, Bolt, ratios "
+    "modales) está definido para cajas; cuando el recinto tiene planta dibujada o "
+    "cortes laterales, hay que decidir cómo ponderar la forma.<br><br>"
+    "<b>Dos caminos:</b> aproximar con la caja envolvente (AABB) para seguir teniendo "
+    "un score de proporciones, o no ponderar la forma (el score geométrico se omite y "
+    "el resto de la predicción sigue).<br><br>"
+    "<b>Ejemplo:</b> una sala en L casi rectangular → «aproximar con AABB»; una planta "
+    "muy irregular donde las proporciones de caja no significan nada → «no ponderar "
+    "la forma».")
 
 
 # ---------------------------------------------------------------------------
@@ -966,6 +988,7 @@ class PredictionPanel(QWidget):
         dlg = QDialog(self)
         apply_dialog_theme(dlg)  # tema claro (fondo blanco)
         dlg.setWindowTitle("Absorción de las superficies")
+        add_help_button(dlg, _HELP_PRED_ABSORPTION, "Absorción — ayuda")
         v = QVBoxLayout(dlg)
         msg = QLabel(
             "La predicción necesita saber cuánta absorción tendrá la sala para "
@@ -1200,6 +1223,7 @@ class PredictionPanel(QWidget):
         dlg = QDialog(self)
         apply_dialog_theme(dlg)  # tema claro (fondo blanco)
         dlg.setWindowTitle("Forma irregular")
+        add_help_button(dlg, _HELP_PRED_SHAPE, "Forma irregular — ayuda")
         v = QVBoxLayout(dlg)
         msg = QLabel(
             "El recinto tiene una forma personalizada (planta dibujada o cortes "
