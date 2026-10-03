@@ -1490,7 +1490,8 @@ class DecayWaterfallDialog(QDialog):
         # Estados a mostrar: sin subs (a), con subs (b) y, si hay TS, con carga del
         # cono (c). El nº de columnas de waterfall se adapta.
         has_c = "edc_c" in data
-        ncol = 3 if has_c else 2
+        has_d = "edc_d" in data          # E5: pared trasera matcheada (C2 ideal)
+        ncol = 2 + (1 if has_c else 0) + (1 if has_d else 0)
         fig = plt.figure(figsize=(3.6 * ncol + 0.8, 7.0), dpi=96)
         fig.patch.set_facecolor('#f0f0f0')
         gs = gridspec.GridSpec(2, ncol, height_ratios=[1.0, 1.2], hspace=0.32,
@@ -1510,6 +1511,11 @@ class DecayWaterfallDialog(QDialog):
             tc, ec, rtc = data["edc_c"]
             edc.plot(tc, ec, color='#c0392b', linewidth=1.8,
                      label=f"con subs + carga cono · {data['lbl_c']}")
+        rtd = None
+        if has_d:
+            td, ed, rtd = data["edc_d"]
+            edc.plot(td, ed, color='#2e7d32', linewidth=1.8, linestyle='--',
+                     label=f"pared trasera matcheada (C2) · {data['lbl_d']}")
         for lvl in (-10, -20, -30):
             edc.axhline(lvl, color='#dddddd', linewidth=0.7, zorder=0)
         edc.set_xlabel("Tiempo (s)", fontsize=10)
@@ -1524,6 +1530,8 @@ class DecayWaterfallDialog(QDialog):
                f"    |    RT sin={_rt_txt(rta)} · con drive={_rt_txt(rtb)}")
         if rtc is not None:
             ttl += f" · con cono={_rt_txt(rtc)}"
+        if rtd is not None:
+            ttl += f" · trasera matcheada={_rt_txt(rtd)}"
         edc.set_title(ttl, fontweight='bold', fontsize=9.5, pad=8)
         edc.grid(True, axis='y', linewidth=0.6, alpha=0.5, color='#cccccc')
         edc.legend(fontsize=9, framealpha=0.9, loc='upper right')
@@ -1534,6 +1542,8 @@ class DecayWaterfallDialog(QDialog):
         cols = [("csd_a", "sin subs"), ("csd_b", "con subs (drive)")]
         if has_c:
             cols.append(("csd_c", "con subs + carga cono"))
+        if has_d:
+            cols.append(("csd_d", "pared trasera matcheada"))
         for col, (key, ttl2) in enumerate(cols):
             ax = fig.add_subplot(gs[1, col])
             fr, ts, Z = data[key]
@@ -1557,7 +1567,13 @@ class DecayWaterfallDialog(QDialog):
             "absorbedor resonante de frontera (β_cono = ρ₀c·Sd/Z_mech, Thiele-Small) y "
             "agrega amortiguamiento REAL Δξₙ a los modos (perturbación validada vs "
             "autovalor complejo exacto) → acorta el decaimiento. Requiere cargar los "
-            "Thiele-Small del sub (editor de fuente → «Driver físico»).")
+            "Thiele-Small del sub (editor de fuente → «Driver físico»). «pared trasera "
+            "matcheada (C2)»: TECHO ideal: si el array trasero presentara una impedancia "
+            "ADAPTADA (β=Y₀, R→0, onda viajera) la pared opuesta absorbería el frente de "
+            "onda y los modos AXIALES del eje decaerían genuinamente más rápido (polos "
+            "movidos, no redistribución). Se estima con perturbación de 1er orden "
+            "(Re(β)=1 en la trasera); es CONSERVADOR: el QEP exacto da aún más "
+            "amortiguamiento (ver plan_frente_opuesto_admitancia / bench_front_rear_qep).")
         note.setWordWrap(True)
         note.setStyleSheet("color:#11111b; font-size:9pt;")
         v.addWidget(note)
@@ -6707,6 +6723,54 @@ class AcousticPanel(QWidget):
             note += " (falta Q_ms/Q_es → cayó a corto)"
         return dxi, len(cones), note
 
+    def _rear_matched_delta_xi(self, sources):
+        """E5 (C2, techo ideal): Δξ_n si la pared TRASERA del eje de los subs fuera un
+        ABSORBEDOR ACTIVO MATCHEADO (admitancia adaptada β=Y₀ → reflexión R→0, onda
+        viajera). Es el decaimiento modal GENUINO (polos movidos) que persigue el
+        proyecto: con el array trasero manejado como terminación de impedancia, la
+        estacionaria del eje se amortigua de verdad (ver plan_frente_opuesto_admitancia,
+        bench_front_rear_qep: RT60 del 1er axial colapsa ×1107).
+
+        Se calcula con la perturbación de 1er orden poniendo Re(β)=1 (Y₀) en la pared
+        trasera. Es CONSERVADOR: a β~1 la perturbación SUBESTIMA (el QEP exacto da hasta
+        ~2× más amortiguamiento en los modos bajos), así que la curva real con pared
+        matcheada decaería AÚN más rápido. Devuelve (Δξ, nota) o (None, "")."""
+        mr = getattr(self, "modal_result", None)
+        if mr is None:
+            return None, ""
+        try:
+            import face_materials as fm_mod
+            import dba_evaluate as dev
+            groups, verts, tris = self._get_face_groups()
+            if not groups:
+                return None, ""
+            verts = np.asarray(verts, dtype=float)
+            vmin = verts.min(axis=0); vmax = verts.max(axis=0)
+            dims = tuple(float(x) for x in (vmax - vmin))
+            active = [s for s in sources if getattr(s, "active", True)]
+            if not active:
+                return None, ""
+            axis = dev.best_axis(active, dims, tuple(vmin), c=C0, criterion="cabs")
+            # Pared trasera = grupos cuya normal apunta +eje (cara de coord. máxima).
+            rear_mask = np.array([float(g.normal[axis]) > 0.9 for g in groups],
+                                 dtype=float)
+            if rear_mask.sum() == 0:
+                return None, ""
+            V = aa.compute_mesh_volume(verts, tris)
+            mf = self._effective_modal_freqs()
+            # β=1 (Y₀, real) en la pared trasera, 0 en el resto -> Δξ de esa pared.
+            beta_provider = lambda gs, fn, m=rear_mask: m.astype(complex)
+            res = fm_mod.perturbation_xi_shift_per_mode(
+                mf, mr.phis, mr.locator, verts, tris, groups, {}, V,
+                beta_provider=beta_provider)
+            if res is None:
+                return None, ""
+            dxi, _f_new = res
+            axis_name = ["X", "Y", "Z"][axis]
+            return np.asarray(dxi, dtype=float), f"eje {axis_name}, 1er orden"
+        except Exception:
+            return None, ""
+
     def _open_decay_waterfall(self):
         """Punto 3 del profesor: compara el DECAIMIENTO del campo total en el receptor
         SIN vs CON los subwoofers (EDC de Schroeder + waterfall), por debajo de f_S.
@@ -6788,6 +6852,23 @@ class AcousticPanel(QWidget):
                 self._log("C2: ningún sub tiene Thiele-Small completo (fs/Qts/Vas/"
                           "Vb/Sd); no se grafica la carga del cono. Cargalos en el "
                           "editor de fuente (grupo «Driver físico»).")
+            # E5 (C2, techo ideal): pared trasera MATCHEADA (absorbedor activo) ->
+            # Δξ modal genuino (polos movidos). Muestra cuánto más rápido decaerían
+            # los axiales si el array trasero presentara una impedancia adaptada.
+            dxi_match, match_note = self._rear_matched_delta_xi(mains + subs)
+            if dxi_match is not None and np.max(dxi_match) > 1e-6:
+                dmp_match = np.asarray(damping, dtype=float) + np.asarray(dxi_match)
+                _, ir_d, _ = mdk.modal_impulse_response(
+                    self.modal_result, mk(mains + subs), self.receiver,
+                    f_hi=f_hi, dur=3.0, damping=dmp_match, modal_freqs=mf)
+                data["edc_d"] = (*mdk.energy_decay_db(ir_d, fs),
+                                 mdk.decay_time(ir_d, fs))
+                data["csd_d"] = mdk.cumulative_spectral_decay(ir_d, fs, f_hi=f_hi)
+                data["lbl_d"] = f"pared trasera matcheada ({match_note})"
+                self._log("E5: pared trasera matcheada (β=Y₀, absorbedor activo ideal) "
+                          f"aplicada ({match_note}); Δξ modal máx="
+                          f"{float(np.max(dxi_match)):.4f}. Es el TECHO C2 (perturbación "
+                          "1er orden, conservador; el QEP exacto da más).")
         except Exception as e:
             QMessageBox.critical(self, "Error decaimiento", str(e))
             return

@@ -2954,6 +2954,15 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.59 (decaimiento de subs: cuarto estado «pared trasera matcheada», el techo C2)
+
+**Cambios v2.59** (2 de octubre 2026): el panel «Decaimiento con subs (waterfall)…» suma una curva de referencia que muestra el amortiguamiento modal GENUINO alcanzable con una terminación de impedancia activa (ver respaldo físico en v2.58; Nelson & Elliott cap. 5; Morse & Ingard §9.4.14).
+
+- **Nuevo estado «pared trasera matcheada (C2)».** Además de «sin subs», «con subs (drive)» y, si hay Thiele-Small, «con carga cono», el panel dibuja una cuarta curva (verde punteada) + su waterfall: el decaimiento si la pared **opuesta al array de subs** fuera un **absorbedor activo matcheado** (admitancia adaptada β = Y₀, reflexión R → 0, onda viajera). Ahí los modos **axiales** de ese eje decaen de verdad más rápido (los polos de la sala se mueven), a diferencia de «con subs (drive)», que solo redistribuye la energía modal sin tocar los polos.
+- **Honestidad.** La curva se estima con una perturbación de primer orden (Re(β) = 1 en la pared trasera) y es **conservadora**: el cálculo exacto (autovalores complejos con la condición de admitancia) da aún más amortiguamiento en los graves, así que la pared matcheada real decaería todavía más rápido. La nota al pie del panel lo aclara. No requiere Thiele-Small ni que el eje de subs sea el más largo (es amortiguamiento de frontera).
+
+*Manual actualizado al 2 de Octubre de 2026 — v2.59.*
+
 ## Cambios v2.58 (norte de optimización «Front↔rear»: absorción del frente de onda trasero)
 
 **Cambios v2.58** (2 de octubre 2026): un norte nuevo en «Optimización de fuentes…» para la interacción entre los subs delanteros y los traseros, con respaldo físico (Nelson & Elliott, *Active Control of Sound*, cap. 5; CABS de Celestinos & Nielsen; Santillán, JASA 110, 2001).

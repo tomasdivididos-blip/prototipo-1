@@ -6,7 +6,15 @@
 > cada cosa contra la fuente física, un oráculo, o una cuenta propia. Que este archivo
 > diga "resuelto/PASA" no prueba nada; es un puntero a qué mirar.
 
-**Última actualización:** 2026-10-02 (v2.58: norte front↔rear cableado a evaluate/optimize/GUI, NÚCLEO NUEVO EN ALCANCE; + v2.57 exploración front↔rear + QEP; + Fazenda/«?» FUERA de alcance; + v2.56 … v2.50).
+**Última actualización:** 2026-10-02 (v2.59: 4º estado «pared trasera matcheada» en el panel de decaimiento, NÚCLEO EN ALCANCE; + v2.58 norte front↔rear; + v2.57 exploración front↔rear + QEP; + Fazenda/«?» FUERA de alcance; + v2.56 … v2.50).
+
+## v2.59 — panel de decaimiento: 4º estado «pared trasera matcheada» (C2) (2 Oct 2026, EN ALCANCE — VERIFICAR)
+
+E5 del plan front↔rear. Lleva el C2 (movimiento de polos por una terminación de admitancia matcheada) al panel «Decaimiento con subs». AFIRMACIONES del autor; auditá.
+
+- **`AcousticPanel._rear_matched_delta_xi(sources)`:** identifica la pared TRASERA (grupos con normal[axis]>0.9, axis=`dba_evaluate.best_axis(active, dims, origin, criterion="cabs")`) y calcula Δξ por modo con `face_materials.perturbation_xi_shift_per_mode` pasando un `beta_provider` que da **β=1 (Re, Im=0 → Y₀) en la trasera y 0 en el resto**. Devuelve el Δξ de esa pared. A AUDITAR: (1) **es PERTURBACIÓN de 1er orden con β=1, FUERA de su régimen de validez** (E1c/E3: β~1 no es perturbativo). Se declara CONSERVADOR porque E3-T2 mostró que la perturbación SUBESTIMA (δ_QEP/δ_pert hasta ~1.95 en modos bajos) → la curva real decaería más rápido. Verificado headless: 1er axial-y recibe δ=c/Ly=68.6 Np/s (perturbación) vs 75.9 del QEP exacto (RT60 0.10 vs 0.091 s). ¿Es aceptable mostrar el piso conservador, o debería ser el QEP exacto? (el usuario quiere el refinamiento QEP como próximo paso). (2) **β=1 real** → solo amortigua (Im=0, sin corrimiento de fₙ); OK para un absorbedor matcheado puro. (3) la pared trasera se elige por `best_axis(criterion="cabs")` = eje con subs enfrentados; si no hay subs enfrentados claros, elige por `opposed`/longitud → ¿la pared elegida es la física correcta? (4) `perturbation_xi_shift_per_mode` usa el mismo `_modal_surface_integrals` (∫φₙ²dS por grupo) ya validado; acá se le pasa g2m={} + beta_provider, camino ya existente (bench_perturbation_complex). (5) a diferencia del norte R̄ (v2.58), E5 NO depende de la banda de onda plana → anda en cualquier eje/recinto (Control Ale incluido).
+- **Wiring (`_open_decay_waterfall` + `DecayWaterfallDialog`):** 4º estado `edc_d`/`csd_d` = `modal_impulse_response(..., damping=ξ_campo+Δξ_rear)`, curva verde punteada + waterfall + nota honesta. Reusa el MISMO `modal_impulse_response`/EDC/CSD de C1 (no hay derivación nueva de decaimiento). Sin cambios al solver ni a `modal_decay.py`/`perturbation_xi_shift_per_mode`.
+- **PRÓXIMO (pedido del usuario): refinamiento QEP para la curva C2** — reemplazar la perturbación por el QEP exacto proyectado a los modos (necesita la Gram de superficie OFF-diagonal ∫φₘφₙdS de la pared trasera, hoy no expuesta; `_modal_surface_integrals` solo da la diagonal). El oráculo es `bench_front_rear_qep`.
 
 ## v2.58 — norte de optimización «front_rear» cableado (E4b) + readout (2 Oct 2026, EN ALCANCE — VERIFICAR)
 

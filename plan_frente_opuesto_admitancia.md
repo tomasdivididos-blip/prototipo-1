@@ -6,9 +6,10 @@
 > `bench_front_rear_room.py` 6/6. E1c redirige E3 al QEP (β_rear no es
 > perturbativo). **E3 (opción (b), QEP exacto) HECHO: `bench_front_rear_qep.py`
 > 4/4 — el RT60 del 1er axial colapsa ×1107 con la pared matcheada (C2 genuino).
-> E4a (norte de optimización = minimizar R de la pared trasera) HECHO:
-> `bench_front_rear_opt.py` 4/4.** Falta E4b/E5 (wiring al núcleo y a la GUI) y el E3
-> opcional (QEP sobre FEM nodal real + β compleja). NO codear el wiring sin OK.** Nota: el quick-win perceptual
+> E4a/E4b (norte front↔rear = minimizar R de la pared trasera) y E5 (panel de
+> decaimiento con 4º estado «pared trasera matcheada» = C2) HECHOS.** El plan está
+> IMPLEMENTADO (E1-E5); quedan solo refinamientos opcionales (QEP exacto proyectado a
+> los modos para la curva C2 de E5; QEP sobre FEM nodal real + β compleja de E3). Nota: el quick-win perceptual
 > de Fazenda (umbral de decaimiento modal en la tabla de modos, `perceptual.py`) es
 > una mejora del panel EXISTENTE, independiente de este plan, y ya está hecho.
 > Vara del proyecto: exactitud por debajo de Schroeder manda; respetar las
@@ -216,9 +217,24 @@ Es la **misma forma** que ya usa el cono del sub como absorbedor interior
     R̄=0.36/coste 16.0, elige el eje front↔rear solo); `optimize_cabs` corre sin error;
     `_show_eval` muestra el readout (R_real 0.35 vs ideal LS 0.20). **FALTA test visual
     del usuario en el diálogo real.**
-- **E5 — Panel de decaimiento riguroso (C2).** Alimentar ξ_total = ξ_pared + Δξ_rear
-  al waterfall → mostrar que la estacionaria del eje decae más rápido (polos movidos),
-  no solo redistribución. Etiquetar C1 vs C2 en la UI (honestidad).
+- **E5 — Panel de decaimiento riguroso (C2) — HECHO.** El panel «Decaimiento con subs»
+  suma un 4º estado **«pared trasera matcheada (C2)»**: ξ_total = ξ_campo + Δξ_rear, con
+  Δξ_rear de una pared trasera con admitancia ADAPTADA (β=Y₀) en el eje de los subs →
+  los modos axiales decaen genuinamente más rápido (polos movidos), no redistribución.
+  `AcousticPanel._rear_matched_delta_xi(sources)`: identifica la pared trasera (normal
+  +eje de `dba_evaluate.best_axis`) y aplica `face_materials.perturbation_xi_shift_per_mode`
+  con β_provider=1 (Y₀ real) en esa pared → Δξ por modo. `_open_decay_waterfall` agrega
+  el estado (`edc_d`/`csd_d`); `DecayWaterfallDialog` dibuja la curva (verde punteada) +
+  waterfall + RT, con nota honesta. Verificado: el 1er axial-y recibe δ=c/Ly (69 Np/s,
+  RT60≈0.10 s), los transversales la mitad; el diálogo renderiza 4 estados.
+  **MATIZ (honesto, en la UI):** es perturbación de 1er orden (Re(β)=1), **CONSERVADOR**:
+  el QEP exacto (E3, `bench_front_rear_qep`) da hasta ~2× más amortiguamiento en los
+  modos bajos, así que la pared matcheada real decaería AÚN más rápido. A diferencia del
+  norte R̄ (E4), E5 NO necesita banda de onda plana (es admitancia de frontera) → anda en
+  cualquier eje/recinto, incluido Control Ale.
+  **PENDIENTE (opcional):** usar el QEP exacto proyectado a los modos (no la perturbación)
+  para la curva C2; requiere la Gram de superficie off-diagonal de la pared (no expuesta
+  hoy). El actual es el piso conservador, declarado.
 
 ## 5. Validación y banda de validez (el norte)
 
