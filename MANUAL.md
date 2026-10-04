@@ -2954,6 +2954,15 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.60 (decaimiento de subs: la curva «pared trasera matcheada» ahora es el QEP exacto)
+
+**Cambios v2.60** (3 de octubre 2026): la cuarta curva del panel «Decaimiento con subs (waterfall)…» («pared trasera matcheada», introducida en v2.59) deja de ser una estimación conservadora y pasa a calcularse con el **cálculo exacto de autovalores complejos** de la sala con la condición de admitancia en la pared (Morse & Ingard §9.4.14; Nelson & Elliott cap. 5). El resultado es más fiel y, en general, muestra un decaimiento aún más rápido que el de v2.59.
+
+- **Cálculo exacto en dos niveles.** Cuando la malla es manejable, se resuelve el problema completo sobre todos los nodos del volumen (capta el régimen de amortiguamiento casi-crítico que la pared perfectamente absorbente produce en los modos axiales). En salas muy grandes o de geometría compleja, donde ese cálculo sería demasiado pesado, se usa su proyección sobre los modos de la sala (exacta dentro de ese conjunto de modos y mucho más económica). La nota al pie del panel indica cuál de los dos se usó.
+- **Sin cambios de uso.** La curva sigue sin requerir Thiele-Small ni que el eje de subs sea el más largo (es amortiguamiento de frontera); solo cambia la exactitud del número, no cómo se pide.
+
+*Manual actualizado al 3 de Octubre de 2026 — v2.60.*
+
 ## Cambios v2.59 (decaimiento de subs: cuarto estado «pared trasera matcheada», el techo C2)
 
 **Cambios v2.59** (2 de octubre 2026): el panel «Decaimiento con subs (waterfall)…» suma una curva de referencia que muestra el amortiguamiento modal GENUINO alcanzable con una terminación de impedancia activa (ver respaldo físico en v2.58; Nelson & Elliott cap. 5; Morse & Ingard §9.4.14).

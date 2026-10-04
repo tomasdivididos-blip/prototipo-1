@@ -926,6 +926,254 @@ def perturbation_xi_shift_extended(
     return xi, f_new
 
 
+def surface_gram_per_mode(phis, locator, verts, tris, groups, wall_mask,
+                          subdiv=2):
+    """Gram de superficie COMPLETA de los modos sobre una pared:
+
+        G[n,m] = INT_{pared} phi_n phi_m dS
+
+    sobre los grupos marcados por `wall_mask` (bool/0-1 por grupo). Generaliza
+    `_modal_surface_integrals` (que da solo la DIAGONAL G[n,n] por grupo) a la
+    matriz completa, con el acople inter-modal off-diagonal. Es la matriz C_bc
+    del QEP de frontera (bench_front_rear_qep) proyectada a los modos FEM REALES:
+    para un shoebox y modos axiales (0,j,0) reduce a la Cbc rango-1 (2/Ly) s s^T
+    del bench (s_j = valor del modo en la pared).
+
+    Misma cuadratura, validez y re-escala por cobertura que `_modal_surface_
+    integrals` (fuente unica de verdad de la integral de superficie), asi la
+    diagonal de G coincide bit a bit con el Sg de la perturbacion. Equivale al
+    emparedado phis^T C_surf,pared phis con la matriz de masa de superficie FEM.
+    Devuelve G (Nm, Nm) simetrica real, o None."""
+    if phis is None or len(groups) == 0 or locator is None:
+        return None
+    Nm = int(phis.shape[1])
+    if Nm == 0:
+        return None
+    tris = np.asarray(tris, dtype=int)
+    Nt = len(tris)
+    if Nt == 0:
+        return None
+    Ng = len(groups)
+    wall_mask = np.asarray(wall_mask).astype(bool).ravel()
+    if wall_mask.size != Ng or not wall_mask.any():
+        return None
+
+    # triangulo -> grupo, SOLO los grupos de la pared marcada.
+    tri_group = np.full(Nt, -1, dtype=int)
+    for gi, g in enumerate(groups):
+        if wall_mask[gi]:
+            tri_group[np.asarray(g.face_indices, dtype=int)] = gi
+    keep = tri_group >= 0
+    if not np.any(keep):
+        return None
+
+    P, gid = _subdivide_tris_indexed(verts[tris[keep]], tri_group[keep], subdiv)
+    cen = P.mean(axis=1)
+    area = 0.5 * np.linalg.norm(
+        np.cross(P[:, 1] - P[:, 0], P[:, 2] - P[:, 0]), axis=1)
+
+    # Cobertura por grupo (mismo criterio A36/A2 que _modal_surface_integrals:
+    # los puntos fuera de la malla escalonada se descartan y se re-escala).
+    valid = np.isfinite(np.real(locator.evaluate_many(phis[:, 0], cen)))
+    area_tot_g = np.bincount(gid, weights=area, minlength=Ng)
+    area_ok_g = np.bincount(gid[valid], weights=area[valid], minlength=Ng)
+    cover_g = np.where(area_ok_g > 0,
+                       area_tot_g / np.maximum(area_ok_g, 1e-12), 0.0)
+
+    # Modos en cada punto de cuadratura -> Phi (Nq, Nm); peso = area * cobertura.
+    Phi = np.empty((len(cen), Nm), dtype=float)
+    for n in range(Nm):
+        Phi[:, n] = np.nan_to_num(np.real(locator.evaluate_many(phis[:, n], cen)))
+    w = np.where(valid, 1.0, 0.0) * area * cover_g[gid]
+    G = Phi.T @ (Phi * w[:, None])                       # (Nm, Nm)
+    return 0.5 * (G + G.T)                                # simetriza (ruido num.)
+
+
+def qep_boundary_xi_shift(freqs, G, beta, c=343.0):
+    """QEP de frontera EXACTO proyectado a los modos (M-ortonormales):
+
+        diag(omega_n^2)  +  i c beta G w  -  I w^2  =  0,
+
+    con G = Gram de superficie de la pared (`surface_gram_per_mode`) y beta la
+    admitancia especifica NORMALIZADA (beta=1 = matcheada = Y0 = absorcion total).
+    Mismo operador y linealizacion companion que bench_front_rear_qep, pero con G
+    sobre los modos FEM reales: captura el acople inter-modal off-diagonal y la
+    estructura en frecuencia del amortiguamiento a beta~1 que la perturbacion de
+    1er orden (diagonal, constante) no ve.
+
+    De los autovalores complejos w (rama Re(w)>0, el mas cercano en Re a cada
+    omega_n): xi[n] = |Im(w_n)| / Re(w_n),  f_new[n] = Re(w_n)/(2 pi). Para la
+    pared RIGIDA (beta->0) xi->0 y f_new->f_n, asi que con la base modal rigida
+    el xi devuelto ES el Delta xi que aporta la pared activa. Devuelve (xi, f_new),
+    o None si degenera. CONVENCION e^{+i w t} (Re(beta)>0 = perdida); beta de
+    impedance.py (e^{-i w t}) entra como conj(beta). `beta` es escalar (la
+    admitancia unica de la pared; para beta(f) por modo usar la perturbacion)."""
+    freqs = np.asarray(freqs, dtype=float)
+    G = np.asarray(G, dtype=complex)
+    if G.ndim != 2 or G.shape[0] != G.shape[1]:
+        return None
+    N = int(G.shape[0])
+    if N == 0 or freqs.size < N:
+        return None
+    try:
+        import scipy.linalg as sla
+    except Exception:
+        return None
+    omega = 2.0 * np.pi * freqs[:N]
+    A0 = np.diag(omega ** 2).astype(complex)
+    A1 = 1j * c * complex(beta) * G
+    Z, Iden = np.zeros((N, N), complex), np.eye(N, dtype=complex)
+    try:                                                 # companion = bench QEP
+        w = sla.eig(np.block([[A0, A1], [Z, Iden]]),
+                    np.block([[Z, Iden], [Iden, Z]]), right=False)
+    except Exception:
+        return None
+    w = w[np.isfinite(w)]
+    w = w[np.real(w) > 1.0]
+    if w.size == 0:
+        return None
+    xi = np.empty(N, dtype=float)
+    f_new = np.empty(N, dtype=float)
+    for i, wn in enumerate(omega):
+        wk = w[int(np.argmin(np.abs(np.real(w) - wn)))]
+        xi[i] = abs(np.imag(wk)) / max(np.real(wk), 1e-9)
+        f_new[i] = np.real(wk) / (2.0 * np.pi)
+    return xi, f_new
+
+
+def _boundary_faces_with_apex(tets):
+    """Caras tri de frontera (compartidas por un solo tet) + el nodo APICE (el
+    4to nodo del tet, interior) de cada una, para poder orientar la normal hacia
+    AFUERA. Devuelve (faces (Nf,3), apex (Nf,))."""
+    tets = np.asarray(tets, dtype=int)
+    combos = [(1, 2, 3, 0), (0, 2, 3, 1), (0, 1, 3, 2), (0, 1, 2, 3)]
+    F = np.vstack([tets[:, [a, b, c]] for a, b, c, _ in combos])
+    A = np.concatenate([tets[:, d] for _, _, _, d in combos])
+    srt = np.sort(F, axis=1)
+    # hash de la terna ordenada; las caras de frontera aparecen una sola vez.
+    Nn = int(tets.max()) + 1
+    keys = (srt[:, 0].astype(np.int64) * Nn ** 2
+            + srt[:, 1].astype(np.int64) * Nn + srt[:, 2].astype(np.int64))
+    order = np.argsort(keys)
+    sk = keys[order]
+    uniq = np.concatenate([[True], sk[1:] != sk[:-1]]) & \
+        np.concatenate([sk[:-1] != sk[1:], [True]])
+    idx = order[uniq]
+    return F[idx], A[idx]
+
+
+def rear_wall_surface_mass(nodes, tets, axis, nrm_tol=0.9):
+    """Matriz de masa de superficie C[i,j] = INT_{pared} N_i N_j dS de la pared
+    TRASERA de la malla de VOLUMEN (nodes, tets): las caras de frontera cuya
+    normal EXTERIOR apunta hacia +axis (componente > nrm_tol). Para un triangulo
+    lineal INT N_i N_j dS = (A/12)(1 + delta_ij) (misma cuadratura exacta que
+    `bench_modal_vs_impedance.assemble_surface_M`). Es la C de superficie del QEP
+    NODAL de frontera (pared trasera matcheada). Devuelve (C csr (Nn,Nn),
+    n_caras), o (None, 0) si no hay pared."""
+    try:
+        import scipy.sparse as sp
+    except Exception:
+        return None, 0
+    nodes = np.asarray(nodes, dtype=float)
+    Nn = nodes.shape[0]
+    F, apex = _boundary_faces_with_apex(tets)
+    if len(F) == 0:
+        return None, 0
+    v0, v1, v2 = nodes[F[:, 0]], nodes[F[:, 1]], nodes[F[:, 2]]
+    nrm = np.cross(v1 - v0, v2 - v0)
+    ln = np.linalg.norm(nrm, axis=1)
+    areas = 0.5 * ln
+    nhat = nrm / np.maximum(ln[:, None], 1e-30)
+    # orientar hacia afuera: la normal debe alejarse del apice interior.
+    cen = (v0 + v1 + v2) / 3.0
+    outward = np.sum(nhat * (cen - nodes[apex]), axis=1) < 0.0
+    nhat[outward] *= -1.0
+    sel = nhat[:, axis] > nrm_tol
+    if not np.any(sel):
+        return None, 0
+    Fs, As = F[sel], areas[sel]
+    local = np.ones((3, 3)) + np.eye(3)                  # (A/12)(1+delta)
+    Ce = (As[:, None, None] / 12.0) * local[None]
+    rows = np.repeat(Fs, 3, axis=1).reshape(-1, 3, 3)
+    cols = np.tile(Fs[:, None, :], (1, 3, 1))
+    C = sp.coo_matrix((Ce.ravel(), (rows.ravel(), cols.ravel())),
+                      shape=(Nn, Nn)).tocsr()
+    return C, int(sel.sum())
+
+
+def qep_boundary_nodal(K, M, C, freqs_ref, phis_ref, beta, c=343.0,
+                       max_dense=1800):
+    """QEP de frontera NODAL EXACTO sobre la malla FEM COMPLETA (no proyectado a
+    los modos):
+
+        c^2 K  +  i c beta C w  -  M w^2  =  0,
+
+    con K, M (rigidez/masa FEM, sparse) y C = masa de superficie de la pared
+    trasera (`rear_wall_surface_mass`). Es el QEP del que el modal
+    (`qep_boundary_xi_shift`) es la proyeccion de Galerkin: a beta~1 (matcheada)
+    captura el amortiguamiento cercano al critico que la base modal truncada NO
+    representa (ver bench_front_rear_qep_modal T4b, bench_front_rear_qep_nodal T4).
+    `beta` COMPLEJA: Re(beta) amortigua (xi), Im(beta) corre la frecuencia
+    (f_new) -- cierra E3.
+
+    Linealizacion companion identica al modal/bench (A x = w B x, x=[p; w p]):
+        A = [[c^2 K, i c beta C], [0, I]],  B = [[0, M], [I, 0]].
+    Se resuelve con eig DENSO EXACTO (sla.eig de 2*Nn): correcto a toda beta,
+    incluido el regimen casi-critico de la pared matcheada. Por eso solo corre si
+    Nn <= max_dense (el eig denso es O((2Nn)^3)); con Nn mayor devuelve None y el
+    caller usa el QEP modal (la proyeccion de Galerkin, exacta en el subespacio y
+    barata). NO se usa shift-invert sparse: a beta~1 los polos casi-criticos se
+    dispersan y el sparse no converge de forma fiable (bench: 87% de error),
+    asi que no se embarca un solver no validado.
+
+    Matcheo por SOLAPAMIENTO del autovector de presion con cada modo rigido
+    phis_ref (robusto ante corrimiento y casi-degeneracion). Devuelve (xi, f_new)
+    (Nm,), o None. CONVENCION e^{+i w t} (Re(beta)>0 = perdida); beta de
+    impedance.py entra como conj(beta)."""
+    try:
+        import scipy.sparse as sp
+        import scipy.linalg as sla
+    except Exception:
+        return None
+    if K is None or M is None or C is None:
+        return None
+    freqs_ref = np.asarray(freqs_ref, dtype=float)
+    phis_ref = np.asarray(phis_ref)
+    Nn = int(M.shape[0])
+    Nm = int(phis_ref.shape[1]) if phis_ref.ndim == 2 else 0
+    if Nn == 0 or Nm == 0 or freqs_ref.size < Nm or Nn > int(max_dense):
+        return None
+    Kc = sp.csr_matrix(K, dtype=complex)
+    Mc = sp.csr_matrix(M, dtype=complex)
+    Cc = sp.csr_matrix(C, dtype=complex)
+    A1 = (1j * c * complex(beta)) * Cc
+    A0 = (c * c) * Kc
+    Z = sp.csr_matrix((Nn, Nn), dtype=complex)
+    Iden = sp.identity(Nn, dtype=complex, format="csr")
+    A = sp.bmat([[A0, A1], [Z, Iden]], format="csc").toarray()
+    B = sp.bmat([[Z, Mc], [Iden, Z]], format="csc").toarray()
+    try:
+        w, V = sla.eig(A, B, right=True)
+    except Exception:
+        return None
+    m = np.isfinite(w) & (np.real(w) > 1.0)
+    w, P = w[m], V[:Nn][:, m]
+    if w.size == 0:
+        return None
+
+    # Matcheo por solapamiento del autovector de presion con cada modo rigido.
+    Mp = (Mc @ P)
+    den = np.sqrt(np.abs(np.einsum("ik,ik->k", P.conj(), Mp)))
+    xi = np.empty(Nm, dtype=float)
+    f_new = np.empty(Nm, dtype=float)
+    for n in range(Nm):
+        num = np.abs(phis_ref[:, n].conj() @ Mp)
+        wk = w[int(np.argmax(num / np.maximum(den, 1e-30)))]
+        xi[n] = abs(np.imag(wk)) / max(np.real(wk), 1e-9)
+        f_new[n] = np.real(wk) / (2.0 * np.pi)
+    return xi, f_new
+
+
 def cone_xi_shift_per_mode(freqs, phis, locator, cones, c: float = 343.0):
     """Delta xi_n por la CARGA PASIVA de conos de parlante (C2, punto 3 riguroso).
 

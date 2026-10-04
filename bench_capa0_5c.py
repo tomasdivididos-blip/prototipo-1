@@ -9,7 +9,8 @@ el export CSV/TXT, y las ramas de borde (xi=None, RT60=inf, Delta~0).
   T1  RT60_n = 6.908/(xi*2*pi*f)  y  xi<=0 -> inf.
   T2  _rows: Delta con signo; "0.00" cuando |Delta|<5e-3; f efectiva = rigida+Delta.
   T3  xi=None -> columnas xi/RT60 = "—" (guion) en todas las filas.
-  T4  export CSV: header correcto + inf/"" limpios + sin signo "+".
+  T4  export CSV: comentario de Fazenda + header de 8 cols (con umbral/audible)
+      + inf/"" limpios + sin signo "+".
   T5  export TXT: mismas filas, ancho fijo, parseables.
   T6  construcciones -> etiqueta de corrimiento maximo presente y correcta.
   T7  sin corrimiento (Delta=0 en todos) -> ninguna celda Delta en negrita.
@@ -101,23 +102,31 @@ _fake_getsave(csv_path)
 dlg._export("csv")
 with open(csv_path, encoding="utf-8") as fh:
     csv_lines = fh.read().strip().splitlines()
-check("T4 CSV header", csv_lines[0] ==
-      "modo_n,f_rigida_hz,f_efectiva_hz,delta_f_hz,xi_n,rt60_n_s", csv_lines[0])
-check("T4 CSV nro filas", len(csv_lines) == 5, str(len(csv_lines)))
-# modo2: delta -1.30 (mantiene el signo -), xi 0 -> rt inf
-row2 = csv_lines[3].split(",")
+# v2.57 (umbral de Fazenda): el CSV abre con una linea de comentario con el
+# estimulo + cita, luego el header de 8 columnas (se agregaron umbral_fazenda_s
+# y audible), y despues las filas.
+check("T4 CSV comentario Fazenda en la 1a linea",
+      csv_lines[0].startswith("# umbral perceptual:")
+      and "Fazenda" in csv_lines[0], csv_lines[0])
+check("T4 CSV header", csv_lines[1] ==
+      "modo_n,f_rigida_hz,f_efectiva_hz,delta_f_hz,xi_n,rt60_n_s,"
+      "umbral_fazenda_s,audible", csv_lines[1])
+check("T4 CSV nro filas", len(csv_lines) == 6, str(len(csv_lines)))
+# modo2: delta -1.30 (mantiene el signo -), xi 0 -> rt inf. +2 lineas de offset
+# (comentario + header) respecto del formato viejo.
+row2 = csv_lines[4].split(",")
 check("T4 CSV delta negativo preserva signo", row2[3] == "-1.30", row2[3])
 check("T4 CSV inf limpio", row2[5] == "inf", row2[5])
 # modo0: delta +0.42 -> el "+" se saca en CSV
-row0 = csv_lines[1].split(",")
+row0 = csv_lines[2].split(",")
 check("T4 CSV delta positivo sin '+'", row0[3] == "0.42", row0[3])
 
-# xi None export -> columnas vacias
+# xi None export -> columnas vacias (1a fila de datos = csv_n[2]: comentario+header)
 _fake_getsave(os.path.join(tmp, "modos_none.csv"))
 dlg_none._export("csv")
 with open(os.path.join(tmp, "modos_none.csv"), encoding="utf-8") as fh:
     csv_n = fh.read().strip().splitlines()
-check("T4 CSV xi None -> celda vacia", csv_n[1].split(",")[4] == "", csv_n[1])
+check("T4 CSV xi None -> celda vacia", csv_n[2].split(",")[4] == "", csv_n[2])
 
 _fake_getsave(txt_path)
 dlg._export("txt")

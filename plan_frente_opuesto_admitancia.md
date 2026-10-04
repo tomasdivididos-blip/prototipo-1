@@ -7,9 +7,16 @@
 > perturbativo). **E3 (opción (b), QEP exacto) HECHO: `bench_front_rear_qep.py`
 > 4/4 — el RT60 del 1er axial colapsa ×1107 con la pared matcheada (C2 genuino).
 > E4a/E4b (norte front↔rear = minimizar R de la pared trasera) y E5 (panel de
-> decaimiento con 4º estado «pared trasera matcheada» = C2) HECHOS.** El plan está
-> IMPLEMENTADO (E1-E5); quedan solo refinamientos opcionales (QEP exacto proyectado a
-> los modos para la curva C2 de E5; QEP sobre FEM nodal real + β compleja de E3). Nota: el quick-win perceptual
+> decaimiento con 4º estado «pared trasera matcheada» = C2) HECHOS.
+> **REFINAMIENTO C2 HECHO (3 Oct 2026): la curva C2 de E5 ya NO usa la perturbación
+> de 1er orden. Dos niveles del QEP de frontera EXACTO: (a) NODAL sobre el FEM
+> completo (`qep_boundary_nodal` + `rear_wall_surface_mass`), validado por
+> `bench_front_rear_qep_nodal.py` 9/9, que capta el régimen casi-crítico de la pared
+> matcheada (ξ~1.2) y soporta β COMPLEJA (Im→Δfₙ, cierra E3); (b) proyectado a los
+> MODOS (`surface_gram_per_mode` + `qep_boundary_xi_shift`), la proyección de Galerkin
+> del nodal, validado por `bench_front_rear_qep_modal.py` 9/9. El panel usa el nodal si
+> la malla es afrontable (Nn≤1800) y cae al modal si no.** El plan está IMPLEMENTADO
+> (E1-E5) y E3 CERRADO. Nota: el quick-win perceptual
 > de Fazenda (umbral de decaimiento modal en la tabla de modos, `perceptual.py`) es
 > una mejora del panel EXISTENTE, independiente de este plan, y ya está hecho.
 > Vara del proyecto: exactitud por debajo de Schroeder manda; respetar las
@@ -186,9 +193,19 @@ Es la **misma forma** que ya usa el cono del sub como absorbedor interior
   rear ∝ p local, β_rear→1): los polos se mueven (C2, decaimiento genuino), calculado
   por el QEP. La opción (a) CABS feedforward (`dba.py`, no mueve polos, C1,
   redistribución de energía en `modal_decay.py`) queda como el modelo descriptivo ya
-  existente. **PENDIENTE de E3 (opcional):** QEP sobre el FEM nodal real (no solo
-  modal-analítico) para salas no rectangulares, reusando `build_KM` + la C de
-  superficie; y β compleja (Im(β)→Δfₙ).
+  existente. **E3 CERRADO (3 Oct 2026):** el QEP sobre el FEM NODAL real (no solo
+  modal-analítico) está en `face_materials.qep_boundary_nodal` (reusa `build_KM` +
+  `rear_wall_surface_mass`, la C de superficie de la pared trasera del volumen) con β
+  COMPLEJA (Re→ξ, Im→Δfₙ). `bench_front_rear_qep_nodal.py` (9/9) valida: **T1** la C de
+  superficie == el ensamblado de referencia y suma == área de la pared; **T2** atadura
+  perturbativa (β=0.05, 0.97%); **T3** β compleja corre fₙ con el mismo signo que la
+  perturbación validada (−0.44 Hz, cierra la Im(β)); **T4** a β=1 el espectro nodal
+  alcanza ξ~1.2 casi-crítico (×3.2 el pico del modal, que la base truncada capa en
+  ~0.38); **T5** umbral `max_dense`: None arriba del tope → el caller cae al modal. Se
+  resuelve con eig DENSO exacto (sin shift-invert sparse: a β~1 los polos casi-críticos
+  se dispersan y el sparse no converge de forma fiable, 87% de error medido → no se
+  embarca). Para salas grandes/no rectangulares (Nn>1800) el panel usa la proyección
+  modal (exacta en el subespacio, barata).
 - **E4 — Interacción front↔rear como norte de optimización (REDEFINIDO por E3).**
   El norte original (maximizar Σ Δξₙ) **NO aplica a fuentes reales**: el drive
   feedforward (`dba.py`) NO mueve polos (E3). El norte correcto y alcanzable por
@@ -232,9 +249,29 @@ Es la **misma forma** que ya usa el cono del sub como absorbedor interior
   modos bajos, así que la pared matcheada real decaería AÚN más rápido. A diferencia del
   norte R̄ (E4), E5 NO necesita banda de onda plana (es admitancia de frontera) → anda en
   cualquier eje/recinto, incluido Control Ale.
-  **PENDIENTE (opcional):** usar el QEP exacto proyectado a los modos (no la perturbación)
-  para la curva C2; requiere la Gram de superficie off-diagonal de la pared (no expuesta
-  hoy). El actual es el piso conservador, declarado.
+  **REFINAMIENTO C2 HECHO (3 Oct 2026).** La curva C2 se calcula con el QEP de frontera
+  EXACTO proyectado a los modos: `face_materials.surface_gram_per_mode` arma la Gram de
+  superficie COMPLETA de la pared trasera G[n,m]=∫_pared φₙφₘ dS (generaliza la diagonal
+  de `_modal_surface_integrals` al acople inter-modal off-diagonal) y
+  `qep_boundary_xi_shift` resuelve diag(ωₙ²)+i c β G ω−I ω²=0 (β=Y₀=1, misma linealización
+  companion que `bench_front_rear_qep`). `AcousticPanel._rear_matched_delta_xi` lo usa con
+  fallback a la perturbación si degenera. `bench_front_rear_qep_modal.py` (9/9) valida:
+  **T1** la Gram nueva == el emparedado de la masa de superficie FEM φᵀ C_surf φ (0.77%)
+  y su diagonal == el Sg de la perturbación (bit a bit); **T2** para β≤0.12 el QEP modal
+  reproduce la perturbación de 1er orden (atadura, 1.8%); **T3** a β=1 el QEP da hasta
+  ×1.95 más amortiguamiento que la perturbación diagonal (estructura en f + acople);
+  **T4a** contra el QEP NODAL exacto (oráculo de Galerkin en todo el espacio FEM) el QEP
+  modal matchea <7% en régimen moderado (β=0.3, solapamiento de autovector >0.9).
+  **HALLAZGO HONESTO (T4b):** a β=1 (ideal matcheada) la identidad modal se DEGRADA (el
+  modo rígido se reparte en varios polos nodales, el nodal roza el amortiguamiento crítico
+  ξ~0.9), así que el δ nodal por modo deja de estar bien definido y NO hay sándwich
+  perturbación≤modal≤nodal limpio; el valor del panel es una estimación del SUBESPACIO
+  modal (sub-Schroeder), declarada, mejor que la perturbación pero sin pretender el nodal
+  exacto. **CERRADO (3 Oct 2026):** el pendiente opcional (QEP nodal completo + β compleja)
+  está hecho; el panel ahora PREFIERE el QEP nodal exacto (`qep_boundary_nodal`) cuando la
+  malla lo permite (Nn≤1800), que sí captura el régimen casi-crítico (ξ~1.2) de la pared
+  matcheada, y cae a la proyección modal solo para mallas grandes. Ver E3 CERRADO arriba y
+  `bench_front_rear_qep_nodal.py` 9/9.
 
 ## 5. Validación y banda de validez (el norte)
 

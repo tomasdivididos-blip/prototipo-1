@@ -1571,9 +1571,13 @@ class DecayWaterfallDialog(QDialog):
             "matcheada (C2)»: TECHO ideal: si el array trasero presentara una impedancia "
             "ADAPTADA (β=Y₀, R→0, onda viajera) la pared opuesta absorbería el frente de "
             "onda y los modos AXIALES del eje decaerían genuinamente más rápido (polos "
-            "movidos, no redistribución). Se estima con perturbación de 1er orden "
-            "(Re(β)=1 en la trasera); es CONSERVADOR: el QEP exacto da aún más "
-            "amortiguamiento (ver plan_frente_opuesto_admitancia / bench_front_rear_qep).")
+            "movidos, no redistribución). Se resuelve con el QEP de frontera EXACTO "
+            "(autovalores complejos de c²K+icβC ω−M ω² con la BC de admitancia β=Y₀ en "
+            "la pared trasera): NODAL sobre el FEM completo si la malla es afrontable "
+            "(capta el régimen casi-crítico de la pared matcheada), si no proyectado a "
+            "los modos (proyección de Galerkin). Captura el acople inter-modal y la "
+            "estructura en frecuencia que la perturbación de 1er orden subestima a β~1 "
+            "(ver plan_frente_opuesto_admitancia / bench_front_rear_qep_nodal).")
         note.setWordWrap(True)
         note.setStyleSheet("color:#11111b; font-size:9pt;")
         v.addWidget(note)
@@ -6731,10 +6735,19 @@ class AcousticPanel(QWidget):
         estacionaria del eje se amortigua de verdad (ver plan_frente_opuesto_admitancia,
         bench_front_rear_qep: RT60 del 1er axial colapsa ×1107).
 
-        Se calcula con la perturbación de 1er orden poniendo Re(β)=1 (Y₀) en la pared
-        trasera. Es CONSERVADOR: a β~1 la perturbación SUBESTIMA (el QEP exacto da hasta
-        ~2× más amortiguamiento en los modos bajos), así que la curva real con pared
-        matcheada decaería AÚN más rápido. Devuelve (Δξ, nota) o (None, "")."""
+        Tres caminos, de más a menos exacto (el primero que corre gana):
+          1. QEP NODAL exacto sobre el FEM completo (`qep_boundary_nodal` con la
+             masa de superficie `rear_wall_surface_mass` de la pared trasera,
+             β=Y₀=1): autovalores complejos de c²K+icβC ω−M ω²=0 en TODO el
+             espacio nodal. Capta el régimen casi-crítico de la pared matcheada
+             que la base modal truncada no representa. Solo si la malla es
+             afrontable (Nn ≤ tope del eig denso).
+          2. QEP de frontera proyectado a los MODOS (`qep_boundary_xi_shift`
+             sobre la Gram `surface_gram_per_mode`): la proyección de Galerkin del
+             nodal, exacta en el subespacio modal sub-Schroeder. Capta el acople
+             inter-modal y la estructura en f que la perturbación no ve.
+          3. Perturbación de 1er orden (β=1 en la trasera): el piso conservador.
+        Devuelve (Δξ, nota) o (None, "")."""
         mr = getattr(self, "modal_result", None)
         if mr is None:
             return None, ""
@@ -6756,9 +6769,39 @@ class AcousticPanel(QWidget):
                                  dtype=float)
             if rear_mask.sum() == 0:
                 return None, ""
-            V = aa.compute_mesh_volume(verts, tris)
             mf = self._effective_modal_freqs()
-            # β=1 (Y₀, real) en la pared trasera, 0 en el resto -> Δξ de esa pared.
+            axis_name = ["X", "Y", "Z"][axis]
+            # (1) QEP NODAL exacto sobre el FEM completo (si la malla es afrontable):
+            # β=1 (Y₀, matcheada) en la masa de superficie de la pared trasera.
+            # xi = Δξ (K/M sin pérdidas: el único amortiguamiento es la pared).
+            nodes_v = getattr(mr, "nodes", None)
+            tets_v = getattr(mr, "tets", None)
+            if nodes_v is not None and tets_v is not None:
+                nodes_v = np.asarray(nodes_v, dtype=float)
+                tets_v = np.asarray(tets_v, dtype=int)
+                if nodes_v.shape[0] <= 1800:             # tope del eig denso 2Nn
+                    import acoustic_fem as afem
+                    Kv, Mv, _vol = afem.build_KM(nodes_v, tets_v)
+                    C_rear, _nf = fm_mod.rear_wall_surface_mass(
+                        nodes_v, tets_v, axis)
+                    if C_rear is not None:
+                        nod = fm_mod.qep_boundary_nodal(
+                            Kv, Mv, C_rear, mf, mr.phis, beta=1.0, c=C0)
+                        if nod is not None:
+                            dxi, _f_new = nod
+                            return (np.asarray(dxi, dtype=float),
+                                    f"eje {axis_name}, QEP nodal exacto")
+            # (2) QEP proyectado a los MODOS: Gram de superficie + β=1.
+            G = fm_mod.surface_gram_per_mode(mr.phis, mr.locator, verts, tris,
+                                             groups, rear_mask)
+            if G is not None:
+                qep = fm_mod.qep_boundary_xi_shift(mf, G, beta=1.0, c=C0)
+                if qep is not None:
+                    dxi, _f_new = qep
+                    return (np.asarray(dxi, dtype=float),
+                            f"eje {axis_name}, QEP modal")
+            # (3) Fallback: perturbación de 1er orden (β=1 en la pared trasera).
+            V = aa.compute_mesh_volume(verts, tris)
             beta_provider = lambda gs, fn, m=rear_mask: m.astype(complex)
             res = fm_mod.perturbation_xi_shift_per_mode(
                 mf, mr.phis, mr.locator, verts, tris, groups, {}, V,
@@ -6766,8 +6809,7 @@ class AcousticPanel(QWidget):
             if res is None:
                 return None, ""
             dxi, _f_new = res
-            axis_name = ["X", "Y", "Z"][axis]
-            return np.asarray(dxi, dtype=float), f"eje {axis_name}, 1er orden"
+            return np.asarray(dxi, dtype=float), f"eje {axis_name}, 1er orden (fallback)"
         except Exception:
             return None, ""
 
@@ -6865,10 +6907,19 @@ class AcousticPanel(QWidget):
                                  mdk.decay_time(ir_d, fs))
                 data["csd_d"] = mdk.cumulative_spectral_decay(ir_d, fs, f_hi=f_hi)
                 data["lbl_d"] = f"pared trasera matcheada ({match_note})"
+                if "nodal" in match_note:
+                    _how = ("QEP de frontera NODAL exacto sobre el FEM completo "
+                            "(autovalores complejos de c²K+icβC ω−M ω²; capta el "
+                            "régimen casi-crítico de la pared matcheada).")
+                elif "QEP" in match_note:
+                    _how = ("QEP de frontera proyectado a los modos (proyección de "
+                            "Galerkin del nodal; capta el acople inter-modal que la "
+                            "perturbación no ve).")
+                else:
+                    _how = "perturbación de 1er orden de respaldo (conservadora)."
                 self._log("E5: pared trasera matcheada (β=Y₀, absorbedor activo ideal) "
                           f"aplicada ({match_note}); Δξ modal máx="
-                          f"{float(np.max(dxi_match)):.4f}. Es el TECHO C2 (perturbación "
-                          "1er orden, conservador; el QEP exacto da más).")
+                          f"{float(np.max(dxi_match)):.4f}. Es el TECHO C2 vía " + _how)
         except Exception as e:
             QMessageBox.critical(self, "Error decaimiento", str(e))
             return
