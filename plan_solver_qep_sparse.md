@@ -96,8 +96,19 @@ de 6 GB. **Conclusión: A+B es viable con holgura; el trabajo es robustez, no c�
   (Nn=5376) corre en 16 s on-demand y CORRIGE la proyección modal hasta 0.22 en ξ.
   Nota: el objetivo de 10 s no se cumple para Nm~71 (el eigs de PAL es ~2 s/shift);
   es on-demand y el norte del proyecto prioriza exactitud sobre comodidad.
-- **F5 — validación física:** RT60 del solver vs las 6 RIRs del TP7 Control Room
-  (`TP 7/RIRs Control Room/`, LSS REC P1-P6).
+- **F5 — validación física. HECHO (4 Oct 2026).** `bench_qep_f5.py` 4/4 contra el
+  TP7 Control Room. **Limitación de la medición (documentada):** las 6 RIRs son de
+  0.19 s → FRF con df≈5.3 Hz, y arriba de 50 Hz los modos están más juntos que eso
+  (hay degenerados, M>1), así que NO se puede extraer ξ por modo sub-Schroeder de
+  estas RIRs (coincide con la calibración previa). Lo validado: (T1) las frecuencias
+  FEM de recinto.room == la caja analítica (<1.3%); (T2) el pico modal medido de la
+  RIR (84.4 Hz) == un modo FEM (83.5 Hz); (T3) el **solver SPARSE == el modelo de
+  PERTURBACIÓN** (el default ya validado contra medición, FLAIR 1.42%) sobre la
+  GEOMETRÍA REAL del TP7, 0.59% medio / 1.94% máx. Combinado con que el sparse
+  reproduce el QEP nodal a máquina, el solver HEREDA la validación empírica del
+  modelo forward.
+
+**ESTADO: F0-F2, F4, F5 HECHOS. Solo queda F3 (oráculo SLEPc vía WSL, opcional).**
 
 ## 6. Geometrías de prueba
 
