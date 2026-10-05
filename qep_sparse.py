@@ -189,7 +189,15 @@ def pal_qep(M, C, K, sigma, k=24, m=3, mode="sparse", E=None,
         if ncv is None:
             ncv = min(N - 1, max(2 * kk + 1, 20))
         # eigenvalores de A_s⁻¹B_s = 1/μ_s ; los μ_s chicos ↔ 1/μ_s grandes (LM).
-        theta, xL = spla.eigs(OP, k=kk, which="LM", maxiter=maxiter, ncv=ncv)
+        # Si ARPACK no converge dentro de maxiter (shifts lentos de baja f), se usan
+        # los pares de Ritz YA convergidos (el fallback modal cubre el resto): acota
+        # el tiempo por shift sin perder los polos buenos (el η_Q filtra después).
+        try:
+            theta, xL = spla.eigs(OP, k=kk, which="LM", maxiter=maxiter, ncv=ncv)
+        except spla.ArpackNoConvergence as exc:
+            theta, xL = exc.eigenvalues, exc.eigenvectors
+            if theta.size == 0:
+                return np.array([]), np.zeros((n, 0), complex), np.array([])
         mu = 1.0 / theta
         X = xL[:n, :]
 
@@ -379,7 +387,8 @@ def sparse_boundary_xi_shift(K, M, Csurf, freqs_ref, phis_ref, beta, c=343.0,
                              m=3, conf_hz=18.0, max_shifts=10, k_per_shift=24,
                              eta_tol=1e-7, n_quad=48, beyn_tol=1e-5,
                              beyn_fill=True, fallback_xi=None, fallback_f=None,
-                             xi_crit=0.35, return_info=False):
+                             xi_crit=0.35, pal_maxiter=None, couple_thr=0.6,
+                             return_info=False):
     """QEP de frontera por A+B: PAL (banda de shifts, rápido) para los modos
     OSCILATORIOS + Beyn (contorno) para los que quedan, incluidos los
     SOBREAMORTIGUADOS (polos reales/muy amortiguados, ξ≳1, que un shift imaginario
@@ -397,6 +406,16 @@ def sparse_boundary_xi_shift(K, M, Csurf, freqs_ref, phis_ref, beta, c=343.0,
     sospechosos de estar subestimados). Sin fallback, Beyn rellena todo lo que PAL
     deja (modo correctitud, caro).
 
+    VELOCIDAD (`couple_thr`, con fallback): los shifts de PAL se concentran en la
+    BANDA de frecuencias de los modos FUERTEMENTE acoplados a la pared trasera
+    (diag(G)=φₙᵀCsurfφₙ > couple_thr·max), que son los únicos donde el modal
+    subestima; los modos fuera de esa banda (acople débil) usan la proyección modal
+    (exacta <7%, bench_front_rear_qep_modal). Esto evita los shifts LENTOS de baja
+    frecuencia (ARPACK converge mal ahí) cuando esos modos no lo necesitan. En
+    Control Ale baja de ~17 s (couple_thr=0) a ~10 s (couple_thr=0.6) preservando la
+    corrección de los modos acoplados, con error ≤0.03 en ξ en los débiles (dentro
+    de la precisión del modal). couple_thr=0 = exacto en toda la banda (más lento).
+
     Para un modo sobreamortiguado se recupera ξ de sus DOS polos reales s1,s2:
     ω_n=√(s1 s2), ξ=−(s1+s2)/(2ω_n) (los polos de la Lorentziana ωₙ²−ω²+2iξωₙω en
     ω=i s son s=iω=reales), y f_new=ω_n/2π."""
@@ -413,16 +432,33 @@ def sparse_boundary_xi_shift(K, M, Csurf, freqs_ref, phis_ref, beta, c=343.0,
         return None
     E = np.sqrt(c * complex(beta)) * E_surf
     fr = freqs_ref[:Nm]
-    fmin, fmax = float(fr.min()), float(fr.max())
 
-    # --- PAL: banda de shifts espaciados por el radio de confianza ---
-    ns = int(np.clip(np.ceil((fmax - fmin) / (2.0 * conf_hz)) + 1, 2, max_shifts))
-    shifts = np.linspace(fmin, fmax, ns)
+    # Indicador de acople con la pared trasera por modo: diag(G)=φₙᵀ Csurf φₙ. Los
+    # modos de diag(G) GRANDE son los fuertemente amortiguados, donde la proyección
+    # modal subestima y hace falta el QEP exacto; los de diag(G) chico los cubre
+    # bien el fallback modal. Si hay fallback, los shifts de PAL se concentran en el
+    # RANGO de frecuencias de los modos acoplados (evita los shifts lentos de baja
+    # frecuencia donde el modal ya es exacto).
+    Cs = sp.csr_matrix(Csurf)
+    diagG = np.real(np.einsum("in,in->n", phis_ref[:, :Nm],
+                              (Cs @ phis_ref[:, :Nm])))
+    fb = fallback_xi is not None and fallback_f is not None
+    coupled = diagG > couple_thr * float(diagG.max()) if diagG.max() > 0 else np.ones(Nm, bool)
+    frng = fr[coupled] if (fb and np.any(coupled)) else fr
+    fmin, fmax = float(fr.min()), float(fr.max())
+    f_lo, f_hi = float(frng.min()), float(frng.max())
+
+    # --- PAL: banda de shifts (solo sobre el rango acoplado si hay fallback) ---
+    ns = int(np.clip(np.ceil((f_hi - f_lo) / (2.0 * conf_hz)) + 1, 2, max_shifts))
+    shifts = np.linspace(f_lo, f_hi, ns)
     lam_pool, X_pool = [], []
     for fsh in shifts:
         sigma = 1j * 2.0 * np.pi * float(fsh)
-        lam, X, eta = pal_qep(Mp, Cp, Kp, sigma, k=k_per_shift, m=m,
-                              mode="sparse", E=E)
+        # k adaptativo: tantos polos como modos haya cerca (+ margen).
+        nloc = int(np.sum(np.abs(fr - fsh) < 1.5 * conf_hz))
+        k_sh = int(min(k_per_shift, max(2 * nloc + 4, 6)))
+        lam, X, eta = pal_qep(Mp, Cp, Kp, sigma, k=k_sh, m=m,
+                              mode="sparse", E=E, maxiter=pal_maxiter)
         sel = (eta < eta_tol) & (lam.imag > 0)
         if np.any(sel):
             lam_pool.append(lam[sel]); X_pool.append(X[:, sel])

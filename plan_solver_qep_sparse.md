@@ -93,9 +93,17 @@ de 6 GB. **Conclusión: A+B es viable con holgura; el trabajo es robustez, no c�
   denso EXACTO en los 12 modos del shoebox, incluido el muy amortiguado ξ=1.2 (PAL
   solo 92% → Beyn rellena → 100%). `_rear_matched_delta_xi` ahora: nodal (Nn≤1800) →
   **sparse A+B con fallback modal (1800<Nn≤6000)** → modal (Nn>6000). Control Ale
-  (Nn=5376) corre en 16 s on-demand y CORRIGE la proyección modal hasta 0.22 en ξ.
-  Nota: el objetivo de 10 s no se cumple para Nm~71 (el eigs de PAL es ~2 s/shift);
-  es on-demand y el norte del proyecto prioriza exactitud sobre comodidad.
+  (Nn=5376) CORRIGE la proyección modal hasta 0.22 en ξ.
+  **OPTIMIZACIÓN (`couple_thr`, 4 Oct 2026):** los shifts de PAL se concentran en la
+  BANDA de los modos FUERTEMENTE acoplados a la pared trasera (diag(G)>couple_thr·max,
+  los únicos donde el modal subestima); los débilmente acoplados usan la proyección
+  modal (exacta <7%). Evita los shifts LENTOS de baja f (ARPACK converge mal ahí)
+  cuando esos modos no lo necesitan. Control Ale: **17 s (couple_thr=0) → 11.5 s
+  (couple_thr=0.6, default)**, preservando la corrección de los acoplados, error
+  ≤0.03 en ξ en los débiles. HALLAZGO: el cuello es la convergencia de ARPACK en baja
+  f (no la LU, 0.35 s a toda f); capar maxiter o bajar k NO sirve (mata justo los
+  modos acoplados que necesitan muchas iteraciones). El eig denso de 2N que esto evita
+  costaría ~24 GB y minutos. couple_thr=0 = exacto en toda la banda (más lento).
 - **F5 — validación física. HECHO (4 Oct 2026).** `bench_qep_f5.py` 4/4 contra el
   TP7 Control Room. **Limitación de la medición (documentada):** las 6 RIRs son de
   0.19 s → FRF con df≈5.3 Hz, y arriba de 50 Hz los modos están más juntos que eso
