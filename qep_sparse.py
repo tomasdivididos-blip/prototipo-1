@@ -208,6 +208,98 @@ def pal_qep(M, C, K, sigma, k=24, m=3, mode="sparse", E=None,
 
 
 # ---------------------------------------------------------------------------
+# Método B: integral de contorno (Beyn 2012)
+# ---------------------------------------------------------------------------
+def beyn_contour(Tfun, z0, R, n_quad=48, ell=24, tol_rank=1e-8,
+                 tol_res=1e-7, seed=0, Tresid=None):
+    """Autopares de T(z) v = 0 DENTRO del círculo Γ de centro z0, radio R, por el
+    método de integral de contorno de Beyn (2012), `referencias/Beyn...pdf`,
+    "Integral algorithm 1" (p.14). T holomorfa; sirve para el QEP (T(z)=z²M+zC+K)
+    y para un NEP β(ω) (T(z) cualquiera). Captura TODOS los polos en Γ, incluidos
+    los sobreamortiguados (eje real) que un shift imaginario no ve.
+
+        A0 = (1/2πi)∮ T(z)⁻¹ V̂ dz,   Ã1 = (1/2πi)∮ (z−z0) T(z)⁻¹ V̂ dz
+    por trapecio (converge EXPONENCIAL en n_quad). SVD de A0 revela el rango
+    k = nº de polos adentro; B = V0ᴴ Ã1 W0 Σ0⁻¹ (k×k) tiene autovalores λ−z0.
+
+    Tfun(z) -> matriz sparse n×n. ell = tamaño de la sonda (≥ nº de polos
+    esperado; si k==ell hay más y conviene subirlo). Tresid(z) opcional para el
+    residuo (default Tfun). Devuelve (lam, V, res): autovalores, autovectores
+    (n×p) y residuo relativo ‖T(λ)v‖/‖v‖ por polo."""
+    Qz0 = sp.csc_matrix(Tfun(z0))
+    n = Qz0.shape[0]
+    rng = np.random.default_rng(seed)
+    Vhat = (rng.standard_normal((n, ell))
+            + 1j * rng.standard_normal((n, ell)))
+    M0 = np.zeros((n, ell), complex)
+    M1 = np.zeros((n, ell), complex)
+    for j in range(n_quad):
+        tj = 2.0 * np.pi * j / n_quad
+        zj = z0 + R * np.exp(1j * tj)
+        lu = spla.splu(sp.csc_matrix(Tfun(zj)))
+        Xj = lu.solve(Vhat)                               # T(z_j)⁻¹ V̂
+        M0 += Xj * np.exp(1j * tj)
+        M1 += Xj * np.exp(2j * tj)
+    M0 *= R / n_quad                                      # A0
+    M1 *= (R * R) / n_quad                                # Ã1 = A1 − z0 A0
+    U, s, Wh = np.linalg.svd(M0, full_matrices=False)
+    if s[0] == 0:
+        return np.array([]), np.zeros((n, 0), complex), np.array([])
+    k = int(np.sum(s > tol_rank * s[0]))
+    if k == 0:
+        return np.array([]), np.zeros((n, 0), complex), np.array([])
+    V0 = U[:, :k]; S0 = s[:k]; W0 = Wh.conj().T[:, :k]
+    B = (V0.conj().T @ M1 @ W0) / S0[None, :]             # V0ᴴ Ã1 W0 Σ0⁻¹
+    theta, Sv = np.linalg.eig(B)
+    lam = z0 + theta
+    V = V0 @ Sv
+    Tr = Tresid if Tresid is not None else Tfun
+    out_lam, out_V, out_res = [], [], []
+    for i in range(len(lam)):
+        v = V[:, i]; nv = np.linalg.norm(v)
+        if nv == 0 or not np.isfinite(lam[i]):
+            continue
+        res = np.linalg.norm(Tr(lam[i]) @ v) / nv
+        inside = abs(lam[i] - z0) < R * (1.0 + 1e-6)
+        if res < tol_res and inside:
+            out_lam.append(lam[i]); out_V.append(v); out_res.append(res)
+    if not out_lam:
+        return np.array([]), np.zeros((n, 0), complex), np.array([])
+    idx = np.argsort(np.abs(np.imag(out_lam)))
+    lam_o = np.array(out_lam)[idx]
+    V_o = np.array(out_V).T[:, idx]
+    res_o = np.array(out_res)[idx]
+    return lam_o, V_o, res_o
+
+
+def beyn_qep(M, C, K, z0, R, n_quad=48, ell=24, tol_rank=1e-8, tol_res=1e-7,
+             seed=0):
+    """Beyn para el QEP (z²M+zC+K)v=0 dentro del círculo (z0,R). Devuelve
+    (lam, V, res) con el residuo = error hacia atrás η_Q del QEP."""
+    M = sp.csr_matrix(M, dtype=complex)
+    C = sp.csr_matrix(C, dtype=complex)
+    K = sp.csr_matrix(K, dtype=complex)
+    nM, nC, nK = _qep_norms(M, C, K)
+
+    def T(z):
+        return (z * z) * M + z * C + K
+
+    lam, V, _res = beyn_contour(T, z0, R, n_quad=n_quad, ell=ell,
+                                tol_rank=tol_rank, tol_res=1e-1, seed=seed,
+                                Tresid=T)
+    # recomputar el residuo como η_Q (certificado del QEP) y filtrar.
+    keep, eta = [], []
+    for i in range(len(lam)):
+        e = _backward_error(M, C, K, lam[i], V[:, i], nM, nC, nK)
+        if e < tol_res:
+            keep.append(i); eta.append(e)
+    keep = np.array(keep, int)
+    if keep.size == 0:
+        return np.array([]), np.zeros((M.shape[0], 0), complex), np.array([])
+    return lam[keep], V[:, keep], np.array(eta)
+
+
+# ---------------------------------------------------------------------------
 # Envoltorio para el QEP de frontera (interfaz como qep_boundary_nodal)
 # ---------------------------------------------------------------------------
 def pal_boundary_xi_shift(K, M, Csurf, freqs_ref, phis_ref, beta, c=343.0,

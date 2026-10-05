@@ -75,10 +75,17 @@ de 6 GB. **Conclusión: A+B es viable con holgura; el trabajo es robustez, no c�
 
 - **F0 — scaffold + oráculos + factibilidad.** Factibilidad HECHA (§1). Falta: 2-3
   shoeboxes oráculo + harness de validación (reusa el QEP denso como verdad).
-- **F1 — método A (PAL).** Reducción por bajo rango + eig del pencil reducido; atadura
-  al denso (~1e-10) y a la perturbación. (leer paper Lu et al.)
-- **F2 — método B (Beyn).** Contorno sub-Schroeder + resolvente `splu`; robusto al
-  casi-crítico; cubre β(ω). (leer paper Beyn)
+- **F1 — método A (PAL). HECHO (4 Oct 2026).** `qep_sparse.pal_qep` (+ wrapper
+  multi-shift `pal_boundary_xi_shift`). `bench_qep_sparse.py` 7/7: PAL denso==QEP
+  denso; PAL sparse==denso (5e-15, factoriza solo Q(σ)); η_Q certifica (6.8e-14);
+  el wrapper multi-shift reproduce `qep_boundary_nodal` a 0.00% en el 83% de modos.
+  HALLAZGO: un shift capta su dominio de confianza (Fig 2.2) → multi-shift cubre la
+  banda oscilatoria; los sobreamortiguados → método B.
+- **F2 — método B (Beyn). HECHO (4 Oct 2026).** `qep_sparse.beyn_contour` (genérico,
+  toma T(z) callable) + `beyn_qep`. `bench_qep_beyn.py` 5/5: encuentra TODOS los polos
+  dentro de Γ (match 1.4e-7, η 4.9e-11); captura el polo más amortiguado (Re=−796,
+  lejos del eje imaginario, que PAL no ve); convergencia EXPONENCIAL en n_quad
+  (3.4e-6→1.5e-9); resuelve el NEP con β(z) dependiente de frecuencia (residuo 1e-8).
 - **F3 — oráculo SLEPc** (env `qep_oracle`, bench que se saltea si no está).
 - **F4 — wiring:** reemplazar el tope Nn≤1800 por el sparse; el denso queda oráculo chico.
 - **F5 — validación física:** RT60 del solver vs las 6 RIRs del TP7 Control Room.
