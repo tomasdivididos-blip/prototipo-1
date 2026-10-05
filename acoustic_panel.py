@@ -6771,36 +6771,57 @@ class AcousticPanel(QWidget):
                 return None, ""
             mf = self._effective_modal_freqs()
             axis_name = ["X", "Y", "Z"][axis]
-            # (1) QEP NODAL exacto sobre el FEM completo (si la malla es afrontable):
-            # β=1 (Y₀, matcheada) en la masa de superficie de la pared trasera.
-            # xi = Δξ (K/M sin pérdidas: el único amortiguamiento es la pared).
-            nodes_v = getattr(mr, "nodes", None)
-            tets_v = getattr(mr, "tets", None)
-            if nodes_v is not None and tets_v is not None:
-                nodes_v = np.asarray(nodes_v, dtype=float)
-                tets_v = np.asarray(tets_v, dtype=int)
-                if nodes_v.shape[0] <= 1800:             # tope del eig denso 2Nn
-                    import acoustic_fem as afem
-                    Kv, Mv, _vol = afem.build_KM(nodes_v, tets_v)
-                    C_rear, _nf = fm_mod.rear_wall_surface_mass(
-                        nodes_v, tets_v, axis)
-                    if C_rear is not None:
-                        nod = fm_mod.qep_boundary_nodal(
-                            Kv, Mv, C_rear, mf, mr.phis, beta=1.0, c=C0)
-                        if nod is not None:
-                            dxi, _f_new = nod
-                            return (np.asarray(dxi, dtype=float),
-                                    f"eje {axis_name}, QEP nodal exacto")
-            # (2) QEP proyectado a los MODOS: Gram de superficie + β=1.
+            N_SPARSE_MAX = 6000      # tope del solver sparse A+B (on-demand ~20 s)
+            # Proyección modal (baseline/fallback barato): Gram de superficie + β=1.
+            # Es el QEP de frontera proyectado a los modos sub-Schroeder (exacto en
+            # el subespacio; subestima solo los casi-críticos). Se usa como fallback
+            # del sparse y como resultado directo para mallas enormes.
+            modal = None
             G = fm_mod.surface_gram_per_mode(mr.phis, mr.locator, verts, tris,
                                              groups, rear_mask)
             if G is not None:
                 qep = fm_mod.qep_boundary_xi_shift(mf, G, beta=1.0, c=C0)
                 if qep is not None:
-                    dxi, _f_new = qep
-                    return (np.asarray(dxi, dtype=float),
-                            f"eje {axis_name}, QEP modal")
-            # (3) Fallback: perturbación de 1er orden (β=1 en la pared trasera).
+                    modal = (np.asarray(qep[0], float), np.asarray(qep[1], float))
+            # Caminos EXACTOS sobre el FEM (β=1, Y₀ matcheada) cuando es afrontable.
+            nodes_v = getattr(mr, "nodes", None)
+            tets_v = getattr(mr, "tets", None)
+            if nodes_v is not None and tets_v is not None:
+                nodes_v = np.asarray(nodes_v, dtype=float)
+                tets_v = np.asarray(tets_v, dtype=int)
+                Nn = int(nodes_v.shape[0])
+                if Nn <= N_SPARSE_MAX:
+                    import acoustic_fem as afem
+                    Kv, Mv, _vol = afem.build_KM(nodes_v, tets_v)
+                    C_rear, _nf = fm_mod.rear_wall_surface_mass(
+                        nodes_v, tets_v, axis)
+                    if C_rear is not None and Nn <= 1800:
+                        # (1) QEP NODAL exacto (eig denso 2Nn) para mallas chicas.
+                        nod = fm_mod.qep_boundary_nodal(
+                            Kv, Mv, C_rear, mf, mr.phis, beta=1.0, c=C0)
+                        if nod is not None:
+                            return (np.asarray(nod[0], dtype=float),
+                                    f"eje {axis_name}, QEP nodal exacto")
+                    elif C_rear is not None:
+                        # (2) QEP SPARSE A+B (PAL + Beyn) para mallas medianas:
+                        # exacto donde PAL/Beyn cubren, fallback modal en el resto.
+                        import qep_sparse as qs
+                        fx = modal[0] if modal else None
+                        ff = modal[1] if modal else None
+                        try:
+                            sp_res = qs.sparse_boundary_xi_shift(
+                                Kv, Mv, C_rear, mf, mr.phis, beta=1.0, c=C0,
+                                fallback_xi=fx, fallback_f=ff)
+                        except Exception:
+                            sp_res = None
+                        if sp_res is not None:
+                            dxi = np.asarray(sp_res[0], float)
+                            if np.all(np.isfinite(dxi)):
+                                return (dxi, f"eje {axis_name}, QEP sparse A+B")
+            # (3) Proyección modal (mallas enormes Nn>N_SPARSE_MAX, o si falló lo exacto).
+            if modal is not None:
+                return (modal[0], f"eje {axis_name}, QEP modal")
+            # (4) Fallback: perturbación de 1er orden (β=1 en la pared trasera).
             V = aa.compute_mesh_volume(verts, tris)
             beta_provider = lambda gs, fn, m=rear_mask: m.astype(complex)
             res = fm_mod.perturbation_xi_shift_per_mode(
@@ -6911,6 +6932,10 @@ class AcousticPanel(QWidget):
                     _how = ("QEP de frontera NODAL exacto sobre el FEM completo "
                             "(autovalores complejos de c²K+icβC ω−M ω²; capta el "
                             "régimen casi-crítico de la pared matcheada).")
+                elif "sparse" in match_note:
+                    _how = ("QEP de frontera SPARSE A+B (PAL multi-shift + Beyn de "
+                            "contorno): autovalores exactos sin el eig denso de 2N; "
+                            "proyección modal de respaldo donde no cubre.")
                 elif "QEP" in match_note:
                     _how = ("QEP de frontera proyectado a los modos (proyección de "
                             "Galerkin del nodal; capta el acople inter-modal que la "

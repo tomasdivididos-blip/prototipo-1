@@ -86,9 +86,18 @@ de 6 GB. **Conclusión: A+B es viable con holgura; el trabajo es robustez, no c�
   dentro de Γ (match 1.4e-7, η 4.9e-11); captura el polo más amortiguado (Re=−796,
   lejos del eje imaginario, que PAL no ve); convergencia EXPONENCIAL en n_quad
   (3.4e-6→1.5e-9); resuelve el NEP con β(z) dependiente de frecuencia (residuo 1e-8).
-- **F3 — oráculo SLEPc** (env `qep_oracle`, bench que se saltea si no está).
-- **F4 — wiring:** reemplazar el tope Nn≤1800 por el sparse; el denso queda oráculo chico.
-- **F5 — validación física:** RT60 del solver vs las 6 RIRs del TP7 Control Room.
+- **F3 — oráculo SLEPc** (pendiente; en Windows va por WSL, no hay build win-64).
+- **F4 — wiring. HECHO (4 Oct 2026).** `qep_sparse.sparse_boundary_xi_shift` (PAL
+  banda + relleno: proyección modal para los modos de ξ modesto, Beyn SOLO para los
+  casi-críticos que PAL no cubre). `bench_qep_sparse_f4.py` 4/4: reproduce el nodal
+  denso EXACTO en los 12 modos del shoebox, incluido el muy amortiguado ξ=1.2 (PAL
+  solo 92% → Beyn rellena → 100%). `_rear_matched_delta_xi` ahora: nodal (Nn≤1800) →
+  **sparse A+B con fallback modal (1800<Nn≤6000)** → modal (Nn>6000). Control Ale
+  (Nn=5376) corre en 16 s on-demand y CORRIGE la proyección modal hasta 0.22 en ξ.
+  Nota: el objetivo de 10 s no se cumple para Nm~71 (el eigs de PAL es ~2 s/shift);
+  es on-demand y el norte del proyecto prioriza exactitud sobre comodidad.
+- **F5 — validación física:** RT60 del solver vs las 6 RIRs del TP7 Control Room
+  (`TP 7/RIRs Control Room/`, LSS REC P1-P6).
 
 ## 6. Geometrías de prueba
 

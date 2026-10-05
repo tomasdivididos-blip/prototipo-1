@@ -373,3 +373,148 @@ def pal_boundary_xi_shift(K, M, Csurf, freqs_ref, phis_ref, beta, c=343.0,
     if return_cov:
         return xi, f_new, covered / Nm
     return xi, f_new
+
+
+def sparse_boundary_xi_shift(K, M, Csurf, freqs_ref, phis_ref, beta, c=343.0,
+                             m=3, conf_hz=18.0, max_shifts=10, k_per_shift=24,
+                             eta_tol=1e-7, n_quad=48, beyn_tol=1e-5,
+                             beyn_fill=True, fallback_xi=None, fallback_f=None,
+                             xi_crit=0.35, return_info=False):
+    """QEP de frontera por A+B: PAL (banda de shifts, rápido) para los modos
+    OSCILATORIOS + Beyn (contorno) para los que quedan, incluidos los
+    SOBREAMORTIGUADOS (polos reales/muy amortiguados, ξ≳1, que un shift imaginario
+    no ve). Es el reemplazo del tope Nn≤1800 de `qep_boundary_nodal`. Interfaz
+    paralela: devuelve (xi, f_new) (Nm,). Con return_info devuelve además un dict
+    {cov_pal, cov_total, n_shifts, n_overdamped, n_beyn}.
+
+    PRESUPUESTO (clave): cada contorno Beyn cuesta n_quad factorizaciones LU, caro
+    para salas grandes. Beyn SOLO aporta sobre la proyección modal en los modos
+    CASI-CRÍTICOS (ξ alto); donde el amortiguamiento es modesto, la proyección
+    modal ya es exacta (bench_front_rear_qep_modal). Por eso: si se pasa
+    `fallback_xi`/`fallback_f` (la proyección modal `qep_boundary_xi_shift`), los
+    modos que PAL no cubre se rellenan con ese fallback, y Beyn se dispara SOLO
+    para los modos no cubiertos cuyo ξ de fallback supera `xi_crit` (los
+    sospechosos de estar subestimados). Sin fallback, Beyn rellena todo lo que PAL
+    deja (modo correctitud, caro).
+
+    Para un modo sobreamortiguado se recupera ξ de sus DOS polos reales s1,s2:
+    ω_n=√(s1 s2), ξ=−(s1+s2)/(2ω_n) (los polos de la Lorentziana ωₙ²−ω²+2iξωₙω en
+    ω=i s son s=iω=reales), y f_new=ω_n/2π."""
+    Mp = sp.csr_matrix(M, dtype=complex)
+    Cp = (c * complex(beta)) * sp.csr_matrix(Csurf, dtype=complex)
+    Kp = (c * c) * sp.csr_matrix(K, dtype=complex)
+    freqs_ref = np.asarray(freqs_ref, float)
+    phis_ref = np.asarray(phis_ref)
+    Nm = int(phis_ref.shape[1]) if phis_ref.ndim == 2 else 0
+    if Nm == 0 or freqs_ref.size < Nm:
+        return None
+    E_surf = lowrank_factor(sp.csr_matrix(Csurf))
+    if E_surf is None:
+        return None
+    E = np.sqrt(c * complex(beta)) * E_surf
+    fr = freqs_ref[:Nm]
+    fmin, fmax = float(fr.min()), float(fr.max())
+
+    # --- PAL: banda de shifts espaciados por el radio de confianza ---
+    ns = int(np.clip(np.ceil((fmax - fmin) / (2.0 * conf_hz)) + 1, 2, max_shifts))
+    shifts = np.linspace(fmin, fmax, ns)
+    lam_pool, X_pool = [], []
+    for fsh in shifts:
+        sigma = 1j * 2.0 * np.pi * float(fsh)
+        lam, X, eta = pal_qep(Mp, Cp, Kp, sigma, k=k_per_shift, m=m,
+                              mode="sparse", E=E)
+        sel = (eta < eta_tol) & (lam.imag > 0)
+        if np.any(sel):
+            lam_pool.append(lam[sel]); X_pool.append(X[:, sel])
+    lam_all = np.concatenate(lam_pool) if lam_pool else np.array([])
+    X_all = (np.concatenate(X_pool, axis=1) if X_pool
+             else np.zeros((Mp.shape[0], 0), complex))
+    # dedupe
+    if lam_all.size:
+        order = np.argsort(lam_all.imag)
+        lam_all, X_all = lam_all[order], X_all[:, order]
+        keep = np.ones(len(lam_all), bool)
+        for i in range(1, len(lam_all)):
+            if keep[i - 1] and abs(lam_all[i] - lam_all[i - 1]) < 1e-3 * abs(lam_all[i]):
+                keep[i] = False
+        lam_all, X_all = lam_all[keep], X_all[:, keep]
+
+    xi = np.full(Nm, np.nan); f_new = np.full(Nm, np.nan)
+
+    def _assign(lam_set, X_set, modes, overlap_min=0.3):
+        """Voto POLO->MODO: cada polo vota por el modo que mejor solapa (M-prod).
+        Un modo recibe sus polos; si no recibe ninguno queda sin cubrir (lo
+        rellena Beyn). Con 1 polo complejo: ξ=−Re/Im. Con >=2 reales:
+        sobreamortiguado, ξ=−(s1+s2)/(2√(s1 s2))."""
+        if lam_set.size == 0:
+            return
+        modes = list(modes)
+        MX = Mp @ X_set
+        den = np.sqrt(np.abs(np.einsum("ik,ik->k", X_set.conj(), MX)))
+        IM_ABS = 1.0                                      # |Im(s)|<1 rad/s = real
+        votes = {nm: [] for nm in modes}                  # modo -> [(overlap, p)]
+        sub = phis_ref[:, modes]                          # (n, |modes|)
+        for p in range(X_set.shape[1]):
+            rel = np.abs(sub.conj().T @ MX[:, p]) / max(den[p], 1e-30)
+            jb = int(np.argmax(rel))
+            if rel[jb] >= overlap_min:
+                votes[modes[jb]].append((float(rel[jb]), p))
+        for nm, vp in votes.items():
+            if not vp:
+                continue
+            vp.sort(reverse=True)                         # por overlap descendente
+            s_dom = lam_set[vp[0][1]]                      # polo dominante = mayor overlap
+            if abs(s_dom.imag) >= IM_ABS:                 # oscilatorio
+                wd = abs(s_dom.imag)
+                xi[nm] = (-s_dom.real) / max(wd, 1e-9)
+                f_new[nm] = wd / (2.0 * np.pi)
+            else:                                         # sobreamortiguado (real)
+                reals = [lam_set[p].real for _o, p in vp
+                         if abs(lam_set[p].imag) < IM_ABS]
+                if len(reals) >= 2:
+                    reals = sorted(reals, key=abs)        # |s| menor = polo dominante
+                    s1, s2 = reals[0], reals[1]
+                    wn = np.sqrt(abs(s1 * s2))
+                    xi[nm] = -(s1 + s2) / (2.0 * max(wn, 1e-9))
+                    f_new[nm] = wn / (2.0 * np.pi)
+
+    _assign(lam_all, X_all, range(Nm))
+    cov_pal = int(np.isfinite(xi).sum()) / Nm
+    n_over = 0
+    n_beyn = 0
+
+    # --- Relleno de los modos que PAL no cubre ---
+    unc = np.where(~np.isfinite(xi))[0]
+    fb = fallback_xi is not None and fallback_f is not None
+    if fb:
+        fbx = np.asarray(fallback_xi, float); fbf = np.asarray(fallback_f, float)
+        for n in unc:                                     # proyección modal (rápida)
+            if np.isfinite(fbx[n]):
+                xi[n] = fbx[n]; f_new[n] = fbf[n]
+        # Beyn SOLO para los sospechosos de estar subestimados (ξ_fallback alto).
+        beyn_modes = [n for n in unc if fb and np.isfinite(fbx[n]) and fbx[n] > xi_crit]
+        if not fb:
+            beyn_modes = list(unc)
+    else:
+        beyn_modes = list(unc)
+
+    if beyn_fill and len(beyn_modes) > 0:
+        bm = np.array(beyn_modes, int)
+        fu = fr[bm]
+        fc = 0.5 * (float(fu.min()) + float(fu.max()))
+        z0 = 1j * 2.0 * np.pi * fc
+        # radio generoso: alcanza el eje real (polos sobreamortiguados).
+        R = 1.2 * max(np.pi * (fmax - fmin), 2.0 * np.pi * fc) + 2.0 * np.pi * 10
+        ell = min(Mp.shape[0] - 2, max(2 * len(bm) + 12, 24))
+        lam_b, V_b, _eta = beyn_qep(Mp, Cp, Kp, z0, R, n_quad=n_quad, ell=ell,
+                                    tol_res=beyn_tol)
+        if lam_b.size:
+            n_over = int(np.sum(np.abs(lam_b.imag) < 1.0))
+            n_beyn = len(bm)
+            _assign(lam_b, V_b, list(bm))
+    cov_total = int(np.isfinite(xi).sum()) / Nm
+    if return_info:
+        return xi, f_new, {"cov_pal": cov_pal, "cov_total": cov_total,
+                           "n_shifts": ns, "n_overdamped": n_over,
+                           "n_beyn": n_beyn}
+    return xi, f_new
