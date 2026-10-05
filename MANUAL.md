@@ -2954,6 +2954,15 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.61 (la curva «pared trasera matcheada» ahora es exacta también en salas más grandes)
+
+**Cambios v2.61** (4 de octubre 2026): el cálculo exacto de la cuarta curva del panel «Decaimiento con subs» («pared trasera matcheada», v2.59/v2.60) deja de estar limitado a salas chicas. Antes, el cálculo exacto sobre todos los nodos del volumen solo corría en mallas pequeñas; por encima de ese tope la curva caía a su proyección sobre los modos. Ahora un solver nuevo permite el cálculo exacto también en salas medianas sin ese costo prohibitivo.
+
+- **Qué cambia para el usuario.** Nada en cómo se pide: solo la exactitud del número. En salas más grandes, la curva de pared matcheada ahora refleja el cálculo exacto de autovalores (puede diferir en forma apreciable de la proyección modal anterior). El cálculo es on-demand: en salas de tamaño control-room tarda algunas decenas de segundos (la ventana se bloquea y avisa mientras calcula). En salas muy grandes (auditorios) sigue usando la proyección modal, que es exacta dentro del conjunto de modos.
+- **Respaldo.** El método se validó contra el cálculo exacto denso (coincidencia a precisión de máquina), contra el modelo de amortiguamiento ya validado en una sala real medida (el TP7 Control Room), y con un certificado de error por cada modo. Referencias: Lu, Huang, Bai y Su (2015); Beyn (2012); Tisseur y Meerbergen (2001).
+
+*Manual actualizado al 4 de Octubre de 2026 — v2.61.*
+
 ## Cambios v2.60 (decaimiento de subs: la curva «pared trasera matcheada» ahora es el QEP exacto)
 
 **Cambios v2.60** (3 de octubre 2026): la cuarta curva del panel «Decaimiento con subs (waterfall)…» («pared trasera matcheada», introducida en v2.59) deja de ser una estimación conservadora y pasa a calcularse con el **cálculo exacto de autovalores complejos** de la sala con la condición de admitancia en la pared (Morse & Ingard §9.4.14; Nelson & Elliott cap. 5). El resultado es más fiel y, en general, muestra un decaimiento aún más rápido que el de v2.59.
