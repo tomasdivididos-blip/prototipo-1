@@ -24,7 +24,7 @@ import numpy as np
 from typing import Callable, Optional
 
 import pyqtgraph as pg
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QThread, QTimer
 from PyQt5.QtGui import QDoubleValidator, QColor
 from style import apply_dialog_theme, add_help_button
 from PyQt5.QtWidgets import (
@@ -3947,6 +3947,31 @@ class WallConstructionsDialog(QDialog):
         self._refresh_list()
 
 
+class _DecayWorker(QThread):
+    """Corre el cálculo del decaimiento (incluido el QEP de frontera exacto de la
+    pared matcheada, que puede tardar minutos en salas grandes/casi-críticas) en un
+    HILO para no congelar la UI. El cómputo es numpy/scipy puro (thread-safe); los
+    mensajes de progreso salen por señal (cola Qt -> hilo principal) y el diálogo
+    matplotlib se crea al terminar, en el hilo principal."""
+    progress = pyqtSignal(str)
+    finished_ok = pyqtSignal(object)        # dict `data`
+    failed = pyqtSignal(str)
+
+    def __init__(self, panel, mains, subs):
+        super().__init__()
+        self._panel = panel
+        self._mains = mains
+        self._subs = subs
+
+    def run(self):
+        try:
+            data = self._panel._compute_decay_data(
+                self._mains, self._subs, self.progress.emit)
+            self.finished_ok.emit(data)
+        except Exception as e:          # noqa: BLE001 (se reporta al usuario)
+            self.failed.emit(str(e))
+
+
 # ---------------------------------------------------------------------------
 # Panel principal
 # ---------------------------------------------------------------------------
@@ -6869,89 +6894,142 @@ class AcousticPanel(QWidget):
                 self, "Fuente fuera del dominio",
                 f"Estas fuentes quedaron fuera de la malla ({_names}) y no aportan al "
                 "decaimiento. Movelas adentro para incluirlas.")
+        # Pre-calentar caches en el HILO PRINCIPAL (evita carreras / toques GL en
+        # el worker): grupos de caras, freqs efectivas, contexto de Schroeder.
         try:
-            import modal_decay as mdk
-            damping = (self._xi_per_mode
-                       if self._xi_per_mode is not None else 0.03)
-            ctx = self._schroeder_context()
-            f_s = float(ctx["fs"]) if ctx else None
-            f_hi = f_s if (f_s and f_s > 40.0) else 200.0
-            mf = self._effective_modal_freqs()
-            self.setEnabled(False)
-            self._log("Calculando decaimiento (sin/con subs)...")
-            mk = lambda lst: SourceArray(list(lst))
-            _, ir_a, fs = mdk.modal_impulse_response(
-                self.modal_result, mk(mains), self.receiver,
-                f_hi=f_hi, dur=3.0, damping=damping, modal_freqs=mf)
-            _, ir_b, _ = mdk.modal_impulse_response(
+            self._get_face_groups(); self._effective_modal_freqs()
+            self._schroeder_context()
+        except Exception:
+            pass
+        # El QEP de frontera exacto (pared matcheada) puede tardar de segundos a
+        # minutos en salas grandes/casi-críticas. Se corre en un HILO para no
+        # congelar la UI, con barra pulsante + tiempo transcurrido.
+        from PyQt5.QtWidgets import QProgressDialog
+        import time as _time
+        prog = QProgressDialog("Calculando decaimiento…", "", 0, 0, self)
+        apply_dialog_theme(prog)
+        prog.setWindowTitle("Decaimiento con subs")
+        prog.setWindowModality(Qt.WindowModal)
+        prog.setMinimumDuration(200)
+        prog.setCancelButton(None)
+        prog.setAutoClose(True); prog.setAutoReset(True)
+        prog.setWindowFlags(prog.windowFlags() & ~Qt.WindowCloseButtonHint
+                            & ~Qt.WindowContextHelpButtonHint)
+        _t0 = _time.perf_counter()
+        _cur = {"msg": "Calculando decaimiento…"}
+        _timer = QTimer(self); _timer.setInterval(500)
+
+        def _tick():
+            el = _time.perf_counter() - _t0
+            el_txt = (f"{int(el // 60)} min {int(el % 60)} s" if el >= 60
+                      else f"{el:.0f} s")
+            prog.setLabelText(f"{_cur['msg']}\nTiempo transcurrido: {el_txt}")
+        _timer.timeout.connect(_tick); _timer.start()
+
+        worker = _DecayWorker(self, mains, subs)
+        self._decay_worker = worker          # evita GC mientras corre
+
+        def _cleanup():
+            _timer.stop(); prog.reset(); self.setEnabled(True)
+
+        def _on_progress(msg):
+            self._log(msg); _cur["msg"] = msg; _tick()
+
+        def _on_ok(data):
+            _cleanup(); self._log("Decaimiento listo.")
+            DecayWaterfallDialog(data, parent=self).exec_()
+
+        def _on_fail(err):
+            _cleanup()
+            QMessageBox.critical(self, "Error decaimiento", err)
+
+        worker.progress.connect(_on_progress)
+        worker.finished_ok.connect(_on_ok)
+        worker.failed.connect(_on_fail)
+        self.setEnabled(False)
+        worker.start()
+
+    def _compute_decay_data(self, mains, subs, log):
+        """Cómputo del decaimiento (numpy/scipy puro; corre en `_DecayWorker`, en
+        un hilo). `log` = callable para mensajes de progreso (señal al hilo
+        principal). Devuelve el dict `data` para `DecayWaterfallDialog`. NO toca
+        Qt/GL (las caches se precalentaron en el hilo principal)."""
+        import modal_decay as mdk
+        damping = (self._xi_per_mode
+                   if self._xi_per_mode is not None else 0.03)
+        ctx = self._schroeder_context()
+        f_s = float(ctx["fs"]) if ctx else None
+        f_hi = f_s if (f_s and f_s > 40.0) else 200.0
+        mf = self._effective_modal_freqs()
+        log("Calculando decaimiento (sin/con subs)...")
+        mk = lambda lst: SourceArray(list(lst))
+        _, ir_a, fs = mdk.modal_impulse_response(
+            self.modal_result, mk(mains), self.receiver,
+            f_hi=f_hi, dur=3.0, damping=damping, modal_freqs=mf)
+        _, ir_b, _ = mdk.modal_impulse_response(
+            self.modal_result, mk(mains + subs), self.receiver,
+            f_hi=f_hi, dur=3.0, damping=damping, modal_freqs=mf)
+        data = {
+            "f_hi": f_hi, "t_view": 1.2,
+            "lbl_a": ", ".join(s.label for s in mains)[:40],
+            "lbl_b": f"+{len(subs)} sub(s)",
+            "edc_a": (*mdk.energy_decay_db(ir_a, fs), mdk.decay_time(ir_a, fs)),
+            "edc_b": (*mdk.energy_decay_db(ir_b, fs), mdk.decay_time(ir_b, fs)),
+            "csd_a": mdk.cumulative_spectral_decay(ir_a, fs, f_hi=f_hi),
+            "csd_b": mdk.cumulative_spectral_decay(ir_b, fs, f_hi=f_hi),
+        }
+        # C2: tercer estado = con la CARGA PASIVA del cono (ξ_walls + Δξ_cono),
+        # si los subs traen Thiele-Small. Aísla el efecto del profesor: los conos
+        # como absorbedores resonantes acortan el decaimiento de los modos.
+        dxi_cone, n_cone, cone_note = self._cone_delta_xi(subs)
+        if dxi_cone is not None:
+            dmp_loaded = np.asarray(damping, dtype=float) + np.asarray(dxi_cone)
+            _, ir_c, _ = mdk.modal_impulse_response(
                 self.modal_result, mk(mains + subs), self.receiver,
-                f_hi=f_hi, dur=3.0, damping=damping, modal_freqs=mf)
-            data = {
-                "f_hi": f_hi, "t_view": 1.2,
-                "lbl_a": ", ".join(s.label for s in mains)[:40],
-                "lbl_b": f"+{len(subs)} sub(s)",
-                "edc_a": (*mdk.energy_decay_db(ir_a, fs), mdk.decay_time(ir_a, fs)),
-                "edc_b": (*mdk.energy_decay_db(ir_b, fs), mdk.decay_time(ir_b, fs)),
-                "csd_a": mdk.cumulative_spectral_decay(ir_a, fs, f_hi=f_hi),
-                "csd_b": mdk.cumulative_spectral_decay(ir_b, fs, f_hi=f_hi),
-            }
-            # C2: tercer estado = con la CARGA PASIVA del cono (ξ_walls + Δξ_cono),
-            # si los subs traen Thiele-Small. Aísla el efecto del profesor: los conos
-            # como absorbedores resonantes acortan el decaimiento de los modos.
-            dxi_cone, n_cone, cone_note = self._cone_delta_xi(subs)
-            if dxi_cone is not None:
-                dmp_loaded = np.asarray(damping, dtype=float) + np.asarray(dxi_cone)
-                _, ir_c, _ = mdk.modal_impulse_response(
-                    self.modal_result, mk(mains + subs), self.receiver,
-                    f_hi=f_hi, dur=3.0, damping=dmp_loaded, modal_freqs=mf)
-                data["edc_c"] = (*mdk.energy_decay_db(ir_c, fs),
-                                 mdk.decay_time(ir_c, fs))
-                data["csd_c"] = mdk.cumulative_spectral_decay(ir_c, fs, f_hi=f_hi)
-                data["lbl_c"] = f"+carga cono ({n_cone}, {cone_note})"
-                self._log(f"C2: carga pasiva del cono aplicada ({n_cone} sub(s) con "
-                          f"Thiele-Small; bornes: {cone_note}); "
-                          f"Δξ modal máx={float(np.max(dxi_cone)):.4f}.")
+                f_hi=f_hi, dur=3.0, damping=dmp_loaded, modal_freqs=mf)
+            data["edc_c"] = (*mdk.energy_decay_db(ir_c, fs),
+                             mdk.decay_time(ir_c, fs))
+            data["csd_c"] = mdk.cumulative_spectral_decay(ir_c, fs, f_hi=f_hi)
+            data["lbl_c"] = f"+carga cono ({n_cone}, {cone_note})"
+            log(f"C2: carga pasiva del cono aplicada ({n_cone} sub(s) con "
+                f"Thiele-Small; bornes: {cone_note}); "
+                f"Δξ modal máx={float(np.max(dxi_cone)):.4f}.")
+        else:
+            log("C2: ningún sub tiene Thiele-Small completo (fs/Qts/Vas/"
+                "Vb/Sd); no se grafica la carga del cono. Cargalos en el "
+                "editor de fuente (grupo «Driver físico»).")
+        # E5 (C2, techo ideal): pared trasera MATCHEADA (absorbedor activo) ->
+        # Δξ modal genuino (polos movidos). Muestra cuánto más rápido decaerían
+        # los axiales si el array trasero presentara una impedancia adaptada.
+        log("Calculando pared trasera matcheada (QEP de frontera exacto)…")
+        dxi_match, match_note = self._rear_matched_delta_xi(mains + subs)
+        if dxi_match is not None and np.max(dxi_match) > 1e-6:
+            dmp_match = np.asarray(damping, dtype=float) + np.asarray(dxi_match)
+            _, ir_d, _ = mdk.modal_impulse_response(
+                self.modal_result, mk(mains + subs), self.receiver,
+                f_hi=f_hi, dur=3.0, damping=dmp_match, modal_freqs=mf)
+            data["edc_d"] = (*mdk.energy_decay_db(ir_d, fs),
+                             mdk.decay_time(ir_d, fs))
+            data["csd_d"] = mdk.cumulative_spectral_decay(ir_d, fs, f_hi=f_hi)
+            data["lbl_d"] = f"pared trasera matcheada ({match_note})"
+            if "nodal" in match_note:
+                _how = ("QEP de frontera NODAL exacto sobre el FEM completo "
+                        "(autovalores complejos de c²K+icβC ω−M ω²; capta el "
+                        "régimen casi-crítico de la pared matcheada).")
+            elif "sparse" in match_note:
+                _how = ("QEP de frontera SPARSE A+B (PAL multi-shift + Beyn de "
+                        "contorno): autovalores exactos sin el eig denso de 2N; "
+                        "proyección modal de respaldo donde no cubre.")
+            elif "QEP" in match_note:
+                _how = ("QEP de frontera proyectado a los modos (proyección de "
+                        "Galerkin del nodal; capta el acople inter-modal que la "
+                        "perturbación no ve).")
             else:
-                self._log("C2: ningún sub tiene Thiele-Small completo (fs/Qts/Vas/"
-                          "Vb/Sd); no se grafica la carga del cono. Cargalos en el "
-                          "editor de fuente (grupo «Driver físico»).")
-            # E5 (C2, techo ideal): pared trasera MATCHEADA (absorbedor activo) ->
-            # Δξ modal genuino (polos movidos). Muestra cuánto más rápido decaerían
-            # los axiales si el array trasero presentara una impedancia adaptada.
-            dxi_match, match_note = self._rear_matched_delta_xi(mains + subs)
-            if dxi_match is not None and np.max(dxi_match) > 1e-6:
-                dmp_match = np.asarray(damping, dtype=float) + np.asarray(dxi_match)
-                _, ir_d, _ = mdk.modal_impulse_response(
-                    self.modal_result, mk(mains + subs), self.receiver,
-                    f_hi=f_hi, dur=3.0, damping=dmp_match, modal_freqs=mf)
-                data["edc_d"] = (*mdk.energy_decay_db(ir_d, fs),
-                                 mdk.decay_time(ir_d, fs))
-                data["csd_d"] = mdk.cumulative_spectral_decay(ir_d, fs, f_hi=f_hi)
-                data["lbl_d"] = f"pared trasera matcheada ({match_note})"
-                if "nodal" in match_note:
-                    _how = ("QEP de frontera NODAL exacto sobre el FEM completo "
-                            "(autovalores complejos de c²K+icβC ω−M ω²; capta el "
-                            "régimen casi-crítico de la pared matcheada).")
-                elif "sparse" in match_note:
-                    _how = ("QEP de frontera SPARSE A+B (PAL multi-shift + Beyn de "
-                            "contorno): autovalores exactos sin el eig denso de 2N; "
-                            "proyección modal de respaldo donde no cubre.")
-                elif "QEP" in match_note:
-                    _how = ("QEP de frontera proyectado a los modos (proyección de "
-                            "Galerkin del nodal; capta el acople inter-modal que la "
-                            "perturbación no ve).")
-                else:
-                    _how = "perturbación de 1er orden de respaldo (conservadora)."
-                self._log("E5: pared trasera matcheada (β=Y₀, absorbedor activo ideal) "
-                          f"aplicada ({match_note}); Δξ modal máx="
-                          f"{float(np.max(dxi_match)):.4f}. Es el TECHO C2 vía " + _how)
-        except Exception as e:
-            QMessageBox.critical(self, "Error decaimiento", str(e))
-            return
-        finally:
-            self.setEnabled(True)
-        self._log("Decaimiento listo.")
-        DecayWaterfallDialog(data, parent=self).exec_()
+                _how = "perturbación de 1er orden de respaldo (conservadora)."
+            log("E5: pared trasera matcheada (β=Y₀, absorbedor activo ideal) "
+                f"aplicada ({match_note}); Δξ modal máx="
+                f"{float(np.max(dxi_match)):.4f}. Es el TECHO C2 vía " + _how)
+        return data
 
     # -----------------------------------------------------------------------
     # FRF
