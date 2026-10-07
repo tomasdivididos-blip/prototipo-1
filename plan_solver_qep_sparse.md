@@ -86,7 +86,21 @@ de 6 GB. **Conclusión: A+B es viable con holgura; el trabajo es robustez, no c�
   dentro de Γ (match 1.4e-7, η 4.9e-11); captura el polo más amortiguado (Re=−796,
   lejos del eje imaginario, que PAL no ve); convergencia EXPONENCIAL en n_quad
   (3.4e-6→1.5e-9); resuelve el NEP con β(z) dependiente de frecuencia (residuo 1e-8).
-- **F3 — oráculo SLEPc** (pendiente; en Windows va por WSL, no hay build win-64).
+- **F3 — oráculo SLEPc. HECHO (6 Oct 2026), ejecutado 4/4 contra SLEPc 3.26 complejo.**
+  `bench_qep_slepc.py`: contrasta A (PAL), B (Beyn), el wrapper sparse A+B y el
+  companion denso de scipy contra SLEPc PEP (TOAR, shift-invert con target σ; STOAR =
+  variante simétrica solo con shift real). **RESULTADO (WSL Ubuntu, env `qep_oracle`
+  con PETSc/SLEPc complejos de conda-forge, shoebox 5×4×3 N=693):**
+  - T1 SLEPc (shift-invert) == companion DENSO: max err rel **1.3e-10**.
+  - T2 PAL (método A) certificado == SLEPc: max err rel **6.3e-9**.
+  - T3 cada polo SLEPc tiene un polo de Beyn (B) cercano: max err rel **1.46e-9**.
+  - T4 ξ por modo de SLEPc (multi-target, 103 polos, matcheo por solape de autovector)
+    == QEP nodal denso: max |Δξ| **0.0000** en los 12 modos.
+  Confirma, con un solver de PEP INDEPENDIENTE (otra linealización + ST), que PAL y
+  Beyn están bien. Se SALTEA con exit 0 si falta `petsc4py/slepc4py` o si PETSc no es
+  de escalares complejos (suite verde en Windows, verificado). **NO corre en win-64**
+  (conda-forge NO tiene slepc4py/petsc4py win-64, confirmado con `conda --dry-run`):
+  va por WSL Ubuntu (env `qep_oracle`, setup en el encabezado del bench) o CI Linux.
 - **F4 — wiring. HECHO (4 Oct 2026).** `qep_sparse.sparse_boundary_xi_shift` (PAL
   banda + relleno: proyección modal para los modos de ξ modesto, Beyn SOLO para los
   casi-críticos que PAL no cubre). `bench_qep_sparse_f4.py` 4/4: reproduce el nodal
@@ -116,7 +130,10 @@ de 6 GB. **Conclusión: A+B es viable con holgura; el trabajo es robustez, no c�
   reproduce el QEP nodal a máquina, el solver HEREDA la validación empírica del
   modelo forward.
 
-**ESTADO: F0-F2, F4, F5 HECHOS. Solo queda F3 (oráculo SLEPc vía WSL, opcional).**
+**ESTADO: F0-F5 TODOS HECHOS (6 Oct 2026). F3 ejecutado 4/4 contra SLEPc 3.26 complejo
+(WSL), confirma PAL y Beyn de forma independiente.** Además, la limitación casi-crítica
+del wrapper A+B quedó CERRADA en v2.62 (gate por ξ de 1er orden + Beyn tileado elíptico
++ only_if_larger; `bench_qep_sparse_f6.py`; ver `auditor_contexto.md`).
 
 ## 6. Geometrías de prueba
 

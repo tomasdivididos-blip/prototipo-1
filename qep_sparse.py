@@ -219,16 +219,24 @@ def pal_qep(M, C, K, sigma, k=24, m=3, mode="sparse", E=None,
 # Método B: integral de contorno (Beyn 2012)
 # ---------------------------------------------------------------------------
 def beyn_contour(Tfun, z0, R, n_quad=48, ell=24, tol_rank=1e-8,
-                 tol_res=1e-7, seed=0, Tresid=None):
-    """Autopares de T(z) v = 0 DENTRO del círculo Γ de centro z0, radio R, por el
-    método de integral de contorno de Beyn (2012), `referencias/Beyn...pdf`,
-    "Integral algorithm 1" (p.14). T holomorfa; sirve para el QEP (T(z)=z²M+zC+K)
-    y para un NEP β(ω) (T(z) cualquiera). Captura TODOS los polos en Γ, incluidos
-    los sobreamortiguados (eje real) que un shift imaginario no ve.
+                 tol_res=1e-7, seed=0, Tresid=None, b=None):
+    """Autopares de T(z) v = 0 DENTRO del contorno Γ (centro z0) por el método de
+    integral de contorno de Beyn (2012), `referencias/Beyn...pdf`, "Integral
+    algorithm 1" (p.14). T holomorfa; sirve para el QEP (T(z)=z²M+zC+K) y para un
+    NEP β(ω) (T(z) cualquiera). Captura TODOS los polos en Γ, incluidos los
+    sobreamortiguados (eje real) que un shift imaginario no ve.
+
+    Γ es por defecto el CÍRCULO z(t)=z0+R·e^{it}. Con `b` distinto de R es la
+    ELIPSE z(t)=z0 + R·cos t + i·b·sin t (R = semieje REAL, b = semieje
+    IMAGINARIO). La elipse ANCHA en Re y ANGOSTA en Im es la clave del tileado de
+    f media-alta: alcanza el polo amortiguado (a −ξωₙ del eje imaginario, Re lejos)
+    sin encerrar a los vecinos en FRECUENCIA (Im). Un círculo de radio suficiente
+    para alcanzar el polo encierra ~f² modos (densidad modal) y el SVD satura.
 
         A0 = (1/2πi)∮ T(z)⁻¹ V̂ dz,   Ã1 = (1/2πi)∮ (z−z0) T(z)⁻¹ V̂ dz
-    por trapecio (converge EXPONENCIAL en n_quad). SVD de A0 revela el rango
-    k = nº de polos adentro; B = V0ᴴ Ã1 W0 Σ0⁻¹ (k×k) tiene autovalores λ−z0.
+    por trapecio sobre la parametrización, con el jacobiano z'(t) (converge
+    EXPONENCIAL en n_quad para Γ analítica). SVD de A0 revela el rango k = nº de
+    polos adentro; B = V0ᴴ Ã1 W0 Σ0⁻¹ (k×k) tiene autovalores λ−z0.
 
     Tfun(z) -> matriz sparse n×n. ell = tamaño de la sonda (≥ nº de polos
     esperado; si k==ell hay más y conviene subirlo). Tresid(z) opcional para el
@@ -241,15 +249,18 @@ def beyn_contour(Tfun, z0, R, n_quad=48, ell=24, tol_rank=1e-8,
             + 1j * rng.standard_normal((n, ell)))
     M0 = np.zeros((n, ell), complex)
     M1 = np.zeros((n, ell), complex)
+    bb = R if b is None else float(b)
     for j in range(n_quad):
         tj = 2.0 * np.pi * j / n_quad
-        zj = z0 + R * np.exp(1j * tj)
+        # z(t) = z0 + R cos t + i b sin t ;  z'(t) = -R sin t + i b cos t.
+        zj = z0 + R * np.cos(tj) + 1j * bb * np.sin(tj)
+        dzj = -R * np.sin(tj) + 1j * bb * np.cos(tj)
         lu = spla.splu(sp.csc_matrix(Tfun(zj)))
         Xj = lu.solve(Vhat)                               # T(z_j)⁻¹ V̂
-        M0 += Xj * np.exp(1j * tj)
-        M1 += Xj * np.exp(2j * tj)
-    M0 *= R / n_quad                                      # A0
-    M1 *= (R * R) / n_quad                                # Ã1 = A1 − z0 A0
+        M0 += Xj * dzj                                     # ∫ T⁻¹V̂ z'(t) dt
+        M1 += Xj * (zj - z0) * dzj                         # ∫ (z−z0)T⁻¹V̂ z'(t) dt
+    M0 *= 1.0 / (1j * n_quad)                              # (1/2πi)·(2π/n)·Σ
+    M1 *= 1.0 / (1j * n_quad)                              # A0, Ã1
     U, s, Wh = np.linalg.svd(M0, full_matrices=False)
     if s[0] == 0:
         return np.array([]), np.zeros((n, 0), complex), np.array([])
@@ -268,7 +279,12 @@ def beyn_contour(Tfun, z0, R, n_quad=48, ell=24, tol_rank=1e-8,
         if nv == 0 or not np.isfinite(lam[i]):
             continue
         res = np.linalg.norm(Tr(lam[i]) @ v) / nv
-        inside = abs(lam[i] - z0) < R * (1.0 + 1e-6)
+        # dentro de Γ: círculo |·|<R, o elipse (Re/R)²+(Im/b)²<1.
+        d = lam[i] - z0
+        if b is None:
+            inside = abs(d) < R * (1.0 + 1e-6)
+        else:
+            inside = ((d.real / R) ** 2 + (d.imag / float(b)) ** 2) < (1.0 + 1e-6)
         if res < tol_res and inside:
             out_lam.append(lam[i]); out_V.append(v); out_res.append(res)
     if not out_lam:
@@ -281,9 +297,10 @@ def beyn_contour(Tfun, z0, R, n_quad=48, ell=24, tol_rank=1e-8,
 
 
 def beyn_qep(M, C, K, z0, R, n_quad=48, ell=24, tol_rank=1e-8, tol_res=1e-7,
-             seed=0):
-    """Beyn para el QEP (z²M+zC+K)v=0 dentro del círculo (z0,R). Devuelve
-    (lam, V, res) con el residuo = error hacia atrás η_Q del QEP."""
+             seed=0, b=None):
+    """Beyn para el QEP (z²M+zC+K)v=0 dentro del contorno (z0, R[, b]). Círculo si
+    b=None, ELIPSE (R=semieje Re, b=semieje Im) si no. Devuelve (lam, V, res) con
+    el residuo = error hacia atrás η_Q del QEP."""
     M = sp.csr_matrix(M, dtype=complex)
     C = sp.csr_matrix(C, dtype=complex)
     K = sp.csr_matrix(K, dtype=complex)
@@ -294,7 +311,7 @@ def beyn_qep(M, C, K, z0, R, n_quad=48, ell=24, tol_rank=1e-8, tol_res=1e-7,
 
     lam, V, _res = beyn_contour(T, z0, R, n_quad=n_quad, ell=ell,
                                 tol_rank=tol_rank, tol_res=1e-1, seed=seed,
-                                Tresid=T)
+                                Tresid=T, b=b)
     # recomputar el residuo como η_Q (certificado del QEP) y filtrar.
     keep, eta = [], []
     for i in range(len(lam)):
@@ -388,7 +405,7 @@ def sparse_boundary_xi_shift(K, M, Csurf, freqs_ref, phis_ref, beta, c=343.0,
                              eta_tol=1e-7, n_quad=48, beyn_tol=1e-5,
                              beyn_fill=True, fallback_xi=None, fallback_f=None,
                              xi_crit=0.35, pal_maxiter=None, couple_thr=0.6,
-                             return_info=False):
+                             xi_gate=0.15, return_info=False):
     """QEP de frontera por A+B: PAL (banda de shifts, rápido) para los modos
     OSCILATORIOS + Beyn (contorno) para los que quedan, incluidos los
     SOBREAMORTIGUADOS (polos reales/muy amortiguados, ξ≳1, que un shift imaginario
@@ -396,15 +413,30 @@ def sparse_boundary_xi_shift(K, M, Csurf, freqs_ref, phis_ref, beta, c=343.0,
     paralela: devuelve (xi, f_new) (Nm,). Con return_info devuelve además un dict
     {cov_pal, cov_total, n_shifts, n_overdamped, n_beyn}.
 
-    PRESUPUESTO (clave): cada contorno Beyn cuesta n_quad factorizaciones LU, caro
-    para salas grandes. Beyn SOLO aporta sobre la proyección modal en los modos
-    CASI-CRÍTICOS (ξ alto); donde el amortiguamiento es modesto, la proyección
-    modal ya es exacta (bench_front_rear_qep_modal). Por eso: si se pasa
-    `fallback_xi`/`fallback_f` (la proyección modal `qep_boundary_xi_shift`), los
-    modos que PAL no cubre se rellenan con ese fallback, y Beyn se dispara SOLO
-    para los modos no cubiertos cuyo ξ de fallback supera `xi_crit` (los
-    sospechosos de estar subestimados). Sin fallback, Beyn rellena todo lo que PAL
-    deja (modo correctitud, caro).
+    GATE (clave, `xi_gate`): cada contorno Beyn cuesta n_quad factorizaciones LU, así
+    que Beyn se dispara SOLO en los modos CASI-CRÍTICOS, que son donde la proyección
+    modal subestima; donde el amortiguamiento es modesto el modal ya es exacto
+    (bench_front_rear_qep_modal). El "¿es casi-crítico?" se decide con el ξ de 1er
+    ORDEN (perturbación diagonal, Morse & Ingard 9.4.14):
+        ξ_est_n = (c·|β|/2)·diag(G)_n / ωₙ,   diag(G)_n = φₙᵀ Csurf φₙ,
+    que es MONÓTONO en el ξ real y su COTA INFERIOR → todo casi-crítico tiene ξ_est
+    no despreciable y queda flaggeado. NO se gatea por el ξ del FALLBACK modal: ese
+    SUBESTIMA justo los casi-críticos (p.ej. ξ_fallback=0.34 para un modo de ξ_real
+    =1.3, que con el gate viejo `ξ_fallback>xi_crit` quedaba afuera; bug v2.61→2.62,
+    bench_qep_sparse_f6). Si se pasa `fallback_xi/f` (la proyección modal), los modos
+    que PAL no cubre se rellenan con él, y Beyn se dispara para ξ_est>xi_gate (o el
+    ξ_fallback>xi_crit, por si acaso). Beyn pisa el fallback SOLO si AUMENTA el ξ
+    (only_if_larger): corrige la subestimación sin dañar un modo ya bien estimado si
+    un polo se mis-asigna. Sin fallback, Beyn rellena todo lo que PAL deja (caro).
+
+    Beyn TILEADO (clave para f media-alta): un contorno CIRCULAR único grande SATURA
+    el SVD (k=ell, sin gap) porque la densidad modal crece como f² → encierra ~2·Nm
+    polos. Se usa en cambio una ELIPSE por cluster de frecuencia, ANCHA en Re (semieje
+    a=1.15ωc: alcanza el polo casi-crítico, que está a −ξωₙ del eje imaginario) y
+    ANGOSTA en Im (semieje atado a la banda del cluster + el corrimiento de fₙ): el
+    ancho en Im controla cuántos modos se encierran, el ancho en Re casi no agrega
+    (pocos modos tienen amortiguamiento grande). Todo polo del QEP nodal tiene Im(s)>1
+    (filtro Re(ω)>1), así que se descartan los no-físicos (DC, Re≥0).
 
     VELOCIDAD (`couple_thr`, con fallback): los shifts de PAL se concentran en la
     BANDA de frecuencias de los modos FUERTEMENTE acoplados a la pared trasera
@@ -477,13 +509,22 @@ def sparse_boundary_xi_shift(K, M, Csurf, freqs_ref, phis_ref, beta, c=343.0,
 
     xi = np.full(Nm, np.nan); f_new = np.full(Nm, np.nan)
 
-    def _assign(lam_set, X_set, modes, overlap_min=0.3):
+    def _assign(lam_set, X_set, modes, overlap_min=0.3, only_if_larger=False):
         """Voto POLO->MODO: cada polo vota por el modo que mejor solapa (M-prod).
         Un modo recibe sus polos; si no recibe ninguno queda sin cubrir (lo
         rellena Beyn). Con 1 polo complejo: ξ=−Re/Im. Con >=2 reales:
-        sobreamortiguado, ξ=−(s1+s2)/(2√(s1 s2))."""
+        sobreamortiguado, ξ=−(s1+s2)/(2√(s1 s2)). `only_if_larger`: escribe solo si
+        el ξ nuevo SUPERA al que ya había (para el relleno Beyn, cuyo fin es corregir
+        la SUBESTIMACIÓN del fallback; si Beyn mis-asigna un polo de menor ξ, no
+        pisa el fallback bueno)."""
         if lam_set.size == 0:
             return
+
+        def _put(nm, newxi, newf):
+            if only_if_larger and np.isfinite(xi[nm]) and not (newxi > xi[nm]):
+                return
+            xi[nm] = newxi; f_new[nm] = newf
+
         modes = list(modes)
         MX = Mp @ X_set
         den = np.sqrt(np.abs(np.einsum("ik,ik->k", X_set.conj(), MX)))
@@ -502,8 +543,7 @@ def sparse_boundary_xi_shift(K, M, Csurf, freqs_ref, phis_ref, beta, c=343.0,
             s_dom = lam_set[vp[0][1]]                      # polo dominante = mayor overlap
             if abs(s_dom.imag) >= IM_ABS:                 # oscilatorio
                 wd = abs(s_dom.imag)
-                xi[nm] = (-s_dom.real) / max(wd, 1e-9)
-                f_new[nm] = wd / (2.0 * np.pi)
+                _put(nm, (-s_dom.real) / max(wd, 1e-9), wd / (2.0 * np.pi))
             else:                                         # sobreamortiguado (real)
                 reals = [lam_set[p].real for _o, p in vp
                          if abs(lam_set[p].imag) < IM_ABS]
@@ -511,8 +551,7 @@ def sparse_boundary_xi_shift(K, M, Csurf, freqs_ref, phis_ref, beta, c=343.0,
                     reals = sorted(reals, key=abs)        # |s| menor = polo dominante
                     s1, s2 = reals[0], reals[1]
                     wn = np.sqrt(abs(s1 * s2))
-                    xi[nm] = -(s1 + s2) / (2.0 * max(wn, 1e-9))
-                    f_new[nm] = wn / (2.0 * np.pi)
+                    _put(nm, -(s1 + s2) / (2.0 * max(wn, 1e-9)), wn / (2.0 * np.pi))
 
     _assign(lam_all, X_all, range(Nm))
     cov_pal = int(np.isfinite(xi).sum()) / Nm
@@ -522,32 +561,81 @@ def sparse_boundary_xi_shift(K, M, Csurf, freqs_ref, phis_ref, beta, c=343.0,
     # --- Relleno de los modos que PAL no cubre ---
     unc = np.where(~np.isfinite(xi))[0]
     fb = fallback_xi is not None and fallback_f is not None
+    # GATE POR ξ DE 1er ORDEN (perturbación diagonal, Morse & Ingard 9.4.14):
+    #   ξ_est_n = (c·|β|/2)·diag(G)_n / ωₙ,   diag(G)_n = φₙᵀ Csurf φₙ (φ M-orton.).
+    # Es MONÓTONO en el ξ real y su COTA INFERIOR (la perturbación nunca sobrestima
+    # el amortiguamiento), así que todo modo casi-crítico tiene ξ_est NO despreciable
+    # y queda flaggeado, mientras que un modo poco amortiguado (ξ real chico) tiene
+    # ξ_est chico y NO se toca. Es mejor que diag(G) crudo: ξ~δ/ωₙ, un modo de alta f
+    # con acople moderado tiene diag(G) grande pero ξ chico (ωₙ grande). Gatear por el
+    # ξ del FALLBACK modal fallaría: el fallback SUBESTIMA justo los casi-críticos
+    # (p.ej. ξ_fallback=0.34 < xi_crit para un modo de ξ_real=1.3).
+    wn_all = np.maximum(2.0 * np.pi * fr, 1e-9)
+    xi_est = (c * abs(complex(beta)) / 2.0) * diagG[:Nm] / wn_all
     if fb:
         fbx = np.asarray(fallback_xi, float); fbf = np.asarray(fallback_f, float)
         for n in unc:                                     # proyección modal (rápida)
             if np.isfinite(fbx[n]):
                 xi[n] = fbx[n]; f_new[n] = fbf[n]
-        # Beyn SOLO para los sospechosos de estar subestimados (ξ_fallback alto).
-        beyn_modes = [n for n in unc if fb and np.isfinite(fbx[n]) and fbx[n] > xi_crit]
-        if not fb:
-            beyn_modes = list(unc)
+        beyn_modes = [int(n) for n in unc if xi_est[n] > xi_gate
+                      or (np.isfinite(fbx[n]) and fbx[n] > xi_crit)]
     else:
-        beyn_modes = list(unc)
+        beyn_modes = [int(n) for n in unc]
 
+    # --- Beyn TILEADO: una ELIPSE por cluster de frecuencia, ANCHA en Re y ANGOSTA
+    # en Im. El ancho en Im controla cuántos modos se encierran (densidad ∝ f²), así
+    # que se lo ata a la BANDA de frecuencia del cluster (+ margen por el corrimiento
+    # de fₙ de la pared matcheada); el ancho en Re casi no agrega modos (pocos tienen
+    # amortiguamiento grande) y es el que ALCANZA el polo casi-crítico, que está a
+    # −ξωₙ del eje imaginario (p.ej. s=−201+i168 para ξ≈1.2). El contorno circular
+    # único grande SATURA el SVD (k=ell) en f media-alta. Todo polo del QEP nodal
+    # tiene Im(s)>1 (el nodal filtra Re(ω)>1), así que NO hay polos reales puros: se
+    # queda la rama oscilatoria y se descartan los polos no-físicos (Re≥0, el DC).
+    # Ver auditor_contexto v2.62.
     if beyn_fill and len(beyn_modes) > 0:
-        bm = np.array(beyn_modes, int)
-        fu = fr[bm]
-        fc = 0.5 * (float(fu.min()) + float(fu.max()))
-        z0 = 1j * 2.0 * np.pi * fc
-        # radio generoso: alcanza el eje real (polos sobreamortiguados).
-        R = 1.2 * max(np.pi * (fmax - fmin), 2.0 * np.pi * fc) + 2.0 * np.pi * 10
-        ell = min(Mp.shape[0] - 2, max(2 * len(bm) + 12, 24))
-        lam_b, V_b, _eta = beyn_qep(Mp, Cp, Kp, z0, R, n_quad=n_quad, ell=ell,
-                                    tol_res=beyn_tol)
-        if lam_b.size:
-            n_over = int(np.sum(np.abs(lam_b.imag) < 1.0))
-            n_beyn = len(bm)
-            _assign(lam_b, V_b, list(bm))
+        bm_all = np.array(sorted(beyn_modes), int)
+        fu = fr[bm_all]
+        order = np.argsort(fu)
+        bm_all, fu = bm_all[order], fu[order]
+        # Clusterizar por hueco en frecuencia (nuevo cluster si salto > conf_hz).
+        clusters = []
+        cur = [0]
+        for i in range(1, len(fu)):
+            if fu[i] - fu[i - 1] > conf_hz:
+                clusters.append(cur); cur = [i]
+            else:
+                cur.append(i)
+        clusters.append(cur)
+        lam_pool_b, X_pool_b = [], []
+        for cl in clusters:
+            idx = np.array(cl, int)
+            fa, fbb = float(fu[idx].min()), float(fu[idx].max())
+            fcl = 0.5 * (fa + fbb)
+            wc = 2.0 * np.pi * fcl
+            nmc = len(idx)
+            # ξ_est medio del cluster: alto = casi-crítico (fₙ cae mucho) → margen de
+            # Im grande; bajo = modesto (fₙ casi no se mueve) → Im angosto (menos modos
+            # encerrados, SVD más limpio).
+            xg = float(np.clip(np.mean(xi_est[bm_all[idx]]), 0.0, 1.0))
+            margin_hz = (0.10 + 0.35 * xg) * fcl + 8.0
+            b_im = 2.0 * np.pi * (0.5 * (fbb - fa) + margin_hz)
+            a_re = 1.15 * wc                               # alcanza ξ≲1 en Re
+            z0 = -0.1 * wc + 1j * wc                       # corrido para evitar el DC
+            ellp = int(min(Mp.shape[0] - 2, max(2 * nmc + 12, 18)))
+            lam_b, V_b, _e = beyn_qep(Mp, Cp, Kp, z0, a_re, n_quad=n_quad,
+                                      ell=ellp, tol_res=beyn_tol, b=b_im)
+            if lam_b.size:
+                lam_pool_b.append(lam_b); X_pool_b.append(V_b)
+        if lam_pool_b:
+            lam_b_all = np.concatenate(lam_pool_b)
+            X_b_all = np.concatenate(X_pool_b, axis=1)
+            # Solo polos físicos: oscilatorios (Im>1), estables y amortiguados (Re<0).
+            phys = (lam_b_all.imag > 1.0) & (lam_b_all.real < -1e-9)
+            lam_b_all, X_b_all = lam_b_all[phys], X_b_all[:, phys]
+            n_over = int(np.sum(lam_b_all.real < -lam_b_all.imag))  # ξ>1
+            n_beyn = len(bm_all)
+            if lam_b_all.size:
+                _assign(lam_b_all, X_b_all, list(bm_all), only_if_larger=True)
     cov_total = int(np.isfinite(xi).sum()) / Nm
     if return_info:
         return xi, f_new, {"cov_pal": cov_pal, "cov_total": cov_total,

@@ -2954,6 +2954,16 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.62 (la curva «pared trasera matcheada» ya no subestima los modos casi-críticos en salas grandes)
+
+**Cambios v2.62** (6 de octubre 2026): corrige un caso en que el solver de salas medianas-grandes (v2.61) devolvía un amortiguamiento demasiado bajo justo en los modos más amortiguados. Con la pared trasera perfectamente absorbente, los modos axiales de esa dirección quedan casi-críticos (amortiguamiento cercano al máximo posible); en salas grandes el solver los subestimaba y la curva de decaimiento salía más lenta de lo real. Ahora esos modos se recuperan exactos.
+
+- **Qué cambia para el usuario.** Nada en cómo se pide: solo la exactitud del número en salas grandes. En salas tipo pasillo o con un eje largo matcheado, la curva de «pared trasera matcheada» ahora refleja el decaimiento casi-crítico real (puede ser bastante más rápido que antes). En salas chicas no cambia (ya usaban el cálculo denso exacto).
+- **Qué se arregló por dentro.** Dos cosas: (1) la decisión de cuándo refinar un modo pasó a basarse en un estimador de amortiguamiento físico y monótono (perturbación de primer orden), que nunca deja pasar un modo casi-crítico, en vez del valor aproximado que justamente los subestimaba; (2) el refinamiento usa contornos de integración elípticos ajustados por banda de frecuencia (angostos en frecuencia, anchos en amortiguamiento), que capturan el polo casi-crítico sin perder robustez a frecuencias medias y altas. Un refinamiento solo corrige hacia arriba (nunca empeora un modo ya bien estimado).
+- **Respaldo.** Se validó contra el cálculo exacto denso (coincidencia a precisión de máquina), con una prueba dedicada del caso casi-crítico (ducto con extremo matcheado, amortiguamiento 1.3 recuperado exacto donde antes salía 0.34), y de forma independiente contra SLEPc, una biblioteca de autovalores polinomiales de referencia (coincidencia a 1e-9). Referencias: Lu, Huang, Bai y Su (2015); Beyn (2012); Morse e Ingard (1968) §9.4.14; Campos y Roman (2016).
+
+*Manual actualizado al 6 de Octubre de 2026 — v2.62.*
+
 ## Cambios v2.61 (la curva «pared trasera matcheada» ahora es exacta también en salas más grandes)
 
 **Cambios v2.61** (4 de octubre 2026): el cálculo exacto de la cuarta curva del panel «Decaimiento con subs» («pared trasera matcheada», v2.59/v2.60) deja de estar limitado a salas chicas. Antes, el cálculo exacto sobre todos los nodos del volumen solo corría en mallas pequeñas; por encima de ese tope la curva caía a su proyección sobre los modos. Ahora un solver nuevo permite el cálculo exacto también en salas medianas sin ese costo prohibitivo.
