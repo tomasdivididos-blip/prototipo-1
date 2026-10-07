@@ -76,7 +76,20 @@ def main():
     
     # Paso 3: Generar ejecutable con PyInstaller
     print("\n[3/4] Compilando con PyInstaller...")
-    
+
+    # El PyQt5 de conda (y scipy/mkl) linkean contra DLLs renombradas con sufijo
+    # `_conda` (Qt5Widgets_conda.dll, ...) y contra el runtime de Intel
+    # (libmmd.dll, libifcoremd.dll) que viven en <prefix>\Library\bin. Si el build
+    # NO corre dentro de `conda activate`, ese directorio NO está en el PATH y
+    # PyInstaller NO puede resolver ni EMPAQUETAR esas DLLs -> el .exe congelado
+    # falla al importar QtWidgets ("DLL load failed"). Se agrega al PATH para que el
+    # análisis de dependencias las encuentre y las bundlee solas.
+    for sub in (Path("Library") / "bin", Path("Library") / "mingw-w64" / "bin"):
+        d = Path(sys.prefix) / sub
+        if d.is_dir():
+            os.environ["PATH"] = str(d) + os.pathsep + os.environ.get("PATH", "")
+            print(f"  PATH += {d}")
+
     # PyInstaller se invoca como MÓDULO del intérprete actual (`python -m
     # PyInstaller`): el ejecutable `pyinstaller` suele NO estar en el PATH del
     # shell (sí el módulo), y así se compila con el mismo Python/entorno que se
