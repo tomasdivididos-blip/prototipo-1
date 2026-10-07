@@ -54,35 +54,74 @@ def main():
     
     # Paso 2: Limpiar compilaciones previas
     print("\n[2/4] Limpiando compilaciones previas...")
+
+    def _on_rm_error(func, path, exc_info):
+        # Un build anterior puede dejar archivos de solo-lectura o bloqueados por
+        # OneDrive -> shutil.rmtree lanza PermissionError (WinError 5). Se limpia el
+        # atributo de solo-lectura y se reintenta la operación.
+        try:
+            os.chmod(path, 0o777)
+            func(path)
+        except Exception as e:
+            print(f"  (aviso) no se pudo borrar {path}: {e}")
+
     for folder in [DIST_DIR, BUILD_DIR, PROJECT_DIR / "build"]:
         if folder.exists():
-            shutil.rmtree(folder)
+            # onexc (Python 3.12+) reemplaza a onerror; se pasa el que exista.
+            try:
+                shutil.rmtree(folder, onexc=_on_rm_error)
+            except TypeError:
+                shutil.rmtree(folder, onerror=lambda f, p, e: _on_rm_error(f, p, e))
             print(f"  ✓ Eliminada carpeta: {folder.name}")
     
     # Paso 3: Generar ejecutable con PyInstaller
     print("\n[3/4] Compilando con PyInstaller...")
     
-    pyinstaller_cmd = (
-        f'pyinstaller '
-        f'--name "Prototipo 1" '
-        f'--onefile '
-        f'--windowed '
-        f'--icon=icon.ico '
-        f'--add-data "recinto.room;." '
-        f'--hidden-import=OpenGL '
-        f'--hidden-import=numpy '
-        f'--hidden-import=scipy '
-        f'--hidden-import=scipy.sparse.linalg '
-        f'--hidden-import=pyqtgraph '
-        f'--hidden-import=matplotlib '
-        f'--hidden-import=matplotlib.backends.backend_qt5agg '
-        f'--hidden-import=gmsh '
-        f'--hidden-import=trimesh '
-        f'--collect-all gmsh '
-        f'--collect-all trimesh '
-        f'"{PROJECT_DIR}/main.py"'
-    )
-    
+    # PyInstaller se invoca como MÓDULO del intérprete actual (`python -m
+    # PyInstaller`): el ejecutable `pyinstaller` suele NO estar en el PATH del
+    # shell (sí el módulo), y así se compila con el mismo Python/entorno que se
+    # está usando. sys.executable va entre comillas por si la ruta tiene espacios.
+    parts = [
+        f'"{sys.executable}" -m PyInstaller --noconfirm',
+        '--name "Prototipo 1"',
+        '--onefile',
+        '--windowed',
+    ]
+    # Ícono y datos OPCIONALES: solo se agregan si el archivo existe (si faltan,
+    # PyInstaller abortaría con FileNotFoundError). Restaurá icon.ico / recinto.room
+    # en la raíz del proyecto y se incluyen solos.
+    icon_file = PROJECT_DIR / "icon.ico"
+    if icon_file.exists():
+        parts.append(f'--icon="{icon_file}"')
+    else:
+        print("  (aviso) icon.ico no está: se compila con el ícono por defecto.")
+    room_file = PROJECT_DIR / "recinto.room"
+    if room_file.exists():
+        parts.append(f'--add-data "{room_file};."')
+    else:
+        print("  (aviso) recinto.room no está: no se empaqueta la sala de ejemplo.")
+    # PyInstaller NO soporta dos bindings de Qt en el mismo ejecutable; si el
+    # entorno tiene PyQt6/PySide además de PyQt5 (el que usa la app), hay que
+    # excluir los otros o aborta la compilación.
+    parts += [
+        '--exclude-module PyQt6',
+        '--exclude-module PySide6',
+        '--exclude-module PySide2',
+        '--hidden-import=OpenGL',
+        '--hidden-import=numpy',
+        '--hidden-import=scipy',
+        '--hidden-import=scipy.sparse.linalg',
+        '--hidden-import=pyqtgraph',
+        '--hidden-import=matplotlib',
+        '--hidden-import=matplotlib.backends.backend_qt5agg',
+        '--hidden-import=gmsh',
+        '--hidden-import=trimesh',
+        '--collect-all gmsh',
+        '--collect-all trimesh',
+        f'"{PROJECT_DIR}/main.py"',
+    ]
+    pyinstaller_cmd = " ".join(parts)
+
     if not run_command(pyinstaller_cmd, "Compilación con PyInstaller"):
         return False
     
