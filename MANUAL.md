@@ -2954,6 +2954,15 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.63 (exportar el gráfico de decaimiento + el ejecutable de Windows vuelve a abrir)
+
+**Cambios v2.63** (7 de octubre 2026): dos mejoras de interfaz y empaquetado, sin tocar la física.
+
+- **Exportar el decaimiento (EDC).** La ventana «Decaimiento con subs (waterfall)…» ahora tiene una fila «Exportar gráfico/datos:» con botones PNG, SVG, PDF, CSV y TXT, igual que la FRF, la SBIR y el comparador de RT. PNG/SVG/PDF guardan la figura completa (la curva de decaimiento de Schroeder arriba y los waterfalls abajo). CSV/TXT guardan la tabla de las curvas de decaimiento: una columna de tiempo y una columna de nivel en dB por cada estado que se muestre (sin subs, con subs, con carga de cono y pared trasera matcheada). Los waterfalls, al ser mapas 2D, se exportan solo como imagen.
+- **Ejecutable de Windows.** Se corrigió el generador del `.exe` (`build_installer.py`), que había quedado desactualizado y producía un ejecutable que no abría (fallaba al cargar las librerías Qt). Ahora empaqueta correctamente las dependencias del entorno y el ejecutable vuelve a abrir normalmente.
+
+*Manual actualizado al 7 de Octubre de 2026 — v2.63.*
+
 ## Cambios v2.62 (la curva «pared trasera matcheada» ya no subestima los modos casi-críticos en salas grandes)
 
 **Cambios v2.62** (6 de octubre 2026): corrige un caso en que el solver de salas medianas-grandes (v2.61) devolvía un amortiguamiento demasiado bajo justo en los modos más amortiguados. Con la pared trasera perfectamente absorbente, los modos axiales de esa dirección quedan casi-críticos (amortiguamiento cercano al máximo posible); en salas grandes el solver los subestimaba y la curva de decaimiento salía más lenta de lo real. Ahora esos modos se recuperan exactos.

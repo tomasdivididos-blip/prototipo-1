@@ -1482,6 +1482,8 @@ class DecayWaterfallDialog(QDialog):
         self.setWindowTitle("Decaimiento del campo total — sin vs con subs")
         add_help_button(self, _HELP_DECAY, "Decaimiento — ayuda")
         self.resize(1040, 720)
+        self._data = data
+        self._fig = None
         v = QVBoxLayout(self)
         if not _HAS_MPL:
             v.addWidget(QLabel("matplotlib no disponible. pip install matplotlib"))
@@ -1560,6 +1562,21 @@ class DecayWaterfallDialog(QDialog):
         v.addWidget(NavigationToolbar(canvas, self))
         v.addWidget(canvas, 1)
 
+        # --- Fila de exportar: imagen de la figura completa (incluye waterfalls) o
+        # las curvas EDC en tabla (CSV/TXT). ---
+        brow = QHBoxLayout()
+        lbl_exp = QLabel("Exportar gráfico/datos:")
+        lbl_exp.setStyleSheet("color:#555; font-size:8pt;")
+        brow.addWidget(lbl_exp)
+        brow.addStretch(1)
+        for fmt in ("PNG", "SVG", "PDF", "CSV", "TXT"):
+            b = QPushButton(f"Exportar {fmt}")
+            b.setMinimumWidth(140)       # texto "Exportar XXX" + padding QSS
+            b.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+            b.clicked.connect(lambda _=False, f=fmt.lower(): self._export(f))
+            brow.addWidget(b)
+        v.addLayout(brow)
+
         note = QLabel(
             "Decaimiento del campo TOTAL en el receptor. «con subs (drive)»: el array "
             "redistribuye la energía modal por su delay/polaridad (NO cambia el ξ de "
@@ -1581,6 +1598,44 @@ class DecayWaterfallDialog(QDialog):
         note.setWordWrap(True)
         note.setStyleSheet("color:#11111b; font-size:9pt;")
         v.addWidget(note)
+
+    def _export(self, fmt: str):
+        """Exporta la figura completa (PNG/SVG/PDF, incluye EDC + waterfalls) o las
+        curvas EDC en tabla (CSV/TXT). Todas las curvas EDC comparten el eje temporal
+        (IRs de igual duración/fs); la tabla lleva una columna de tiempo y una de EDC
+        en dB por estado (sin subs, con subs drive, y si aplican con cono / pared
+        trasera matcheada). Los waterfalls (CSD, 2D) van solo en la imagen."""
+        from PyQt5.QtWidgets import QFileDialog, QMessageBox
+        path, _ = QFileDialog.getSaveFileName(
+            self, f"Exportar como {fmt.upper()}",
+            f"decaimiento_edc.{fmt}", f"{fmt.upper()} (*.{fmt})")
+        if not path:
+            return
+        if fmt in ('csv', 'txt'):
+            data = self._data
+            # Eje de tiempo de referencia = el de "sin subs"; el resto se interpola
+            # sobre él por si (improbable) difirieran en longitud.
+            tref = np.asarray(data["edc_a"][0], dtype=float)
+            cols = [("edc_a", "edc_db_sin_subs"),
+                    ("edc_b", "edc_db_con_subs_drive")]
+            if "edc_c" in data:
+                cols.append(("edc_c", "edc_db_con_cono"))
+            if "edc_d" in data:
+                cols.append(("edc_d", "edc_db_trasera_matcheada"))
+            header = ["tiempo_s"] + [name for _k, name in cols]
+            series = []
+            for key, _name in cols:
+                t = np.asarray(data[key][0], dtype=float)
+                e = np.asarray(data[key][1], dtype=float)
+                series.append(e if (t.shape == tref.shape and np.allclose(t, tref))
+                              else np.interp(tref, t, e))
+            rows = [tuple([float(tref[i])] + [float(s[i]) for s in series])
+                    for i in range(len(tref))]
+            _write_tabular(path, header, rows, fmt)
+        elif self._fig is not None:
+            self._fig.savefig(path, dpi=300, bbox_inches='tight', facecolor='white')
+        else:
+            QMessageBox.information(self, "Exportar", "No hay figura para exportar.")
 
 
 class FRFDialog(QDialog):
