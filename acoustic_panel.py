@@ -8626,7 +8626,10 @@ class AcousticPanel(QWidget):
         dlg.applied.connect(lambda: self._on_patches_applied(dlg.result_patches))
         # Preview 3D en vivo mientras se edita (sin recomputar la fisica).
         dlg.changed.connect(self._refresh_patch_overlay)
+        # Hover/click sobre una cara en la lista -> iluminarla en el render 3D.
+        dlg.hovered.connect(self._on_materials_hovered)
         ok = dlg.exec_()
+        self._on_materials_hovered(None)       # apagar el resaltado de cara al cerrar
         if ok:
             self._on_patches_applied(dlg.result_patches)
         else:

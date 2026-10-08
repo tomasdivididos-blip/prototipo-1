@@ -28,7 +28,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal
+from PyQt5.QtCore import Qt, QRectF, QPointF, QEvent, pyqtSignal
 from PyQt5.QtGui import QPainter, QPen, QColor, QBrush, QFont, QPolygonF, QCursor
 from style import apply_dialog_theme, add_help_button
 from PyQt5.QtWidgets import (
@@ -454,9 +454,21 @@ class PatchCanvas(QWidget):
             qp.drawPolygon(poly)
             cx = sum(p.x() for p in poly) / max(len(poly), 1)
             cy = sum(p.y() for p in poly) / max(len(poly), 1)
+            # Nombre centrado SIN rect que lo recorte: se mide el ancho con las
+            # métricas de la fuente y se dibuja en un punto, así el nombre completo
+            # se ve aunque sea más largo que el parche (antes un QRectF de 124 px
+            # lo cortaba). Un recuadro claro semi-transparente lo hace legible
+            # sobre cualquier color de material.
+            txt = r.get("name", "") or "(sin material)"
+            fm = qp.fontMetrics()
+            tw = fm.horizontalAdvance(txt) if hasattr(fm, "horizontalAdvance") else fm.width(txt)
+            th = fm.height()
+            qp.setPen(Qt.NoPen)
+            qp.setBrush(QBrush(QColor(245, 245, 250, 190)))
+            qp.drawRoundedRect(QRectF(cx - tw / 2.0 - 4, cy - th / 2.0 - 1,
+                                      tw + 8, th + 2), 3, 3)
             qp.setPen(QPen(QColor(17, 17, 27)))
-            qp.drawText(QRectF(cx - 62, cy - 12, 124, 24), Qt.AlignCenter,
-                        r.get("name", "") or "(sin material)")
+            qp.drawText(QPointF(cx - tw / 2.0, cy + th / 2.0 - fm.descent()), txt)
 
         invalid = QColor(243, 139, 168)
         ok = QColor(148, 226, 213)
@@ -507,6 +519,7 @@ class PatchEditorDialog(QDialog):
 
     applied = pyqtSignal()
     changed = pyqtSignal(list)   # preview en vivo: lista actual de AbsorptionPatch
+    hovered = pyqtSignal(object)  # cara (FaceGroup) a iluminar en el 3D; None = apagar
 
     def __init__(self, groups, verts, tris, mat_lib,
                  patches: Optional[List[ap.AbsorptionPatch]] = None, parent=None):
@@ -560,11 +573,23 @@ class PatchEditorDialog(QDialog):
         left.addWidget(QLabel("Caras"))
         self.face_list = QListWidget()
         self.face_list.setSelectionMode(QAbstractItemView.SingleSelection)
+        # Nombres SIEMPRE completos: sin elipsis (…), con wrap a varias líneas si no
+        # entran, tooltip con el nombre entero y un ancho mínimo cómodo.
+        self.face_list.setTextElideMode(Qt.ElideNone)
+        self.face_list.setWordWrap(True)
+        self.face_list.setMinimumWidth(260)
+        self.face_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        # Hover sobre un item -> iluminar esa cara en el render 3D.
+        self.face_list.setMouseTracking(True)
         for g in self._groups:
             na = int(np.argmax(np.abs(g.normal)))
-            self.face_list.addItem(
-                QListWidgetItem(f"{g.label}   ({g.area:.1f} m2, perp {_axis_label(na)})"))
+            it = QListWidgetItem(
+                f"{g.label}   ({g.area:.1f} m2, perp {_axis_label(na)})")
+            it.setToolTip(str(g.label))
+            self.face_list.addItem(it)
         self.face_list.currentRowChanged.connect(self._on_face_changed)
+        self.face_list.itemEntered.connect(self._on_face_hovered)
+        self.face_list.installEventFilter(self)   # Leave -> volver a la cara sel.
         left.addWidget(self.face_list, 1)
         if self._n_skipped:
             skip = QLabel(f"({self._n_skipped} cara(s) no axis-aligned omitidas en v1)")
@@ -748,6 +773,7 @@ class PatchEditorDialog(QDialog):
     def _on_face_changed(self, row):
         if not (0 <= row < len(self._groups)):
             self._cur_group = None
+            self.hovered.emit(None)
             return
         self._cur_group = self._groups[row]
         self._sel_patch = -1
@@ -756,6 +782,20 @@ class PatchEditorDialog(QDialog):
         self.canvas.set_grid(GRID_STEPS[self.combo_grid.currentIndex()])
         self.canvas.set_mode("poly" if self.combo_mode.currentIndex() == 1 else "rect")
         self._refresh_all()
+        self.hovered.emit(self._cur_group)   # iluminar la cara clickeada en el 3D
+
+    def _on_face_hovered(self, item):
+        """Mouse sobre un item de la lista de caras -> iluminar esa cara en el 3D."""
+        row = self.face_list.row(item)
+        if 0 <= row < len(self._groups):
+            self.hovered.emit(self._groups[row])
+
+    def eventFilter(self, obj, ev):
+        # Al salir el mouse de la lista, volver a iluminar la cara SELECCIONADA
+        # (no dejar prendida la última que se hovereó).
+        if obj is self.face_list and ev.type() == QEvent.Leave:
+            self.hovered.emit(self._cur_group)
+        return super().eventFilter(obj, ev)
 
     def _on_rect_drawn(self, u0, v0, u1, v1):
         if self._cur_group is None:
