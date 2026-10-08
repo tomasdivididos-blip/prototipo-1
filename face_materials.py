@@ -300,6 +300,21 @@ def group_faces_by_planar_region(
                 kind=kind,
             ))
 
+    # Piso vs techo por POSICION, no por el signo de la normal. Un CAD importado
+    # (p.ej. PLANO AULA / aula 301) puede no ser solido cerrado y traer el winding
+    # (y por ende la normal) invertido en las caras horizontales, lo que
+    # intercambiaba piso<->techo en el panel. Las caras casi-horizontales
+    # (|nz|>0.85) se reclasifican por la altura del centroide respecto al medio del
+    # recinto: abajo = piso, arriba = techo. Para recintos parametricos (make_room),
+    # cuya normal de piso ya apunta -Z, da el MISMO resultado (sin regresion). Las
+    # paredes e inclinadas no se tocan. La firma (_signature) usa la normal, no el
+    # kind, asi que los materiales asignados en el .room siguen en sus mismas caras.
+    if raw_groups:
+        zmid = 0.5 * (float(verts[:, 2].min()) + float(verts[:, 2].max()))
+        for g in raw_groups:
+            if abs(float(g.normal[2])) > 0.85:
+                g.kind = "floor" if float(g.centroid[2]) < zmid else "ceiling"
+
     # Ordenar: piso primero, techo, paredes, inclinadas. Dentro de cada
     # categoria, por area descendente.
     kind_order = {"floor": 0, "ceiling": 1, "wall": 2, "tilted": 3}
