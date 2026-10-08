@@ -2954,6 +2954,16 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.64 (editor de parches: nombres completos e iluminar la cara en 3D + piso/techo correctos en CAD importado)
+
+**Cambios v2.64** (8 de octubre 2026): mejoras del editor de «Parches de absorcion por cara» y una corrección de clasificación de caras.
+
+- **Nombres completos en el editor de parches.** En la lista de caras los nombres ya no se cortan con «…»: se muestran enteros (con salto de línea si hace falta y tooltip al pasar el mouse). Los nombres de material dibujados sobre cada parche en el lienzo tampoco se recortan.
+- **Iluminar la cara en el render 3D.** Al pasar el mouse por una cara de la lista (o al seleccionarla), esa cara se ilumina en la vista 3D de fondo, para ubicarla sin ambigüedad. Al sacar el mouse vuelve a resaltarse la cara seleccionada.
+- **Piso y techo correctos en recintos importados (CAD).** En algunos modelos importados (OBJ que no son un sólido perfectamente cerrado) el piso y el techo aparecían intercambiados en los paneles. Ahora el piso y el techo se identifican por su altura dentro del recinto (abajo es piso, arriba es techo), no por la orientación de las caras del modelo, así que quedan bien aunque el modelo venga con las normales invertidas. Los materiales que ya tenías asignados no se mueven: siguen en sus mismas caras; solo se corrigen las etiquetas.
+
+*Manual actualizado al 8 de Octubre de 2026 — v2.64.*
+
 ## Cambios v2.63 (exportar el gráfico de decaimiento + el ejecutable de Windows vuelve a abrir)
 
 **Cambios v2.63** (7 de octubre 2026): dos mejoras de interfaz y empaquetado, sin tocar la física.

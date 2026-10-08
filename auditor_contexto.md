@@ -6,7 +6,7 @@
 > cada cosa contra la fuente física, un oráculo, o una cuenta propia. Que este archivo
 > diga "resuelto/PASA" no prueba nada; es un puntero a qué mirar.
 
-**Última actualización:** 2026-10-07 (v2.63: export del gráfico de EDC + fix del build del .exe de Windows = GUI/IO, FUERA de alcance, no toca física; + v2.62: CIERRE de la limitación CASI-CRÍTICA del sparse `qep_sparse.py` = gate por ξ de 1er orden + Beyn TILEADO elíptico + only_if_larger, NÚCLEO EN ALCANCE; + v2.61 solver sparse PAL+Beyn; + v2.60 QEP modal/nodal; + v2.59 4º estado; + v2.58 norte front↔rear; + v2.57 exploración; + Fazenda/«?» FUERA de alcance; + v2.56 … v2.50).
+**Última actualización:** 2026-10-08 (v2.64: UI/UX del editor de parches = GUI FUERA de alcance; + FIX piso↔techo en CAD importado = `face_materials.group_faces_by_planar_region` ahora clasifica las caras casi-horizontales por la ALTURA del centroide (no por el signo de la normal, que el CAD no-watertight trae invertido) → EN ALCANCE geométrico, VERIFICAR: es no-destructivo (la firma usa la normal, no el kind; los materiales no se mueven) y en make_room da igual que antes (sin regresión); + v2.63: export del gráfico de EDC + fix del build del .exe de Windows = GUI/IO, FUERA de alcance, no toca física; + v2.62: CIERRE de la limitación CASI-CRÍTICA del sparse `qep_sparse.py` = gate por ξ de 1er orden + Beyn TILEADO elíptico + only_if_larger, NÚCLEO EN ALCANCE; + v2.61 solver sparse PAL+Beyn; + v2.60 QEP modal/nodal; + v2.59 4º estado; + v2.58 norte front↔rear; + v2.57 exploración; + Fazenda/«?» FUERA de alcance; + v2.56 … v2.50).
 
 ## v2.61 — solver SPARSE del QEP de frontera `qep_sparse.py` (PAL + Beyn) (4 Oct 2026, EN ALCANCE — VERIFICAR)
 
