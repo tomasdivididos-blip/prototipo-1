@@ -9,6 +9,17 @@ import subprocess
 import shutil
 from pathlib import Path
 
+# La consola de Windows suele estar en cp1252 y los print de abajo usan box-drawing
+# (╔═║) y simbolos (📦 ✓ ✗); sin esto el script CRASHEA con UnicodeEncodeError al
+# primer banner cuando se corre `python build_installer.py` directo (sin un
+# PYTHONIOENCODING=utf-8 seteado). Forzar UTF-8 en stdout/stderr lo hace independiente
+# del codepage de la consola.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 def run_command(cmd, description):
     """Ejecuta un comando y maneja errores."""
     print(f"\n{'='*60}")
