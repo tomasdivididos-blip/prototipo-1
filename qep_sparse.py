@@ -30,6 +30,21 @@ import scipy.sparse.linalg as spla
 import scipy.linalg as sla
 
 
+# Tope de Nn hasta el cual el camino de la pared matcheada USA este solver sparse.
+# HISTORIA (M1, 12 Oct 2026): el oraculo INDEPENDIENTE SLEPc (bench_qep_slepc_scale.py)
+# expuso que el sparse A+B era INEXACTO a escala (fundamental casi-critico 0.34 vs nodal
+# 0.825 a Nn~2600) por el CONTORNO de Beyn: el polo de un modo fuertemente matcheado
+# tiene δ grande Y su fₙ se corre hacia arriba (|s|~1.4-1.7·wc), quedando lejos del eje
+# imaginario, y la elipse (a=1.15wc, z0=-0.1wc) no lo alcanzaba. ARREGLADO en `_beyn_band`
+# (a=1.5wc, z0=-0.35wc): ensanchar en Re NO agrega modos (no satura), y captura el polo.
+# VALIDADO: sparse == nodal EXACTO a 0.0000 en los 16 modos a Nn=2660 (antes 0.30 de
+# error), 24x mas rapido (21 s). Por eso el tope vuelve a 6000 (cubre Control Ale 5376).
+# NOTA: la unica discrepancia residual sparse-vs-SLEPc a escala es en pares
+# near-degenerados (asignacion ambigua ENTRE oraculos; el sparse coincide con el nodal
+# exacto, no es error). Ver [[solver-qep-sparse]] + bench_qep_slepc_scale.
+SPARSE_NN_MAX = 6000
+
+
 # ---------------------------------------------------------------------------
 # Piezas del algoritmo
 # ---------------------------------------------------------------------------
@@ -219,7 +234,7 @@ def pal_qep(M, C, K, sigma, k=24, m=3, mode="sparse", E=None,
 # Método B: integral de contorno (Beyn 2012)
 # ---------------------------------------------------------------------------
 def beyn_contour(Tfun, z0, R, n_quad=48, ell=24, tol_rank=1e-8,
-                 tol_res=1e-7, seed=0, Tresid=None, b=None):
+                 tol_res=1e-7, seed=0, Tresid=None, b=None, return_info=False):
     """Autopares de T(z) v = 0 DENTRO del contorno Γ (centro z0) por el método de
     integral de contorno de Beyn (2012), `referencias/Beyn...pdf`, "Integral
     algorithm 1" (p.14). T holomorfa; sirve para el QEP (T(z)=z²M+zC+K) y para un
@@ -263,10 +278,16 @@ def beyn_contour(Tfun, z0, R, n_quad=48, ell=24, tol_rank=1e-8,
     M1 *= 1.0 / (1j * n_quad)                              # A0, Ã1
     U, s, Wh = np.linalg.svd(M0, full_matrices=False)
     if s[0] == 0:
-        return np.array([]), np.zeros((n, 0), complex), np.array([])
+        _inf0 = {"k": 0, "ell": int(ell), "saturated": False}
+        _e0 = (np.array([]), np.zeros((n, 0), complex), np.array([]))
+        return (*_e0, _inf0) if return_info else _e0
     k = int(np.sum(s > tol_rank * s[0]))
+    # M4: si k == ell el SVD SATURO (hay mas polos que la sonda) -> se perderian en
+    # silencio; se expone `saturated` para que el caller re-tilee (bisecte en Im).
+    info = {"k": int(k), "ell": int(ell), "saturated": bool(k >= ell)}
     if k == 0:
-        return np.array([]), np.zeros((n, 0), complex), np.array([])
+        _e = (np.array([]), np.zeros((n, 0), complex), np.array([]))
+        return (*_e, info) if return_info else _e
     V0 = U[:, :k]; S0 = s[:k]; W0 = Wh.conj().T[:, :k]
     B = (V0.conj().T @ M1 @ W0) / S0[None, :]             # V0ᴴ Ã1 W0 Σ0⁻¹
     theta, Sv = np.linalg.eig(B)
@@ -288,19 +309,21 @@ def beyn_contour(Tfun, z0, R, n_quad=48, ell=24, tol_rank=1e-8,
         if res < tol_res and inside:
             out_lam.append(lam[i]); out_V.append(v); out_res.append(res)
     if not out_lam:
-        return np.array([]), np.zeros((n, 0), complex), np.array([])
+        _e = (np.array([]), np.zeros((n, 0), complex), np.array([]))
+        return (*_e, info) if return_info else _e
     idx = np.argsort(np.abs(np.imag(out_lam)))
     lam_o = np.array(out_lam)[idx]
     V_o = np.array(out_V).T[:, idx]
     res_o = np.array(out_res)[idx]
-    return lam_o, V_o, res_o
+    return (lam_o, V_o, res_o, info) if return_info else (lam_o, V_o, res_o)
 
 
 def beyn_qep(M, C, K, z0, R, n_quad=48, ell=24, tol_rank=1e-8, tol_res=1e-7,
-             seed=0, b=None):
+             seed=0, b=None, return_info=False):
     """Beyn para el QEP (z²M+zC+K)v=0 dentro del contorno (z0, R[, b]). Círculo si
     b=None, ELIPSE (R=semieje Re, b=semieje Im) si no. Devuelve (lam, V, res) con
-    el residuo = error hacia atrás η_Q del QEP."""
+    el residuo = error hacia atrás η_Q del QEP. Con `return_info` devuelve además el
+    dict {k, ell, saturated} del SVD (M4: saturated=True si k>=ell → faltan polos)."""
     M = sp.csr_matrix(M, dtype=complex)
     C = sp.csr_matrix(C, dtype=complex)
     K = sp.csr_matrix(K, dtype=complex)
@@ -309,9 +332,9 @@ def beyn_qep(M, C, K, z0, R, n_quad=48, ell=24, tol_rank=1e-8, tol_res=1e-7,
     def T(z):
         return (z * z) * M + z * C + K
 
-    lam, V, _res = beyn_contour(T, z0, R, n_quad=n_quad, ell=ell,
-                                tol_rank=tol_rank, tol_res=1e-1, seed=seed,
-                                Tresid=T, b=b)
+    lam, V, _res, info = beyn_contour(T, z0, R, n_quad=n_quad, ell=ell,
+                                      tol_rank=tol_rank, tol_res=1e-1, seed=seed,
+                                      Tresid=T, b=b, return_info=True)
     # recomputar el residuo como η_Q (certificado del QEP) y filtrar.
     keep, eta = [], []
     for i in range(len(lam)):
@@ -320,8 +343,10 @@ def beyn_qep(M, C, K, z0, R, n_quad=48, ell=24, tol_rank=1e-8, tol_res=1e-7,
             keep.append(i); eta.append(e)
     keep = np.array(keep, int)
     if keep.size == 0:
-        return np.array([]), np.zeros((M.shape[0], 0), complex), np.array([])
-    return lam[keep], V[:, keep], np.array(eta)
+        _e = (np.array([]), np.zeros((M.shape[0], 0), complex), np.array([]))
+        return (*_e, info) if return_info else _e
+    _r = (lam[keep], V[:, keep], np.array(eta))
+    return (*_r, info) if return_info else _r
 
 
 # ---------------------------------------------------------------------------
@@ -405,7 +430,8 @@ def sparse_boundary_xi_shift(K, M, Csurf, freqs_ref, phis_ref, beta, c=343.0,
                              eta_tol=1e-7, n_quad=48, beyn_tol=1e-5,
                              beyn_fill=True, fallback_xi=None, fallback_f=None,
                              xi_crit=0.35, pal_maxiter=None, couple_thr=0.6,
-                             xi_gate=0.15, return_info=False):
+                             xi_gate=0.08, overlap_strong=0.5, overlap_margin=0.1,
+                             return_info=False):
     """QEP de frontera por A+B: PAL (banda de shifts, rápido) para los modos
     OSCILATORIOS + Beyn (contorno) para los que quedan, incluidos los
     SOBREAMORTIGUADOS (polos reales/muy amortiguados, ξ≳1, que un shift imaginario
@@ -520,56 +546,80 @@ def sparse_boundary_xi_shift(K, M, Csurf, freqs_ref, phis_ref, beta, c=343.0,
         if lam_set.size == 0:
             return
 
-        def _put(nm, newxi, newf):
-            if only_if_larger and np.isfinite(xi[nm]) and not (newxi > xi[nm]):
-                return
+        def _put(nm, newxi, newf, conf=1.0, margin=1.0):
+            if only_if_larger:
+                if np.isfinite(xi[nm]) and not (newxi > xi[nm]):
+                    return
+                # M3: guarda anti-inflacion en el relleno Beyn. Solo se PISA un modo
+                # ya estimado si la asignacion polo->modo es CONFIABLE (solape fuerte
+                # y con margen sobre el 2do modo), para no inflar un modo modesto con
+                # un polo mal asignado de un vecino casi-degenerado. El 1er pase PAL
+                # (only_if_larger=False) es el baseline y escribe sin guarda.
+                if conf < overlap_strong or margin < overlap_margin:
+                    return
             xi[nm] = newxi; f_new[nm] = newf
 
         modes = list(modes)
         MX = Mp @ X_set
         den = np.sqrt(np.abs(np.einsum("ik,ik->k", X_set.conj(), MX)))
         IM_ABS = 1.0                                      # |Im(s)|<1 rad/s = real
-        votes = {nm: [] for nm in modes}                  # modo -> [(overlap, p)]
+        votes = {nm: [] for nm in modes}                  # modo -> [(overlap, p, margen)]
         sub = phis_ref[:, modes]                          # (n, |modes|)
         for p in range(X_set.shape[1]):
             rel = np.abs(sub.conj().T @ MX[:, p]) / max(den[p], 1e-30)
-            jb = int(np.argmax(rel))
+            order = np.argsort(rel)[::-1]
+            jb = int(order[0])
+            second = float(rel[order[1]]) if rel.size > 1 else 0.0
             if rel[jb] >= overlap_min:
-                votes[modes[jb]].append((float(rel[jb]), p))
+                votes[modes[jb]].append((float(rel[jb]), p, float(rel[jb]) - second))
         for nm, vp in votes.items():
             if not vp:
                 continue
             vp.sort(reverse=True)                         # por overlap descendente
-            s_dom = lam_set[vp[0][1]]                      # polo dominante = mayor overlap
+            conf, pdom, margin = vp[0]                     # polo dominante = mayor overlap
+            s_dom = lam_set[pdom]
             if abs(s_dom.imag) >= IM_ABS:                 # oscilatorio
-                wd = abs(s_dom.imag)
-                _put(nm, (-s_dom.real) / max(wd, 1e-9), wd / (2.0 * np.pi))
+                # s-dominio: Re(s)=-delta, Im(s)=omega_d, |s|=omega_n (natural).
+                # xi CLASICO = delta/omega_n (lo que consume el Lorentziano), NO
+                # delta/omega_d (bug C1): divergen en el regimen casi-critico.
+                smag = abs(s_dom)                         # |s| = omega_n
+                _put(nm, (-s_dom.real) / max(smag, 1e-9), smag / (2.0 * np.pi),
+                     conf, margin)
             else:                                         # sobreamortiguado (real)
-                reals = [lam_set[p].real for _o, p in vp
+                reals = [lam_set[p].real for _o, p, _m in vp
                          if abs(lam_set[p].imag) < IM_ABS]
                 if len(reals) >= 2:
                     reals = sorted(reals, key=abs)        # |s| menor = polo dominante
                     s1, s2 = reals[0], reals[1]
                     wn = np.sqrt(abs(s1 * s2))
-                    _put(nm, -(s1 + s2) / (2.0 * max(wn, 1e-9)), wn / (2.0 * np.pi))
+                    _put(nm, -(s1 + s2) / (2.0 * max(wn, 1e-9)), wn / (2.0 * np.pi),
+                         conf, margin)
 
     _assign(lam_all, X_all, range(Nm))
     cov_pal = int(np.isfinite(xi).sum()) / Nm
     n_over = 0
     n_beyn = 0
+    n_sat = 0                                    # M4: clusters que saturaron el SVD
 
     # --- Relleno de los modos que PAL no cubre ---
     unc = np.where(~np.isfinite(xi))[0]
     fb = fallback_xi is not None and fallback_f is not None
-    # GATE POR ξ DE 1er ORDEN (perturbación diagonal, Morse & Ingard 9.4.14):
-    #   ξ_est_n = (c·|β|/2)·diag(G)_n / ωₙ,   diag(G)_n = φₙᵀ Csurf φₙ (φ M-orton.).
-    # Es MONÓTONO en el ξ real y su COTA INFERIOR (la perturbación nunca sobrestima
-    # el amortiguamiento), así que todo modo casi-crítico tiene ξ_est NO despreciable
-    # y queda flaggeado, mientras que un modo poco amortiguado (ξ real chico) tiene
-    # ξ_est chico y NO se toca. Es mejor que diag(G) crudo: ξ~δ/ωₙ, un modo de alta f
-    # con acople moderado tiene diag(G) grande pero ξ chico (ωₙ grande). Gatear por el
-    # ξ del FALLBACK modal fallaría: el fallback SUBESTIMA justo los casi-críticos
-    # (p.ej. ξ_fallback=0.34 < xi_crit para un modo de ξ_real=1.3).
+    # GATE (M2: empiricamente calibrado, NO una cota DEMOSTRADA):
+    #   ξ_est_n = (c·|β|/2)·diag(G)_n / ωₙ,   diag(G)_n = φₙᵀ Csurf φₙ (φ M-orton.),
+    # es la perturbacion de 1er orden (diagonal, Morse & Ingard 9.4.14). El auditor
+    # señaló que NO es cota inferior PROBADA del ξ real. El audit sobre una familia de
+    # shoeboxes (bench_qep_sparse_m2) mide ξ_est/ξ_nodal ∈ [0.40, 0.43] para el axial
+    # casi-critico, asi que xi_gate=0.08 (< 0.40·xi_crit=0.139) captura todo casi-critico
+    # con ξ_real ≳ 0.20, con margen. DOS redes extra cierran la subestimacion del modal:
+    #   (a) fallback modal > xi_crit (el modal ya lo ve casi-critico);
+    #   (b) SOSPECHA: fallback < ξ_est (con ξ_est no despreciable) → el modal da MENOS
+    #       amortiguamiento que la perturbacion diagonal ⇒ probable subestimacion por
+    #       truncamiento (p.ej. un modo de ξ_real~0.19 con fallback 0.004 que escaparia
+    #       al gate de ξ_est); se flaggea para que Beyn lo verifique.
+    # Err hacia flaggear de mas: Beyn de mas = mas lento, pero only_if_larger + la guarda
+    # de confianza (M3) no dañan un modo ya bien estimado. Un certificado η con la forma
+    # RIGIDA φ_n NO sirve de gate (no separa: mide cuan autovector es φ_n, no el error del
+    # ξ del fallback; medido en el bench M2).
     wn_all = np.maximum(2.0 * np.pi * fr, 1e-9)
     xi_est = (c * abs(complex(beta)) / 2.0) * diagG[:Nm] / wn_all
     if fb:
@@ -578,7 +628,9 @@ def sparse_boundary_xi_shift(K, M, Csurf, freqs_ref, phis_ref, beta, c=343.0,
             if np.isfinite(fbx[n]):
                 xi[n] = fbx[n]; f_new[n] = fbf[n]
         beyn_modes = [int(n) for n in unc if xi_est[n] > xi_gate
-                      or (np.isfinite(fbx[n]) and fbx[n] > xi_crit)]
+                      or (np.isfinite(fbx[n]) and fbx[n] > xi_crit)
+                      or (np.isfinite(fbx[n]) and fbx[n] < xi_est[n]
+                          and xi_est[n] > 0.5 * xi_gate)]
     else:
         beyn_modes = [int(n) for n in unc]
 
@@ -587,7 +639,7 @@ def sparse_boundary_xi_shift(K, M, Csurf, freqs_ref, phis_ref, beta, c=343.0,
     # que se lo ata a la BANDA de frecuencia del cluster (+ margen por el corrimiento
     # de fₙ de la pared matcheada); el ancho en Re casi no agrega modos (pocos tienen
     # amortiguamiento grande) y es el que ALCANZA el polo casi-crítico, que está a
-    # −ξωₙ del eje imaginario (p.ej. s=−201+i168 para ξ≈1.2). El contorno circular
+    # −δ del eje imaginario con δ grande (p.ej. s=−201+i168, δ=201 Np/s). El contorno circular
     # único grande SATURA el SVD (k=ell) en f media-alta. Todo polo del QEP nodal
     # tiene Im(s)>1 (el nodal filtra Re(ω)>1), así que NO hay polos reales puros: se
     # queda la rama oscilatoria y se descartan los polos no-físicos (Re≥0, el DC).
@@ -606,24 +658,61 @@ def sparse_boundary_xi_shift(K, M, Csurf, freqs_ref, phis_ref, beta, c=343.0,
             else:
                 cur.append(i)
         clusters.append(cur)
+        # M4: una banda [fa,fbb] Hz -> una ELIPSE Beyn. Si el SVD SATURA (k>=ell:
+        # hay mas polos en el contorno que la sonda), los polos de mas se perderian
+        # en SILENCIO; en vez de eso se BISECTA la banda en Im y se recursa (reduce
+        # modos-por-contorno a la mitad por nivel) hasta recuperar un SVD con hueco o
+        # agotar la profundidad. `ell` se provisiona por la densidad REAL de la banda
+        # (todos los modos de `fr` dentro del semieje Im), no por los flaggeados.
+        BEYN_MAX_DEPTH = 3
+
+        def _beyn_band(fa, fbb, xg, depth=0):
+            fcl = 0.5 * (fa + fbb)
+            wc = 2.0 * np.pi * fcl
+            margin_hz = (0.10 + 0.35 * xg) * fcl + 8.0
+            b_im = 2.0 * np.pi * (0.5 * (fbb - fa) + margin_hz)
+            # ALCANCE en Re (clave del fix M1, 12 Oct 2026): el polo de un modo
+            # fuertemente matcheado tiene δ=Re GRANDE (amortiguamiento alto) Y su fₙ
+            # se CORRE hacia arriba (|s| hasta ~1.7·wc), asi que esta lejos del eje
+            # imaginario: s=−δ+iω_d con δ=|s|·ξ. La elipse vieja (a=1.15wc, z0=−0.1wc)
+            # NO lo alcanzaba (verificado: fundamental ducto Nn=2430, polo s=−181+124i
+            # fuera del contorno → Beyn 0 polos → sparse caia al fallback 0.34 vs nodal
+            # 0.825). Se ENSANCHA en Re y se corre el centro a −0.35wc: alcanza δ hasta
+            # ~1.85wc (ξ~0.97 con corrimiento 1.7×). Ensanchar en Re NO agrega modos (se
+            # diferencian en Im/frecuencia, no en Re), asi que NO satura el SVD. El Im
+            # (ω_d) se mantiene en banda porque el corrimiento de |s| compensa la caida
+            # por el amortiguamiento. Oraculo: SLEPc a escala (bench_qep_slepc_scale).
+            a_re = 1.5 * wc                                # alcanza ξ→1 + corrimiento
+            z0 = -0.35 * wc + 1j * wc                      # centro en el 2do cuadrante
+            lo_hz = fcl - b_im / (2.0 * np.pi)
+            hi_hz = fcl + b_im / (2.0 * np.pi)
+            nband = int(np.sum((fr >= lo_hz) & (fr <= hi_hz)))   # densidad REAL
+            ellp = int(min(Mp.shape[0] - 2, max(2 * nband + 12, 18)))
+            lam_b, V_b, _e, info = beyn_qep(Mp, Cp, Kp, z0, a_re, n_quad=n_quad,
+                                            ell=ellp, tol_res=beyn_tol, b=b_im,
+                                            return_info=True)
+            if (info.get("saturated") and depth < BEYN_MAX_DEPTH
+                    and (fbb - fa) > 0.5 * conf_hz):
+                fmid = fcl
+                l1, v1, s1 = _beyn_band(fa, fmid, xg, depth + 1)
+                l2, v2, s2 = _beyn_band(fmid, fbb, xg, depth + 1)
+                ll = [x for x in (l1, l2) if x.size]
+                vv = [x for x in (v1, v2) if x.size]
+                lam_c = np.concatenate(ll) if ll else np.zeros(0, complex)
+                V_c = (np.concatenate(vv, axis=1) if vv
+                       else np.zeros((Mp.shape[0], 0), complex))
+                return lam_c, V_c, s1 + s2
+            return lam_b, V_b, (1 if info.get("saturated") else 0)
+
         lam_pool_b, X_pool_b = [], []
         for cl in clusters:
             idx = np.array(cl, int)
             fa, fbb = float(fu[idx].min()), float(fu[idx].max())
-            fcl = 0.5 * (fa + fbb)
-            wc = 2.0 * np.pi * fcl
-            nmc = len(idx)
             # ξ_est medio del cluster: alto = casi-crítico (fₙ cae mucho) → margen de
-            # Im grande; bajo = modesto (fₙ casi no se mueve) → Im angosto (menos modos
-            # encerrados, SVD más limpio).
+            # Im grande; bajo = modesto (fₙ casi no se mueve) → Im angosto.
             xg = float(np.clip(np.mean(xi_est[bm_all[idx]]), 0.0, 1.0))
-            margin_hz = (0.10 + 0.35 * xg) * fcl + 8.0
-            b_im = 2.0 * np.pi * (0.5 * (fbb - fa) + margin_hz)
-            a_re = 1.15 * wc                               # alcanza ξ≲1 en Re
-            z0 = -0.1 * wc + 1j * wc                       # corrido para evitar el DC
-            ellp = int(min(Mp.shape[0] - 2, max(2 * nmc + 12, 18)))
-            lam_b, V_b, _e = beyn_qep(Mp, Cp, Kp, z0, a_re, n_quad=n_quad,
-                                      ell=ellp, tol_res=beyn_tol, b=b_im)
+            lam_b, V_b, s_sat = _beyn_band(fa, fbb, xg)
+            n_sat += int(s_sat)
             if lam_b.size:
                 lam_pool_b.append(lam_b); X_pool_b.append(V_b)
         if lam_pool_b:
@@ -640,5 +729,5 @@ def sparse_boundary_xi_shift(K, M, Csurf, freqs_ref, phis_ref, beta, c=343.0,
     if return_info:
         return xi, f_new, {"cov_pal": cov_pal, "cov_total": cov_total,
                            "n_shifts": ns, "n_overdamped": n_over,
-                           "n_beyn": n_beyn}
+                           "n_beyn": n_beyn, "n_saturated": n_sat}
     return xi, f_new

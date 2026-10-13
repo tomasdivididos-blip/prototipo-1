@@ -6827,31 +6827,39 @@ class AcousticPanel(QWidget):
              nodal, exacta en el subespacio modal sub-Schroeder. Capta el acople
              inter-modal y la estructura en f que la perturbación no ve.
           3. Perturbación de 1er orden (β=1 en la trasera): el piso conservador.
-        Devuelve (Δξ, nota) o (None, "")."""
+        Devuelve (Δξ, f_new, nota) o (None, None, ""). f_new = frecuencia natural
+        |w|/2π del modo con la pared matcheada (bug C1): el consumidor DEBE usarla
+        como modal_freqs, porque con amortiguamiento fuerte |w| se aparta de la
+        rígida (hasta ~35% medido) y el Lorentziano con la rígida decae mal."""
         mr = getattr(self, "modal_result", None)
         if mr is None:
-            return None, ""
+            return None, None, ""
         try:
             import face_materials as fm_mod
             import dba_evaluate as dev
+            import qep_sparse as qs_mod
             groups, verts, tris = self._get_face_groups()
             if not groups:
-                return None, ""
+                return None, None, ""
             verts = np.asarray(verts, dtype=float)
             vmin = verts.min(axis=0); vmax = verts.max(axis=0)
             dims = tuple(float(x) for x in (vmax - vmin))
             active = [s for s in sources if getattr(s, "active", True)]
             if not active:
-                return None, ""
+                return None, None, ""
             axis = dev.best_axis(active, dims, tuple(vmin), c=C0, criterion="cabs")
             # Pared trasera = grupos cuya normal apunta +eje (cara de coord. máxima).
             rear_mask = np.array([float(g.normal[axis]) > 0.9 for g in groups],
                                  dtype=float)
             if rear_mask.sum() == 0:
-                return None, ""
+                return None, None, ""
             mf = self._effective_modal_freqs()
             axis_name = ["X", "Y", "Z"][axis]
-            N_SPARSE_MAX = 6000      # tope del solver sparse A+B (on-demand ~20 s)
+            # M1 (12 Oct 2026): el sparse A+B tenia un bug de contorno a escala (el
+            # casi-critico fuertemente matcheado se perdia); ARREGLADO en `_beyn_band`
+            # (ensanche en Re) y validado sparse==nodal a 0.0000 a Nn=2660 vs el oraculo
+            # SLEPc (bench_qep_slepc_scale). Tope = qep_sparse.SPARSE_NN_MAX (6000).
+            N_SPARSE_MAX = qs_mod.SPARSE_NN_MAX
             # Proyección modal (baseline/fallback barato): Gram de superficie + β=1.
             # Es el QEP de frontera proyectado a los modos sub-Schroeder (exacto en
             # el subespacio; subestima solo los casi-críticos). Se usa como fallback
@@ -6881,6 +6889,7 @@ class AcousticPanel(QWidget):
                             Kv, Mv, C_rear, mf, mr.phis, beta=1.0, c=C0)
                         if nod is not None:
                             return (np.asarray(nod[0], dtype=float),
+                                    np.asarray(nod[1], dtype=float),
                                     f"eje {axis_name}, QEP nodal exacto")
                     elif C_rear is not None:
                         # (2) QEP SPARSE A+B (PAL + Beyn) para mallas medianas:
@@ -6897,10 +6906,11 @@ class AcousticPanel(QWidget):
                         if sp_res is not None:
                             dxi = np.asarray(sp_res[0], float)
                             if np.all(np.isfinite(dxi)):
-                                return (dxi, f"eje {axis_name}, QEP sparse A+B")
+                                return (dxi, np.asarray(sp_res[1], float),
+                                        f"eje {axis_name}, QEP sparse A+B")
             # (3) Proyección modal (mallas enormes Nn>N_SPARSE_MAX, o si falló lo exacto).
             if modal is not None:
-                return (modal[0], f"eje {axis_name}, QEP modal")
+                return (modal[0], modal[1], f"eje {axis_name}, QEP modal")
             # (4) Fallback: perturbación de 1er orden (β=1 en la pared trasera).
             V = aa.compute_mesh_volume(verts, tris)
             beta_provider = lambda gs, fn, m=rear_mask: m.astype(complex)
@@ -6908,11 +6918,12 @@ class AcousticPanel(QWidget):
                 mf, mr.phis, mr.locator, verts, tris, groups, {}, V,
                 beta_provider=beta_provider)
             if res is None:
-                return None, ""
+                return None, None, ""
             dxi, _f_new = res
-            return np.asarray(dxi, dtype=float), f"eje {axis_name}, 1er orden (fallback)"
+            return (np.asarray(dxi, dtype=float), np.asarray(_f_new, dtype=float),
+                    f"eje {axis_name}, 1er orden (fallback)")
         except Exception:
-            return None, ""
+            return None, None, ""
 
     def _open_decay_waterfall(self):
         """Punto 3 del profesor: compara el DECAIMIENTO del campo total en el receptor
@@ -7057,12 +7068,23 @@ class AcousticPanel(QWidget):
         # Δξ modal genuino (polos movidos). Muestra cuánto más rápido decaerían
         # los axiales si el array trasero presentara una impedancia adaptada.
         log("Calculando pared trasera matcheada (QEP de frontera exacto)…")
-        dxi_match, match_note = self._rear_matched_delta_xi(mains + subs)
+        dxi_match, fnew_match, match_note = self._rear_matched_delta_xi(mains + subs)
         if dxi_match is not None and np.max(dxi_match) > 1e-6:
-            dmp_match = np.asarray(damping, dtype=float) + np.asarray(dxi_match)
+            # Bug C1: el QEP mueve la frecuencia natural del modo matcheado a
+            # |w| (= fnew_match), que se aparta de la rígida con amortiguamiento
+            # fuerte. El Lorentziano se evalúa en |w| y, para preservar las TASAS
+            # de decaimiento (δ_total = δ_campo + δ_matched, Np/s), el ξ del campo
+            # se reescala por mf/|w| (el matcheado ya viene como δ_matched/|w|).
+            mf_arr = np.asarray(mf, dtype=float)
+            if fnew_match is not None:
+                mf_match = np.asarray(fnew_match, dtype=float)
+                ratio = mf_arr / np.maximum(mf_match, 1e-9)
+            else:
+                mf_match, ratio = mf_arr, 1.0
+            dmp_match = np.asarray(damping, dtype=float) * ratio + np.asarray(dxi_match)
             _, ir_d, _ = mdk.modal_impulse_response(
                 self.modal_result, mk(mains + subs), self.receiver,
-                f_hi=f_hi, dur=3.0, damping=dmp_match, modal_freqs=mf)
+                f_hi=f_hi, dur=3.0, damping=dmp_match, modal_freqs=mf_match)
             data["edc_d"] = (*mdk.energy_decay_db(ir_d, fs),
                              mdk.decay_time(ir_d, fs))
             data["csd_d"] = mdk.cumulative_spectral_decay(ir_d, fs, f_hi=f_hi)

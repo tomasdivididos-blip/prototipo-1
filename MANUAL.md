@@ -2954,6 +2954,16 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.65 (auditoría del solver de «pared trasera matcheada»: corrección del número y robustez en salas grandes)
+
+**Cambios v2.65** (12 de octubre 2026): una auditoría independiente del cálculo de la cuarta curva del panel «Decaimiento con subs» («pared trasera matcheada», v2.59-v2.62) encontró y corrigió un error en cómo se reportaba el amortiguamiento, más cuatro mejoras de robustez del solver de salas grandes. Nada cambia en cómo se usa el panel; cambia la exactitud de la curva verde punteada.
+
+- **Corrección del amortiguamiento mostrado (lo importante para el usuario).** El cálculo expresaba el amortiguamiento de cada modo respecto de su frecuencia *amortiguada* en vez de la *natural*; las dos coinciden cuando el amortiguamiento es chico, pero se separan mucho en los modos fuertemente amortiguados (los que la pared matcheada más afecta). En esos modos la curva de decaimiento salía mal (un modo con amortiguamiento alto pero subcrítico se trataba como «sobreamortiguado» y su cola decaía demasiado lento). Ahora el número es el amortiguamiento clásico correcto y la cuarta curva reproduce el decaimiento real de la sala con la pared adaptada, validado contra el cálculo exacto de referencia (coincidencia a cifras de máquina en todos los modos de prueba). El decaimiento tardío (RT60) casi no cambia; la diferencia está en los primeros instantes y en los modos más amortiguados.
+
+- **Robustez del solver de salas grandes.** El solver que hace exacta esa curva en salas medianas-grandes (v2.61-v2.62) se auditó a fondo y se endureció: ahora avisa y se recupera si su búsqueda de modos se satura, no infla por error el amortiguamiento de un modo vecino, decide mejor qué modos necesitan el cálculo fino, y —lo principal— vuelve a capturar los modos fuertemente amortiguados en salas grandes, que antes podía perder (su «firma» se corre en frecuencia y amortiguamiento, y la búsqueda no llegaba hasta ahí). Verificado contra un solver de autovalores independiente (biblioteca SLEPc) hasta el tamaño de malla de un aula real: el amortiguamiento coincide y el cálculo es además bastante más rápido. El solver se usa automáticamente en salas grandes (en las chicas ya se usaba el cálculo denso exacto).
+
+*Manual actualizado al 12 de Octubre de 2026 — v2.65.*
+
 ## Cambios v2.64 (editor de parches: nombres completos e iluminar la cara en 3D + piso/techo correctos en CAD importado)
 
 **Cambios v2.64** (8 de octubre 2026): mejoras del editor de «Parches de absorcion por cara» y una corrección de clasificación de caras.

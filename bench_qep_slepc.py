@@ -9,7 +9,9 @@ y transformación espectral shift-invert, así que un acuerdo SLEPc==propio vali
 
 QEP en s (Laplace, s=iω):  P(s) = s² M + s (c β) C_surf + c² K = 0,  todo REAL
 SIMÉTRICO (M SPD, c²K SPSD, cβC_surf SPSD de bajo rango). Coeficientes del PEP:
-A0 = c²K,  A1 = (cβ)C_surf,  A2 = M  (λ=s). Los s = −δ ± iω_d dan ξ = −Re(s)/|Im(s)|.
+A0 = c²K,  A1 = (cβ)C_surf,  A2 = M  (λ=s). Los s = −δ ± iω_d dan ξ CLASICO =
+δ/ωₙ = −Re(s)/|s| (|s|=ωₙ natural; NO −Re(s)/|Im(s)|=δ/ω_d, que divergen en el
+regimen casi-critico — bug C1, 12 Oct 2026).
 
   T1  SLEPc (shift-invert, target σ en la banda) == companion DENSO de scipy en los
       polos sub-Schroeder (<1e-7 rel): valida SLEPc contra la verdad exacta.
@@ -266,8 +268,10 @@ if lam_ml.size:
         num = np.abs(phis[:, nmo].conj() @ MV)
         kb = int(np.argmax(num / np.maximum(den, 1e-30)))
         s = lam_ml[kb]
-        xi_slepc[nmo] = -s.real / max(abs(s.imag), 1e-9)
-        f_slepc[nmo] = abs(s.imag) / (2 * np.pi)
+        # ξ CLASICO = δ/ωₙ = -Re(s)/|s| (|s|=ωₙ natural), NO -Re(s)/|Im(s)|=δ/ω_d
+        # (bug C1, 12 Oct 2026): coincide con qep_boundary_nodal ya corregido.
+        xi_slepc[nmo] = -s.real / max(abs(s), 1e-9)
+        f_slepc[nmo] = abs(s) / (2 * np.pi)
 xi_nod_t4, f_nod_t4 = fm.qep_boundary_nodal(K, M, C_rear, freqs, phis, beta=1.0, c=C0)
 cov = np.isfinite(xi_slepc) & np.isfinite(xi_nod_t4)
 dxi = np.abs(xi_slepc[cov] - xi_nod_t4[cov])

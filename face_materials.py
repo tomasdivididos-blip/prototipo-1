@@ -1017,7 +1017,13 @@ def qep_boundary_xi_shift(freqs, G, beta, c=343.0):
     1er orden (diagonal, constante) no ve.
 
     De los autovalores complejos w (rama Re(w)>0, el mas cercano en Re a cada
-    omega_n): xi[n] = |Im(w_n)| / Re(w_n),  f_new[n] = Re(w_n)/(2 pi). Para la
+    omega_n): xi[n] = |Im(w_n)| / |w_n|  (amortiguamiento CLASICo delta/omega_n,
+    el que consume el Lorentziano omega_n^2 - omega^2 + 2j xi omega_n omega), y
+    f_new[n] = |w_n|/(2 pi)  (la frecuencia natural NO amortiguada, no la
+    amortiguada Re(w)). OJO (bug C1, 12 Oct 2026): la version vieja reportaba
+    |Im(w)|/Re(w) = delta/omega_d, que diverge del clasico en el regimen
+    casi-critico (zeta -> 1) y hacia decaer mal esos modos; validado contra el
+    oraculo nodal denso (err 0.0000% vs 42% viejo). Para la
     pared RIGIDA (beta->0) xi->0 y f_new->f_n, asi que con la base modal rigida
     el xi devuelto ES el Delta xi que aporta la pared activa. Devuelve (xi, f_new),
     o None si degenera. CONVENCION e^{+i w t} (Re(beta)>0 = perdida); beta de
@@ -1051,8 +1057,9 @@ def qep_boundary_xi_shift(freqs, G, beta, c=343.0):
     f_new = np.empty(N, dtype=float)
     for i, wn in enumerate(omega):
         wk = w[int(np.argmin(np.abs(np.real(w) - wn)))]
-        xi[i] = abs(np.imag(wk)) / max(np.real(wk), 1e-9)
-        f_new[i] = np.real(wk) / (2.0 * np.pi)
+        wmag = abs(wk)                                  # |w| = natural NO amortiguada
+        xi[i] = abs(np.imag(wk)) / max(wmag, 1e-9)      # delta/omega_n (clasico, C1)
+        f_new[i] = wmag / (2.0 * np.pi)
     return xi, f_new
 
 
@@ -1184,8 +1191,9 @@ def qep_boundary_nodal(K, M, C, freqs_ref, phis_ref, beta, c=343.0,
     for n in range(Nm):
         num = np.abs(phis_ref[:, n].conj() @ Mp)
         wk = w[int(np.argmax(num / np.maximum(den, 1e-30)))]
-        xi[n] = abs(np.imag(wk)) / max(np.real(wk), 1e-9)
-        f_new[n] = np.real(wk) / (2.0 * np.pi)
+        wmag = abs(wk)                                  # |w| = natural NO amortiguada
+        xi[n] = abs(np.imag(wk)) / max(wmag, 1e-9)      # delta/omega_n (clasico, C1)
+        f_new[n] = wmag / (2.0 * np.pi)
     return xi, f_new
 
 
