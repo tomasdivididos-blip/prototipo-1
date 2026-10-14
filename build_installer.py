@@ -153,8 +153,26 @@ def main():
     print("\n[4/4] Creando instalador NSIS...")
     
     installer_script = PROJECT_DIR / "installer.nsi"
-    if installer_script.exists():
-        nsis_cmd = f'makensis "{installer_script}"'
+    # makensis no suele estar en el PATH. Buscarlo: PATH -> env conda `nsis_tool`
+    # (install sin admin: `conda create -n nsis_tool nsis`) -> Program Files.
+    def _find_makensis():
+        import shutil
+        p = shutil.which("makensis")
+        if p:
+            return p
+        cands = [
+            Path(sys.prefix).parent / "nsis_tool" / "NSIS" / "makensis.exe",
+            Path(sys.prefix) / "NSIS" / "makensis.exe",
+            Path(r"C:\Program Files (x86)\NSIS\makensis.exe"),
+            Path(r"C:\Program Files\NSIS\makensis.exe"),
+        ]
+        for c in cands:
+            if c.is_file():
+                return str(c)
+        return None
+    makensis = _find_makensis()
+    if installer_script.exists() and makensis:
+        nsis_cmd = f'"{makensis}" "{installer_script}"'
         if run_command(nsis_cmd, "Generación del instalador NSIS"):
             print("\n" + "="*60)
             print("✓ ¡Instalador generado exitosamente!")
@@ -164,7 +182,12 @@ def main():
             print("\n⚠️  PyInstaller funcionó pero NSIS no está disponible.")
             print(f"   El ejecutable está en: {DIST_DIR / 'Prototipo 1.exe'}")
     else:
-        print("\n⚠️  archivo installer.nsi no encontrado.")
+        if not installer_script.exists():
+            print("\n⚠️  archivo installer.nsi no encontrado.")
+        else:
+            print("\n⚠️  makensis (NSIS) no encontrado. Instalalo sin admin con:")
+            print("       conda create -n nsis_tool nsis")
+            print("   (o desde https://nsis.sourceforge.io/). El instalador es OPCIONAL.")
         print(f"   El ejecutable está en: {DIST_DIR / 'Prototipo 1.exe'}")
     
     print("\n" + "="*60)

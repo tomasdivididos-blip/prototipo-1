@@ -1,13 +1,12 @@
 ; NSIS Installer Script para Prototipo 1
 ; Instalar NSIS desde: https://nsis.sourceforge.io/
 ;
-; Pre-requisitos: correr build.bat primero para generar dist\Prototipo1\
-; Despues correr build_installer.bat (o makensis installer.nsi).
+; Pre-requisitos: correr `python build_installer.py` primero (PyInstaller ONEFILE)
+; para generar `dist\Prototipo 1.exe`. Despues `makensis installer.nsi`.
 ;
-; Arreglado v2.12: usa File /r para bundlear el dist/ entero (PyInstaller
-; --onedir produce muchos archivos, no solo el .exe). El installer.nsi
-; viejo apuntaba a "dist\Prototipo 1.exe" (con espacio) y "recinto.room"
-; que nunca existieron en este build.
+; v2.66: adaptado al build ONEFILE (un solo ejecutable "Prototipo 1.exe", con
+; espacio). Antes (v2.12) esperaba el layout --onedir `dist\Prototipo1\` con exe
+; "Prototipo1.exe" sin espacio, que el build onefile actual no produce.
 
 !include "MUI2.nsh"
 !include "x64.nsh"
@@ -37,22 +36,22 @@ RequestExecutionLevel admin
 Section "Instalar Prototipo 1"
   SetOutPath "$INSTDIR"
 
-  ; Bundle recursivo del dist/Prototipo1/ entero:
-  ;   Prototipo1.exe + _internal\* (DLLs, Python embebido, materiales)
-  ;   + MANUAL.pdf + ejemplo.room + LEEME.txt (copiados por build.bat)
-  File /r "dist\Prototipo1\*"
+  ; Build ONEFILE: un solo ejecutable (con espacio) + manual + sala de ejemplo.
+  File "dist\Prototipo 1.exe"
+  File "MANUAL.md"
+  File "ejemplo.room"
 
   ; Shortcuts en menu Inicio
   CreateDirectory "$SMPROGRAMS\Prototipo1"
   CreateShortCut "$SMPROGRAMS\Prototipo1\Prototipo 1.lnk" \
-                  "$INSTDIR\Prototipo1.exe"
+                  "$INSTDIR\Prototipo 1.exe"
   CreateShortCut "$SMPROGRAMS\Prototipo1\Manual.lnk" \
-                  "$INSTDIR\MANUAL.pdf"
+                  "$INSTDIR\MANUAL.md"
   CreateShortCut "$SMPROGRAMS\Prototipo1\Desinstalar.lnk" \
                   "$INSTDIR\uninstall.exe"
 
   ; Shortcut en escritorio
-  CreateShortCut "$DESKTOP\Prototipo 1.lnk" "$INSTDIR\Prototipo1.exe"
+  CreateShortCut "$DESKTOP\Prototipo 1.lnk" "$INSTDIR\Prototipo 1.exe"
 
   ; Registry: para que aparezca en "Programas y caracteristicas"
   WriteRegStr HKLM "Software\Prototipo1" "InstallDir" "$INSTDIR"
@@ -61,7 +60,7 @@ Section "Instalar Prototipo 1"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Prototipo1" \
                     "UninstallString" "$INSTDIR\uninstall.exe"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Prototipo1" \
-                    "DisplayVersion" "2.12"
+                    "DisplayVersion" "2.66"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Prototipo1" \
                     "Publisher" "Prototipo 1"
 
