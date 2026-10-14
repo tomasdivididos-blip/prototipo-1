@@ -100,7 +100,7 @@ class DBADialog(QDialog):
     """
 
     def __init__(self, dims, receiver, parent=None, apply_callback=None,
-                 eval_context=None):
+                 eval_context=None, preset_criterion=None):
         super().__init__(parent)
         apply_dialog_theme(self)
         self.setWindowTitle("Optimización de fuentes")
@@ -375,6 +375,18 @@ class DBADialog(QDialog):
         self.resize(600, min(720, int(avail * 0.9)))
         self._refresh_count()
         self._refresh_xi_hint()
+        # Preseleccion de norte (p.ej. abierto desde «Aplicar a los subs traseros»
+        # del panel de decaimiento -> criterio front_rear, modo «Optimizar mis
+        # fuentes»). Se hace ANTES de _on_mode_changed() para que la visibilidad
+        # (eje de enfrentamiento, etc.) quede coherente con el criterio elegido.
+        if preset_criterion is not None and self.combo_mode is not None:
+            im = self.combo_mode.findData("eval")
+            if im >= 0:
+                self.combo_mode.setCurrentIndex(im)
+            if self.combo_criterion is not None:
+                ic = self.combo_criterion.findData(preset_criterion)
+                if ic >= 0:
+                    self.combo_criterion.setCurrentIndex(ic)
         # Estado inicial de visibilidad segun el modo default ("Optimizar mis
         # fuentes" si hay eval_ctx; "Diseñar un array" si el diálogo es solo diseño).
         self._on_mode_changed()

@@ -1806,6 +1806,25 @@ class MainWindow(QMainWindow):
                 ap._refresh_materials_summary()
             if hasattr(ap, "_refresh_constructions_summary"):
                 ap._refresh_constructions_summary()
+            # Aviso de impedancias cargadas: cuántas se restauraron y cuántas MATCHEAN
+            # la geometría actual (la firma es por centroide). Si alguna no matchea
+            # (p.ej. la malla cambió de frame) se avisa, porque esa impedancia no se
+            # aplicaría a ninguna cara. El efecto se aplica al calcular FEM/FRF (que
+            # recomputan ξ desde el `_construction_map`).
+            try:
+                _nc = len(ap._construction_map)
+                if _nc and hasattr(ap, "_log"):
+                    _cur = {g.signature for g in ap._get_face_groups()[0]}
+                    _m = sum(1 for k in ap._construction_map if k in _cur)
+                    if _m < _nc:
+                        ap._log(f"Impedancias: {_nc} cargadas pero solo {_m} matchean "
+                                f"la geometría (las demás no se aplicarán; revisá si la "
+                                f"malla cambió). Calculá FEM/FRF para aplicarlas.")
+                    else:
+                        ap._log(f"Impedancias cargadas: {_nc} superficie(s). Calculá "
+                                f"FEM/FRF para que se apliquen.")
+            except Exception:
+                pass
         except Exception:
             ap._construction_map = {}
 

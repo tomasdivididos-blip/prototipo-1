@@ -2954,6 +2954,16 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.66 (realizar la «pared trasera matcheada» con los subs + la FRF se actualiza con la config actual)
+
+**Cambios v2.66** (13 de octubre 2026): dos mejoras de flujo de trabajo alrededor del 4º estado del panel de decaimiento y de la respuesta en frecuencia.
+
+- **«Aplicar a los subs traseros…» (realizar la pared trasera matcheada).** El 4º estado del panel «Decaimiento con subs» muestra el TECHO ideal (si la pared opuesta a los subs fuera un absorbedor matcheado). Ahora, debajo de ese gráfico, hay un botón **«Aplicar a los subs traseros…»** (aparece solo cuando ese 4º estado está presente) que abre «Optimización de fuentes» ya elegido el norte **«Front↔rear»** y con el delay/nivel/polaridad de los subs traseros marcados como libres. Apretás «Optimizar» y «Aplicar» y el array trasero queda configurado para generar el frente de onda viajero (reflexión de la pared trasera → 0) que acerca el decaimiento real al techo ideal. No mueve las posiciones, solo el manejo (drive).
+
+- **La FRF se actualiza con la configuración actual al calcularla.** Antes, si cambiabas las impedancias o corrías una optimización después de haber calculado los modos, «Calcular FRF» podía mostrar la curva vieja hasta que recalcularas los modos a mano. Ahora, al presionar «Calcular FRF», la respuesta se recalcula sobre la configuración vigente (impedancias/materiales y fuentes actuales) reusando los modos ya calculados (no hace falta recomputar el FEM, que no depende ni de las fuentes ni del amortiguamiento). Las impedancias asignadas se guardan y se restauran con el `.room` (en salas paramétricas y CAD); al abrir un `.room` el panel avisa cuántas superficies con impedancia cargó, y su efecto se aplica al calcular FEM/FRF.
+
+*Manual actualizado al 13 de Octubre de 2026 — v2.66.*
+
 ## Cambios v2.65 (auditoría del solver de «pared trasera matcheada»: corrección del número y robustez en salas grandes)
 
 **Cambios v2.65** (12 de octubre 2026): una auditoría independiente del cálculo de la cuarta curva del panel «Decaimiento con subs» («pared trasera matcheada», v2.59-v2.62) encontró y corrigió un error en cómo se reportaba el amortiguamiento, más cuatro mejoras de robustez del solver de salas grandes. Nada cambia en cómo se usa el panel; cambia la exactitud de la curva verde punteada.

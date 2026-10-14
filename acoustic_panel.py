@@ -1577,6 +1577,27 @@ class DecayWaterfallDialog(QDialog):
             brow.addWidget(b)
         v.addLayout(brow)
 
+        # --- Punto 1: aplicar la config que REALIZA la pared trasera matcheada ---
+        # El 4º estado es el TECHO ideal (β=Y₀). Este botón abre el optimizador en el
+        # norte «Front↔rear» con el DRIVE de los subs traseros marcado libre, para
+        # configurarlos y ACERCARSE a ese techo (frente de onda viajero, R→0).
+        if has_d:
+            arow = QHBoxLayout()
+            lbl_ap = QLabel("Realizar con los subs:")
+            lbl_ap.setStyleSheet("color:#555; font-size:8pt;")
+            arow.addWidget(lbl_ap)
+            arow.addStretch(1)
+            btn_apply_rear = QPushButton("Aplicar a los subs traseros…")
+            btn_apply_rear.setObjectName("PrimaryButton")
+            btn_apply_rear.setToolTip(
+                "Abre «Optimización de fuentes» con el norte «Front↔rear» y marca "
+                "libres el delay/nivel/polaridad de los subs traseros, para "
+                "configurarlos y generar el frente de onda viajero (R→0) que este "
+                "4º estado muestra como techo ideal.")
+            btn_apply_rear.clicked.connect(self._on_apply_rear)
+            arow.addWidget(btn_apply_rear)
+            v.addLayout(arow)
+
         note = QLabel(
             "Decaimiento del campo TOTAL en el receptor. «con subs (drive)»: el array "
             "redistribuye la energía modal por su delay/polaridad (NO cambia el ξ de "
@@ -1598,6 +1619,15 @@ class DecayWaterfallDialog(QDialog):
         note.setWordWrap(True)
         note.setStyleSheet("color:#11111b; font-size:9pt;")
         v.addWidget(note)
+
+    def _on_apply_rear(self):
+        """Punto 1: cierra el panel de decaimiento y abre el optimizador de fuentes
+        en el norte «Front↔rear» para configurar los subs traseros (realizar la pared
+        matcheada). La lógica (marcar libre el drive + preset) está en el panel."""
+        panel = self.parent()
+        self.accept()
+        if panel is not None and hasattr(panel, "_apply_rear_matched_to_subs"):
+            panel._apply_rear_matched_to_subs()
 
     def _export(self, fmt: str):
         """Exporta la figura completa (PNG/SVG/PDF, incluye EDC + waterfalls) o las
@@ -7183,10 +7213,57 @@ class AcousticPanel(QWidget):
                 f"Estas fuentes quedaban fuera del volumen simulado y se movieron al "
                 f"punto interior más cercano para que acoplen a los modos: {_n}.")
 
-    def _open_dba(self):
+    def _apply_rear_matched_to_subs(self):
+        """Punto 1 (12 Oct 2026): CONFIGURAR los subs traseros para REALIZAR la pared
+        trasera matcheada (el techo ideal β=Y₀ que muestra el 4º estado del panel de
+        decaimiento). Marca libres las variables de DRIVE (delay/nivel/polaridad) de
+        los subs traseros y abre «Optimización de fuentes» con el norte «Front↔rear»
+        (minimiza la reflexión R̄ de la pared trasera = frente de onda viajero, R→0).
+        Reusa toda la maquinaria de cabs_optimize + _apply_cabs_optimization; el usuario
+        aprieta «Optimizar» + «Aplicar» en el diálogo. No mueve las posiciones."""
+        import dba_evaluate as dev
+        act = self._active_sources()
+        subs = [s for s in act if str(getattr(s, "source_type", "")) == "subwoofer"]
+        if not subs:
+            QMessageBox.information(
+                self, "Sin subs traseros",
+                "La pared trasera matcheada se REALIZA manejando los subs traseros. "
+                "Agregá o activá al menos un subwoofer y reintentá.")
+            return
+        try:
+            verts, _t = self.get_surface()
+            v = np.asarray(verts, dtype=float)
+            vmin = v.min(axis=0)
+            dims = tuple((v.max(axis=0) - vmin).tolist())
+        except Exception as e:
+            QMessageBox.critical(self, "Sin geometría", str(e))
+            return
+        axis = dev.best_axis(act, dims, tuple(vmin), c=C0, criterion="cabs")
+        axis_name = ["X", "Y", "Z"][axis]
+        # «traseros» = en la mitad de coordenada ALTA del eje (lado de la pared
+        # matcheada, coord. máxima). Si ninguno cae claramente atrás, se usan todos.
+        mid = float(vmin[axis]) + 0.5 * float(dims[axis])
+        rear = [s for s in subs if float(np.asarray(s.position)[axis]) >= mid]
+        target = rear if rear else subs
+        for s in target:
+            fv = set(getattr(s, "free_vars", None) or ())
+            fv.update({"delay", "level", "polarity"})
+            s.free_vars = frozenset(fv)
+        self._refresh_sources_list()
+        self._log(
+            f"Front↔rear: {len(target)} sub(s) trasero(s) sobre el eje {axis_name} con "
+            f"drive (delay/nivel/polaridad) marcado libre. Abriendo «Optimización de "
+            f"fuentes» en el norte Front↔rear; apretá «Optimizar» y luego «Aplicar».")
+        self._open_dba(preset_criterion="front_rear")
+
+    def _open_dba(self, preset_criterion=None):
         """Abre la herramienta de subs enfrentados (DBA/CABS) sobre la caja
         rectangular (AABB) de la sala. El receptor se pasa relativo a la esquina
-        mínima (la base modal analítica asume el recinto en [0,L])."""
+        mínima (la base modal analítica asume el recinto en [0,L]).
+
+        `preset_criterion`: si se pasa (p.ej. "front_rear" desde «Aplicar a los subs
+        traseros» del panel de decaimiento), el diálogo abre con ese norte y en modo
+        «Optimizar mis fuentes»."""
         try:
             verts, _tris = self.get_surface()
         except Exception as e:
@@ -7299,7 +7376,8 @@ class AcousticPanel(QWidget):
         }
         DBADialog(dims, rec, self,
                   apply_callback=lambda specs: self._apply_dba_to_room(specs, vmin),
-                  eval_context=eval_context
+                  eval_context=eval_context,
+                  preset_criterion=preset_criterion,
                   ).exec_()
 
     def _apply_dba_to_room(self, specs, vmin):
@@ -7564,6 +7642,15 @@ class AcousticPanel(QWidget):
                         f"(descartados)."
                     )
                 self._refresh_modes_combo()
+                self._xi_per_mode = self._compute_xi_from_materials()
+                damping = self._xi_per_mode if self._xi_per_mode is not None else 0.03
+            else:
+                # Corrección (punto 1): con los modos YA calculados, refrescar el
+                # amortiguamiento desde los materiales/impedancias ACTUALES para que
+                # presionar «Calcular FRF» SIEMPRE calcule sobre la config vigente
+                # (tras optimizar o cambiar impedancias, sin recomputar FEM a mano).
+                # Las fuentes (`act`) ya son las actuales. El modal_result (modos) no
+                # depende ni de fuentes ni del amortiguamiento → no hace falta re-FEM.
                 self._xi_per_mode = self._compute_xi_from_materials()
                 damping = self._xi_per_mode if self._xi_per_mode is not None else 0.03
             self._log("Calculando FRF (FEM)...")
