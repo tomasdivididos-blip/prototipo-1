@@ -1073,7 +1073,19 @@ class DBADialog(QDialog):
         self._ax.plot(fa, ideal, "--", color="#888", lw=1.0,
                       label="CABS ideal (referencia)")
         self._ax.plot(fa, real, "-", color="#1f77b4", lw=1.5,
-                      label="tus fuentes (total)")
+                      label="tus fuentes (promedio de zona)")
+        # Respuesta en UN asiento (receptor): mismo motor modal+SBIR+crossfade pero
+        # en 1 punto. Hace reaparecer el null de interferencia que el promedio de
+        # ENERGIA de la zona (la curva azul) no puede mostrar: asi se ve que SBIR+FRF
+        # (un asiento) y la optimizacion (promedio de la zona) son el MISMO calculo a
+        # distinta escala espacial, no respuestas contradictorias (respuesta al
+        # profesor, 16 Oct 2026).
+        rx = r.get("total_db_receiver_real")
+        if rx is not None:
+            rx = np.asarray(rx, dtype=float)
+            rx = rx - np.mean(rx)
+            self._ax.plot(fa, rx, "-", color="#d62728", lw=1.1, alpha=0.9,
+                          label="tu asiento (1 punto · el null vive acá)")
         if r["band_hi"] < fa[-1] and np.isfinite(r["f_max"]):
             self._ax.axvspan(r["band_hi"], fa[-1], color="#f2c14e", alpha=0.15,
                              label=f"aliasing espacial (> f_max = {r['f_max']:.0f} Hz)")
@@ -1243,6 +1255,10 @@ class DBADialog(QDialog):
             r = self._last_eval
             csv_header = ["freq_hz", "total_real_db", "cabs_ideal_db"]
             csv_cols = ("freq", "total_db_mean_real", "total_db_mean_ideal")
+            # La respuesta del asiento unico se agrega como columna si existe.
+            if r.get("total_db_receiver_real") is not None:
+                csv_header = csv_header + ["asiento_receptor_db"]
+                csv_cols = csv_cols + ("total_db_receiver_real",)
         else:
             r, csv_header, csv_cols = None, None, None
         if fmt == "csv" and r is None:

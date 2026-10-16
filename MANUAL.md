@@ -2954,6 +2954,14 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.67 (la vista de optimización muestra también la respuesta en un asiento)
+
+**Cambios v2.67** (16 de octubre 2026): una curva nueva en el gráfico de «Optimización de fuentes» para aclarar por qué el resultado de la optimización puede verse más plano que el SBIR+FRF.
+
+- **Curva «tu asiento (1 punto)» en la evaluación de fuentes.** El gráfico «Respuesta total media (zona de escucha)» mostraba la respuesta como un **promedio de energía sobre toda la zona de escucha** (varios asientos). Ese promedio no puede mostrar un null de interferencia que ocurre en un solo punto: la energía de los asientos vecinos, sin null ahí, rellena el pozo. Por eso la curva de optimización salía más plana que la del SBIR+FRF, que es la respuesta en UN asiento (el receptor), y un mismo setup parecía dar dos respuestas distintas. Ahora, además del promedio de zona (curva azul, «tus fuentes (promedio de zona)»), el gráfico dibuja una curva roja, **«tu asiento (1 punto)»**, calculada con el MISMO motor (modal + imágenes, cruce en f_S) pero en el receptor único. Así el null reaparece sobre la curva plana y queda claro que SBIR+FRF y la optimización son el mismo cálculo a distinta escala espacial, no respuestas contradictorias: el promedio de zona es lo que el optimizador minimiza, y la respuesta del asiento es lo que oye el oyente en ese punto. La curva nueva también se incluye como columna `asiento_receptor_db` al exportar el CSV.
+
+*Manual actualizado al 16 de Octubre de 2026 — v2.67.*
+
 ## Cambios v2.66 (realizar la «pared trasera matcheada» con los subs + la FRF se actualiza con la config actual)
 
 **Cambios v2.66** (13 de octubre 2026): dos mejoras de flujo de trabajo alrededor del 4º estado del panel de decaimiento y de la respuesta en frecuencia.

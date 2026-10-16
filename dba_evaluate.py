@@ -588,7 +588,8 @@ def _sbir_span(sources_world, walls, receiver_world, fa,
 
 def _config_metrics(sources_world, dims, origin, walls, receiver_world, *,
                     axis, fa, xi, c, f_s, basis=None, with_decay=True,
-                    zone_box=None, want_sbir=False, want_reflection=False) -> dict:
+                    zone_box=None, want_sbir=False, want_reflection=False,
+                    want_receiver=False) -> dict:
     """Total (SBIR+modal) + metricas de una lista de fuentes (coords mundo).
 
     `basis` opcional (la base solo depende de dims, no de las fuentes -> se puede
@@ -623,6 +624,20 @@ def _config_metrics(sources_world, dims, origin, walls, receiver_world, *,
         if 0 < int(np.count_nonzero(inside)) < len(inside):
             total_db = total_db[inside]
     flat, spatial, L_bar = flatness_and_spatial(fa, total_db)
+    # Respuesta en el ASIENTO UNICO (receptor), con el MISMO motor modal+SBIR+
+    # crossfade pero en UN solo punto. En la vista de optimizacion deja ver el null
+    # que el promedio de ENERGIA de la zona (L_bar) no puede mostrar (un cero de
+    # presion puntual se rellena al promediar potencia sobre varios asientos). Gated:
+    # solo lo pide el eval final; el loop del optimizador no (want_receiver=False).
+    L_rx = None
+    if want_receiver:
+        modal_rx = _modal_frf_grid(basis, kappa, Q_spec,
+                                   np.atleast_2d(receiver_box), fa, xi=xi)
+        modal_db_rx = 20.0 * np.log10(np.abs(modal_rx) + 1e-30)
+        total_rx = _total_db_grid(
+            active, walls, [np.asarray(receiver_world, dtype=float)],
+            fa, modal_db_rx, f_s, c=c, rho0=RHO0)
+        L_rx = total_rx[0]
     decay = (_decay_of(basis, kappa, arr, receiver_box, fmax=fa[-1], xi=xi)
              if with_decay else float("nan"))
     sbir_span = (_sbir_span(active, walls, receiver_world, fa)
@@ -630,6 +645,7 @@ def _config_metrics(sources_world, dims, origin, walls, receiver_world, *,
     rear_refl = (rear_reflection(basis, kappa, Q_spec, dims, origin, axis, fa, xi=xi)
                  if want_reflection else float("nan"))
     return {"flat": flat, "spatial": spatial, "decay": decay, "L_bar": L_bar,
+            "L_rx": L_rx,
             "n_modes": basis.n_modes, "sbir_span": sbir_span,
             "rear_reflection": rear_refl,
             "freqs": np.asarray(basis.omega_n, dtype=float) / (2.0 * np.pi)}
@@ -710,7 +726,8 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
     # --- metricas de la config REAL ---
     real = _config_metrics(active, dims, origin, walls, receiver,
                            axis=axis, fa=fa, xi=xi_eff, c=c, f_s=f_s, basis=basis,
-                           with_decay=wd, want_sbir=ws, want_reflection=wr)
+                           with_decay=wd, want_sbir=ws, want_reflection=wr,
+                           want_receiver=True)
 
     # --- metricas del IDEAL (mismo pipeline; array LS materializado) ---
     n_front = len(fronts)
@@ -744,6 +761,9 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
         "checklist": checklist, "passed": bool(passed),
         "freq": fa, "total_db_mean_real": real["L_bar"],
         "total_db_mean_ideal": ideal["L_bar"],
+        # Respuesta en el ASIENTO unico (receptor): mismo motor que L_bar pero en
+        # 1 punto. Deja ver el null que el promedio de energia de la zona oculta.
+        "total_db_receiver_real": real.get("L_rx"),
         "f_schroeder": f_s, "criterion": criterion,
         # Sobre que VOLUMEN se midio: "fem" = campo modal del recinto REAL (los
         # modos FEM, cualquier geometria); "aabb" = base rectangular analitica de
