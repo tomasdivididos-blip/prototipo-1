@@ -2954,6 +2954,14 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.68 (selector de visibilidad en el visor 3D: fuentes, receptores, parches y planos)
+
+**Cambios v2.68** (18 de octubre 2026): el botón «▦» del visor 3D (que solo prendía los planos de referencia XZ/YZ) se reemplazó por un **botón «👁» con un menú de visibilidad**.
+
+- **Mostrar / ocultar por grupo.** Al lado de los presets de cámara (P/I/L), abajo a la izquierda del visor, el botón **«👁»** abre un menú con cuatro casillas: **Fuentes**, **Receptores**, **Parches de absorción** y **Planos de referencia XZ/YZ**. Tildás u ocultás cada grupo por separado. Las tres primeras vienen visibles; los planos, apagados (como antes). El ocultamiento es persistente: si ocultás las fuentes y después movés o seleccionás una, no reaparecen solas. Es útil para despejar la escena (por ejemplo, ocultar los parches para ver bien las fuentes, o esconder fuentes y receptor para mirar solo la geometría).
+
+*Manual actualizado al 18 de Octubre de 2026 — v2.68.*
+
 ## Cambios v2.67 (la vista de optimización muestra también la respuesta en un asiento)
 
 **Cambios v2.67** (16 de octubre 2026): una curva nueva en el gráfico de «Optimización de fuentes» para aclarar por qué el resultado de la optimización puede verse más plano que el SBIR+FRF.

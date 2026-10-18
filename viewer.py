@@ -16,9 +16,10 @@ os.environ.setdefault("PYQTGRAPH_QT_LIB", "PyQt5")
 from math import radians, sin, cos, degrees, asin, atan2
 import numpy as np
 import pyqtgraph.opengl as gl
-from PyQt5.QtCore import Qt, QRectF, pyqtSignal
+from PyQt5.QtCore import Qt, QRectF, QPoint, pyqtSignal
 from PyQt5.QtGui import QColor, QPainter, QFont, QPen, QVector4D, QMatrix4x4
-from PyQt5.QtWidgets import QFrame, QLabel, QHBoxLayout, QPushButton, QToolTip
+from PyQt5.QtWidgets import (QFrame, QLabel, QHBoxLayout, QPushButton, QToolTip,
+                             QMenu, QAction)
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +141,11 @@ class IsoViewer(gl.GLViewWidget):
     wallDragStarted = pyqtSignal(int)
     wallDragMoved = pyqtSignal(float)
     wallDragEnded = pyqtSignal()
+
+    # Selector de visibilidad (botón 👁): qué grupos mostrar/ocultar en el visor.
+    # 'sources'/'receivers' los maneja el panel (son suyos); 'patches'/'planes' los
+    # maneja el visor (son suyos). key ∈ {sources, receivers, patches, planes}.
+    visibilityChanged = pyqtSignal(str, bool)
 
     # Sensibilidad de los gestos de orientacion del bafle (ajustables).
     BAFFLE_ROTATE_DEG_PER_PX = 0.6    # azimut por px horizontal (Alt+Ctrl+Left)
@@ -320,24 +326,34 @@ class IsoViewer(gl.GLViewWidget):
             b.clicked.connect(lambda _c, k=key: self._on_cam_preset_clicked(k))
             _cp_lay.addWidget(b)
             self._cam_preset_btns[key] = b
-        # Toggle de los planos de referencia XZ/YZ (default DESACTIVADOS). Mismo
-        # estilo que P/I/L, checkable. Activa/desactiva las dos grillas verticales.
-        self._show_coord_planes = False
-        self._btn_planes = QPushButton("▦", self._cam_preset_row)
-        self._btn_planes.setCheckable(True)
-        self._btn_planes.setChecked(False)
-        self._btn_planes.setFixedSize(30, 30)
-        self._btn_planes.setCursor(Qt.PointingHandCursor)
-        self._btn_planes.setToolTip("Planos de referencia XZ / YZ: activar/desactivar "
-                                    "(para mover fuentes/muebles a los costados y en Z).")
-        self._btn_planes.setStyleSheet(
+        # Selector de visibilidad (botón 👁): abre un menú con checks para mostrar/
+        # ocultar Fuentes, Receptores, Parches y los Planos de referencia XZ/YZ.
+        # Reemplaza el viejo toggle «▦» (que solo prendía/apagaba los planos).
+        self._show_coord_planes = False       # estado de los planos (default OFF)
+        self._patches_visible = True          # estado de los parches (default ON)
+        self._btn_vis = QPushButton("👁", self._cam_preset_row)
+        self._btn_vis.setFixedSize(30, 30)
+        self._btn_vis.setCursor(Qt.PointingHandCursor)
+        self._btn_vis.setToolTip("Mostrar / ocultar: fuentes, receptores, parches de "
+                                 "absorción y los planos de referencia XZ/YZ.")
+        self._btn_vis.setStyleSheet(
             "QPushButton { background-color: #45475a; color: #cdd6f4;"
             " border: none; border-radius: 5px; font-weight: 800;"
             " font-size: 12pt; padding: 0px; }"
-            "QPushButton:hover { background-color: #585b70; }"
-            "QPushButton:checked { background-color: #89b4fa; color: #11111b; }")
-        self._btn_planes.clicked.connect(self._on_toggle_coord_planes)
-        _cp_lay.addWidget(self._btn_planes)
+            "QPushButton:hover { background-color: #585b70; }")
+        self._vis_menu = QMenu(self)
+        self._vis_actions = {}
+        for key, label, default in (("sources", "Fuentes", True),
+                                    ("receivers", "Receptores", True),
+                                    ("patches", "Parches de absorción", True),
+                                    ("planes", "Planos de referencia XZ/YZ", False)):
+            act = QAction(label, self._vis_menu, checkable=True)
+            act.setChecked(default)
+            act.toggled.connect(lambda checked, k=key: self._on_vis_toggled(k, checked))
+            self._vis_menu.addAction(act)
+            self._vis_actions[key] = act
+        self._btn_vis.clicked.connect(self._popup_vis_menu)
+        _cp_lay.addWidget(self._btn_vis)
         self._cam_preset_row.adjustSize()
         self._reposition_cam_presets()
 
@@ -868,10 +884,28 @@ class IsoViewer(gl.GLViewWidget):
         vg.setVisible(True)
         self.update()
 
-    def _on_toggle_coord_planes(self, _checked=None):
-        """Botón ▦: activa/desactiva los planos de referencia XZ/YZ (default OFF)."""
-        self._show_coord_planes = bool(self._btn_planes.isChecked())
-        self._update_vertical_grid()
+    def _popup_vis_menu(self):
+        """Botón 👁: abre el menú de visibilidad justo encima del botón (el botón
+        vive abajo a la izquierda del visor, así que el menú se despliega hacia
+        arriba; QMenu.popup igual lo re-encaja en pantalla)."""
+        btn = self._btn_vis
+        top_left = btn.mapToGlobal(btn.rect().topLeft())
+        h = self._vis_menu.sizeHint().height()
+        self._vis_menu.popup(top_left - QPoint(0, h))
+
+    def _on_vis_toggled(self, key: str, checked: bool):
+        """Un check del menú 👁 cambió. 'patches'/'planes' son del visor; 'sources'/
+        'receivers' los maneja el panel vía la señal visibilityChanged."""
+        if key == "planes":
+            self._show_coord_planes = bool(checked)
+            self._update_vertical_grid()
+        elif key == "patches":
+            self._patches_visible = bool(checked)
+            for it in self._patch_items:
+                it.setVisible(self._patches_visible)
+            self.update()
+        else:                                   # 'sources' / 'receivers' -> el panel
+            self.visibilityChanged.emit(key, bool(checked))
 
     def _pick_source(self, px, py, radius_px: int = 28) -> int:
         """Devuelve el indice de la fuente mas cercana (>=0), -2 para el receptor, -1 si no hay nada."""
@@ -1443,6 +1477,7 @@ class IsoViewer(gl.GLViewWidget):
                 meshdata=gl.MeshData(vertexes=np.asarray(verts, dtype=float),
                                      faces=np.asarray(faces, dtype=int)),
                 smooth=False, color=tuple(rgba), shader=None, glOptions="additive")
+            item.setVisible(self._patches_visible)
             self.addItem(item)
             self._patch_items.append(item)
             if edges is not None and len(edges) >= 2:
@@ -1451,6 +1486,7 @@ class IsoViewer(gl.GLViewWidget):
                     color=self.PATCH_EDGE_COLOR, width=self.PATCH_EDGE_WIDTH,
                     antialias=True, mode="lines")
                 eitem.setGLOptions("additive")
+                eitem.setVisible(self._patches_visible)
                 self.addItem(eitem)
                 self._patch_items.append(eitem)
         self.update()

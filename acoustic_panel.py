@@ -4151,6 +4151,17 @@ class AcousticPanel(QWidget):
             self.viewer.slicePlaneHovered.connect(self._on_slice_hovered)
         if hasattr(self.viewer, 'slicePlaneConfirmed'):
             self.viewer.slicePlaneConfirmed.connect(self._on_slice_confirmed)
+        # Selector de visibilidad 👁 del visor: fuentes/receptores los maneja el
+        # panel (sus markers); parches/planos los maneja el visor solo.
+        if hasattr(self.viewer, 'visibilityChanged'):
+            self.viewer.visibilityChanged.connect(self._on_visibility_changed)
+
+    def _on_visibility_changed(self, key: str, visible: bool):
+        """Muestra/oculta el grupo elegido en el selector 👁 del visor."""
+        if key == "sources" and hasattr(self, "src_markers"):
+            self.src_markers.set_visible(visible)
+        elif key == "receivers" and hasattr(self, "rcv_marker"):
+            self.rcv_marker.set_visible(visible)
 
     def _compute_default_receiver(self) -> tuple:
         """Centro del AABB del recinto actual (o fallback a dims_hint/2)."""

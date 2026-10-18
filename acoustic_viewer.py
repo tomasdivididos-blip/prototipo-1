@@ -221,6 +221,18 @@ class SourceMarkers:
         self.viewer = viewer
         self._item_normal = None
         self._item_sel = None
+        self._visible = True       # toggle del selector 👁 (persistente entre updates)
+
+    def set_visible(self, visible: bool):
+        """Muestra/oculta los bafles (selector de visibilidad 👁). Persistente: el
+        próximo update() lo respeta (no reaparecen solos al mover una fuente)."""
+        self._visible = bool(visible)
+        for it in (self._item_normal, self._item_sel):
+            if it is not None:
+                has = it.pos is not None and len(it.pos) > 0
+                it.setVisible(self._visible and has)
+        if self.viewer is not None:
+            self.viewer.update()
 
     def _ensure_items(self):
         if self._item_normal is None:
@@ -255,7 +267,7 @@ class SourceMarkers:
                            (self._item_sel, sel_segs)):
             if segs:
                 item.setData(pos=np.asarray(segs, dtype=np.float32))
-                item.setVisible(True)
+                item.setVisible(self._visible)
             else:
                 item.setVisible(False)
 
@@ -423,6 +435,16 @@ class ReceiverMarker:
     def __init__(self, viewer):
         self.viewer = viewer
         self.item = None
+        self._visible = True       # toggle del selector 👁 (persistente entre updates)
+
+    def set_visible(self, visible: bool):
+        """Muestra/oculta la cruz del receptor (selector de visibilidad 👁).
+        Persistente: el próximo update() lo respeta."""
+        self._visible = bool(visible)
+        if self.item is not None:
+            self.item.setVisible(self._visible)
+        if self.viewer is not None:
+            self.viewer.update()
 
     def update(self, pos, size: float = 0.55):
         """Actualiza la posicion del marker. Si `pos` es None, lo oculta."""
@@ -440,6 +462,7 @@ class ReceiverMarker:
         else:
             # Actualizar in-place; no toca el scene graph.
             self.item.setData(pos=lines)
+        self.item.setVisible(self._visible)
 
     @staticmethod
     def _lines_for(pos, size: float = 0.55) -> np.ndarray:
