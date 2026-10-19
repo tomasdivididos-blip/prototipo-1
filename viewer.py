@@ -345,6 +345,7 @@ class IsoViewer(gl.GLViewWidget):
         self._vis_actions = {}
         for key, label, default in (("sources", "Fuentes", True),
                                     ("receivers", "Receptores", True),
+                                    ("furniture", "Muebles", True),
                                     ("patches", "Parches de absorción", True),
                                     ("planes", "Planos de referencia XZ/YZ", False)):
             act = QAction(label, self._vis_menu, checkable=True)

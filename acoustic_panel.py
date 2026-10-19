@@ -4162,6 +4162,8 @@ class AcousticPanel(QWidget):
             self.src_markers.set_visible(visible)
         elif key == "receivers" and hasattr(self, "rcv_marker"):
             self.rcv_marker.set_visible(visible)
+        elif key == "furniture" and hasattr(self, "furn_markers"):
+            self.furn_markers.set_visible(visible)
 
     def _compute_default_receiver(self) -> tuple:
         """Centro del AABB del recinto actual (o fallback a dims_hint/2)."""

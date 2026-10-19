@@ -382,6 +382,17 @@ class FurnitureMarkers:
         self.viewer = viewer
         self._item_normal = None
         self._item_sel = None
+        self._visible = True       # toggle del selector 👁 (persistente entre updates)
+
+    def set_visible(self, visible: bool):
+        """Muestra/oculta los muebles (selector de visibilidad 👁). Persistente."""
+        self._visible = bool(visible)
+        for it in (self._item_normal, self._item_sel):
+            if it is not None:
+                has = it.pos is not None and len(it.pos) > 0
+                it.setVisible(self._visible and has)
+        if self.viewer is not None:
+            self.viewer.update()
 
     def _ensure_items(self):
         if self._item_normal is None:
@@ -405,7 +416,7 @@ class FurnitureMarkers:
                            (self._item_sel, sel_segs)):
             if segs:
                 item.setData(pos=np.asarray(segs, dtype=np.float32))
-                item.setVisible(True)
+                item.setVisible(self._visible)
             else:
                 item.setVisible(False)
 

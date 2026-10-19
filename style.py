@@ -550,6 +550,110 @@ for _k, _v in LIGHT.items():
     LIGHT_QSS = LIGHT_QSS.replace("__%s__" % _k, _v)
 
 
+# ---------------------------------------------------------------------------
+# Temas de app CONMUTABLES (3a): CUATRO, seleccionables por el usuario.
+#   mocha   = Catppuccin Mocha  (muy oscuro)  -> DARK_QSS     (color-QSS sobre Fusion)
+#   gruvbox = Gruvbox Dark      (oscuro cálido)-> GRUVBOX_QSS  (color-QSS sobre Fusion)
+#   github  = GitHub Light      (muy claro)   -> GITHUB_QSS   (color-QSS sobre Fusion)
+#   clasico = Windows clásico   (gris biselado)-> QStyle NATIVO "Windows" + QPalette
+# Los tres de color usan Fusion + stylesheet; "clasico" usa el motor nativo de Qt
+# (QStyle + QPalette, SIN QSS) para el relieve 3D clásico (ver apply_app_theme).
+# NOTA Win11: "windowsvista" seguiría el tema del SO (se vería Win11, no XP), por eso
+# el retro usa "Windows" (QWindowsStyle), que respeta el QPalette y da los biseles.
+# ALCANCE 3a: chrome de la GUI + fondo del visor. Los colores HARDCODEADOS de la
+# escena 3D (aristas, markers, botones flotantes) son 3b.
+
+# Gruvbox = remapeo de los colores de CHROME de Mocha sobre DARK_QSS. NO se tocan
+# los del popup claro embebido (#ffffff #000000 #1e66f5 #bcc0cc #dce0e8 #8839ef
+# #eff1f5): esos quedan Latte para que QMessageBox/QInputDialog sigan claros.
+_MOCHA_TO_GRUVBOX = {
+    "#1e1e2e": "#282828", "#181825": "#1d2021", "#313244": "#3c3836",
+    "#45475a": "#504945", "#585b70": "#665c54", "#cdd6f4": "#ebdbb2",
+    "#a6adc8": "#a89984", "#89b4fa": "#83a598", "#cba6f7": "#d3869b",
+    "#94e2d5": "#8ec07c", "#f5e0dc": "#fbf1c7", "#f5c2e7": "#d3869b",
+    "#11111b": "#1d2021",
+}
+GRUVBOX_QSS = DARK_QSS
+for _o, _n in _MOCHA_TO_GRUVBOX.items():
+    GRUVBOX_QSS = GRUVBOX_QSS.replace(_o, _n)
+
+# GitHub Light = mismo template claro que Latte, otra paleta.
+GITHUB = {
+    "bg": "#ffffff", "inset": "#f6f8fa", "text": "#1f2328", "subtext": "#656d76",
+    "border": "#d0d7de", "blue": "#0969da", "mauve": "#8250df", "teal": "#1b7c83",
+    "green": "#1a7f37", "amber": "#9a6700", "red": "#cf222e", "sel": "#ddf4ff",
+}
+GITHUB_QSS = _LIGHT_QSS.replace("__UI_FONT__", _UI_FONT)
+for _k, _v in GITHUB.items():
+    GITHUB_QSS = GITHUB_QSS.replace("__%s__" % _k, _v)
+
+
+THEME_ORDER = ["mocha", "gruvbox", "github", "clasico"]
+DEFAULT_THEME = "mocha"
+_THEMES = {
+    "mocha":   {"label": "Catppuccin Mocha (muy oscuro)",    "kind": "qss",
+                "qss": DARK_QSS,    "gl": "#11111b"},
+    "gruvbox": {"label": "Gruvbox Dark (oscuro cálido)",      "kind": "qss",
+                "qss": GRUVBOX_QSS, "gl": "#1d2021"},
+    "github":  {"label": "GitHub Light (muy claro)",          "kind": "qss",
+                "qss": GITHUB_QSS,  "gl": "#eef1f4"},
+    "clasico": {"label": "Windows clásico (gris, nativo)",    "kind": "native",
+                "style": "Windows", "gl": "#d6d3ce"},
+}
+
+
+def theme_label(key):
+    return _THEMES.get(key, _THEMES[DEFAULT_THEME])["label"]
+
+
+def _classic_palette():
+    """QPalette gris estilo Windows 2000 para el estilo nativo 'Windows' (el motor
+    respeta la paleta y dibuja los biseles). Lazy: no toca QtGui al importar."""
+    from PyQt5.QtGui import QPalette, QColor
+    g = QColor("#d4d0c8")      # gris Win2000 (ventana/botón)
+    p = QPalette()
+    p.setColor(QPalette.Window, g)
+    p.setColor(QPalette.WindowText, QColor("#000000"))
+    p.setColor(QPalette.Base, QColor("#ffffff"))
+    p.setColor(QPalette.AlternateBase, QColor("#e9e7e1"))
+    p.setColor(QPalette.ToolTipBase, QColor("#ffffe1"))
+    p.setColor(QPalette.ToolTipText, QColor("#000000"))
+    p.setColor(QPalette.Text, QColor("#000000"))
+    p.setColor(QPalette.Button, g)
+    p.setColor(QPalette.ButtonText, QColor("#000000"))
+    p.setColor(QPalette.BrightText, QColor("#ffffff"))
+    p.setColor(QPalette.Light, QColor("#ffffff"))
+    p.setColor(QPalette.Midlight, QColor("#e8e6e0"))
+    p.setColor(QPalette.Mid, QColor("#a0a0a0"))
+    p.setColor(QPalette.Dark, QColor("#808080"))
+    p.setColor(QPalette.Shadow, QColor("#000000"))
+    p.setColor(QPalette.Highlight, QColor("#316ac5"))
+    p.setColor(QPalette.HighlightedText, QColor("#ffffff"))
+    p.setColor(QPalette.Link, QColor("#0000ee"))
+    return p
+
+
+def apply_app_theme(app, key):
+    """Aplica el tema a TODA la app y devuelve el color de fondo del visor 3D.
+    Ramifica: 'qss' = Fusion + stylesheet de color; 'native' = QStyle Windows +
+    QPalette, SIN stylesheet (para el relieve clásico)."""
+    from PyQt5.QtWidgets import QStyleFactory
+    t = _THEMES.get(key, _THEMES[DEFAULT_THEME])
+    if t["kind"] == "native":
+        app.setStyleSheet("")                       # el QSS tapa los biseles nativos
+        st = QStyleFactory.create(t["style"])
+        if st is not None:
+            app.setStyle(st)
+        app.setPalette(_classic_palette())
+    else:
+        st = QStyleFactory.create("Fusion")
+        if st is not None:
+            app.setStyle(st)
+            app.setPalette(st.standardPalette())    # reset de cualquier paleta nativa
+        app.setStyleSheet(t["qss"])
+    return t["gl"]
+
+
 def apply_dialog_theme(widget):
     """Aplica el tema CLARO (fondo blanco / letra negra) a un diálogo.
 

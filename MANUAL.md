@@ -2954,6 +2954,16 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.69 (muebles en el selector de visibilidad + selector de 4 temas de la interfaz)
+
+**Cambios v2.69** (19 de octubre 2026): dos mejoras de interfaz.
+
+- **«Muebles» en el selector de visibilidad «👁».** El menú del botón «👁» del visor (v2.68) ahora tiene cinco casillas: Fuentes, Receptores, **Muebles**, Parches de absorción y Planos de referencia XZ/YZ. Podés ocultar los muebles para despejar la escena; el ocultamiento es persistente (no reaparecen al mover o seleccionar uno).
+
+- **Selector de tema de la interfaz (4 temas).** Arriba a la derecha de las pestañas hay un botón **«Tema»** con cuatro opciones que cambian el aspecto de toda la aplicación y se recuerdan entre sesiones: **Catppuccin Mocha** (muy oscuro, el de siempre), **Gruvbox Dark** (oscuro cálido), **GitHub Light** (muy claro) y **Windows clásico** (gris con botones en relieve, estilo nativo de Windows). Los tres primeros son temas de color; «Windows clásico» usa el motor de dibujo nativo de Qt (relieve 3D biselado). Nota: en los temas claros, los colores de la escena 3D (aristas del recinto, marcadores de fuente y receptor) todavía no se adaptan al fondo claro; ese ajuste viene en una actualización próxima.
+
+*Manual actualizado al 19 de Octubre de 2026 — v2.69.*
+
 ## Cambios v2.68 (selector de visibilidad en el visor 3D: fuentes, receptores, parches y planos)
 
 **Cambios v2.68** (18 de octubre 2026): el botón «▦» del visor 3D (que solo prendía los planos de referencia XZ/YZ) se reemplazó por un **botón «👁» con un menú de visibilidad**.

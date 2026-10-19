@@ -39,11 +39,12 @@ try:
 except Exception:
     pass
 
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QKeySequence
+from PyQt5.QtCore import Qt, QTimer, QSettings
+from PyQt5.QtGui import QKeySequence, QColor
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QLabel,
     QShortcut, QFileDialog, QMessageBox, QDialog, QTabWidget, QProgressDialog,
+    QPushButton, QMenu, QAction, QActionGroup,
 )
 import time as _time
 
@@ -51,7 +52,8 @@ from controls import ControlPanel
 from viewer import IsoViewer
 from geometry import make_room, room_metrics, make_arch_ribs, build_room_geometry
 from shape_dialog import ShapeDrawDialog
-from style import DARK_QSS, apply_dialog_theme
+from style import (apply_dialog_theme, apply_app_theme, theme_label,
+                   THEME_ORDER, DEFAULT_THEME)
 from acoustic_panel import AcousticPanel
 from prediction_panel import PredictionPanel
 
@@ -148,6 +150,28 @@ class MainWindow(QMainWindow):
         root.addWidget(right, 1)
         self.setCentralWidget(central)
 
+        # ----- Selector de tema (3a): 4 temas seleccionables -----
+        # Botón «Tema ▾» en la esquina superior derecha del tab bar, con un menú
+        # de 4 opciones (radio). El QSS/estilo de app ya se aplicó en main() con el
+        # tema guardado; acá armamos el menú y marcamos el actual + fondo del visor.
+        self._theme = QSettings("Prototipo1", "Prototipo1").value("theme", DEFAULT_THEME)
+        if self._theme not in THEME_ORDER:
+            self._theme = DEFAULT_THEME
+        self._theme_btn = QPushButton("Tema")
+        self._theme_btn.setCursor(Qt.PointingHandCursor)
+        self._theme_menu = QMenu(self)
+        self._theme_group = QActionGroup(self)
+        self._theme_group.setExclusive(True)
+        for key in THEME_ORDER:
+            act = QAction(theme_label(key), self._theme_menu, checkable=True)
+            act.setData(key)
+            self._theme_group.addAction(act)
+            self._theme_menu.addAction(act)
+            act.triggered.connect(lambda _c=False, k=key: self._apply_theme(k))
+        self._theme_btn.setMenu(self._theme_menu)
+        self.tabs.setCornerWidget(self._theme_btn, Qt.TopRightCorner)
+        self._apply_theme(self._theme, persist=False)   # marca el actual + fondo visor
+
         # ----- Estado Undo/Redo GLOBAL y archivo actual -----
         # Undo/redo por SNAPSHOT del estado completo (params + acustica +
         # materiales + CAD), no por accion individual: garantiza que TODO sea
@@ -209,6 +233,28 @@ class MainWindow(QMainWindow):
         self._snap_timer.setInterval(400)
         self._snap_timer.timeout.connect(lambda: self._maybe_snapshot(False))
         self._snap_timer.start()
+
+    # ---------- Tema de app (3a): 4 seleccionables ----------
+    def _apply_theme(self, key: str, persist: bool = True):
+        """Aplica uno de los 4 temas a TODA la app (QSS de color o estilo nativo)
+        + fondo del visor + marca la opción en el menú + (opcional) persiste. Los
+        colores hardcodeados de la escena 3D (aristas/markers) son 3b."""
+        if key not in THEME_ORDER:
+            key = DEFAULT_THEME
+        self._theme = key
+        app = QApplication.instance()
+        gl_bg = apply_app_theme(app, key) if app is not None else "#11111b"
+        try:
+            self.viewer.setBackgroundColor(QColor(gl_bg))
+            self.viewer.update()
+        except Exception:
+            pass
+        for act in self._theme_group.actions():
+            if act.data() == key and not act.isChecked():
+                act.setChecked(True)
+        self._theme_btn.setToolTip("Tema: " + theme_label(key))
+        if persist:
+            QSettings("Prototipo1", "Prototipo1").setValue("theme", key)
 
     # ---------- Render + metricas ----------
     def _only_origin_changed(self, params: dict) -> bool:
@@ -1883,8 +1929,14 @@ def main():
     QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
-    app.setStyleSheet(DARK_QSS)
     app.setApplicationName("Prototipo 1")
+    app.setOrganizationName("Prototipo1")
+    # Tema inicial = el que el usuario eligió la última vez (QSettings), default
+    # Mocha. Se aplica ACÁ (antes de crear la ventana) para no parpadear.
+    _theme0 = QSettings("Prototipo1", "Prototipo1").value("theme", DEFAULT_THEME)
+    if _theme0 not in THEME_ORDER:
+        _theme0 = DEFAULT_THEME
+    apply_app_theme(app, _theme0)
 
     # Watchdog de diagnostico (opcional): correr con PROTO1_WATCHDOG=1 para
     # que, si la GUI queda COLGADA >20 s, se impriman en la consola los stacks
