@@ -2954,6 +2954,12 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.71 (los colores de la escena 3D se adaptan al tema claro u oscuro)
+
+**Cambios v2.71** (20 de octubre 2026): completa el selector de temas (v2.69). Ahora los colores de los objetos del visor 3D, las **aristas del recinto**, la **grilla**, los **planos de referencia XZ/YZ** y los **marcadores** de fuente, receptor y mueble, se adaptan al tema elegido. En los temas claros (GitHub Light, Windows clásico) pasan a tonos oscuros (aristas ciruela, fuente magenta oscuro, receptor y muebles en verde/teal oscuro) para que se lean sobre el fondo claro, en vez de lavarse como antes. En los temas oscuros (Mocha, Gruvbox) se mantienen los colores de siempre. El cambio es inmediato al cambiar de tema y se recuerda entre sesiones. Nota: el contorno de los parches de absorción usa un modo de dibujo que suma luz sobre el fondo, así que en los temas muy claros queda tenue (se ve mejor el relleno del parche que su borde); los botones flotantes del visor y los anillos de rotación mantienen su color fijo.
+
+*Manual actualizado al 20 de Octubre de 2026 — v2.71.*
+
 ## Cambios v2.70 (las aristas de los bafles se dibujan por encima de los parches)
 
 **Cambios v2.70** (20 de octubre 2026): ajuste menor de dibujo en el visor 3D. Las aristas del bafle de cada fuente ahora se dibujan **por encima de los parches de absorción**, así un bafle ubicado sobre una pared con parches se distingue con claridad (antes el parche se superponía a las aristas). Nota técnica: se evaluó dibujar los bafles como prismas sólidos rellenos, pero el motor de dibujo 3D de esta versión no renderiza las caras opacas de esos marcadores, así que los bafles se mantienen como wireframe (contorno).

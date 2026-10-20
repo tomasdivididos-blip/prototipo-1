@@ -16,6 +16,7 @@ os.environ.setdefault("PYQTGRAPH_QT_LIB", "PyQt5")
 from math import radians, sin, cos, degrees, asin, atan2
 import numpy as np
 import pyqtgraph.opengl as gl
+import style                      # paleta de escena 3D por tema (3b): style.SCENE
 from PyQt5.QtCore import Qt, QRectF, QPoint, pyqtSignal
 from PyQt5.QtGui import QColor, QPainter, QFont, QPen, QVector4D, QMatrix4x4
 from PyQt5.QtWidgets import (QFrame, QLabel, QHBoxLayout, QPushButton, QToolTip,
@@ -165,7 +166,7 @@ class IsoViewer(gl.GLViewWidget):
         self._grid = gl.GLGridItem()
         self._grid.setSize(x=200, y=200, z=0)
         self._grid.setSpacing(x=2, y=2, z=0)
-        self._grid.setColor((137, 180, 250, 70))
+        self._grid.setColor(tuple(style.SCENE["grid"]))
         self.addItem(self._grid)
 
         # Grilla VERTICAL de altura (item 5, preset Lateral): parada en la pared
@@ -174,7 +175,7 @@ class IsoViewer(gl.GLViewWidget):
         # MUNDO (GLLinePlotItem) calculados en _update_vertical_grid: asi no depende
         # de transforms de GLGridItem ni de _grid_size. Oculta salvo en vista Lateral.
         self._vgrid = gl.GLLinePlotItem(mode="lines", antialias=True,
-                                        color=(0.54, 0.71, 0.98, 0.5), width=1.0)
+                                        color=style.SCENE["plane"], width=1.0)
         self._vgrid.setVisible(False)
         self.addItem(self._vgrid)
 
@@ -881,7 +882,7 @@ class IsoViewer(gl.GLViewWidget):
             return segs
 
         pts = np.asarray(_plane(1) + _plane(0), dtype=float)   # XZ + YZ
-        vg.setData(pos=pts, color=(0.54, 0.71, 0.98, 0.4), width=1.0, mode="lines")
+        vg.setData(pos=pts, color=style.SCENE["plane"], width=1.0, mode="lines")
         vg.setVisible(True)
         self.update()
 
@@ -1484,7 +1485,7 @@ class IsoViewer(gl.GLViewWidget):
             if edges is not None and len(edges) >= 2:
                 eitem = gl.GLLinePlotItem(
                     pos=np.asarray(edges, dtype=np.float32),
-                    color=self.PATCH_EDGE_COLOR, width=self.PATCH_EDGE_WIDTH,
+                    color=style.SCENE["patch_edge"], width=self.PATCH_EDGE_WIDTH,
                     antialias=True, mode="lines")
                 eitem.setGLOptions("additive")
                 eitem.setVisible(self._patches_visible)
@@ -1539,7 +1540,7 @@ class IsoViewer(gl.GLViewWidget):
                 self.mesh_item = None
             self.edge_item = gl.GLLinePlotItem(
                 pos=v[e.flatten()].astype(np.float32),
-                color=EDGE_COLOR, width=2.2, antialias=True, mode="lines",
+                color=style.SCENE["edge"], width=2.2, antialias=True, mode="lines",
             )
             self.addItem(self.edge_item)
         elif self._view_mode == "externa":
@@ -1555,9 +1556,21 @@ class IsoViewer(gl.GLViewWidget):
         elif self._view_mode == "contorno":
             self.edge_item = gl.GLLinePlotItem(
                 pos=v[e.flatten()].astype(np.float32),
-                color=EDGE_COLOR, width=2.5, antialias=True, mode="lines",
+                color=style.SCENE["edge"], width=2.5, antialias=True, mode="lines",
             )
             self.addItem(self.edge_item)
+
+    def refresh_scene_colors(self):
+        """Re-aplica la paleta de escena vigente (`style.SCENE`) a los items del
+        visor: grilla, planos XZ/YZ y aristas del recinto. Los markers de fuente/
+        receptor/mueble y los parches los refresca el panel acústico. (3b)"""
+        try:
+            self._grid.setColor(tuple(style.SCENE["grid"]))
+        except Exception:
+            pass
+        self._update_vertical_grid()     # planos XZ/YZ con el nuevo color
+        self._refresh_render()           # aristas del recinto con el nuevo color
+        self.update()
 
     def _refresh_arch_ribs(self, arch_ribs):
         for item in self._arch_rib_items:

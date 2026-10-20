@@ -53,7 +53,7 @@ from viewer import IsoViewer
 from geometry import make_room, room_metrics, make_arch_ribs, build_room_geometry
 from shape_dialog import ShapeDrawDialog
 from style import (apply_dialog_theme, apply_app_theme, theme_label,
-                   THEME_ORDER, DEFAULT_THEME)
+                   THEME_ORDER, DEFAULT_THEME, use_scene)
 from acoustic_panel import AcousticPanel
 from prediction_panel import PredictionPanel
 
@@ -244,9 +244,15 @@ class MainWindow(QMainWindow):
         self._theme = key
         app = QApplication.instance()
         gl_bg = apply_app_theme(app, key) if app is not None else "#11111b"
+        use_scene(key)      # paleta de escena 3D del tema (3b)
         try:
             self.viewer.setBackgroundColor(QColor(gl_bg))
+            self.viewer.refresh_scene_colors()      # aristas/grilla/planos del visor
             self.viewer.update()
+        except Exception:
+            pass
+        try:
+            self.acoustic.refresh_scene_colors()    # markers + parches
         except Exception:
             pass
         for act in self._theme_group.actions():
@@ -1937,6 +1943,7 @@ def main():
     if _theme0 not in THEME_ORDER:
         _theme0 = DEFAULT_THEME
     apply_app_theme(app, _theme0)
+    use_scene(_theme0)      # paleta de escena 3D inicial (antes de crear el visor)
 
     # Watchdog de diagnostico (opcional): correr con PROTO1_WATCHDOG=1 para
     # que, si la GUI queda COLGADA >20 s, se impriman en la consola los stacks

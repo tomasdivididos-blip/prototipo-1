@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import numpy as np
 import pyqtgraph.opengl as gl
+import style                      # paleta de escena 3D por tema (3b): style.SCENE
 from PyQt5.QtGui import QColor
 
 
@@ -237,7 +238,7 @@ class SourceMarkers:
     def _ensure_items(self):
         if self._item_normal is None:
             self._item_normal = gl.GLLinePlotItem(
-                pos=self._EMPTY, color=self._COL, width=2.2,
+                pos=self._EMPTY, color=style.SCENE["source"], width=2.2,
                 antialias=True, mode="lines")
             # depthValue 1: las aristas del bafle se dibujan DESPUÉS (encima) de los
             # parches additive, que si no tapaban el bafle. (El relleno sólido opaco
@@ -246,10 +247,17 @@ class SourceMarkers:
             self.viewer.addItem(self._item_normal)
         if self._item_sel is None:
             self._item_sel = gl.GLLinePlotItem(
-                pos=self._EMPTY, color=self._COL_SEL, width=2.2,
+                pos=self._EMPTY, color=style.SCENE["source_sel"], width=2.2,
                 antialias=True, mode="lines")
             self._item_sel.setDepthValue(1)
             self.viewer.addItem(self._item_sel)
+
+    def refresh_colors(self):
+        """Re-aplica los colores de la paleta de escena vigente (3b)."""
+        if self._item_normal is not None:
+            self._item_normal.setData(color=style.SCENE["source"])
+        if self._item_sel is not None:
+            self._item_sel.setData(color=style.SCENE["source_sel"])
 
     def update(self, source_array, selected_idx: int = -1, **_):
         self._ensure_items()
@@ -402,14 +410,21 @@ class FurnitureMarkers:
     def _ensure_items(self):
         if self._item_normal is None:
             self._item_normal = gl.GLLinePlotItem(
-                pos=self._EMPTY, color=self._COL, width=2.0,
+                pos=self._EMPTY, color=style.SCENE["furniture"], width=2.0,
                 antialias=True, mode="lines")
             self.viewer.addItem(self._item_normal)
         if self._item_sel is None:
             self._item_sel = gl.GLLinePlotItem(
-                pos=self._EMPTY, color=self._COL_SEL, width=2.4,
+                pos=self._EMPTY, color=style.SCENE["source_sel"], width=2.4,
                 antialias=True, mode="lines")
             self.viewer.addItem(self._item_sel)
+
+    def refresh_colors(self):
+        """Re-aplica los colores de la paleta de escena vigente (3b)."""
+        if self._item_normal is not None:
+            self._item_normal.setData(color=style.SCENE["furniture"])
+        if self._item_sel is not None:
+            self._item_sel.setData(color=style.SCENE["source_sel"])
 
     def update(self, muebles, selected_idx: int = -1, **_):
         self._ensure_items()
@@ -462,6 +477,11 @@ class ReceiverMarker:
         if self.viewer is not None:
             self.viewer.update()
 
+    def refresh_colors(self):
+        """Re-aplica el color de la paleta de escena vigente (3b)."""
+        if self.item is not None:
+            self.item.setData(color=style.SCENE["receiver"])
+
     def update(self, pos, size: float = 0.55):
         """Actualiza la posicion del marker. Si `pos` es None, lo oculta."""
         if pos is None:
@@ -471,7 +491,7 @@ class ReceiverMarker:
         if self.item is None:
             # Primera vez: crear el item y agregarlo al scene graph.
             self.item = gl.GLLinePlotItem(
-                pos=lines, color=self._COLOR,
+                pos=lines, color=style.SCENE["receiver"],
                 width=4.5, antialias=True, mode="lines",
             )
             self.viewer.addItem(self.item)

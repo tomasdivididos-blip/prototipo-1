@@ -654,6 +654,57 @@ def apply_app_theme(app, key):
     return t["gl"]
 
 
+# ---------------------------------------------------------------------------
+# PALETA DE ESCENA 3D por tema (3b): los colores de los objetos del visor
+# (aristas del recinto, grilla, planos, markers de fuente/receptor/mueble, borde
+# de parches, botones flotantes) se adaptan al tema para que en los temas CLAROS
+# (github, clasico) no se laven sobre el fondo claro. Mocha/Gruvbox = oscuros →
+# paleta "dark"; GitHub/Clásico = claros → paleta "light" (colores más oscuros).
+# El visor y los markers LEEN `SCENE` (módulo) al crear/actualizar; `use_scene(key)`
+# la cambia y cada parte refresca sus items. Tuplas 0..1 RGBA salvo `grid` (0..255,
+# que es lo que pide GLGridItem.setColor) y los `btn_*` (hex para QSS).
+SCENE_DARK = {
+    "edge":       (0.96, 0.74, 0.95, 1.0),     # aristas del recinto (rosa)
+    "grid":       (137, 180, 250, 70),         # grilla del piso (0..255)
+    "plane":      (0.54, 0.71, 0.98, 0.5),     # planos de referencia XZ/YZ
+    "source":     (0.96, 0.74, 0.95, 1.0),     # bafle/fuente (normal)
+    "source_sel": (0.98, 0.55, 0.05, 1.0),     # fuente/mueble seleccionado (naranja)
+    "receiver":   (0.30, 0.95, 0.85, 1.0),     # cruz del receptor (turquesa)
+    "furniture":  (0.40, 0.85, 0.75, 1.0),     # mueble (verde-azulado)
+    "patch_edge": (1.0, 1.0, 1.0, 0.95),       # contorno de los parches (blanco)
+    "btn_bg": "#45475a", "btn_fg": "#cdd6f4", "btn_hover": "#585b70",
+    "btn_accent": "#89b4fa", "btn_accent_fg": "#11111b",
+}
+SCENE_LIGHT = {
+    "edge":       (0.52, 0.14, 0.40, 1.0),     # ciruela oscuro (contrasta en claro)
+    "grid":       (90, 100, 135, 110),
+    "plane":      (0.20, 0.34, 0.60, 0.6),
+    "source":     (0.58, 0.12, 0.42, 1.0),
+    "source_sel": (0.80, 0.33, 0.0, 1.0),      # naranja oscuro
+    "receiver":   (0.0, 0.42, 0.37, 1.0),      # teal oscuro
+    "furniture":  (0.10, 0.44, 0.36, 1.0),
+    # El borde de parches es additive (suma sobre el fondo); en claro un color
+    # oscuro no se ve (additive no oscurece). Magenta saturado suma visible sobre
+    # el gris del tema clásico; sobre blanco puro (GitHub) igual queda tenue.
+    "patch_edge": (0.60, 0.05, 0.45, 0.95),
+    "btn_bg": "#dce0e8", "btn_fg": "#11111b", "btn_hover": "#bcc0cc",
+    "btn_accent": "#1e66f5", "btn_accent_fg": "#ffffff",
+}
+SCENE = dict(SCENE_DARK)      # paleta de escena vigente (default oscuro)
+
+
+def theme_is_dark(key):
+    return key in ("mocha", "gruvbox")
+
+
+def use_scene(key):
+    """Fija la paleta de escena vigente según el tema y la devuelve. El visor y los
+    markers la leen por `style.SCENE[...]`; cada uno refresca sus items aparte."""
+    SCENE.clear()
+    SCENE.update(SCENE_DARK if theme_is_dark(key) else SCENE_LIGHT)
+    return SCENE
+
+
 def apply_dialog_theme(widget):
     """Aplica el tema CLARO (fondo blanco / letra negra) a un diálogo.
 

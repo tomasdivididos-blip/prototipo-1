@@ -4165,6 +4165,20 @@ class AcousticPanel(QWidget):
         elif key == "furniture" and hasattr(self, "furn_markers"):
             self.furn_markers.set_visible(visible)
 
+    def refresh_scene_colors(self):
+        """Re-aplica la paleta de escena 3D vigente (3b) a los markers (fuente,
+        receptor, mueble) y al overlay de parches. La llama MainWindow al cambiar
+        el tema; el visor refresca aparte sus aristas/grilla/planos."""
+        for m in (getattr(self, "src_markers", None),
+                  getattr(self, "rcv_marker", None),
+                  getattr(self, "furn_markers", None)):
+            if m is not None and hasattr(m, "refresh_colors"):
+                m.refresh_colors()
+        try:
+            self._refresh_patch_overlay()
+        except Exception:
+            pass
+
     def _compute_default_receiver(self) -> tuple:
         """Centro del AABB del recinto actual (o fallback a dims_hint/2)."""
         try:
