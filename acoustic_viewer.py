@@ -239,11 +239,16 @@ class SourceMarkers:
             self._item_normal = gl.GLLinePlotItem(
                 pos=self._EMPTY, color=self._COL, width=2.2,
                 antialias=True, mode="lines")
+            # depthValue 1: las aristas del bafle se dibujan DESPUÉS (encima) de los
+            # parches additive, que si no tapaban el bafle. (El relleno sólido opaco
+            # no se logró: el GLMeshItem opaco no renderiza en esta escena.)
+            self._item_normal.setDepthValue(1)
             self.viewer.addItem(self._item_normal)
         if self._item_sel is None:
             self._item_sel = gl.GLLinePlotItem(
                 pos=self._EMPTY, color=self._COL_SEL, width=2.2,
                 antialias=True, mode="lines")
+            self._item_sel.setDepthValue(1)
             self.viewer.addItem(self._item_sel)
 
     def update(self, source_array, selected_idx: int = -1, **_):

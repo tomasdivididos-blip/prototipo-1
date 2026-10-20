@@ -2954,6 +2954,12 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.70 (las aristas de los bafles se dibujan por encima de los parches)
+
+**Cambios v2.70** (20 de octubre 2026): ajuste menor de dibujo en el visor 3D. Las aristas del bafle de cada fuente ahora se dibujan **por encima de los parches de absorción**, así un bafle ubicado sobre una pared con parches se distingue con claridad (antes el parche se superponía a las aristas). Nota técnica: se evaluó dibujar los bafles como prismas sólidos rellenos, pero el motor de dibujo 3D de esta versión no renderiza las caras opacas de esos marcadores, así que los bafles se mantienen como wireframe (contorno).
+
+*Manual actualizado al 20 de Octubre de 2026 — v2.70.*
+
 ## Cambios v2.69 (muebles en el selector de visibilidad + selector de 4 temas de la interfaz)
 
 **Cambios v2.69** (19 de octubre 2026): dos mejoras de interfaz.
