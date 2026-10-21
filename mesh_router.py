@@ -31,12 +31,69 @@ from typing import Optional, Callable
 import numpy as np
 
 import acoustic_mesh
+import acoustic_analysis
 try:
     import mesh_gmsh
     _HAS_GMSH_MODULE = mesh_gmsh.is_available()
 except ImportError:
     mesh_gmsh = None
     _HAS_GMSH_MODULE = False
+
+
+# Tolerancia del GATE DE PLAUSIBILIDAD DE VOLUMEN (bug 2 del auditor): si el
+# volumen del tet-mesh realizado se aparta mas que esto del volumen de referencia
+# (teorema de la divergencia sobre la superficie de entrada), se RECHAZA el
+# resultado de gmsh y la cascada cae a remesh/voxel. 5% es conservador: el remesh
+# isotropico legitimo preserva el volumen <1-2% (bench_remesh_curved), pero el
+# caso patologico (reparam sobre malla no-watertight) desviaba ~21%. Solo se
+# aplica cuando la referencia es CONFIABLE (superficie watertight); si no, no se
+# rechaza (se registra volume_error para diagnostico). Ver auditor_contexto.md.
+_VOLUME_GATE_TOL = 0.05
+
+
+class MeshVolumeError(RuntimeError):
+    """El volumen del tet-mesh no es plausible frente a la superficie de entrada.
+
+    Se lanza desde el gate de volumen para que la cascada de build_mesh (que ya
+    captura las excepciones de gmsh) caiga a remesh/voxel, en vez de devolver un
+    dominio con el volumen incorrecto en silencio."""
+
+
+def _check_mesh_volume(nodes, tets, info, ref_verts, ref_tris, progress=None):
+    """Gate de plausibilidad de volumen. Compara info['volume'] (tet-mesh) contra
+    el volumen encerrado por la superficie de entrada (divergencia). Anota
+    info['volume_ref'] e info['volume_error'] SIEMPRE. RECHAZA (MeshVolumeError)
+    solo si la referencia es confiable (superficie watertight) y el error supera
+    _VOLUME_GATE_TOL. Sin trimesh / no-watertight -> no rechaza (referencia no
+    confiable, evita falsos rechazos)."""
+    try:
+        v_mesh = float(info.get("volume", 0.0))
+        v_ref = float(acoustic_analysis.compute_mesh_volume(
+            np.asarray(ref_verts, dtype=float), np.asarray(ref_tris, dtype=int)))
+    except Exception:
+        return
+    if v_ref <= 1e-9:
+        return
+    err = abs(v_mesh - v_ref) / v_ref
+    info["volume_ref"] = v_ref
+    info["volume_error"] = err
+    # Confiabilidad de la referencia: la divergencia solo da el volumen encerrado
+    # exacto si la superficie es cerrada. Si no es watertight (o no hay trimesh),
+    # NO rechazamos sobre una referencia dudosa.
+    ref_trustworthy = False
+    try:
+        import trimesh
+        _m = trimesh.Trimesh(vertices=np.asarray(ref_verts, dtype=float),
+                             faces=np.asarray(ref_tris, dtype=int), process=False)
+        ref_trustworthy = bool(_m.is_watertight)
+    except Exception:
+        ref_trustworthy = False
+    if ref_trustworthy and err > _VOLUME_GATE_TOL:
+        msg = (f"volumen del mallado {v_mesh:.3f} m3 difiere {err*100:.1f}% del "
+               f"esperado {v_ref:.3f} m3 (gate {_VOLUME_GATE_TOL*100:.0f}%)")
+        if progress:
+            progress(f"GATE DE VOLUMEN: {msg}; se rechaza y se reintenta.")
+        raise MeshVolumeError(msg)
 
 
 # ---------------------------------------------------------------------------
@@ -640,21 +697,28 @@ def build_mesh(
     def _build_gmsh():
         # gmsh usa la superficie con el boolean ya aplicado (sala - columnas) si
         # hubo cuerpos interiores; si no, la original. Camino REPARAMETRIZACION.
-        return mesh_gmsh.mesh_with_gmsh(
+        nodes, tets, info = mesh_gmsh.mesh_with_gmsh(
             gmsh_verts, gmsh_tris,
             h_target=h, progress=progress,
         )
+        # GATE DE VOLUMEN (bug 2): la reparametrizacion puede COMPLETAR sin
+        # excepcion pero con el volumen incorrecto (CAD casi-estanco). Si lo
+        # detectamos, lanzamos MeshVolumeError y la cascada reintenta remesh/voxel.
+        _check_mesh_volume(nodes, tets, info, gmsh_verts, gmsh_tris, progress)
+        return nodes, tets, info
 
     def _build_gmsh_remesh():
         # Camino REMESH + DISCRETO (pymeshlab): para superficies curvas o CAD
         # sucio donde la reparametrizacion falla ("overlapping facets"). Remalla
         # isotropico la superficie -> uniforme sin T-junctions -> gmsh malla el
         # volumen con esa frontera discreta fija. Boundary-fitted a la curva.
-        return mesh_gmsh.mesh_with_gmsh(
+        nodes, tets, info = mesh_gmsh.mesh_with_gmsh(
             gmsh_verts, gmsh_tris,
             h_target=h, progress=progress,
             remesh_target_len=h,
         )
+        _check_mesh_volume(nodes, tets, info, gmsh_verts, gmsh_tris, progress)
+        return nodes, tets, info
 
     if decision.engine == "gmsh":
         if not _HAS_GMSH_MODULE:

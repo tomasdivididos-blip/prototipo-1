@@ -159,6 +159,57 @@ def points_inside_surface(points: np.ndarray,
     return (counts % 2) == 1
 
 
+def _signed_volume(surface_verts: np.ndarray,
+                   surface_tris: np.ndarray) -> float:
+    """Volumen encerrado por la superficie triangular (teorema de la divergencia).
+    Mismo calculo que acoustic_analysis.compute_mesh_volume; se replica aca para
+    no introducir un import cruzado en este modulo de bajo nivel."""
+    v = np.asarray(surface_verts, dtype=float)
+    a = v[surface_tris[:, 0]]
+    b = v[surface_tris[:, 1]]
+    c = v[surface_tris[:, 2]]
+    cross = np.cross(b - a, c - a)
+    return float(abs(np.einsum("ij,ij->i", a, cross).sum()) / 6.0)
+
+
+def domain_fill_estimate(surface_verts: np.ndarray,
+                         surface_tris: np.ndarray,
+                         n: int = 24):
+    """Cuantifica cuanto se aparta el DOMINIO que se va a voxelizar del recinto
+    real (bug 3 del auditor). Sobre una malla NO estanca, points_inside_surface
+    (paridad de rayo 1-dir) da falsos 'adentro' y el dominio degenera hacia el
+    AABB; esta funcion mide ese apartamiento con un numero.
+
+    Devuelve (frac, V_dom, V_surf, domain_error) o None si no se puede medir:
+      - frac         = fraccion del AABB clasificada 'adentro' (grilla n^3).
+      - V_dom        = frac * V_caja ~ volumen del dominio voxelizado.
+      - V_surf       = volumen encerrado por la superficie (divergencia).
+      - domain_error = |V_dom - V_surf| / V_surf.
+    """
+    v = np.asarray(surface_verts, dtype=float)
+    t = np.asarray(surface_tris, dtype=int)
+    if v.size == 0 or t.size == 0:
+        return None
+    lo = v.min(0)
+    hi = v.max(0)
+    ext = hi - lo
+    v_box = float(np.prod(ext))
+    if v_box <= 1e-9:
+        return None
+    v_surf = _signed_volume(v, t)
+    if v_surf <= 1e-9:
+        return None
+    n = max(2, int(n))
+    axes = [lo[d] + (hi[d] - lo[d]) * (np.arange(n) + 0.5) / n for d in range(3)]
+    gx, gy, gz = np.meshgrid(*axes, indexing="ij")
+    pts = np.column_stack([gx.ravel(), gy.ravel(), gz.ravel()])
+    inside = points_inside_surface(pts, v, t)
+    frac = float(np.mean(inside))
+    v_dom = frac * v_box
+    domain_error = abs(v_dom - v_surf) / v_surf
+    return frac, v_dom, v_surf, domain_error
+
+
 # ---------------------------------------------------------------------------
 # Mallado volumetrico
 # ---------------------------------------------------------------------------

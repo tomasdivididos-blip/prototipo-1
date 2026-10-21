@@ -399,7 +399,7 @@ El caso de uso pensado es **capturar un recinto real**: escanear el estudio con 
 
 Al importar, el mueble aparece en el centro de la sala apoyado en el piso, y el diálogo muestra la cantidad de caras. El **tipo y el tamaño quedan bloqueados** (la forma la define la malla); se editan posición, los tres ángulos, material, etiqueta y procedencia. La malla se guarda **embebida en el `.room`**, así el archivo sigue siendo autocontenido.
 
-> **La malla tiene que ser cerrada (watertight).** El tallado pregunta "¿este punto está adentro?", y esa pregunta solo tiene respuesta confiable si la superficie está cerrada. Al importar se intenta **reparar** automáticamente (unir vértices duplicados, tapar huecos, corregir normales); si aun así queda abierta, el programa **avisa** y conviene cerrar los huecos en el CAD antes de confiar en el resultado.
+> **La malla tiene que ser cerrada (watertight).** El tallado pregunta "¿este punto está adentro?", y esa pregunta solo tiene respuesta confiable si la superficie está cerrada. Al importar se intenta **reparar** automáticamente (unir vértices duplicados, tapar huecos, corregir normales); si aun así queda abierta, el programa **avisa** y conviene cerrar los huecos en el CAD antes de confiar en el resultado. Desde 2026-10 ese aviso **cuantifica** cuánto se aparta el dominio simulado del recinto real: muestra qué porcentaje de la caja envolvente quedaría clasificado "adentro", el volumen del dominio voxelizado y el volumen encerrado por la superficie, con la discrepancia en porcentaje. Si el número es grande, el dominio degeneró hacia la caja envolvente y hay que curar el CAD; si es chico (por ejemplo 1 %), la malla abierta igual define bien el interior y se puede seguir.
 
 > **Sobre la fidelidad de la forma.** Un experimento controlado mostró que, en la banda modal, la forma exacta de un mueble frente a su caja envolvente es un efecto de **segundo orden** (0,3 % a 1,4 % en las frecuencias, del orden del ruido de malla), y que depende mucho más de **dónde** está el mueble (el máximo se da en las esquinas, que son antinodos). Importar CAD sirve para **capturar** un recinto real con comodidad, no para ganar precisión de predicción.
 
@@ -956,6 +956,8 @@ Cadena completa del motor gmsh: **reparametrización → remesh + discreto → v
 **pymeshlab es una dependencia OPCIONAL** (está en `requirements.txt`). Si falta, el módulo `mesh_gmsh` reporta `is_remesh_available() == False` y la cadena se saltea el remesh.
 
 Validación (`bench_remesh_curved.py`, 18/18): los modos del mallado gmsh-discreto coinciden con los del voxel (que para un recinto *axis-aligned* es near-exacto) dentro de **0.34 %** en una caja, y convergen al refinar `h` (orden $O(h^2)$, boundary-fitted). Sobre el aula real (arco + columna) el volumen sale 110.58 m³ (sala menos columna), sin tetraedros degenerados.
+
+**Gate de plausibilidad de volumen (desde 2026-10).** La reparametrización de gmsh puede, sobre un CAD casi-estanco, **completar sin error pero con el volumen incorrecto** (se midió hasta ~21 % de desvío), y antes eso pasaba en silencio. Ahora, tras mallar, el router compara el volumen del tetraedrizado contra el volumen encerrado por la superficie (teorema de la divergencia); si la superficie es cerrada (referencia confiable) y la diferencia supera **5 %**, el resultado se **rechaza** y la cadena reintenta remesh y luego voxel, como si gmsh hubiera fallado. Si la superficie no es estanca (referencia poco confiable), no se rechaza: solo se registra el desvío para diagnóstico. Oráculo: `bench_mesh_volume_gate.py` (7/7). El remesh isotrópico legítimo preserva el volumen por debajo del 1 %, así que el gate no lo toca.
 
 > **Matiz de exactitud (importante).** Un CAD *facetado en pasos axis-aligned* (caras paralelas a los ejes, como algunos "arcos" exportados groseramente) **no sufre error de escalera**: ahí el voxel ya converge a menos del 1 % en modos y menos del 0.15 % en volumen. El beneficio real del boundary-fitted aparece cuando el CAD tiene caras **genuinamente inclinadas o curvas**.
 
@@ -2953,6 +2955,18 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 ### Exportar el CAD curado
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
+
+## Cambios v2.72 (el soft avisa cuando el dominio simulado no coincide con el recinto real)
+
+**Cambios v2.72** (21 de octubre 2026): dos guardas de exactitud del dominio, para que la malla con la que se calcula nunca difiera en silencio del recinto real. No cambian la física (solver, modos, amortiguamiento); solo detectan y avisan cuando el dominio sería incorrecto.
+
+1. **Gate de volumen en el mallado gmsh.** Al importar un CAD casi cerrado, el mallador boundary-fitted (gmsh) a veces terminaba sin error pero con un volumen equivocado (se vio hasta ~21 % de desvío), y eso pasaba inadvertido. Ahora, después de mallar, el programa compara el volumen del mallado contra el volumen encerrado por la superficie importada; si la superficie es cerrada y la diferencia supera el 5 %, descarta ese resultado y reintenta automáticamente el remesh y, si hace falta, el voxel. El remesh normal (que preserva el volumen por debajo del 1 %) no se ve afectado.
+
+2. **El aviso de «CAD no es un sólido cerrado» ahora cuantifica.** Cuando la malla importada no es estanca, además de avisar, el programa estima y muestra cuánto se aparta el dominio del recinto real: qué porcentaje de la caja envolvente quedaría tomado como «interior», el volumen de ese dominio y el volumen encerrado por la superficie, con la discrepancia en porcentaje. Si el número es grande, conviene curar el CAD; si es chico (por ejemplo 1 %), la malla abierta igual define bien el interior y se puede seguir. La decisión sigue siendo tuya (se calcula igual bajo tu responsabilidad).
+
+Nota de mantenimiento: un tercer riesgo histórico (una cara con material no reconocido se volvía rígida y disparaba una frecuencia de Schroeder falsa) ya estaba corregido desde v2.55 y se verificó cerrado en esta versión; esas caras usan α = 0,03 y el material usado se guarda embebido en el `.room`.
+
+*Manual actualizado al 21 de Octubre de 2026 — v2.72.*
 
 ## Cambios v2.71 (los colores de la escena 3D se adaptan al tema claro u oscuro)
 

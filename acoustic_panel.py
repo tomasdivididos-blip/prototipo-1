@@ -5914,11 +5914,29 @@ class AcousticPanel(QWidget):
             return npm_used, h_used, True
         return npm_auto, h_auto, False
 
+    def _estimate_domain_error(self, im):
+        """Cuantifica cuanto se aparta el DOMINIO que se va a simular del recinto
+        real cuando el CAD no es estanco (bug 3 del auditor). El voxelizador usa
+        points_inside_surface (paridad de rayo 1-dir), que sobre una malla no
+        estanca da FALSOS 'adentro' -> el dominio degenera hacia el AABB.
+
+        Devuelve (frac, V_dom, V_surf, domain_error) o None. Delega el calculo
+        puro (sin Qt) en acoustic_mesh.domain_fill_estimate para poder testearlo
+        headless."""
+        try:
+            import numpy as _np
+            from acoustic_mesh import domain_fill_estimate as _dfe
+            return _dfe(_np.asarray(im.vertices, float),
+                        _np.asarray(im.faces, int))
+        except Exception:
+            return None
+
     def _confirm_nonsolid_cad(self) -> bool:
         """Si el CAD importado NO es estanco, avisa (una vez por malla) que el
         interior no esta definido y que mallar puede colgarse, y deja cancelar.
         Devuelve True para seguir, False para abortar. Malla estanca -> True sin
-        preguntar. Tambien estima el tamano del voxelizado (caja/h³) para el aviso."""
+        preguntar. Tambien estima el tamano del voxelizado (caja/h³) para el aviso
+        y CUANTIFICA el error del dominio (bug 3 del auditor)."""
         if getattr(self, "_nonsolid_ack", False):
             return True
         im = getattr(self, "_imported_mesh", None)
@@ -5943,13 +5961,24 @@ class AcousticPanel(QWidget):
                        + ("  (ENORME: probable cuelgue)" if n_est > 200000 else ""))
         except Exception:
             pass
+        # Cuantificacion del error de dominio (bug 3).
+        quant = ""
+        dom = self._estimate_domain_error(im)
+        if dom is not None:
+            frac, v_dom, v_surf, derr = dom
+            quant = (f"\n\nDominio simulado: el voxelizado ocuparía ~{frac*100:.0f}% "
+                     f"de la caja envolvente (~{v_dom:.1f} m³), cuando el volumen "
+                     f"encerrado por la superficie es ~{v_surf:.1f} m³. "
+                     f"Discrepancia ~{derr*100:.0f}% respecto del recinto real"
+                     + ("  (GRANDE: el dominio degeneró hacia la caja)"
+                        if derr > 0.10 else "") + ".")
         ret = QMessageBox.warning(
             self, "CAD no es un sólido cerrado",
             "La geometría importada NO es un sólido cerrado (no estanco): tiene "
             "paños sueltos o aberturas, así que el interior del recinto no está "
             "definido. El mallado toma la caja envolvente entera y puede quedar "
             "enorme o colgar el cálculo (la barra del FEM no se puede cancelar)."
-            + est +
+            + est + quant +
             "\n\nRecomendado: cancelá y curá la malla en «Importar CAD» → «Curar "
             "CAD roto» (o cerrala en tu 3D) hasta que sea estanca.\n\n"
             "¿Calcular igual bajo tu responsabilidad?",
