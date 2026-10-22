@@ -21,7 +21,7 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QLabel,
     QComboBox, QSpinBox, QDoubleSpinBox, QPushButton, QDialogButtonBox,
     QApplication, QFileDialog, QSizePolicy, QMessageBox, QScrollArea, QWidget,
-    QProgressDialog)
+    QProgressDialog, QCheckBox)
 
 try:
     from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -281,6 +281,19 @@ class DBADialog(QDialog):
         self.sb_fmax.setRange(50.0, 400.0); self.sb_fmax.setValue(180.0)
         self.sb_fmax.setSuffix(" Hz")
         fl.addRow("f máx del análisis:", self.sb_fmax)
+        # Refinamientos CABS por amortiguamiento (Celestinos & Nielsen): ganancia
+        # G del trasero (el frente llega atenuado a la pared trasera) + banda
+        # f_max = c/d − Δe. Opt-in: OFF = comportamiento histórico.
+        self.chk_damping = QCheckBox(
+            "Refinar CABS por amortiguamiento (ganancia G del trasero + f_max−Δe)")
+        self.chk_damping.setChecked(False)
+        self.chk_damping.setToolTip(
+            "ON: el array trasero del drive naive se baja con la ganancia G = "
+            "e^(−δ·L/c)·e^(−α_aire·L) (el frente llega atenuado a la pared "
+            "trasera; CABS sec. 2.3), y la banda útil usa f_max = c/d − Δe (Δe del "
+            "amortiguamiento; sec. 2.1). δ sale del ξ de arriba. OFF = histórico.")
+        self.chk_damping.toggled.connect(self._refresh_count)
+        fl.addRow("", self.chk_damping)
         lay.addWidget(grp_an)
 
         self.btn = QPushButton("Calcular")
@@ -1009,6 +1022,19 @@ class DBADialog(QDialog):
                 f"&nbsp;&nbsp;<span style='color:#555;'>Uniformidad modal (Bolt): "
                 f"{_sm:.0f}/100 — propiedad de la sala (no depende de las fuentes).</span>")
 
+        # MSFD = [SD, MD] de Celestinos (comparable con la literatura CABS). SD es
+        # la misma «varianza espacial» de arriba; MD es la rugosidad espectral
+        # media por asiento. Se muestra siempre (se computa siempre).
+        _sd_r, _md_r = r.get("sd_real"), r.get("md_real")
+        _sd_i, _md_i = r.get("sd_ideal"), r.get("md_ideal")
+        if _sd_r is not None and _md_r is not None:
+            _id_txt = (f" (ideal SD ±{_sd_i:.1f}, MD ±{_md_i:.1f})"
+                       if _sd_i is not None and _md_i is not None else "")
+            lines.append(
+                f"&nbsp;&nbsp;<span style='color:#555;'>MSFD (Celestinos): "
+                f"SD ±{_sd_r:.1f} dB, MD ±{_md_r:.1f} dB{_id_txt} — "
+                f"SD = varianza espacial; MD = rugosidad espectral por asiento.</span>")
+
         # Nota de geometría irregular: los criterios son de paralelepípedo. Si hay
         # modos FEM del recinto real, la evaluación corre sobre el VOLUMEN INTERIOR
         # REAL (no el AABB); si no, cae al AABB analítico y se avisa cómo mejorarlo.
@@ -1110,6 +1136,20 @@ class DBADialog(QDialog):
         self._canvas.draw()
         self._last_plot_kind = "eval"
 
+    def _damping_args(self, axis):
+        """(rear_gain, rt60) según el checkbox «Refinar CABS por amortiguamiento».
+        OFF -> (1.0, None) = comportamiento histórico. ON -> G del trasero
+        (`cabs_rear_gain`, de ξ) + rt60 (de ξ del 1er axial) para el Δe de f_max."""
+        if not (hasattr(self, "chk_damping") and self.chk_damping.isChecked()):
+            return 1.0, None
+        import dba
+        from sources import C0 as _C0
+        xi = float(self.sb_xi.value())
+        rg = dba.cabs_rear_gain(self._dims, axis, xi=xi)
+        omega_1 = _C0 * np.pi / self._dims[axis]
+        rt60 = (3.0 * np.log(10.0) / (xi * omega_1)) if xi > 0 else None
+        return rg, rt60
+
     def _apply(self):
         from dba import build_dba_sources
         axis = self._axis_concrete()     # diseñar el array necesita un eje concreto
@@ -1130,11 +1170,12 @@ class DBADialog(QDialog):
                 QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
             return
         QApplication.setOverrideCursor(Qt.WaitCursor)
+        rg, _rt60 = self._damping_args(axis)
         try:
             specs = build_dba_sources(
                 self._dims, axis=axis, n_x=self.sb_nx.value(),
                 n_z=self.sb_nz.value(), drive=drv, xi=self.sb_xi.value(),
-                fmin=20.0, fmax=self.sb_fmax.value())
+                fmin=20.0, fmax=self.sb_fmax.value(), rear_gain=rg)
         except Exception as e:
             QApplication.restoreOverrideCursor()
             QMessageBox.warning(self, "DBA", f"No se pudo construir el preset:\n{e}")
@@ -1162,12 +1203,14 @@ class DBADialog(QDialog):
         self.lbl_na.setText(f"Subs por pared, dirección 1 (a lo {short[a]}):")
         self.lbl_nb.setText(f"Subs por pared, dirección 2 (a lo {short[b]}):")
         n = self.sb_nx.value() * self.sb_nz.value()
+        _rg, rt60 = self._damping_args(axis)
         fmx = alias_fmax(self._dims, axis,
-                         self.sb_nx.value(), self.sb_nz.value())
+                         self.sb_nx.value(), self.sb_nz.value(), rt60=rt60)
         fmx_txt = "∞" if not np.isfinite(fmx) else f"{fmx:.0f} Hz"
+        fmx_lbl = "f_max = c/d − Δe" if rt60 is not None else "f_max = c/d"
         self.lbl_count.setText(
             f"= {n} subs por pared × 2 paredes = {2*n} en total  ·  "
-            f"f_max = c/d ≈ {fmx_txt}")
+            f"{fmx_lbl} ≈ {fmx_txt}")
 
     def _calc(self):
         axis = self._axis_concrete()     # diseñar/calcular el array necesita eje concreto
@@ -1175,12 +1218,13 @@ class DBADialog(QDialog):
                for k in range(3)]
         self.btn.setEnabled(False)
         QApplication.setOverrideCursor(Qt.WaitCursor)
+        rg, rt60 = self._damping_args(axis)
         try:
             r = compute_dba(
                 self._dims, rec, axis=axis,
                 n_x=self.sb_nx.value(), n_z=self.sb_nz.value(),
                 drive=self.combo_drive.currentData(), xi=self.sb_xi.value(),
-                fmin=20.0, fmax=self.sb_fmax.value())
+                fmin=20.0, fmax=self.sb_fmax.value(), rear_gain=rg, rt60=rt60)
         except Exception as e:
             self.lbl_res.setText(f"<span style='color:#b00'>Error: {e}</span>")
             return

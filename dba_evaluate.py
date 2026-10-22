@@ -395,6 +395,41 @@ def flatness_and_spatial(freq_axis, total_db_grid):
     return flat, spatial, L_bar
 
 
+def msfd_metrics(freq_axis, total_db_grid):
+    """Mean Sound Field Deviation de Celestinos & Nielsen (JAES 56(11) 2008,
+    sec. 2.4; Acoustics'08 ec. 1-3). Devuelve (SD, MD) en dB:
+
+    - SD (Spatial Deviation) = media sobre FRECUENCIAS del desvío entre
+      POSICIONES: SD = mean_f( std_r L(r,f) ). Coincide con `spatial` de
+      `flatness_and_spatial` (atadura). Cuánto varía el nivel asiento-a-asiento.
+    - MD (Magnitude Deviation) = media sobre POSICIONES del desvío entre
+      FRECUENCIAS: MD = mean_r( std_f L(r,f) ). Cuán rugosa es la respuesta en
+      frecuencia de un asiento típico.
+
+    El par MSFD = [SD ± dB, MD ± dB] es el número con el que los papers de CABS
+    juzgan la uniformidad; reportarlo hace comparables los resultados con esa
+    literatura.
+    """
+    L = np.asarray(total_db_grid, dtype=float)            # (N_R, Nf)
+    sd = float(np.mean(np.std(L, axis=0)))                # entre posiciones
+    md = float(np.mean(np.std(L, axis=1)))                # entre frecuencias
+    return sd, md
+
+
+def clarity_db(t, ir, te_ms: float = 50.0):
+    """Claridad C_te = 10log10( E[0,te] / E[te,inf] ) de una respuesta impulsiva.
+    C50 (te=50 ms) y C30 (te=30 ms) son los índices de Celestinos (sec. 2.4).
+    `ir` puede ser la presión p(t) (se eleva al cuadrado) o su energía."""
+    t = np.asarray(t, dtype=float)
+    e = np.asarray(ir, dtype=float) ** 2
+    te = te_ms * 1e-3
+    early = float(np.sum(e[t <= te]))
+    late = float(np.sum(e[t > te]))
+    if late <= 1e-30:
+        return float("inf")
+    return 10.0 * np.log10(max(early, 1e-30) / late)
+
+
 # ---------------------------------------------------------------------------
 # Reflexion de la pared trasera (interaccion front<->rear, norte 'front_rear')
 # ---------------------------------------------------------------------------
@@ -624,6 +659,9 @@ def _config_metrics(sources_world, dims, origin, walls, receiver_world, *,
         if 0 < int(np.count_nonzero(inside)) < len(inside):
             total_db = total_db[inside]
     flat, spatial, L_bar = flatness_and_spatial(fa, total_db)
+    # MSFD = [SD, MD] de Celestinos (SD==spatial; MD = rugosidad espectral media
+    # por asiento). Barato: reusa el mismo grid total_db.
+    _sd, _md = msfd_metrics(fa, total_db)
     # Respuesta en el ASIENTO UNICO (receptor), con el MISMO motor modal+SBIR+
     # crossfade pero en UN solo punto. En la vista de optimizacion deja ver el null
     # que el promedio de ENERGIA de la zona (L_bar) no puede mostrar (un cero de
@@ -645,7 +683,7 @@ def _config_metrics(sources_world, dims, origin, walls, receiver_world, *,
     rear_refl = (rear_reflection(basis, kappa, Q_spec, dims, origin, axis, fa, xi=xi)
                  if want_reflection else float("nan"))
     return {"flat": flat, "spatial": spatial, "decay": decay, "L_bar": L_bar,
-            "L_rx": L_rx,
+            "L_rx": L_rx, "sd": _sd, "md": _md,
             "n_modes": basis.n_modes, "sbir_span": sbir_span,
             "rear_reflection": rear_refl,
             "freqs": np.asarray(basis.omega_n, dtype=float) / (2.0 * np.pi)}
@@ -758,6 +796,9 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
         "decay_real": real["decay"],
         "flat_ideal": ideal["flat"], "spatial_ideal": ideal["spatial"],
         "decay_ideal": ideal["decay"],
+        # MSFD = [SD, MD] de Celestinos (comparable con la literatura CABS).
+        "sd_real": real.get("sd"), "md_real": real.get("md"),
+        "sd_ideal": ideal.get("sd"), "md_ideal": ideal.get("md"),
         "checklist": checklist, "passed": bool(passed),
         "freq": fa, "total_db_mean_real": real["L_bar"],
         "total_db_mean_ideal": ideal["L_bar"],

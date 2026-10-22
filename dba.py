@@ -43,6 +43,58 @@ def travel_delay(basis: RectModalBasis, axis: int = 1) -> float:
     return basis.dims[axis] / basis.c
 
 
+def cabs_rear_gain(dims, axis: int = 1, *, rt60: float | None = None,
+                   xi: float | None = None, c: float = C0, air: bool = True,
+                   T: float = 20.0, RH: float = 50.0, P: float = 101325.0):
+    """Ganancia G(f) del parlante trasero del CABS (Celestinos & Nielsen, JAES
+    56(11) 2008, sec. 2.3 y Fig. 7).
+
+    El frente de onda que llega a la pared trasera NO tiene amplitud 1: viene
+    atenuado por el amortiguamiento de la sala y por la absorcion del aire sobre
+    la distancia de viaje L=dims[axis]. Para cancelarlo, el trasero debe igualar
+    ESA amplitud, no 1. Se modela
+
+        G(f) = exp(-delta * L / c) * exp(-alpha_aire(f) * L)
+
+    con delta la tasa de decaimiento (Np/s): delta = 3*ln(10)/RT60 si se da el
+    RT60 efectivo (= T30 Schroeder), o delta = xi*omega_1 del primer axial si se
+    da xi. Si no hay ni RT60 ni xi, el termino de amortiguamiento es 1 (solo
+    aire). alpha_aire por ISO 9613-1.
+
+    Devuelve un callable G(f) (float->float). Es real y <=1.
+    """
+    import acoustic_analysis as _aa
+    L = float(dims[axis])
+    if rt60 is not None and rt60 > 0:
+        delta = 3.0 * np.log(10.0) / float(rt60)
+    elif xi is not None and xi > 0:
+        # omega del primer axial sobre el eje: k_1 = pi/L -> omega_1 = c*pi/L.
+        omega_1 = c * np.pi / L
+        delta = float(xi) * omega_1
+    else:
+        delta = 0.0
+    g_damp = float(np.exp(-delta * L / c))
+
+    def G_of_f(f: float) -> float:
+        g = g_damp
+        if air:
+            a = _aa.air_absorption_alpha(float(f), T=T, RH=RH, P=P)
+            g *= float(np.exp(-a * L))
+        return g
+
+    return G_of_f
+
+
+def _as_gain_fn(rear_gain):
+    """Normaliza rear_gain (float|callable|None) a un callable G(f)->float."""
+    if rear_gain is None:
+        return lambda f: 1.0
+    if callable(rear_gain):
+        return rear_gain
+    g = float(rear_gain)
+    return lambda f: g
+
+
 def front_only_coupling(basis: RectModalBasis, axis: int = 1,
                         front_vn: complex = 1.0) -> np.ndarray:
     """CABS OFF: solo el array frontal de pared entera (C_n fijo)."""
@@ -52,21 +104,25 @@ def front_only_coupling(basis: RectModalBasis, axis: int = 1,
 
 def dba_coupling_fn(basis: RectModalBasis, axis: int = 1,
                     front_vn: complex = 1.0, delay: float | None = None,
-                    invert: bool = True) -> Callable[[float], np.ndarray]:
+                    invert: bool = True, rear_gain=1.0
+                    ) -> Callable[[float], np.ndarray]:
     """CABS ON: devuelve C(f) con el frente + trasero manejado.
 
     delay=None -> Ly/c (retardo de transito). invert=True -> inversion de
-    polaridad del trasero (el default de CABS).
+    polaridad del trasero (el default de CABS). rear_gain -> ganancia G del
+    trasero (float, callable G(f), o None=1.0); default 1.0 = comportamiento
+    historico. Ver `cabs_rear_gain` para el G fisico (amortiguamiento + aire).
     """
     if delay is None:
         delay = travel_delay(basis, axis)
     sign = -1.0 if invert else 1.0
     front = WallPiston(axis=axis, side="min", vn=front_vn)
     C_front = basis.wall_piston_coupling(front)
+    G = _as_gain_fn(rear_gain)
 
     def C_of_f(f: float) -> np.ndarray:
         omega = 2.0 * np.pi * f
-        vr = sign * front_vn * np.exp(-1j * omega * delay)
+        vr = sign * G(f) * front_vn * np.exp(-1j * omega * delay)
         rear = WallPiston(axis=axis, side="max", vn=vr)
         return C_front + basis.wall_piston_coupling(rear)
 
@@ -74,18 +130,20 @@ def dba_coupling_fn(basis: RectModalBasis, axis: int = 1,
 
 
 def array_naive_coupling_fn(basis: RectModalBasis, front: list, rear: list,
-                            axis: int = 1, delay: float | None = None
-                            ) -> Callable[[float], np.ndarray]:
+                            axis: int = 1, delay: float | None = None,
+                            rear_gain=1.0) -> Callable[[float], np.ndarray]:
     """Drive de RETARDO naive para arrays de pistones front/rear (generaliza
-    dba_coupling_fn a grillas): C(f) = Cf - e^{-i w tau} * Cr, con Cf/Cr los
-    acoplamientos de las grillas (vn=1) y tau el tiempo de tránsito."""
+    dba_coupling_fn a grillas): C(f) = Cf - G(f) e^{-i w tau} * Cr, con Cf/Cr los
+    acoplamientos de las grillas (vn=1), tau el tiempo de tránsito y G la ganancia
+    del trasero (default 1.0 = histórico)."""
     if delay is None:
         delay = travel_delay(basis, axis)
     Cf = coupling_matrix(basis, front).sum(axis=1)
     Cr = coupling_matrix(basis, rear).sum(axis=1)
+    G = _as_gain_fn(rear_gain)
 
     def C_of_f(f: float) -> np.ndarray:
-        return Cf - np.exp(-1j * 2.0 * np.pi * f * delay) * Cr
+        return Cf - G(f) * np.exp(-1j * 2.0 * np.pi * f * delay) * Cr
 
     return C_of_f
 
@@ -199,6 +257,67 @@ def ls_error_curve(basis: RectModalBasis, pistons: list, sensors, freqs, *,
     return E
 
 
+def santillan_global_eq(basis: RectModalBasis, pistons: list, sensors, freqs, *,
+                        axis: int = 1, xi: float = 0.03, reg: float = 0.0,
+                        model_delay: float | None = None, zone=None):
+    """Ecualización GLOBAL de banda ancha (Santillán, JASA 110(4) 2001, §IV,
+    ec. 10, Fig. 4): diseña un filtro FIR por fuente que ecualiza TODA la zona a
+    lo largo de la banda, no un punto.
+
+    Corre el LS-óptimo de Santillán `ls_drive` en cada frecuencia (q_l(f)),
+    aplica un DELAY DE MODELADO δ_m (fase lineal, para que la respuesta impulsiva
+    sea causal: el objetivo es una delta RETARDADA, §IV) y hace la IFFT de
+    q_l(f)·e^{-iω δ_m} para obtener los coeficientes FIR h_l(n) por fuente.
+
+    `freqs` DEBE ser una grilla uniforme [0, f_max] con Nf puntos (para la IFFT
+    one-sided). `model_delay=None` -> tiempo de tránsito del plano de sensores
+    sobre `axis`. `zone` (grilla de receptores) opcional: si se pasa, devuelve la
+    planitud de la zona corregida (std_f de la media espacial) como chequeo.
+
+    Devuelve dict: {freqs, Q (Nf,L drive), filters (L,N), fs, model_delay,
+    E_ls (Nf), zone_flat (float|None)}.
+    """
+    freqs = np.asarray(freqs, dtype=float)
+    Nf = len(freqs)
+    Cmat = coupling_matrix(basis, pistons)
+    Phi_s = basis.phi_matrix(sensors)
+    Ln = len(pistons)
+    Q = np.zeros((Nf, Ln), dtype=complex)
+    E = np.zeros(Nf)
+    for j, f in enumerate(freqs):
+        q, _, e = ls_drive(basis, Cmat, Phi_s, sensors, float(f),
+                           axis=axis, xi=xi, reg=reg)
+        Q[j] = q
+        E[j] = e
+    # Delay de modelado: por default, el tránsito a lo largo del span de sensores.
+    if model_delay is None:
+        span = float(np.ptp(np.atleast_2d(np.asarray(sensors, float))[:, axis]))
+        model_delay = span / basis.c
+    omega = 2.0 * np.pi * freqs
+    Qd = Q * np.exp(-1j * omega * model_delay)[:, None]
+    Qd[0] = 0.0                                   # sin DC (evita offset)
+    # FIR por fuente: IFFT one-sided. N muestras = 2*(Nf-1), fs = 2*f_max.
+    n_time = 2 * (Nf - 1)
+    filters = np.zeros((Ln, n_time), dtype=float)
+    for l in range(Ln):
+        filters[l] = np.fft.irfft(Qd[:, l], n=n_time)
+    fs = 2.0 * float(freqs[-1])
+    zone_flat = None
+    if zone is not None:
+        zone = np.asarray(zone, dtype=float)
+        Lbar = np.empty(Nf)
+        for j, f in enumerate(freqs):
+            if f <= 0:
+                Lbar[j] = np.nan
+                continue
+            C_opt = Cmat @ Q[j]
+            p = np.abs(basis.pressure_field(zone, float(f), C_opt, xi=xi))
+            Lbar[j] = 20.0 * np.log10(np.mean(p) + 1e-30)
+        zone_flat = float(np.nanstd(Lbar))
+    return {"freqs": freqs, "Q": Q, "filters": filters, "fs": fs,
+            "model_delay": float(model_delay), "E_ls": E, "zone_flat": zone_flat}
+
+
 def impulse_response(basis: RectModalBasis, receiver, coupling, *,
                      fmax: float = 200.0, n_freq: int = 4096,
                      xi: float = 0.03):
@@ -236,31 +355,55 @@ def _t_decay(t, sch, level_db=-15.0):
 
 
 def alias_fmax(dims, axis: int, n_a: int, n_b: int, c: float = C0,
-               inset: float = 0.05) -> float:
-    """Frecuencia máxima de ecualización f_max = c/d (Santillán), con d el mayor
-    espaciado entre subs adyacentes en los dos ejes transversales a `axis`. Por
-    encima de f_max el array no puede sintetizar la onda plana (aliasing
-    espacial) y el DBA deja de servir. Devuelve inf si hay 1 sub por eje."""
+               inset: float = 0.05, rt60: float | None = None,
+               delta_e: float | None = None) -> float:
+    """Frecuencia máxima de ecualización f_max = c/d − Δe (CABS, Celestinos &
+    Nielsen JAES 56(11) 2008, sec. 2.1), con d el mayor espaciado entre subs
+    adyacentes en los dos ejes transversales a `axis`. Por encima de f_max el
+    array no puede sintetizar la onda plana (aliasing espacial) y el DBA deja de
+    servir. Devuelve inf si hay 1 sub por eje.
+
+    Δe DEPENDE DEL AMORTIGUAMIENTO. La tesis de Celestinos (2007, Paper D §3.1,
+    p.83) y el paper JAES lo dejan explícitamente como "una constante que depende
+    del amortiguamiento de la sala, aproximable del tiempo de reverberación",
+    SIN fórmula cerrada. APROXIMACIÓN documentada acá: Δe = δ/π = 3·ln10/(π·RT60)
+    (el ancho de banda de media potencia modal, en Hz), que achica la banda útil
+    cuando la sala es más amortiguada. `delta_e` explícito la fija a mano.
+    Default (ambos None) -> Δe=0 = comportamiento histórico (solo c/d).
+    """
     a, b = tuple(x for x in (0, 1, 2) if x != axis)
     ds = []
     for L, n in ((dims[a], n_a), (dims[b], n_b)):
         if n > 1:
             ds.append((L - 2 * inset) / (n - 1))
-    return float(c / max(ds)) if ds else float("inf")
+    if not ds:
+        return float("inf")
+    f_alias = c / max(ds)
+    if delta_e is not None:
+        de = float(delta_e)
+    elif rt60 is not None and rt60 > 0:
+        de = 3.0 * np.log(10.0) / (np.pi * float(rt60))
+    else:
+        de = 0.0
+    return float(max(f_alias - de, 0.0))
 
 
 def compute_dba(dims, receiver, *, axis: int = 1, n_x: int = 4, n_z: int = 4,
                 drive: str = "ls", xi: float = 0.03, fmin: float = 20.0,
                 fmax: float = 200.0, n_freq: int = 220, reg: float = 0.005,
-                c: float = C0) -> dict:
+                c: float = C0, rear_gain=1.0, rt60=None) -> dict:
     """Análisis DBA/CABS para una sala rectangular (motor headless de la
     herramienta de GUI). Compara CABS off (array frontal solo) vs on (front +
     rear con el drive elegido).
 
     Las métricas (planitud espectral, varianza espacial) se miden en la BANDA
-    VÁLIDA [fmin, min(fmax, f_max=c/d)]: arriba de f_max hay aliasing espacial y
-    el DBA no aplica, así que promediar ahí ensuciaría el número. El drive LS se
+    VÁLIDA [fmin, min(fmax, f_max=c/d−Δe)]: arriba de f_max hay aliasing espacial
+    y el DBA no aplica, así que promediar ahí ensuciaría el número. El drive LS se
     regulariza (reg) para no crear nulos profundos. drive: "ls" | "naive".
+
+    `rear_gain` (float|callable, default 1.0): ganancia G del trasero del drive
+    naive (ver `cabs_rear_gain`). `rt60` (opcional): aplica el término Δe a f_max
+    (CABS §2.1); None = Δe=0 = histórico. Ambos defaults = comportamiento previo.
     """
     dims = tuple(float(x) for x in dims)
     receiver = np.asarray(receiver, dtype=float)
@@ -272,12 +415,13 @@ def compute_dba(dims, receiver, *, axis: int = 1, n_x: int = 4, n_z: int = 4,
 
     C_before = coupling_matrix(basis, front).sum(axis=1)
     if drive == "naive":
-        C_after = array_naive_coupling_fn(basis, front, rear, axis)
+        C_after = array_naive_coupling_fn(basis, front, rear, axis,
+                                          rear_gain=rear_gain)
     else:
         C_after = dba_ls_coupling_fn(basis, front + rear, zone, axis=axis,
                                      xi=xi, reg=reg)
 
-    f_max = alias_fmax(dims, axis, n_x, n_z, c=c)
+    f_max = alias_fmax(dims, axis, n_x, n_z, c=c, rt60=rt60)
     band_hi = min(fmax, f_max)
 
     fa = np.linspace(fmin, fmax, n_freq)
@@ -327,7 +471,7 @@ def piston_center(piston: WallPiston, dims) -> tuple:
 def build_dba_sources(dims, *, axis: int = 1, n_x: int = 4, n_z: int = 4,
                       drive: str = "ls", xi: float = 0.03, fmin: float = 20.0,
                       fmax: float = 180.0, reg: float = 0.005,
-                      inset: float = 0.06, c: float = C0) -> list:
+                      inset: float = 0.06, c: float = C0, rear_gain=1.0) -> list:
     """Materializa un preset DBA como fuentes PUNTUALES (monopolos) para inyectar
     en la lista de fuentes del panel. Devuelve specs dict en coordenadas [0,L]:
       {pos, label, Q, delay_s, polarity, response}
@@ -371,6 +515,10 @@ def build_dba_sources(dims, *, axis: int = 1, n_x: int = 4, n_z: int = 4,
     specs = []
     if drive == "naive":
         delay = L / c
+        # Ganancia G del trasero (amortiguamiento + aire). Se hornea como Q
+        # escalar (el termino de amortiguamiento domina y es ~plano en la banda).
+        Gfn = _as_gain_fn(rear_gain)
+        g_rear = complex(Gfn(0.5 * (fmin + fmax)))
         for i, p in enumerate(front):
             ori, pit = _facing(p)
             specs.append(dict(pos=_center(p), label=f"DBA-F{i}", Q=1.0 + 0j,
@@ -378,7 +526,7 @@ def build_dba_sources(dims, *, axis: int = 1, n_x: int = 4, n_z: int = 4,
                               orientation=ori, pitch=pit))
         for i, p in enumerate(rear):
             ori, pit = _facing(p)
-            specs.append(dict(pos=_center(p), label=f"DBA-R{i}", Q=1.0 + 0j,
+            specs.append(dict(pos=_center(p), label=f"DBA-R{i}", Q=g_rear,
                               delay_s=delay, polarity=-1, response=None,
                               orientation=ori, pitch=pit))
     else:

@@ -2956,6 +2956,22 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.73 (refinamientos de subs enfrentados CABS: ganancia del trasero, banda, MSFD y ganancia de sala)
+
+**Cambios v2.73** (22 de octubre 2026): seis refinamientos del modelo de subwoofers enfrentados (CABS/DBA), tomados de los trabajos de Celestinos & Nielsen (JAES 2008 y Acoustics'08), su tesis (2007) y Santillán (JASA 2001). Los efectos que cambian lo que se ve entran como opción (checkbox) y por default quedan apagados, así los proyectos existentes no cambian.
+
+1. **Ganancia del parlante trasero.** En «Optimización de fuentes» → «Diseñar array» hay un checkbox nuevo **«Refinar CABS por amortiguamiento»**. Al activarlo, el array trasero del drive «retardo + inversión» se baja de nivel con una ganancia G que representa que el frente de onda llega atenuado a la pared del fondo (por el amortiguamiento de la sala y la absorción del aire). En una sala amortiguada eso deja la respuesta más pareja entre asientos (con el drive de mínimos cuadrados no cambia, porque ya resuelve el nivel óptimo).
+
+2. **Banda útil con el amortiguamiento.** El mismo checkbox hace que la frecuencia máxima del array use f_max = c/d − Δe (antes solo c/d): la banda donde el array puede armar la onda plana se achica un poco cuando la sala es más amortiguada. El rótulo bajo los controles pasa a mostrar «f_max = c/d − Δe».
+
+3. **MSFD en la evaluación.** El resultado de «Evaluar» ahora muestra el par **MSFD (Celestinos): SD ± dB, MD ± dB**: SD es la variación de nivel entre asientos (la misma «varianza espacial» de siempre) y MD es la rugosidad de la respuesta en frecuencia de un asiento típico. Es el número con el que la literatura de CABS compara la uniformidad.
+
+4. **Ganancia de sala (modo cero).** En la sección de FRF hay un checkbox **«Incluir ganancia de sala (modo cero, <1er modo)»**. Al activarlo, la respuesta incluye la compliancia del aire del recinto: por debajo del primer modo la curva sube hacia las frecuencias muy bajas a unos 20 dB por década (la «ganancia de sala» de los recintos chicos). Por encima del primer modo casi no cambia.
+
+Quedó también, como herramienta interna (todavía sin interfaz), la ecualización global de banda ancha de Santillán (diseño de un filtro que aplana la respuesta en toda la zona de escucha, no en un solo punto), y una validación del CABS en una sala en L.
+
+*Manual actualizado al 22 de Octubre de 2026 — v2.73.*
+
 ## Cambios v2.72 (el soft avisa cuando el dominio simulado no coincide con el recinto real)
 
 **Cambios v2.72** (21 de octubre 2026): dos guardas de exactitud del dominio, para que la malla con la que se calcula nunca difiera en silencio del recinto real. No cambian la física (solver, modos, amortiguamiento); solo detectan y avisan cuando el dominio sería incorrecto.

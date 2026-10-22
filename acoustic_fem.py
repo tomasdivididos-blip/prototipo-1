@@ -405,6 +405,9 @@ def frequency_response(
     damping = 0.03,        # float (uniforme) o ndarray (Nm,) por modo
     c: float = C0,
     rho0: float = RHO0,
+    include_room_gain: bool = False,
+    volume: float | None = None,
+    room_gain_fleak: float = 5.0,
 ) -> np.ndarray:
     """H(f) en un receptor a partir de los modos numericos.
 
@@ -451,6 +454,32 @@ def frequency_response(
         denom = np.where(np.abs(denom) < 1e-30, 1e-30, denom)
         num_i = phi_r * coupling[i]               # (Nm,) complejo
         H[i] = 1j * omega * rho0 * c_sq * np.sum(num_i / denom)
+
+    if include_room_gain:
+        # GANANCIA DE SALA / MODO CERO (Celestinos & Nielsen, CABS, sec. 2.4): el
+        # solver descarta el modo trivial p=const (drop_zero_mode), que representa
+        # la COMPLIANCIA del aire (pressure-chamber). Por debajo del 1er modo la
+        # sala actua como un volumen comprimible y la respuesta SUBE hacia DC a
+        # -20 dB/decada. Se suma como termino analitico de 1er orden (NO se
+        # reactiva el omega=0 singular del Lorentziano):
+        #   H0(f) = i w rho0 c^2 (Q_net/V) / (-w^2 + 2j d_leak w)
+        # con d_leak = pi*f_leak la perdida por fuga que fija el corte (estimada),
+        # y Q_net el acople al modo constante phi0=1/sqrt(V) (un dipolo de bafle
+        # abierto, de volumen-velocidad neta cero, NO excita este modo).
+        if volume is None or volume <= 0:
+            raise ValueError("include_room_gain requiere volume>0 (m^3).")
+        V = float(volume)
+        phi0 = np.full(phis.shape[0], 1.0 / np.sqrt(V))
+        phi_s0 = _source_modal_coupling(locator, phi0[:, None], sources)  # (Ns,1)
+        coupling0 = src_spec @ phi_s0[:, 0]                   # (Nf,) complejo
+        phi_r0 = 1.0 / np.sqrt(V)
+        d_leak = np.pi * float(room_gain_fleak)
+        for i, f in enumerate(freq_axis):
+            omega = 2.0 * np.pi * f
+            denom0 = -omega**2 + 2j * d_leak * omega
+            if abs(denom0) < 1e-30:
+                continue
+            H[i] += 1j * omega * rho0 * c_sq * phi_r0 * coupling0[i] / denom0
     return H
 
 

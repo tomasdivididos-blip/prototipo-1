@@ -4852,6 +4852,16 @@ class AcousticPanel(QWidget):
         fg.addRow("f mín (Hz):", self.sb_frf_fmin)
         fg.addRow("f máx (Hz):", self.sb_frf_fmax)
         fg.addRow("Nº puntos:", self.sb_frf_n)
+        # Ganancia de sala / modo cero (compliancia del aire por debajo del 1er
+        # modo; Celestinos & Nielsen CABS sec. 2.4). Opt-in: OFF = histórico.
+        self.chk_room_gain = QCheckBox("Incluir ganancia de sala (modo cero, <1er modo)")
+        self.chk_room_gain.setChecked(False)
+        self.chk_room_gain.setToolTip(
+            "ON: suma la compliancia del aire (modo p=const que el solver descarta). "
+            "Por debajo del 1er modo la respuesta sube hacia DC a −20 dB/década "
+            "(ganancia de sala). Por encima del 1er modo es despreciable. "
+            "OFF = comportamiento histórico (sin el término).")
+        fg.addRow(self.chk_room_gain)
         self.btn_frf_fem = QPushButton("Calcular FRF")
         fg.addRow(self.btn_frf_fem)
         self.btn_frf_fem.clicked.connect(lambda: self._compute_frf("fem"))
@@ -7710,6 +7720,10 @@ class AcousticPanel(QWidget):
                 self._xi_per_mode = self._compute_xi_from_materials()
                 damping = self._xi_per_mode if self._xi_per_mode is not None else 0.03
             self._log("Calculando FRF (FEM)...")
+            # Ganancia de sala / modo cero (opt-in): necesita el volumen del recinto.
+            _room_gain = bool(getattr(self, "chk_room_gain", None)
+                              and self.chk_room_gain.isChecked())
+            _vol = aa.compute_mesh_volume(verts, tris) if _room_gain else None
             result = aa.run_fem_frf(
                 self.modal_result, act, self.receiver,
                 f_min=self.sb_frf_fmin.value(),
@@ -7718,6 +7732,7 @@ class AcousticPanel(QWidget):
                 damping=damping,
                 # Capa 0 (Etapa 5): resonancias corridas por reactancia de pared.
                 modal_freqs=self._effective_modal_freqs(),
+                include_room_gain=_room_gain, volume=_vol,
             )
         except Exception as e:
             QMessageBox.critical(self, "Error FRF", str(e))

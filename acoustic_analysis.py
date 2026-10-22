@@ -214,17 +214,26 @@ def run_fem_frf(
     n_freqs: int = 200,
     damping: float = 0.03,
     modal_freqs=None,
+    include_room_gain: bool = False,
+    volume=None,
+    room_gain_fleak: float = 5.0,
 ) -> FRFResult:
     """`modal_freqs` (opcional, Nm,): frecuencias de RESONANCIA a usar en la suma
     modal, en vez de las rigidas `modal.freqs`. Es el corrimiento reactivo de la
     Capa 0 (Im(beta) -> fₙ corrida); la FORMA modal `modal.phis` sigue rigida
     (perturbacion de 1er orden, D3). Sin construcciones se pasa None y coincide
-    bit a bit con el camino previo."""
+    bit a bit con el camino previo.
+
+    `include_room_gain` (default False): suma la ganancia de sala / modo cero
+    (compliancia del aire, <1er modo; CABS sec. 2.4). Requiere `volume` (m^3).
+    Default OFF = comportamiento previo."""
     fa = np.linspace(f_min, f_max, n_freqs)
     freqs = modal.freqs if modal_freqs is None else np.asarray(modal_freqs, float)
     H = acoustic_fem.frequency_response(
         modal.locator, freqs, modal.phis, sources, receiver,
         freq_axis=fa, damping=damping,
+        include_room_gain=include_room_gain, volume=volume,
+        room_gain_fleak=room_gain_fleak,
     )
     return FRFResult(method="fem", freq_axis=fa, H=H, receiver=tuple(receiver))
 
@@ -418,6 +427,43 @@ def schroeder_frequency(volume: float, surface_area: float,
     """
     RT60 = 0.161 * volume / max(alpha * surface_area, 1e-9)
     return 2000.0 * float(np.sqrt(max(RT60 / max(volume, 1e-9), 0)))
+
+
+def air_absorption_alpha(freq, T: float = 20.0, RH: float = 50.0,
+                         P: float = 101325.0):
+    """Coeficiente de atenuacion del aire alpha(f) en Np/m (ISO 9613-1:1993).
+
+    Parameters
+    ----------
+    freq : float o array, frecuencia [Hz].
+    T    : temperatura [grados C].  RH : humedad relativa [%].  P : presion [Pa].
+
+    Devuelve alpha en Np/m (para usar como e^{-alpha*L}). Para pasar a dB/m,
+    multiplicar por 8.686. A graves (<200 Hz) alpha es ~1e-4 Np/m o menos.
+
+    Ref.: ISO 9613-1, Attenuation of sound during propagation outdoors, Part 1.
+    """
+    f = np.asarray(freq, dtype=float)
+    Tk = T + 273.15                      # K
+    T0 = 293.15                          # K (20 C de referencia)
+    T01 = 273.16                         # K (punto triple del agua)
+    pr = 101325.0                        # Pa de referencia
+    # Presion de saturacion de vapor / pr (ISO 9613-1).
+    psat_pr = 10.0 ** (-6.8346 * (T01 / Tk) ** 1.261 + 4.6151)
+    # Concentracion molar de vapor de agua [%].
+    h = RH * psat_pr * (pr / P)
+    # Frecuencias de relajacion del oxigeno y del nitrogeno.
+    frO = (P / pr) * (24.0 + 4.04e4 * h * (0.02 + h) / (0.391 + h))
+    frN = (P / pr) * (Tk / T0) ** (-0.5) * (
+        9.0 + 280.0 * h * np.exp(-4.170 * ((Tk / T0) ** (-1.0 / 3.0) - 1.0)))
+    # Coeficiente de atenuacion [dB/m] (ISO 9613-1 ec. 3).
+    alpha_db = 8.686 * f ** 2 * (
+        1.84e-11 * (pr / P) * (Tk / T0) ** 0.5
+        + (Tk / T0) ** (-2.5) * (
+            0.01275 * np.exp(-2239.1 / Tk) / (frO + f ** 2 / frO)
+            + 0.1068 * np.exp(-3352.0 / Tk) / (frN + f ** 2 / frN)))
+    alpha_np = alpha_db / 8.686          # Np/m
+    return float(alpha_np) if np.ndim(freq) == 0 else alpha_np
 
 
 def pressure_field_3d(modal: ModalSolution, sources: SourceArray,
