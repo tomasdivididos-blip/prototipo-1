@@ -796,6 +796,29 @@ def colormap_signed_vivid(t: np.ndarray) -> np.ndarray:
     return (1.0 - a) * GRAY + a * target
 
 
+def colormap_lerp3(t01, c_lo, c_mid, c_hi) -> np.ndarray:
+    """t en [0,1] -> RGB interpolado lineal entre tres colores: c_lo (0),
+    c_mid (0.5), c_hi (1). Para el campo de presion |p| con colores configurables."""
+    t = np.clip(np.asarray(t01, dtype=float), 0.0, 1.0)[..., None]
+    lo = np.asarray(c_lo, float); mid = np.asarray(c_mid, float)
+    hi = np.asarray(c_hi, float)
+    lower = (1.0 - t * 2.0) * lo + (t * 2.0) * mid           # t in [0,0.5]
+    upper = (1.0 - (t - 0.5) * 2.0) * mid + ((t - 0.5) * 2.0) * hi  # [0.5,1]
+    return np.where(t <= 0.5, lower, upper)
+
+
+def colormap_signed3(t, c_min, c_zero, c_max) -> np.ndarray:
+    """t en [-1,1] -> RGB entre c_min (t=-1), c_zero (t=0), c_max (t=+1), con
+    saturacion sqrt(|t|) (acelera la transicion cerca del centro). Colores
+    configurables para la forma modal."""
+    t = np.clip(np.asarray(t, dtype=float), -1.0, 1.0)
+    z = np.asarray(c_zero, float); mn = np.asarray(c_min, float)
+    mx = np.asarray(c_max, float)
+    a = np.sqrt(np.abs(t))[..., None]
+    target = np.where(t[..., None] >= 0, mx, mn)
+    return (1.0 - a) * z + a * target
+
+
 # ---------------------------------------------------------------------------
 # Mapa de calor 3D (nube de puntos coloreada por presion)
 # ---------------------------------------------------------------------------
@@ -826,6 +849,22 @@ def _field_point_size_world(points, factor: float = 0.6, fallback: float = 0.08)
     return factor * min(steps)
 
 
+def _depth_alpha_scale(n, target: float = 4.0, floor: float = 0.10,
+                       cap: float = 1.0) -> float:
+    """Factor de opacidad por punto para el blending ADITIVO del campo/modos, que
+    compensa la SATURACION A BLANCO por acumulacion en profundidad (item 6).
+
+    Mirando a traves del volumen se apilan ~N^(1/3) capas de puntos; con blending
+    aditivo sus opacidades SE SUMAN y saturan a blanco a alta resolucion. Se baja
+    la opacidad por punto ∝ 1/N^(1/3) para que la suma en profundidad quede ~cte
+    (visible, sin clipping) a cualquier N, conservando la transparencia que deja
+    VER ADENTRO (lo que se perdia con alpha-over opaco). `target` ≈ opacidad
+    acumulada objetivo de las capas; floor/cap acotan el factor."""
+    n = max(int(n), 1)
+    layers = n ** (1.0 / 3.0)
+    return float(min(cap, max(floor, target / layers)))
+
+
 class PressureField3D:
     """Renderiza el campo de presion acustica 3D como nube de puntos coloreada.
 
@@ -838,23 +877,38 @@ class PressureField3D:
         self._item = None
 
     def update(self, points: np.ndarray, pressure_abs: np.ndarray,
-               point_size=None):
-        """Actualiza la visualizacion.
+               point_size=None, saturation: float = 4.0,
+               c_lo=None, c_mid=None, c_hi=None, zero_transparent: bool = False):
+        """Actualiza la visualizacion del campo de presion |p| (sin signo).
 
         points: (N,3) posiciones dentro del recinto
         pressure_abs: (N,) amplitud de presion en cada punto
         point_size: diametro en METROS; None = auto segun el espaciado de la grilla.
+        saturation: 1..7 (config de render); escala la opacidad acumulada (target
+            de `_depth_alpha_scale`). c_lo/c_mid/c_hi: colores (RGB 0..1) del minimo
+            (t=0), medio (t=0.5) y maximo (t=1); None = rainbow por default.
+            zero_transparent: si True, el extremo bajo (|p| minimo) se hace
+            transparente (alpha 0 en t=0).
         """
         self.clear()
         if points is None or len(points) == 0:
             return
         p_max = float(pressure_abs.max()) if pressure_abs.max() > 0 else 1.0
         t = pressure_abs / p_max                     # normalizado [0,1]
-        # Rainbow HSV: azul (min) -> celeste -> turquesa -> verde claro (medio)
-        # -> amarillo -> naranja -> rojo (max). Saturado para vibrancia
-        # incluso con muchos puntos overlap a alta resolucion.
-        rgb = colormap_rainbow(t)
-        alpha = (0.4 + 0.5 * t).reshape(-1, 1)      # mas opaco donde hay mas presion
+        if c_lo is None or c_mid is None or c_hi is None:
+            rgb = colormap_rainbow(t)                # default historico
+        else:
+            rgb = colormap_lerp3(t, c_lo, c_mid, c_hi)
+        # Blending ADITIVO (default de pyqtgraph): deja VER ADENTRO del volumen
+        # (los puntos del fondo brillan a traves de los de adelante), pero la suma
+        # a lo largo de la profundidad satura a BLANCO cuando hay muchas capas de
+        # puntos. Fix (item 6): se escala la opacidad por punto INVERSAMENTE a la
+        # densidad (~N^(1/3) = capas en profundidad), asi la suma queda acotada a
+        # cualquier resolucion sin perder la transparencia que deja ver adentro.
+        # `saturation` (1..7) ajusta la opacidad acumulada (mas = mas saturado).
+        k = _depth_alpha_scale(len(points), target=float(saturation))
+        base = t if zero_transparent else (0.4 + 0.5 * t)
+        alpha = (base * k).reshape(-1, 1)
         rgba = np.concatenate([rgb, alpha], axis=1).astype(np.float32)
 
         sz = _field_point_size_world(points) if point_size is None else point_size
@@ -867,14 +921,16 @@ class PressureField3D:
         self.viewer.addItem(self._item)
 
     def update_signed(self, points: np.ndarray, values: np.ndarray,
-                      point_size=None):
-        """Muestra forma modal con signo: AZUL=negativo, GRIS=cero, ROJO=positivo.
+                      point_size=None, saturation: float = 4.0,
+                      c_min=None, c_zero=None, c_max=None,
+                      zero_transparent: bool = False):
+        """Muestra forma modal con signo: por default AZUL=negativo, GRIS=cero,
+        ROJO=positivo (configurable por c_min/c_zero/c_max, RGB 0..1).
 
-        Reemplazo del blanco central por gris para evitar que los puntos cerca
-        de cero "blanqueen" la imagen al subir la resolucion. Usa colors mas
-        vibrantes (saturacion por sqrt(|t|)).
-
-        point_size: diametro en METROS; None = auto segun el espaciado de la grilla.
+        saturation: 1..7 (config de render), escala la opacidad acumulada.
+        zero_transparent: si True el centro (t=0) se hace transparente (los puntos
+        cerca de cero, que no aportan info modal, desaparecen). point_size:
+        diametro en METROS; None = auto segun el espaciado de la grilla.
         """
         self.clear()
         if points is None or len(points) == 0:
@@ -882,10 +938,17 @@ class PressureField3D:
         m = float(np.max(np.abs(values))) if len(values) > 0 else 1.0
         m = max(m, 1e-12)
         t = values / m                         # normalizado a [-1, 1]
-        rgb = colormap_signed_vivid(t)         # (N, 3) — gris en t=0, vibrante en |t|=1
-        # Alpha mas opaco fuera del centro: puntos cerca de cero se ven menos
-        # (no aportan informacion modal). Minimo 0.25 para que se vean.
-        alpha = (0.25 + 0.70 * np.abs(t)).reshape(-1, 1)
+        if c_min is None or c_zero is None or c_max is None:
+            rgb = colormap_signed_vivid(t)     # default historico (gris en 0)
+        else:
+            rgb = colormap_signed3(t, c_min, c_zero, c_max)
+        # Blending ADITIVO: deja ver la estructura interna del modo; la opacidad
+        # por punto baja ~N^(1/3) (densidad) para que la suma en profundidad no
+        # sature a blanco a alta resolucion (item 6). `saturation` (1..7) ajusta
+        # la opacidad acumulada. zero_transparent -> alpha 0 en el centro.
+        k = _depth_alpha_scale(len(points), target=float(saturation))
+        base = np.abs(t) if zero_transparent else (0.25 + 0.70 * np.abs(t))
+        alpha = (base * k).reshape(-1, 1)
         rgba = np.concatenate([rgb, alpha], axis=1).astype(np.float32)
         sz = _field_point_size_world(points) if point_size is None else point_size
         self._item = gl.GLScatterPlotItem(

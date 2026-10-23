@@ -3106,6 +3106,121 @@ class CompareDialog(QDialog):
                 fh.write(",".join(f"{x:.6g}" for x in row) + "\n")
 
 
+class _ColorButton(QPushButton):
+    """Botón que muestra un color (RGB 0..1) y lo deja elegir con QColorDialog."""
+
+    def __init__(self, rgb01, parent=None):
+        super().__init__(parent)
+        self.setFixedWidth(90)
+        self._set(rgb01)
+        self.clicked.connect(self._pick)
+
+    def _set(self, rgb01):
+        self._rgb = tuple(float(np.clip(c, 0.0, 1.0)) for c in rgb01)
+        qc = QColor.fromRgbF(*self._rgb)
+        # Texto en blanco o negro según luminancia para que se lea.
+        lum = 0.299 * self._rgb[0] + 0.587 * self._rgb[1] + 0.114 * self._rgb[2]
+        fg = "#000" if lum > 0.55 else "#fff"
+        self.setStyleSheet(f"background:{qc.name()}; color:{fg}; min-height:20px;")
+        self.setText(qc.name())
+
+    def _pick(self):
+        from PyQt5.QtWidgets import QColorDialog
+        qc = QColorDialog.getColor(QColor.fromRgbF(*self._rgb), self,
+                                   "Elegí un color")
+        if qc.isValid():
+            self._set((qc.redF(), qc.greenF(), qc.blueF()))
+
+    def rgb01(self):
+        return self._rgb
+
+
+class RenderConfigDialog(QDialog):
+    """«Configuración de render 3D»: resolución (10–100), saturación (1–7) y
+    colores (mínimo / cero / máximo) de la forma modal y del campo de presión,
+    con opción de cero transparente en cada uno."""
+
+    def __init__(self, cfg, resolution, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Configuración de render 3D")
+        try:
+            apply_dialog_theme(self)
+        except Exception:
+            pass
+        lay = QVBoxLayout(self)
+
+        top = QFormLayout()
+        self.sb_res = QSpinBox(); self.sb_res.setRange(10, 100)
+        self.sb_res.setValue(int(resolution))
+        top.addRow("Resolución (10–100):", self.sb_res)
+        self.sb_sat = QSpinBox(); self.sb_sat.setRange(1, 15)
+        self.sb_sat.setValue(int(round(float(cfg["saturation"]))))
+        self.sb_sat.setToolTip("Más alto = más saturado/vívido (suma de opacidad "
+                               "en profundidad). 1 = tenue, 15 = muy saturado.")
+        top.addRow("Saturación (1–15):", self.sb_sat)
+        lay.addLayout(top)
+
+        # --- Forma modal (señal con signo: mínimo / cero / máximo) ---
+        m = cfg["modal"]
+        gm = QGroupBox("Forma modal (color por signo)")
+        fm = QFormLayout(gm)
+        self.m_min = _ColorButton(m["c_min"])
+        self.m_zero = _ColorButton(m["c_zero"])
+        self.m_max = _ColorButton(m["c_max"])
+        fm.addRow("Mínimo (−):", self.m_min)
+        fm.addRow("Cero (0):", self.m_zero)
+        fm.addRow("Máximo (+):", self.m_max)
+        self.m_zt = QCheckBox("Cero transparente")
+        self.m_zt.setChecked(bool(m["zero_transparent"]))
+        fm.addRow(self.m_zt)
+        lay.addWidget(gm)
+
+        # --- Campo de presión |p| (mínimo / medio / máximo) ---
+        fc = cfg["field"]
+        gf = QGroupBox("Campo de presión |p|")
+        ff = QFormLayout(gf)
+        self.f_rainbow = QCheckBox("Arcoíris (por default); destildá para elegir colores")
+        self.f_rainbow.setChecked(bool(fc["rainbow"]))
+        ff.addRow(self.f_rainbow)
+        self.f_lo = _ColorButton(fc["c_lo"])
+        self.f_mid = _ColorButton(fc["c_mid"])
+        self.f_hi = _ColorButton(fc["c_hi"])
+        ff.addRow("Mínimo (|p| bajo):", self.f_lo)
+        ff.addRow("Medio:", self.f_mid)
+        ff.addRow("Máximo (|p| alto):", self.f_hi)
+        self.f_zt = QCheckBox("Mínimo transparente")
+        self.f_zt.setChecked(bool(fc["zero_transparent"]))
+        ff.addRow(self.f_zt)
+        # Los colores se habilitan solo si NO es arcoíris.
+        def _sync_field(_=None):
+            on = not self.f_rainbow.isChecked()
+            for w in (self.f_lo, self.f_mid, self.f_hi, self.f_zt):
+                w.setEnabled(on)
+        self.f_rainbow.toggled.connect(_sync_field)
+        _sync_field()
+        lay.addWidget(gf)
+
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb.accepted.connect(self.accept)
+        bb.rejected.connect(self.reject)
+        lay.addWidget(bb)
+
+    def resolution(self):
+        return int(self.sb_res.value())
+
+    def result_cfg(self):
+        return {
+            "saturation": float(self.sb_sat.value()),
+            "modal": {"c_min": self.m_min.rgb01(), "c_zero": self.m_zero.rgb01(),
+                      "c_max": self.m_max.rgb01(),
+                      "zero_transparent": self.m_zt.isChecked()},
+            "field": {"rainbow": self.f_rainbow.isChecked(),
+                      "c_lo": self.f_lo.rgb01(), "c_mid": self.f_mid.rgb01(),
+                      "c_hi": self.f_hi.rgb01(),
+                      "zero_transparent": self.f_zt.isChecked()},
+        }
+
+
 class ModeTableDialog(QDialog):
     """Tabla por modo (Capa 0, Etapa 5c): expone EXPLICITAMENTE el corrimiento
     de frecuencia Delta f_n = f_efectiva - f_rigida (por Im(beta) de las
@@ -4928,15 +5043,22 @@ class AcousticPanel(QWidget):
         f3d.addRow("Actualización:", self.combo_field3d_mode)
 
         self.sb_field3d_res = QSpinBox()
-        self.sb_field3d_res.setRange(8, 80)
+        self.sb_field3d_res.setRange(10, 100)
         self.sb_field3d_res.setValue(20)
         self.sb_field3d_res.setToolTip(
-            "Puntos por eje para el campo 3D.\n"
+            "Puntos por eje para el campo 3D (rango 10–100).\n"
             "20 → ~800-2000 pts (rápido)\n"
             "40 → ~6000-8000 pts (medio)\n"
             "60 → ~15000+ pts (lento, detallado)"
         )
-        f3d.addRow("Resolución campo 3D:", self.sb_field3d_res)
+        f3d.addRow("Resolución campo 3D (10–100):", self.sb_field3d_res)
+
+        btn_render_cfg = QPushButton("Configuración de render…")
+        btn_render_cfg.setToolTip(
+            "Resolución, saturación (1–7) y colores (mínimo / cero / máximo) de la "
+            "forma modal y del campo de presión, con opción de cero transparente.")
+        btn_render_cfg.clicked.connect(self._open_render_config)
+        f3d.addRow(btn_render_cfg)
 
         self.chk_grad = QCheckBox("Mostrar flechas de gradiente (blancas)")
         self.chk_grad.setChecked(False)
@@ -7909,6 +8031,38 @@ class AcousticPanel(QWidget):
             self.pressure_3d = av_mod.PressureField3D(self.viewer)
             self.grad_arrows = av_mod.GradientArrows(self.viewer)
 
+    @staticmethod
+    def _default_render_cfg():
+        """Config de render 3D por default (reproduce el look histórico)."""
+        return {
+            "saturation": 4.0,
+            "modal": {"c_min": (0.10, 0.30, 1.00),      # azul
+                      "c_zero": (0.35, 0.35, 0.35),     # gris
+                      "c_max": (1.00, 0.15, 0.10),      # rojo
+                      "zero_transparent": False},
+            "field": {"rainbow": True,                  # arcoíris por default
+                      "c_lo": (0.10, 0.30, 1.00),       # azul (|p| mínimo)
+                      "c_mid": (0.20, 0.90, 0.30),      # verde (medio)
+                      "c_hi": (1.00, 0.15, 0.10),       # rojo (|p| máximo)
+                      "zero_transparent": False},
+        }
+
+    def _get_render_cfg(self):
+        cfg = getattr(self, "_render_cfg", None)
+        if cfg is None:
+            cfg = self._default_render_cfg()
+            self._render_cfg = cfg
+        return cfg
+
+    def _open_render_config(self):
+        """Diálogo «Configuración de render»: resolución, saturación y colores."""
+        cfg = self._get_render_cfg()
+        dlg = RenderConfigDialog(cfg, self.sb_field3d_res.value(), parent=self)
+        if dlg.exec_() == QDialog.Accepted:
+            self._render_cfg = dlg.result_cfg()
+            self.sb_field3d_res.setValue(dlg.resolution())
+            self._update_field_3d()
+
     def _update_field_3d(self):
         """Actualiza la nube de puntos 3D segun el modo de campo seleccionado.
 
@@ -7931,6 +8085,8 @@ class AcousticPanel(QWidget):
         kind = self.combo_field.currentIndex()   # 0=modo, 1=presion
         f    = float(self.modal_result.freqs[mode_idx])
         res  = self.sb_field3d_res.value()      # controlado por el usuario
+        rcfg = self._get_render_cfg()
+        _sat = float(rcfg["saturation"])
 
         import acoustic_analysis as aa_mod
 
@@ -7940,7 +8096,11 @@ class AcousticPanel(QWidget):
                 self._log(f"Calculando forma modal {mode_idx} en 3D...")
                 pts, vals, _ = aa_mod.mode_shape_field_3d(
                     self.modal_result, mode_idx, resolution=res)
-                self.pressure_3d.update_signed(pts, vals)
+                _m = rcfg["modal"]
+                self.pressure_3d.update_signed(
+                    pts, vals, saturation=_sat,
+                    c_min=_m["c_min"], c_zero=_m["c_zero"], c_max=_m["c_max"],
+                    zero_transparent=_m["zero_transparent"])
                 self._log(
                     f"Forma modal {mode_idx} ({f:.1f} Hz): {len(pts)} pts. "
                     f"Azul=(-), Blanco=0, Rojo=(+)."
@@ -7959,7 +8119,14 @@ class AcousticPanel(QWidget):
                 pts, p_abs, _ = aa_mod.pressure_field_3d(
                     self.modal_result, act, f=f,
                     resolution=res, damping=damping)
-                self.pressure_3d.update(pts, p_abs)
+                _fc = rcfg["field"]
+                if _fc["rainbow"]:
+                    self.pressure_3d.update(pts, p_abs, saturation=_sat)
+                else:
+                    self.pressure_3d.update(
+                        pts, p_abs, saturation=_sat,
+                        c_lo=_fc["c_lo"], c_mid=_fc["c_mid"], c_hi=_fc["c_hi"],
+                        zero_transparent=_fc["zero_transparent"])
 
                 if hasattr(self, 'chk_grad') and self.chk_grad.isChecked():
                     origs, grads = aa_mod.pressure_gradient_3d(
@@ -9686,8 +9853,16 @@ class AcousticPanel(QWidget):
         if self.modal_result is None:
             return None
         f_rig = np.asarray(self.modal_result.freqs, dtype=float)
-        if self._xi_per_mode is None:
-            # Poblar xi (y de paso el corrimiento) para el modelo activo.
+        # Recomputar xi + corrimiento (barato: perturbación de 1er orden, sin
+        # re-FEM) cuando: (a) no hay cache, o (b) HAY impedancias asignadas en modo
+        # perturbación pero el corrimiento Δfₙ quedó sin poblar. (b) cubre el bug
+        # item 7 (el Δf no aparecía tras asignar impedancias hasta recalcular FEM):
+        # el cache podía quedar stale por un camino de asignación que no lo
+        # repobló. La condición no se dispara en el bench (inyecta el cache).
+        _stale_shift = (self._freq_shift_per_mode is None
+                        and self._damping_model == "perturbation"
+                        and bool(getattr(self, "_construction_map", None)))
+        if self._xi_per_mode is None or _stale_shift:
             self._xi_per_mode = self._compute_xi_from_materials()
         f_eff = self._effective_modal_freqs()
         f_eff = f_rig if f_eff is None else np.asarray(f_eff, dtype=float)

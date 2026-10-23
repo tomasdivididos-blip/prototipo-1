@@ -2956,6 +2956,18 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.74 (visualización 3D: el campo ya no se lava a blanco, configuración de render, y fix del Δfₙ)
+
+**Cambios v2.74** (23 de octubre 2026): tres mejoras de la visualización de modos y campo en el visor 3D.
+
+1. **El campo 3D ya no se satura a blanco.** Al subir la resolución, la nube de puntos del modo/campo se lavaba a blanco (el dibujo aditivo suma el color de los puntos que se apilan en profundidad). Ahora la opacidad de cada punto se baja según la cantidad de puntos, así el color se mantiene vívido sin blanquearse, conservando la transparencia que deja ver la estructura interna del modo.
+
+2. **Configuración de render.** Botón **«Configuración de render…»** en la sección de campo 3D: elegís la **resolución (10–100)**, la **saturación (1–15)** y los **colores** (mínimo / cero / máximo) por separado para la **forma modal** y para el **campo de presión**, con opción de dejar el **cero (o el mínimo) transparente**. El campo usa arcoíris por default; destildándolo podés poner tus tres colores. Cada casilla indica su rango.
+
+3. **El Δfₙ aparece sin recalcular FEM.** A veces, tras asignar impedancias, la tabla «Visualizar modos» mostraba Δfₙ = 0 hasta volver a calcular los modos. Ahora el corrimiento se recalcula al abrir la tabla cuando hay impedancias asignadas y el valor quedó sin poblar (es un cálculo liviano, no recalcula los modos).
+
+*Manual actualizado al 23 de Octubre de 2026 — v2.74.*
+
 ## Cambios v2.73 (refinamientos de subs enfrentados CABS: ganancia del trasero, banda, MSFD y ganancia de sala)
 
 **Cambios v2.73** (22 de octubre 2026): seis refinamientos del modelo de subwoofers enfrentados (CABS/DBA), tomados de los trabajos de Celestinos & Nielsen (JAES 2008 y Acoustics'08), su tesis (2007) y Santillán (JASA 2001). Los efectos que cambian lo que se ve entran como opción (checkbox) y por default quedan apagados, así los proyectos existentes no cambian.
