@@ -4249,6 +4249,15 @@ class AcousticPanel(QWidget):
         self._field_timer.setSingleShot(True)
         self._field_timer.setInterval(350)
         self._field_timer.timeout.connect(self._deferred_field_update)
+        # Auto-cálculo (item 2): en modo «Automático», cada cambio (impedancia,
+        # material/α, posición de fuente/parche) reprograma un recompute DEBOUNCED
+        # de FRF + campo (sin re-FEM: esos cambios no mueven los modos). NUNCA
+        # dispara decaimiento, optimización ni predicción.
+        self._auto_timer = QTimer()
+        self._auto_timer.setSingleShot(True)
+        self._auto_timer.setInterval(500)
+        self._auto_timer.timeout.connect(self._run_auto_recompute)
+        self._auto_busy = False
 
         # Overlays sobre el viewer
         self.src_markers = av.SourceMarkers(viewer)
@@ -5026,6 +5035,20 @@ class AcousticPanel(QWidget):
         self.btn_frf_fem = QPushButton("Calcular FRF")
         fg.addRow(self.btn_frf_fem)
         self.btn_frf_fem.clicked.connect(lambda: self._compute_frf("fem"))
+
+        # Auto-cálculo (item 2): en Automático, cada cambio (impedancia, material/α,
+        # posición de fuente/parche) recalcula la FRF + el campo solo (debounced,
+        # sin re-FEM: esos cambios no mueven los modos). NO toca decaimiento,
+        # optimización ni predicción (quedan a demanda). Requiere modos ya resueltos.
+        self.chk_auto = QCheckBox("Recalcular automáticamente (FRF + campo)")
+        self.chk_auto.setChecked(False)
+        self.chk_auto.setToolTip(
+            "Al cambiar impedancias, materiales/α o la posición de una fuente/parche,\n"
+            "recalcula la FRF y el campo 3D automáticamente (con un pequeño retardo),\n"
+            "sin re-calcular los modos (esos cambios no los mueven). NO dispara el\n"
+            "decaimiento, la optimización ni la predicción. Necesita los modos ya\n"
+            "calculados (calculá «Calcular modos (FEM)» una vez).")
+        fg.addRow(self.chk_auto)
 
         self.btn_sbir = QPushButton("Ver SBIR (fuente-frontera)")
         self.btn_sbir.setToolTip(
@@ -8319,6 +8342,40 @@ class AcousticPanel(QWidget):
     def schedule_field_update(self):
         """Llamar cuando la fuente se mueve para agendar actualizacion del campo."""
         self._field_timer.start()   # reinicia el timer en cada llamada
+        self._schedule_auto_recompute()   # item 2: en Automático, FRF+campo
+
+    def _auto_recompute_on(self) -> bool:
+        return bool(getattr(self, "chk_auto", None)
+                    and self.chk_auto.isChecked())
+
+    def _schedule_auto_recompute(self):
+        """Item 2: reprograma el recompute automático (debounced) de FRF + campo.
+        Solo en modo Automático y si YA hay modos (no auto-resuelve FEM de cero:
+        el usuario calcula los modos una vez y después tocar impedancias/posiciones
+        actualiza en vivo). NO toca decaimiento/optimización/predicción."""
+        if not self._auto_recompute_on():
+            return
+        if getattr(self, "modal_result", None) is None:
+            return
+        if getattr(self, "_auto_busy", False):
+            return                      # no reprogramar durante el propio recompute
+        self._auto_timer.start()
+
+    def _run_auto_recompute(self):
+        """Ejecuta el recompute automático: FRF (recomputa ξ desde materiales/
+        impedancias actuales, sin re-FEM) + campo 3D. Guard anti-reentrada."""
+        if self._auto_busy or getattr(self, "modal_result", None) is None:
+            return
+        if not self._auto_recompute_on():
+            return
+        self._auto_busy = True
+        try:
+            self._compute_frf("fem")          # recomputa ξ + FRF (sin re-FEM)
+            self._update_field_3d()           # campo 3D con la config vigente
+        except Exception as e:
+            self._log(f"Auto-cálculo: error ({e}).")
+        finally:
+            self._auto_busy = False
 
     def _clear_field_3d(self):
         if hasattr(self, 'pressure_3d'):
@@ -9143,6 +9200,7 @@ class AcousticPanel(QWidget):
         self._refresh_abs_choice_label()   # los parches tambien mueven el RT
         if self.modal_result is not None:
             self._xi_per_mode = self._compute_xi_from_materials()
+            self._schedule_auto_recompute()   # item 2: Automático -> FRF+campo
         self._update_modal_crossover()
 
     # ------------------------------------------------------------------
@@ -9198,6 +9256,7 @@ class AcousticPanel(QWidget):
             # Etapa 5c: al cambiar el corrimiento, repintar el picker (marcador
             # Δfₙ) y el read-out del modo. Repuebla el combo (vuelve al modo 0).
             self._refresh_modes_combo()
+            self._schedule_auto_recompute()   # item 2: Automático -> FRF+campo
         else:
             self._update_modal_crossover()
 
@@ -9469,6 +9528,7 @@ class AcousticPanel(QWidget):
         # B27: aviso de colocacion de absorbente para control modal LF (poroso
         # ineficaz en pared/esquina; usar resonante o poroso+camara). No bloquea.
         self._emit_lf_absorption_hints()
+        self._schedule_auto_recompute()   # item 2: Automático -> FRF+campo
 
     def apply_zone_materials(self, floor_name, walls_name, ceiling_name) -> bool:
         """Asigna 3 materiales por zona (piso/paredes/techo) a las caras del

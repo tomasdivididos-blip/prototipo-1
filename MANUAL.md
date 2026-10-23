@@ -2956,6 +2956,14 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.77 (recalcular automáticamente la FRF y el campo al cambiar algo)
+
+**Cambios v2.77** (23 de octubre 2026): un modo **«Recalcular automáticamente (FRF + campo)»** (checkbox en la sección de FRF, apagado por default). Con los modos ya calculados, al cambiar una **impedancia**, un **material o su α**, o la **posición de una fuente o parche**, la **FRF y el campo 3D se recalculan solos** (con un pequeño retardo para no recalcular en cada tecla).
+
+No recalcula los modos (esos cambios no los mueven, así que es rápido) ni dispara el **decaimiento**, la **optimización** ni la **predicción**, que siguen siendo a demanda. Si cambiás la geometría o movés un mueble (que sí cambia los modos), recalculá los modos a mano. Apagá el checkbox para volver al modo manual de siempre.
+
+*Manual actualizado al 23 de Octubre de 2026 — v2.77.*
+
 ## Cambios v2.76 (multi-receptor: elegir sobre qué receptores optimizar)
 
 **Cambios v2.76** (23 de octubre 2026): los puntos de escucha pasan a ser **receptores** que se habilitan o deshabilitan como las fuentes, y la optimización trabaja sobre los activos.
