@@ -278,7 +278,7 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
                   n_freq: int = 70, grid=(3, 2, 3), maxiter: int = 25,
                   popsize: int = 12, seed: int = 0, criterion: str = "dba",
                   inside_fn=None, progress_cb=None, should_cancel=None,
-                  fem=None, weights=None) -> dict:
+                  fem=None, weights=None, zone_box=None) -> dict:
     """Optimiza las variables liberadas de las fuentes (item 6). Devuelve dict con
     la config optimizada, metricas antes/despues, los DOF y un resumen de cambios.
 
@@ -322,7 +322,13 @@ def optimize_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0), walls=None
     basis, xi = dev._basis_and_xi(fem, origin, xi, c)
     if basis is None:
         basis = dev.make_basis(dims, fmax, c)
-    zone_box = _dba._zone_grid(dims, axis, grid[0], grid[1], grid[2])
+    # Grilla de evaluacion: la zona fina por default, o los RECEPTORES ACTIVOS que
+    # pasa el panel (optimizar sobre los puntos elegidos, item 3). zone_box en
+    # coords CAJA (mundo - origin).
+    if zone_box is None:
+        zone_box = _dba._zone_grid(dims, axis, grid[0], grid[1], grid[2])
+    else:
+        zone_box = np.asarray(zone_box, dtype=float)
 
     # Objetivo del NORTE (flat/spatial/sbir/cabs/dba). El costo que se minimiza y con
     # el que se juzga "mejoro" es el MISMO `composite_cost` que usa `_cost` (coherencia

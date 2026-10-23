@@ -697,7 +697,8 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
                   fmax: float = 200.0, xi: float = 0.03, c: float = C0,
                   n_freq: int = 200, ideal_grid=None,
                   f_schroeder: Optional[float] = None,
-                  criterion: str = "dba", fem=None, weights=None) -> dict:
+                  criterion: str = "dba", fem=None, weights=None,
+                  zone_box=None) -> dict:
     """Evalua la configuracion de fuentes real contra el criterio elegido.
 
     Parameters
@@ -765,7 +766,7 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
     real = _config_metrics(active, dims, origin, walls, receiver,
                            axis=axis, fa=fa, xi=xi_eff, c=c, f_s=f_s, basis=basis,
                            with_decay=wd, want_sbir=ws, want_reflection=wr,
-                           want_receiver=True)
+                           want_receiver=True, zone_box=zone_box)
 
     # --- metricas del IDEAL (mismo pipeline; array LS materializado) ---
     n_front = len(fronts)
@@ -776,7 +777,8 @@ def evaluate_cabs(sources, dims, receiver, *, origin=(0.0, 0.0, 0.0),
     ideal_srcs = _ideal_sources(dims, origin, axis, na, nb, fmin, fmax, xi, c)
     ideal = _config_metrics(ideal_srcs, dims, origin, walls, receiver,
                             axis=axis, fa=fa, xi=xi_eff, c=c, f_s=f_s, basis=basis,
-                            with_decay=wd, want_sbir=ws, want_reflection=wr)
+                            with_decay=wd, want_sbir=ws, want_reflection=wr,
+                            zone_box=zone_box)
 
     # --- banda de validez CABS (aliasing del array real) ---
     f_max_alias = _alias_fmax_from_roles(fronts, dims, axis, c)

@@ -4467,14 +4467,33 @@ class AcousticPanel(QWidget):
         # --- Puntos de escucha (v2.16): lista de posiciones nombradas para
         # comparar (Sweet Spot + mics). El receptor de arriba es el "cursor";
         # "Agregar" captura su posicion actual como un punto con nombre.
-        self.listen_points = []          # [{"name": str, "position": (x,y,z)}]
-        self.list_pts = QListWidget()
-        self.list_pts.setMaximumHeight(110)
-        self.list_pts.setToolTip(
-            "Puntos de escucha para «Comparar»: posicioná el receptor y\n"
-            "apretá Agregar. Doble click = mover el receptor a ese punto.")
-        self.list_pts.itemDoubleClicked.connect(self._goto_listen_point)
-        fr.addRow(self.list_pts)
+        # [{"name": str, "position": (x,y,z), "active": bool}]  (multi-receptor)
+        self.listen_points = []
+        from PyQt5.QtWidgets import (QTableWidget as _QTW,
+                                     QTableWidgetItem as _TWI2,
+                                     QHeaderView as _QHV,
+                                     QAbstractItemView as _QAIV)
+        self._TWI = getattr(self, "_TWI", _TWI2)
+        self.tbl_pts = _QTW(0, 5)
+        self.tbl_pts.setHorizontalHeaderLabels(["", "Receptor", "X", "Y", "Z"])
+        self.tbl_pts.setMaximumHeight(150)
+        self.tbl_pts.verticalHeader().setVisible(False)
+        self.tbl_pts.setSelectionBehavior(_QAIV.SelectRows)
+        self.tbl_pts.setSelectionMode(_QAIV.SingleSelection)
+        self.tbl_pts.setEditTriggers(_QAIV.NoEditTriggers)
+        _hp = self.tbl_pts.horizontalHeader()
+        _hp.setSectionResizeMode(0, _QHV.ResizeToContents)
+        _hp.setSectionResizeMode(1, _QHV.Stretch)
+        for _c in (2, 3, 4):
+            _hp.setSectionResizeMode(_c, _QHV.ResizeToContents)
+        self.tbl_pts.setToolTip(
+            "Receptores / puntos de escucha. El checkbox los ACTIVA para la\n"
+            "optimización (como las fuentes); coords X/Y/Z editables (rueda o\n"
+            "teclado). Doble click en el nombre = mover el cursor a ese punto.")
+        self.tbl_pts.itemChanged.connect(self._on_pt_check_changed)
+        self.tbl_pts.cellDoubleClicked.connect(self._goto_listen_point)
+        self._pt_coord_spins = []        # por fila: (sb_x, sb_y, sb_z)
+        fr.addRow(self.tbl_pts)
         prow = QHBoxLayout()
         prow.setSpacing(4)
         self.btn_add_pt = QPushButton("Agregar")
@@ -5828,13 +5847,45 @@ class AcousticPanel(QWidget):
         self._refresh_receiver_marker()
 
     # ------------------------- Puntos de escucha (v2.16) -------------------
+    def _active_listen_points(self):
+        """Posiciones de los receptores ACTIVOS (para optimizar/evaluar sobre
+        ellos). Lista vacía si no hay ninguno activo."""
+        return [tuple(p["position"]) for p in self.listen_points
+                if p.get("active", True)]
+
     def _refresh_listen_points(self):
-        self.list_pts.blockSignals(True)
-        self.list_pts.clear()
-        for p in self.listen_points:
-            x, y, z = p["position"]
-            self.list_pts.addItem(f"{p['name']}   ({x:.2f}, {y:.2f}, {z:.2f}) m")
-        self.list_pts.blockSignals(False)
+        sel = self.tbl_pts.currentRow()
+        self.tbl_pts.blockSignals(True)
+        self.tbl_pts.setRowCount(0)
+        self._pt_coord_spins = []
+        self.tbl_pts.setRowCount(len(self.listen_points))
+        for i, p in enumerate(self.listen_points):
+            active = bool(p.get("active", True))
+            chk = self._TWI()
+            chk.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled
+                         | Qt.ItemIsSelectable)
+            chk.setCheckState(Qt.Checked if active else Qt.Unchecked)
+            self.tbl_pts.setItem(i, 0, chk)
+            nm = self._TWI(str(p["name"]))
+            nm.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            if not active:
+                nm.setForeground(QColor("#6c7086"))
+            self.tbl_pts.setItem(i, 1, nm)
+            spins = []
+            for c, val in zip((2, 3, 4), tuple(p["position"])):
+                sb = QDoubleSpinBox()
+                sb.setRange(-1e3, 1e3); sb.setDecimals(3); sb.setSingleStep(0.05)
+                sb.setValue(float(val))
+                sb.setButtonSymbols(QDoubleSpinBox.NoButtons)
+                sb.setMaximumWidth(78)
+                sb.valueChanged.connect(
+                    lambda _v, r=i: self._on_pt_coord_changed(r))
+                self.tbl_pts.setCellWidget(i, c, sb)
+                spins.append(sb)
+            self._pt_coord_spins.append(tuple(spins))
+        self.tbl_pts.blockSignals(False)
+        if 0 <= sel < self.tbl_pts.rowCount():
+            self.tbl_pts.selectRow(sel)
         if hasattr(self.viewer, "set_listen_points"):
             try:
                 self.viewer.set_listen_points(
@@ -5842,38 +5893,65 @@ class AcousticPanel(QWidget):
             except Exception:
                 pass
 
+    def _on_pt_coord_changed(self, i):
+        if not (0 <= i < len(self.listen_points)) or i >= len(self._pt_coord_spins):
+            return
+        sx, sy, sz = self._pt_coord_spins[i]
+        self.listen_points[i]["position"] = (float(sx.value()),
+                                             float(sy.value()), float(sz.value()))
+        if hasattr(self.viewer, "set_listen_points"):
+            try:
+                self.viewer.set_listen_points(
+                    [p["position"] for p in self.listen_points])
+            except Exception:
+                pass
+
+    def _on_pt_check_changed(self, item):
+        if item is None or item.column() != 0:
+            return
+        i = item.row()
+        if not (0 <= i < len(self.listen_points)):
+            return
+        self.listen_points[i]["active"] = (item.checkState() == Qt.Checked)
+        self.tbl_pts.blockSignals(True)
+        nm = self.tbl_pts.item(i, 1)
+        if nm is not None:
+            nm.setForeground(QColor("#6c7086")
+                             if not self.listen_points[i]["active"]
+                             else self.tbl_pts.palette().text().color())
+        self.tbl_pts.blockSignals(False)
+
     def _add_listen_point(self):
         name = ("Sweet Spot" if not self.listen_points
                 else f"Mic {len(self.listen_points) + 1}")
         pos = tuple(float(v) for v in self.receiver)
-        self.listen_points.append({"name": name, "position": pos})
+        self.listen_points.append({"name": name, "position": pos, "active": True})
         self._refresh_listen_points()
-        self._log(f"Punto de escucha '{name}' agregado en "
+        self._log(f"Receptor '{name}' agregado en "
                   f"({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f}).")
 
     def _rename_listen_point(self):
-        i = self.list_pts.currentRow()
+        i = self.tbl_pts.currentRow()
         if not (0 <= i < len(self.listen_points)):
             return
         from PyQt5.QtWidgets import QInputDialog
         name, ok = QInputDialog.getText(
-            self, "Renombrar punto", "Nombre:",
+            self, "Renombrar receptor", "Nombre:",
             text=self.listen_points[i]["name"])
         if ok and name.strip():
             self.listen_points[i]["name"] = name.strip()
             self._refresh_listen_points()
 
     def _remove_listen_point(self):
-        i = self.list_pts.currentRow()
+        i = self.tbl_pts.currentRow()
         if 0 <= i < len(self.listen_points):
             gone = self.listen_points.pop(i)
             self._refresh_listen_points()
-            self._log(f"Punto '{gone['name']}' quitado.")
+            self._log(f"Receptor '{gone['name']}' quitado.")
 
-    def _goto_listen_point(self, item):
-        i = self.list_pts.row(item)
-        if 0 <= i < len(self.listen_points):
-            x, y, z = self.listen_points[i]["position"]
+    def _goto_listen_point(self, row, _col=0):
+        if 0 <= row < len(self.listen_points):
+            x, y, z = self.listen_points[row]["position"]
             self.move_receiver_to(float(x), float(y), float(z))
 
     # ------------------------- Comparar (v2.16) ----------------------------
@@ -7608,6 +7686,14 @@ class AcousticPanel(QWidget):
                 }
         except Exception:
             fem_bundle = None
+        # Multi-receptor (item 3): si hay receptores ACTIVOS en la lista, se
+        # optimiza/evalúa SOBRE ESOS PUNTOS (zone_box en coords CAJA = mundo -
+        # origin); sin ninguno activo, None -> la zona fina default.
+        _active_rx = self._active_listen_points()
+        _zone_box = None
+        if _active_rx:
+            _zone_box = (np.asarray(_active_rx, dtype=float)
+                         - np.asarray(vmin, dtype=float))
         eval_context = {
             "sources": lambda: list(self.sources.sources),
             "walls_fn": self._cabs_sbir_walls,
@@ -7621,6 +7707,7 @@ class AcousticPanel(QWidget):
             "inside_fn": _inside_fn,
             "is_rectangular": is_rectangular,
             "fem": fem_bundle,
+            "zone_box": _zone_box,
         }
         DBADialog(dims, rec, self,
                   apply_callback=lambda specs: self._apply_dba_to_room(specs, vmin),

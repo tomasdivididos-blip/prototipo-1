@@ -647,7 +647,8 @@ class DBADialog(QDialog):
                 walls=ctx.get("walls_fn"), axis=axis,
                 fmin=20.0, fmax=self.sb_fmax.value(), xi=self.sb_xi.value(),
                 f_schroeder=ctx.get("f_schroeder"), criterion=self._criterion(),
-                fem=ctx.get("fem"), weights=self._criterion_weights())
+                fem=ctx.get("fem"), weights=self._criterion_weights(),
+                zone_box=ctx.get("zone_box"))
         except Exception as e:
             self.lbl_res.setText(f"<span style='color:#b00'>Error: {e}</span>")
             return
@@ -729,7 +730,7 @@ class DBADialog(QDialog):
             fmax=self.sb_fmax.value(), xi=self.sb_xi.value(),
             f_schroeder=ctx.get("f_schroeder"), criterion=self._criterion(),
             inside_fn=ctx.get("inside_fn"), maxiter=maxiter, fem=ctx.get("fem"),
-            weights=self._criterion_weights())
+            weights=self._criterion_weights(), zone_box=ctx.get("zone_box"))
         worker = _OptimizeWorker(kwargs, self)
         self._opt_worker = worker            # ref para que no lo junte el GC
 

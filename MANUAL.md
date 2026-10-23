@@ -2956,6 +2956,16 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.76 (multi-receptor: elegir sobre qué receptores optimizar)
+
+**Cambios v2.76** (23 de octubre 2026): los puntos de escucha pasan a ser **receptores** que se habilitan o deshabilitan como las fuentes, y la optimización trabaja sobre los activos.
+
+- La lista de puntos de escucha es ahora una **tabla** con un **checkbox** (activa el receptor), el **nombre** y las coordenadas **X / Y / Z** editables (rueda del mouse o escribir). Doble click en el nombre mueve el cursor del receptor a ese punto.
+- **La optimización y la evaluación de «Optimización de fuentes» se hacen sobre los receptores ACTIVOS** (en vez de una grilla de zona genérica): tildás los asientos que te importan y el optimizador aplana la respuesta en ESOS puntos. Si no hay ninguno activo, se usa la zona fina de siempre.
+- El estado activo/inactivo se guarda en el `.room` (los proyectos viejos abren con todos activos).
+
+*Manual actualizado al 23 de Octubre de 2026 — v2.76.*
+
 ## Cambios v2.75 (lista de fuentes editable estilo EASE + orden de capas del visor)
 
 **Cambios v2.75** (23 de octubre 2026): dos mejoras de interfaz del visor 3D.

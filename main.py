@@ -1394,7 +1394,8 @@ class MainWindow(QMainWindow):
             # el Comparar. Lista vacia si no se usaron.
             "listen_points": [
                 {"name": str(p.get("name", "")),
-                 "position": [float(x) for x in p.get("position", (0, 0, 0))]}
+                 "position": [float(x) for x in p.get("position", (0, 0, 0))],
+                 "active": bool(p.get("active", True))}
                 for p in getattr(ap, "listen_points", [])
             ],
             "face_materials": face_mat,
@@ -1741,7 +1742,8 @@ class MainWindow(QMainWindow):
         # Puntos de escucha (v2.16; .room viejos no traen la clave)
         ap.listen_points = [
             {"name": str(p.get("name", f"Punto {i+1}")),
-             "position": tuple(float(x) for x in p.get("position", (0, 0, 0)))}
+             "position": tuple(float(x) for x in p.get("position", (0, 0, 0))),
+             "active": bool(p.get("active", True))}      # .room viejos -> activo
             for i, p in enumerate(ac.get("listen_points") or [])
             if len(p.get("position", [])) == 3
         ]
