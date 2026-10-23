@@ -20,7 +20,8 @@ import style                      # paleta de escena 3D por tema (3b): style.SCE
 from PyQt5.QtCore import Qt, QRectF, QPoint, pyqtSignal
 from PyQt5.QtGui import QColor, QPainter, QFont, QPen, QVector4D, QMatrix4x4
 from PyQt5.QtWidgets import (QFrame, QLabel, QHBoxLayout, QPushButton, QToolTip,
-                             QMenu, QAction)
+                             QMenu, QAction, QDialog, QVBoxLayout, QListWidget,
+                             QListWidgetItem, QDialogButtonBox)
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +120,52 @@ AXIS_Z = (0.06, 0.82, 0.30, 1.0)   # verde
 EDGE_COLOR = (0.96, 0.74, 0.95, 1.0)
 
 
+_LAYER_LABELS = {"sources": "Fuentes", "receivers": "Receptores",
+                 "furniture": "Muebles", "patches": "Parches",
+                 "walls": "Paredes", "planes": "Planos XZ/YZ"}
+
+
+class LayerOrderDialog(QDialog):
+    """Reordena la prioridad de dibujo de las capas (item 4). El primero de la
+    lista se dibuja ENCIMA. Subir/Bajar mueven la capa seleccionada."""
+
+    def __init__(self, order, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Orden de capas (prioridad de dibujo)")
+        lay = QVBoxLayout(self)
+        lay.addWidget(QLabel("Arriba = se dibuja por encima. "
+                             "Seleccioná y usá Subir/Bajar."))
+        self.lst = QListWidget()
+        for key in order:
+            it = QListWidgetItem(_LAYER_LABELS.get(key, key))
+            it.setData(Qt.UserRole, key)
+            self.lst.addItem(it)
+        self.lst.setCurrentRow(0)
+        lay.addWidget(self.lst)
+        row = QHBoxLayout()
+        b_up = QPushButton("▲ Subir"); b_dn = QPushButton("▼ Bajar")
+        b_up.clicked.connect(lambda: self._move(-1))
+        b_dn.clicked.connect(lambda: self._move(+1))
+        row.addWidget(b_up); row.addWidget(b_dn)
+        lay.addLayout(row)
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb.accepted.connect(self.accept); bb.rejected.connect(self.reject)
+        lay.addWidget(bb)
+
+    def _move(self, d):
+        r = self.lst.currentRow()
+        nr = r + d
+        if r < 0 or not (0 <= nr < self.lst.count()):
+            return
+        it = self.lst.takeItem(r)
+        self.lst.insertItem(nr, it)
+        self.lst.setCurrentRow(nr)
+
+    def result_order(self):
+        return [self.lst.item(i).data(Qt.UserRole)
+                for i in range(self.lst.count())]
+
+
 class IsoViewer(gl.GLViewWidget):
     # Senales de acustica
     sourceAddRequested    = pyqtSignal(float, float, float)      # (x,y,z) nuevo
@@ -147,6 +194,9 @@ class IsoViewer(gl.GLViewWidget):
     # 'sources'/'receivers' los maneja el panel (son suyos); 'patches'/'planes' los
     # maneja el visor (son suyos). key ∈ {sources, receivers, patches, planes}.
     visibilityChanged = pyqtSignal(str, bool)
+    # Orden de capas (item 4): prioridad de dibujo de una capa del PANEL
+    # (sources/receivers/furniture). key + depthValue; el panel lo rutea al marker.
+    layerDepthChanged = pyqtSignal(str, float)
 
     # Sensibilidad de los gestos de orientacion del bafle (ajustables).
     BAFFLE_ROTATE_DEG_PER_PX = 0.6    # azimut por px horizontal (Alt+Ctrl+Left)
@@ -348,12 +398,22 @@ class IsoViewer(gl.GLViewWidget):
                                     ("receivers", "Receptores", True),
                                     ("furniture", "Muebles", True),
                                     ("patches", "Parches de absorción", True),
+                                    ("walls", "Paredes", True),
                                     ("planes", "Planos de referencia XZ/YZ", False)):
             act = QAction(label, self._vis_menu, checkable=True)
             act.setChecked(default)
             act.toggled.connect(lambda checked, k=key: self._on_vis_toggled(k, checked))
             self._vis_menu.addAction(act)
             self._vis_actions[key] = act
+        # Orden de capas (item 4): prioridad de dibujo reordenable (best-effort;
+        # la oclusión GL entre capas aditivas/mesh es limitada en esta escena).
+        self._layer_order = ["sources", "receivers", "furniture",
+                             "patches", "walls", "planes"]
+        self._walls_visible = True
+        self._vis_menu.addSeparator()
+        _ord_act = QAction("Orden de capas…", self._vis_menu)
+        _ord_act.triggered.connect(self._open_layer_order)
+        self._vis_menu.addAction(_ord_act)
         self._btn_vis.clicked.connect(self._popup_vis_menu)
         _cp_lay.addWidget(self._btn_vis)
         self._cam_preset_row.adjustSize()
@@ -906,8 +966,47 @@ class IsoViewer(gl.GLViewWidget):
             for it in self._patch_items:
                 it.setVisible(self._patches_visible)
             self.update()
+        elif key == "walls":
+            self._walls_visible = bool(checked)
+            for it in (getattr(self, "mesh_item", None),
+                       getattr(self, "edge_item", None)):
+                if it is not None:
+                    it.setVisible(self._walls_visible)
+            self.update()
         else:                                   # 'sources' / 'receivers' -> el panel
             self.visibilityChanged.emit(key, bool(checked))
+
+    def _open_layer_order(self):
+        """Diálogo de ORDEN DE CAPAS (item 4): reordena la prioridad de dibujo."""
+        dlg = LayerOrderDialog(self._layer_order, parent=self)
+        if dlg.exec_() == QDialog.Accepted:
+            self._layer_order = dlg.result_order()
+            self._apply_layer_order()
+
+    def _apply_layer_order(self):
+        """Aplica la prioridad de dibujo (setDepthValue) según `_layer_order`.
+        El primero de la lista es el de MÁS prioridad (se dibuja encima). Las
+        capas del visor (patches/walls/planes) se setean acá; las del panel
+        (sources/receivers/furniture) se emiten por `layerDepthChanged`.
+        Best-effort: la oclusión GL entre aditivos/mesh es limitada en esta escena."""
+        n = len(self._layer_order)
+        for rank, key in enumerate(self._layer_order):
+            depth = float(n - rank)              # primero (rank 0) -> depth máximo
+            if key == "patches":
+                for it in getattr(self, "_patch_items", []):
+                    it.setDepthValue(depth)
+            elif key == "walls":
+                for it in (getattr(self, "mesh_item", None),
+                           getattr(self, "edge_item", None)):
+                    if it is not None:
+                        it.setDepthValue(depth)
+            elif key == "planes":
+                vg = getattr(self, "_vgrid", None)
+                if vg is not None:
+                    vg.setDepthValue(depth)
+            else:                                # sources / receivers / furniture
+                self.layerDepthChanged.emit(key, depth)
+        self.update()
 
     def _pick_source(self, px, py, radius_px: int = 28) -> int:
         """Devuelve el indice de la fuente mas cercana (>=0), -2 para el receptor, -1 si no hay nada."""

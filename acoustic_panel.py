@@ -4270,6 +4270,10 @@ class AcousticPanel(QWidget):
         # panel (sus markers); parches/planos los maneja el visor solo.
         if hasattr(self.viewer, 'visibilityChanged'):
             self.viewer.visibilityChanged.connect(self._on_visibility_changed)
+        # Orden de capas (item 4): el visor emite la prioridad de las capas del
+        # panel (sources/receivers/furniture) y acá se rutea al marker.
+        if hasattr(self.viewer, 'layerDepthChanged'):
+            self.viewer.layerDepthChanged.connect(self._on_layer_depth_changed)
 
     def _on_visibility_changed(self, key: str, visible: bool):
         """Muestra/oculta el grupo elegido en el selector 👁 del visor."""
@@ -4279,6 +4283,14 @@ class AcousticPanel(QWidget):
             self.rcv_marker.set_visible(visible)
         elif key == "furniture" and hasattr(self, "furn_markers"):
             self.furn_markers.set_visible(visible)
+
+    def _on_layer_depth_changed(self, key: str, depth: float):
+        """Prioridad de dibujo (orden de capas) de un marker del panel (item 4)."""
+        m = {"sources": getattr(self, "src_markers", None),
+             "receivers": getattr(self, "rcv_marker", None),
+             "furniture": getattr(self, "furn_markers", None)}.get(key)
+        if m is not None and hasattr(m, "set_depth"):
+            m.set_depth(depth)
 
     def refresh_scene_colors(self):
         """Re-aplica la paleta de escena 3D vigente (3b) a los markers (fuente,
@@ -4349,18 +4361,33 @@ class AcousticPanel(QWidget):
         layout.addWidget(title)
         layout.addWidget(sub)
 
-        # --- Fuentes ---
+        # --- Fuentes --- (tabla estilo EASE: nombre + coords X/Y/Z editables)
+        from PyQt5.QtWidgets import (QTableWidget, QTableWidgetItem as _TWI,
+                                     QHeaderView, QAbstractItemView)
+        self._TWI = _TWI
         grp_src = QGroupBox("Fuentes omnidireccionales")
         vs = QVBoxLayout(grp_src)
-        self.list_src = QListWidget()
-        self.list_src.setMaximumHeight(120)
-        self.list_src.itemSelectionChanged.connect(self._on_src_selection)
-        self.list_src.itemChanged.connect(self._on_src_check_changed)
-        self.list_src.setToolTip(
-            "El checkbox activa/silencia la fuente: silenciada no radia\n"
-            "(FRF, SBIR, FoM, campo 3D y Comparar la excluyen) pero conserva\n"
-            "posición, curva y bafle. Útil para analizar parlante por parlante.")
-        vs.addWidget(self.list_src)
+        self.tbl_src = QTableWidget(0, 5)
+        self.tbl_src.setHorizontalHeaderLabels(["", "Fuente", "X", "Y", "Z"])
+        self.tbl_src.setMaximumHeight(170)
+        self.tbl_src.verticalHeader().setVisible(False)
+        self.tbl_src.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.tbl_src.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.tbl_src.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        _hh = self.tbl_src.horizontalHeader()
+        _hh.setSectionResizeMode(0, QHeaderView.ResizeToContents)   # check
+        _hh.setSectionResizeMode(1, QHeaderView.Stretch)            # nombre
+        for _c in (2, 3, 4):
+            _hh.setSectionResizeMode(_c, QHeaderView.ResizeToContents)
+        self.tbl_src.itemSelectionChanged.connect(self._on_src_selection)
+        self.tbl_src.itemChanged.connect(self._on_src_check_changed)
+        self.tbl_src.setToolTip(
+            "Nombre + coordenadas X/Y/Z editables (rueda del mouse o escribir),\n"
+            "como en EASE. El checkbox activa/silencia la fuente: silenciada no\n"
+            "radia (FRF, SBIR, FoM, campo 3D, Comparar la excluyen) pero conserva\n"
+            "posición, curva y bafle.")
+        self._src_coord_spins = []    # por fila: (sb_x, sb_y, sb_z)
+        vs.addWidget(self.tbl_src)
         row = QHBoxLayout()
         row.setSpacing(4)   # menos espacio entre botones para que entren los 4
         self.btn_add_src = QPushButton("Añadir")
@@ -5093,48 +5120,64 @@ class AcousticPanel(QWidget):
         self.status.setText(msg)
 
     def _selected_src_idx(self) -> int:
-        items = self.list_src.selectedItems()
-        if not items:
-            return -1
-        return self.list_src.row(items[0])
+        r = self.tbl_src.currentRow()
+        return r if 0 <= r < len(self.sources) else -1
 
-    def _src_item_text(self, i, s) -> str:
+    def _src_name_text(self, i, s) -> str:
+        """Texto de la columna NOMBRE (las coords van en columnas X/Y/Z aparte)."""
         absQ = abs(s.Q)
         ph = math.degrees(np.angle(s.Q))
         active = bool(getattr(s, "active", True))
-        # El ∠ sale de s.Q CRUDO, que no lleva la polaridad (vive en
-        # effective_Q). Sin este tag, una fuente invertida se veria igual que
-        # una normal en la lista — el mismo problema de readback que motivo
-        # sacar la polaridad de la curva.
+        # El ∠ sale de s.Q CRUDO, que no lleva la polaridad (vive en effective_Q).
         inv = int(getattr(s, "polarity", 1) or 1) < 0
-        return (f"[{i}] {s.label}  @ ({s.position[0]:.2f}, "
-                f"{s.position[1]:.2f}, {s.position[2]:.2f})   "
-                f"|Q|={absQ:.3g}  ∠={ph:+.1f}°"
-                + ("   [180°]" if inv else "")
-                + ("" if active else "   [MUTE]"))
+        return (f"[{i}] {s.label}   |Q|={absQ:.3g} ∠={ph:+.1f}°"
+                + ("  [180°]" if inv else "")
+                + ("" if active else "  [MUTE]"))
 
     def _refresh_sources_list(self):
         sel = self._selected_src_idx()
-        self.list_src.blockSignals(True)
-        self.list_src.clear()
+        self.tbl_src.blockSignals(True)
+        self.tbl_src.setRowCount(0)
+        self._src_coord_spins = []
+        self.tbl_src.setRowCount(len(self.sources))
         for i, s in enumerate(self.sources):
             active = bool(getattr(s, "active", True))
-            item = QListWidgetItem(self._src_item_text(i, s))
-            # Checkbox = fuente activa (mute v2.16). Desmarcada -> no radia:
-            # FRF/SBIR/FoM/campo 3D/Comparar la excluyen sin borrarla.
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(Qt.Checked if active else Qt.Unchecked)
+            # Col 0: checkbox activa/silencia (mute v2.16).
+            chk = self._TWI()
+            chk.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled
+                         | Qt.ItemIsSelectable)
+            chk.setCheckState(Qt.Checked if active else Qt.Unchecked)
+            self.tbl_src.setItem(i, 0, chk)
+            # Col 1: nombre (no editable).
+            nm = self._TWI(self._src_name_text(i, s))
+            nm.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
             if not active:
-                item.setForeground(QColor("#6c7086"))
-            self.list_src.addItem(item)
-        self.list_src.blockSignals(False)
-        if 0 <= sel < self.list_src.count():
-            self.list_src.setCurrentRow(sel)
+                nm.setForeground(QColor("#6c7086"))
+            self.tbl_src.setItem(i, 1, nm)
+            # Cols 2-4: coords X/Y/Z editables (rueda o teclado), escriben la
+            # posicion real al cambiar. setValue ANTES de conectar para no
+            # disparar el handler durante el armado.
+            spins = []
+            pos = tuple(s.position)
+            for c, val in zip((2, 3, 4), pos):
+                sb = QDoubleSpinBox()
+                sb.setRange(-1e3, 1e3)
+                sb.setDecimals(3)
+                sb.setSingleStep(0.05)
+                sb.setValue(float(val))
+                sb.setButtonSymbols(QDoubleSpinBox.NoButtons)
+                sb.setMaximumWidth(78)
+                sb.valueChanged.connect(
+                    lambda _v, r=i: self._on_src_coord_changed(r))
+                self.tbl_src.setCellWidget(i, c, sb)
+                spins.append(sb)
+            self._src_coord_spins.append(tuple(spins))
+        self.tbl_src.blockSignals(False)
+        if 0 <= sel < self.tbl_src.rowCount():
+            self.tbl_src.selectRow(sel)
         self.src_markers.update(self.sources, selected_idx=sel)
         # Sincronizar posiciones al viewer para que el picking de Shift+drag
-        # (`_pick_source`) y doble-click vean la lista actualizada. Es el
-        # cuello de botella historico de "no me toma la fuente" despues de
-        # cargar un .room, importar CAD, o eliminar/duplicar/editar una fuente.
+        # (`_pick_source`) y doble-click vean la lista actualizada.
         self._sync_source_positions_to_viewer()
         self.viewer.update()
 
@@ -5145,24 +5188,41 @@ class AcousticPanel(QWidget):
         self.src_markers.update(self.sources, selected_idx=self._selected_src_idx())
         self.viewer.update()
 
-    def _on_src_check_changed(self, item):
-        """Checkbox de la lista: activa/silencia la fuente correspondiente.
+    def _on_src_coord_changed(self, i):
+        """Una coordenada X/Y/Z de la fila i cambió (rueda/teclado): escribe la
+        posicion real de la fuente y refresca marcadores + campo. NO reconstruye
+        la tabla (destruiria el spinbox que se esta editando)."""
+        if not (0 <= i < len(self.sources)) or i >= len(self._src_coord_spins):
+            return
+        sx, sy, sz = self._src_coord_spins[i]
+        self.sources[i].position = (float(sx.value()), float(sy.value()),
+                                    float(sz.value()))
+        self.src_markers.update(self.sources, selected_idx=self._selected_src_idx())
+        self._sync_source_positions_to_viewer()
+        self.viewer.update()
+        self.schedule_field_update()      # el campo |p| depende de la posicion
 
-        OJO: NO reconstruir la lista aca (clear() destruiria el item que Qt
-        esta procesando en este mismo click -> el mouse-grab queda colgado en
-        un widget muerto y toda la app deja de recibir clicks/drags bien).
-        Se actualiza el item IN PLACE con señales bloqueadas.
+    def _on_src_check_changed(self, item):
+        """Checkbox de la tabla (col 0): activa/silencia la fuente.
+
+        OJO: NO reconstruir la tabla aca (destruiria el item/celda que Qt esta
+        procesando en este click). Se actualiza el nombre IN PLACE con señales
+        bloqueadas.
         """
-        i = self.list_src.row(item)
+        if item is None or item.column() != 0:
+            return
+        i = item.row()
         if not (0 <= i < len(self.sources)):
             return
         s = self.sources[i]
         s.active = (item.checkState() == Qt.Checked)
-        self.list_src.blockSignals(True)
-        item.setText(self._src_item_text(i, s))
-        item.setForeground(QColor("#6c7086") if not s.active
-                           else self.list_src.palette().text().color())
-        self.list_src.blockSignals(False)
+        self.tbl_src.blockSignals(True)
+        nm = self.tbl_src.item(i, 1)
+        if nm is not None:
+            nm.setText(self._src_name_text(i, s))
+            nm.setForeground(QColor("#6c7086") if not s.active
+                             else self.tbl_src.palette().text().color())
+        self.tbl_src.blockSignals(False)
         self._log(f"Fuente '{s.label}' "
                   f"{'activada' if s.active else 'silenciada'}.")
 

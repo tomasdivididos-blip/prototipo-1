@@ -223,6 +223,7 @@ class SourceMarkers:
         self._item_normal = None
         self._item_sel = None
         self._visible = True       # toggle del selector 👁 (persistente entre updates)
+        self._depth = 3            # prioridad de dibujo (orden de capas, item 4)
 
     def set_visible(self, visible: bool):
         """Muestra/oculta los bafles (selector de visibilidad 👁). Persistente: el
@@ -235,21 +236,27 @@ class SourceMarkers:
         if self.viewer is not None:
             self.viewer.update()
 
+    def set_depth(self, v):
+        """Prioridad de dibujo (orden de capas, item 4): mayor = más arriba."""
+        self._depth = float(v)
+        for it in (self._item_normal, self._item_sel):
+            if it is not None:
+                it.setDepthValue(self._depth)
+        if self.viewer is not None:
+            self.viewer.update()
+
     def _ensure_items(self):
         if self._item_normal is None:
             self._item_normal = gl.GLLinePlotItem(
                 pos=self._EMPTY, color=style.SCENE["source"], width=2.2,
                 antialias=True, mode="lines")
-            # depthValue 1: las aristas del bafle se dibujan DESPUÉS (encima) de los
-            # parches additive, que si no tapaban el bafle. (El relleno sólido opaco
-            # no se logró: el GLMeshItem opaco no renderiza en esta escena.)
-            self._item_normal.setDepthValue(1)
+            self._item_normal.setDepthValue(self._depth)
             self.viewer.addItem(self._item_normal)
         if self._item_sel is None:
             self._item_sel = gl.GLLinePlotItem(
                 pos=self._EMPTY, color=style.SCENE["source_sel"], width=2.2,
                 antialias=True, mode="lines")
-            self._item_sel.setDepthValue(1)
+            self._item_sel.setDepthValue(self._depth)
             self.viewer.addItem(self._item_sel)
 
     def refresh_colors(self):
@@ -396,6 +403,7 @@ class FurnitureMarkers:
         self._item_normal = None
         self._item_sel = None
         self._visible = True       # toggle del selector 👁 (persistente entre updates)
+        self._depth = 1            # prioridad de dibujo (orden de capas, item 4)
 
     def set_visible(self, visible: bool):
         """Muestra/oculta los muebles (selector de visibilidad 👁). Persistente."""
@@ -407,16 +415,27 @@ class FurnitureMarkers:
         if self.viewer is not None:
             self.viewer.update()
 
+    def set_depth(self, v):
+        """Prioridad de dibujo (orden de capas, item 4)."""
+        self._depth = float(v)
+        for it in (self._item_normal, self._item_sel):
+            if it is not None:
+                it.setDepthValue(self._depth)
+        if self.viewer is not None:
+            self.viewer.update()
+
     def _ensure_items(self):
         if self._item_normal is None:
             self._item_normal = gl.GLLinePlotItem(
                 pos=self._EMPTY, color=style.SCENE["furniture"], width=2.0,
                 antialias=True, mode="lines")
+            self._item_normal.setDepthValue(self._depth)
             self.viewer.addItem(self._item_normal)
         if self._item_sel is None:
             self._item_sel = gl.GLLinePlotItem(
                 pos=self._EMPTY, color=style.SCENE["source_sel"], width=2.4,
                 antialias=True, mode="lines")
+            self._item_sel.setDepthValue(self._depth)
             self.viewer.addItem(self._item_sel)
 
     def refresh_colors(self):
@@ -467,6 +486,7 @@ class ReceiverMarker:
         self.viewer = viewer
         self.item = None
         self._visible = True       # toggle del selector 👁 (persistente entre updates)
+        self._depth = 2            # prioridad de dibujo (orden de capas, item 4)
 
     def set_visible(self, visible: bool):
         """Muestra/oculta la cruz del receptor (selector de visibilidad 👁).
@@ -474,6 +494,14 @@ class ReceiverMarker:
         self._visible = bool(visible)
         if self.item is not None:
             self.item.setVisible(self._visible)
+        if self.viewer is not None:
+            self.viewer.update()
+
+    def set_depth(self, v):
+        """Prioridad de dibujo (orden de capas, item 4)."""
+        self._depth = float(v)
+        if self.item is not None:
+            self.item.setDepthValue(self._depth)
         if self.viewer is not None:
             self.viewer.update()
 
@@ -494,6 +522,7 @@ class ReceiverMarker:
                 pos=lines, color=style.SCENE["receiver"],
                 width=4.5, antialias=True, mode="lines",
             )
+            self.item.setDepthValue(self._depth)
             self.viewer.addItem(self.item)
         else:
             # Actualizar in-place; no toca el scene graph.

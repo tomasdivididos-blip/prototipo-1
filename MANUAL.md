@@ -2956,6 +2956,16 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.75 (lista de fuentes editable estilo EASE + orden de capas del visor)
+
+**Cambios v2.75** (23 de octubre 2026): dos mejoras de interfaz del visor 3D.
+
+1. **Lista de fuentes editable (estilo EASE).** La lista de fuentes pasó a ser una **tabla** con el nombre y las coordenadas **X / Y / Z** en casillas editables: cambiás cada valor con la **rueda del mouse** o escribiéndolo, y la fuente se mueve en el acto (se actualizan el marcador y el campo). El checkbox de la primera columna sigue activando o silenciando la fuente.
+
+2. **Orden de capas del visor.** En el menú del botón **«👁»** se agregó **«Paredes»** como capa (se puede mostrar u ocultar como las demás) y una opción **«Orden de capas…»** que abre una ventana para **reordenar la prioridad de dibujo** (Fuentes, Receptores, Muebles, Parches, Paredes, Planos) con Subir/Bajar: la de más arriba se dibuja por encima. Nota: en esta versión del visor la oclusión entre capas translúcidas o de malla es limitada, así que el reordenamiento es de mejor esfuerzo.
+
+*Manual actualizado al 23 de Octubre de 2026 — v2.75.*
+
 ## Cambios v2.74 (visualización 3D: el campo ya no se lava a blanco, configuración de render, y fix del Δfₙ)
 
 **Cambios v2.74** (23 de octubre 2026): tres mejoras de la visualización de modos y campo en el visor 3D.
