@@ -3221,6 +3221,120 @@ class RenderConfigDialog(QDialog):
         }
 
 
+class ReflectionMapDialog(QDialog):
+    """Mapa de calor de reflexiones (item 1): energía reflejada hacia el receptor
+    por cada pared (fuentes-imagen orden ≤3), por banda de octava. Tabla (dB rel)
+    + pintado best-effort sobre las caras del visor."""
+
+    WALL_LABELS = {"x0": "Pared X−", "xL": "Pared X+", "y0": "Pared Y−",
+                   "yL": "Pared Y+", "z0": "Piso (Z−)", "zL": "Techo (Z+)"}
+    WALL_ORDER = ["x0", "xL", "y0", "yL", "z0", "zL"]
+
+    def __init__(self, panel, result, quads, bands, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Mapa de reflexiones (energía por pared)")
+        try:
+            apply_dialog_theme(self)
+        except Exception:
+            pass
+        self._panel = panel
+        self._r = result
+        self._quads = quads
+        self._bands = np.asarray(bands, float)
+        lay = QVBoxLayout(self)
+        top = QHBoxLayout()
+        top.addWidget(QLabel("Banda de octava:"))
+        self.combo = QComboBox()
+        for f in self._bands:
+            self.combo.addItem(f"{f:.0f} Hz")
+        self.combo.setCurrentIndex(int(np.argmin(np.abs(self._bands - 1000.0))))
+        self.combo.currentIndexChanged.connect(self._refresh)
+        top.addWidget(self.combo)
+        top.addStretch(1)
+        self.chk_paint = QCheckBox("Pintar en 3D")
+        self.chk_paint.setChecked(True)
+        self.chk_paint.toggled.connect(self._refresh)
+        top.addWidget(self.chk_paint)
+        lay.addLayout(top)
+        from PyQt5.QtWidgets import (QTableWidget, QTableWidgetItem as _TWI,
+                                     QHeaderView)
+        self._TWI = _TWI
+        self.tbl = QTableWidget(6, 2)
+        self.tbl.setHorizontalHeaderLabels(["Pared", "Energía refl. [dB rel]"])
+        self.tbl.verticalHeader().setVisible(False)
+        self.tbl.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.tbl.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        lay.addWidget(self.tbl)
+        self.lbl = QLabel("")
+        self.lbl.setWordWrap(True)
+        self.lbl.setStyleSheet("color:#555; font-size:9pt;")
+        lay.addWidget(self.lbl)
+        bb = QDialogButtonBox(QDialogButtonBox.Close)
+        bb.rejected.connect(self.reject)
+        bb.accepted.connect(self.reject)
+        lay.addWidget(bb)
+        self._refresh()
+
+    def _refresh(self, *a):
+        import acoustic_viewer as av
+        bi = self.combo.currentIndex()
+        we = self._r["wall_energy"]
+        vals = {w: float(we[w][bi]) for w in self.WALL_ORDER}
+        emax = max(vals.values()) or 1e-30
+        order = sorted(self.WALL_ORDER, key=lambda w: -vals[w])
+        self.tbl.blockSignals(True)
+        self.tbl.setRowCount(6)
+        for row, w in enumerate(order):
+            db = 10.0 * np.log10(max(vals[w], 1e-30) / emax)
+            it0 = self._TWI(self.WALL_LABELS[w])
+            it0.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            it1 = self._TWI(f"{db:+.1f}")
+            it1.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            if row == 0:
+                it0.setForeground(QColor("#c0392b"))
+                it1.setForeground(QColor("#c0392b"))
+            self.tbl.setItem(row, 0, it0)
+            self.tbl.setItem(row, 1, it1)
+        self.tbl.blockSignals(False)
+        self.lbl.setText(
+            f"La que más refleja hacia el receptor en esta banda: "
+            f"<b>{self.WALL_LABELS[order[0]]}</b>. Valores relativos al máximo "
+            "(0 dB = la pared que más refleja). Especular, orden ≤3; exacto para "
+            "recinto rectangular.")
+        if self.chk_paint.isChecked():
+            walls = []
+            for w in self.WALL_ORDER:
+                t = float(vals[w] / emax)
+                rgb = av.colormap_lerp3(np.array([t]), (0.10, 0.20, 0.90),
+                                        (0.20, 0.90, 0.20), (1.00, 0.10, 0.10))[0]
+                rgba = (float(rgb[0]), float(rgb[1]), float(rgb[2]), 0.55)
+                faces = np.array([[0, 1, 2], [0, 2, 3]])
+                walls.append((self._quads[w], faces, rgba))
+            try:
+                self._panel.viewer.set_reflection_map(walls)
+            except Exception:
+                pass
+        else:
+            try:
+                self._panel.viewer.set_reflection_map(None)
+            except Exception:
+                pass
+
+    def closeEvent(self, e):
+        try:
+            self._panel.viewer.set_reflection_map(None)
+        except Exception:
+            pass
+        super().closeEvent(e)
+
+    def reject(self):
+        try:
+            self._panel.viewer.set_reflection_map(None)
+        except Exception:
+            pass
+        super().reject()
+
+
 class ModeTableDialog(QDialog):
     """Tabla por modo (Capa 0, Etapa 5c): expone EXPLICITAMENTE el corrimiento
     de frecuencia Delta f_n = f_efectiva - f_rigida (por Im(beta) de las
@@ -5049,6 +5163,15 @@ class AcousticPanel(QWidget):
             "decaimiento, la optimización ni la predicción. Necesita los modos ya\n"
             "calculados (calculá «Calcular modos (FEM)» una vez).")
         fg.addRow(self.chk_auto)
+
+        self.btn_refl = QPushButton("Mapa de reflexiones…")
+        self.btn_refl.setToolTip(
+            "Mapa de calor de la energía reflejada hacia el receptor por cada "
+            "pared (fuentes-imagen, hasta orden 3, por banda de octava). Media/alta "
+            "frecuencia (especular, arriba de Schroeder). Exacto para recinto "
+            "rectangular; usa la caja envolvente si no lo es.")
+        self.btn_refl.clicked.connect(self._open_reflection_map)
+        fg.addRow(self.btn_refl)
 
         self.btn_sbir = QPushButton("Ver SBIR (fuente-frontera)")
         self.btn_sbir.setToolTip(
@@ -8376,6 +8499,83 @@ class AcousticPanel(QWidget):
             self._log(f"Auto-cálculo: error ({e}).")
         finally:
             self._auto_busy = False
+
+    # -----------------------------------------------------------------------
+    # Mapa de calor de reflexiones (item 1): fuentes-imagen (ISM) sobre la caja
+    # -----------------------------------------------------------------------
+    def _box_wall_quads(self, vmin, vmax):
+        """Los 4 vértices (mundo) de cada una de las 6 paredes de la caja AABB."""
+        x0, y0, z0 = vmin; x1, y1, z1 = vmax
+        return {
+            "x0": np.array([[x0, y0, z0], [x0, y1, z0], [x0, y1, z1], [x0, y0, z1]]),
+            "xL": np.array([[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]]),
+            "y0": np.array([[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]]),
+            "yL": np.array([[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]]),
+            "z0": np.array([[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0]]),
+            "zL": np.array([[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]]),
+        }
+
+    def _reflection_wall_alpha(self, vmin, vmax, bands):
+        """α(bands) por pared (x0/xL/y0/yL/z0/zL) desde los materiales de cara.
+        Mapea cada pared a su grupo de caras (centroide en el plano + normal del
+        eje); default 0.1 si no hay material."""
+        amap = {}
+        planes = {"x0": (0, vmin[0]), "xL": (0, vmax[0]), "y0": (1, vmin[1]),
+                  "yL": (1, vmax[1]), "z0": (2, vmin[2]), "zL": (2, vmax[2])}
+        try:
+            groups, _v, _t = self._get_face_groups()
+            g2m = self._group_to_material_dict(groups)
+        except Exception:
+            groups, g2m = [], {}
+        for w, (ax, val) in planes.items():
+            a = 0.1
+            best = None
+            for g in groups:
+                try:
+                    if (abs(float(g.centroid[ax]) - float(val)) < 0.1
+                            and abs(float(g.normal[ax])) > 0.9):
+                        best = g
+                        break
+                except Exception:
+                    continue
+            if best is not None:
+                mat = g2m.get(getattr(best, "signature", None))
+                if mat is not None:
+                    try:
+                        a = np.clip(np.asarray(mat.alpha(bands), float), 0.0, 0.999)
+                    except Exception:
+                        a = 0.1
+            amap[w] = a
+        return amap
+
+    def _open_reflection_map(self):
+        import reflections_ism as ism
+        try:
+            verts, tris = self.get_surface()
+        except Exception as e:
+            QMessageBox.critical(self, "Sin geometría", str(e))
+            return
+        verts = np.asarray(verts, dtype=float)
+        vmin = verts.min(0); vmax = verts.max(0)
+        dims = tuple((vmax - vmin).tolist())
+        act = self._active_sources()
+        if len(act) == 0:
+            QMessageBox.information(self, "Mapa de reflexiones",
+                                   "Agregá (o activá) al menos una fuente.")
+            return
+        src = np.asarray(act[0].position, dtype=float)
+        rec = np.asarray(self.receiver, dtype=float)
+        bands = ism.octave_bands()
+        alpha_by_wall = self._reflection_wall_alpha(vmin, vmax, bands)
+        try:
+            r = ism.wall_reflection_energy(
+                tuple((src - vmin).tolist()), tuple((rec - vmin).tolist()),
+                dims, alpha_by_wall, bands=bands, max_order=3, air=True)
+        except Exception as e:
+            QMessageBox.critical(self, "Mapa de reflexiones", str(e))
+            return
+        quads = self._box_wall_quads(vmin, vmax)
+        ReflectionMapDialog(self, r, quads, bands, parent=self).exec_()
 
     def _clear_field_3d(self):
         if hasattr(self, 'pressure_3d'):

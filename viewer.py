@@ -1592,6 +1592,30 @@ class IsoViewer(gl.GLViewWidget):
                 self._patch_items.append(eitem)
         self.update()
 
+    def set_reflection_map(self, walls=None):
+        """Mapa de calor de reflexiones (item 1): un GLMeshItem por pared coloreado
+        por la energia reflejada hacia el receptor. `walls` = lista de
+        (verts (Nv,3), faces (Nf,3), rgba (4,)); None/vacio = quitar. Mismo patron
+        probado que los parches (color uniforme + shader=None + 'additive', el
+        unico que renderiza en esta escena)."""
+        items = getattr(self, "_reflection_items", [])
+        for it in items:
+            self.removeItem(it)
+        self._reflection_items = []
+        if not walls:
+            self.update()
+            return
+        for verts, faces, rgba in walls:
+            if verts is None or faces is None or len(faces) == 0:
+                continue
+            item = gl.GLMeshItem(
+                meshdata=gl.MeshData(vertexes=np.asarray(verts, dtype=float),
+                                     faces=np.asarray(faces, dtype=int)),
+                smooth=False, color=tuple(rgba), shader=None, glOptions="additive")
+            self.addItem(item)
+            self._reflection_items.append(item)
+        self.update()
+
     def set_highlight_patch(self, verts=None, faces=None):
         """Resalta UN parche (hover en la fila de Materiales) con un glow ambar,
         mismo criterio que `set_highlight_faces`. None/vacio = apagar. Item
