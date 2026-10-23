@@ -2956,6 +2956,12 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.80 (barra de menú estilo Altium/Reaper)
+
+**Cambios v2.80** (23 de octubre 2026): la ventana principal ahora tiene una **barra de menú** arriba (Archivo, Edición, Insertar, Ver, Herramientas, Calcular, Configuración, Ventana, Ayuda) que reúne en un solo lugar las acciones que ya estaban repartidas en botones y pestañas: abrir/guardar el proyecto, importar CAD, deshacer/rehacer, insertar fuente/receptor/parche/mueble, configuración de render, materiales, impedancias, comparar, optimización de fuentes, calcular modos/FRF/SBIR/mapa de reflexiones/predicción, elegir tema y navegar entre pestañas. Es un acceso adicional: los paneles y botones de siempre siguen funcionando igual.
+
+*Manual actualizado al 23 de Octubre de 2026 — v2.80.*
+
 ## Cambios v2.79 (mapa de reflexiones por pared, con interfaz)
 
 **Cambios v2.79** (23 de octubre 2026): el motor de reflexiones de v2.78 ya tiene interfaz. Botón **«Mapa de reflexiones…»** (en la sección de FRF): muestra, por **banda de octava**, cuánta **energía reflejada** llega al receptor desde cada **pared** (fuentes-imagen hasta tercer orden, con la absorción de los materiales y del aire). Una tabla ordena las paredes de mayor a menor (en dB relativos a la que más refleja) y, con «Pintar en 3D», colorea las paredes del visor según esa energía (azul = poco, rojo = mucho). Elegís la banda con un selector. Es útil para ver **dónde tratar** (qué superficie manda la reflexión más fuerte a tu asiento) en media y alta frecuencia. Exacto para recinto rectangular; en otras formas usa la caja envolvente.

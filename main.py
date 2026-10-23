@@ -171,6 +171,7 @@ class MainWindow(QMainWindow):
         self._theme_btn.setMenu(self._theme_menu)
         self.tabs.setCornerWidget(self._theme_btn, Qt.TopRightCorner)
         self._apply_theme(self._theme, persist=False)   # marca el actual + fondo visor
+        self._build_menubar()                            # barra de menú (item 8)
 
         # ----- Estado Undo/Redo GLOBAL y archivo actual -----
         # Undo/redo por SNAPSHOT del estado completo (params + acustica +
@@ -1130,6 +1131,89 @@ class MainWindow(QMainWindow):
         """Alt+Enter -> borra la nube de campo 3D (solo en la pestaña Acústica)."""
         if self.tabs.currentIndex() == 1:
             self.acoustic.trigger_clear_field()
+
+    # ---------- Barra de menú (item 8): acceso unificado estilo Altium/Reaper ----
+    def _build_menubar(self):
+        """Barra de menú (Archivo/Edición/Insertar/Ver/Herramientas/Calcular/
+        Configuración/Ventana/Ayuda). ADITIVA: refleja las acciones ya existentes
+        (los paneles y botones siguen). Cada acción se cablea SOLO si el método
+        existe (robusto). No cambia la física."""
+        mb = self.menuBar()
+        ac = getattr(self, "acoustic", None)
+        pr = getattr(self, "prediction", None)
+
+        def act(menu, label, obj, meth, shortcut=None):
+            if obj is None or not hasattr(obj, meth):
+                return None
+            a = menu.addAction(label)
+            if shortcut:
+                a.setShortcut(shortcut)
+            a.triggered.connect(
+                lambda _=False, o=obj, m=meth: getattr(o, m)())
+            return a
+
+        def go_tab(ix):
+            return lambda _=False: self.tabs.setCurrentIndex(ix)
+
+        m = mb.addMenu("&Archivo")
+        act(m, "Abrir…", self, "load_file", "Ctrl+O")
+        act(m, "Guardar", self, "save_file", "Ctrl+S")
+        act(m, "Guardar como…", self, "save_file_as", "Ctrl+Shift+S")
+        m.addSeparator()
+        act(m, "Importar CAD…", self, "_quick_import_cad")
+        m.addSeparator()
+        aq = m.addAction("Salir"); aq.setShortcut("Ctrl+Q")
+        aq.triggered.connect(self.close)
+
+        m = mb.addMenu("&Edición")
+        act(m, "Deshacer", self, "undo", "Ctrl+Z")
+        act(m, "Rehacer", self, "redo", "Ctrl+Y")
+
+        m = mb.addMenu("&Insertar")
+        act(m, "Fuente…", ac, "_add_source")
+        act(m, "Receptor (punto de escucha)", ac, "_add_listen_point")
+        act(m, "Parches de absorción…", ac, "_open_patches_dialog")
+        act(m, "Mueble…", ac, "_add_furniture")
+
+        m = mb.addMenu("&Ver")
+        act(m, "Configuración de render…", ac, "_open_render_config")
+        m.addSeparator()
+        for i, name in enumerate(("Geometría", "Acústica", "Predicción")):
+            a = m.addAction(f"Ir a {name}")
+            a.triggered.connect(go_tab(i))
+
+        m = mb.addMenu("&Herramientas")
+        act(m, "Materiales…", ac, "_open_materials_dialog")
+        act(m, "Impedancias…", ac, "_open_constructions_dialog")
+        act(m, "Comparar puntos de escucha…", ac, "_open_compare_dialog")
+        act(m, "Optimización de fuentes…", ac, "_open_dba")
+
+        m = mb.addMenu("&Calcular")
+        act(m, "Calcular modos (FEM)", ac, "trigger_compute")
+        act(m, "Calcular FRF", ac, "_compute_frf")
+        act(m, "Ver SBIR…", ac, "_open_sbir")
+        act(m, "Mapa de reflexiones…", ac, "_open_reflection_map")
+        act(m, "Predecir", pr, "trigger_predict")
+
+        m = mb.addMenu("&Configuración")
+        if getattr(self, "_theme_menu", None) is not None:
+            tm = m.addMenu("Tema")
+            for a in self._theme_menu.actions():
+                tm.addAction(a)
+
+        m = mb.addMenu("Ve&ntana")
+        for i, name in enumerate(("Geometría", "Acústica", "Predicción")):
+            a = m.addAction(name)
+            a.triggered.connect(go_tab(i))
+
+        m = mb.addMenu("A&yuda")
+        aa = m.addAction("Acerca de…")
+        aa.triggered.connect(lambda: QMessageBox.about(
+            self, "Acerca de Prototipo 1",
+            "<b>Prototipo 1</b> — Super Calculator Room Oriented Treatment "
+            "Optimizer.<br>Simulación acústica modal bajo Schroeder (núcleo "
+            "numpy/scipy) + reflexiones especulares (ISM).<br>UNTREF, Ing. de "
+            "Sonido."))
 
     # ---------- Aplicar sugerencia de la pestaña Predicción ----------
     def _on_prediction_apply_params(self, params: dict):
