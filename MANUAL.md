@@ -2956,6 +2956,12 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.78 (base del mapa de reflexiones y del futuro motor de media/alta frecuencia)
+
+**Cambios v2.78** (23 de octubre 2026): primer paso hacia la simulación de **media y alta frecuencia** (reflexiones especulares, por encima de la frecuencia de Schroeder, donde el campo deja de ser modal). Se agregó el motor de **fuentes-imagen** (`reflections_ism.py`) que, en un recinto rectangular, calcula de forma exacta cuánta energía reflejada (hasta tercer orden, por banda de octava) llega al receptor desde cada pared, con la absorción de los materiales y del aire. Es la base del futuro **mapa de calor de reflexiones sobre las paredes** y la semilla validada del motor de trazado de rayos que viene. Por ahora es un cálculo interno (sin interfaz todavía), validado contra el resultado analítico del recinto rectangular.
+
+*Manual actualizado al 23 de Octubre de 2026 — v2.78.*
+
 ## Cambios v2.77 (recalcular automáticamente la FRF y el campo al cambiar algo)
 
 **Cambios v2.77** (23 de octubre 2026): un modo **«Recalcular automáticamente (FRF + campo)»** (checkbox en la sección de FRF, apagado por default). Con los modos ya calculados, al cambiar una **impedancia**, un **material o su α**, o la **posición de una fuente o parche**, la **FRF y el campo 3D se recalculan solos** (con un pequeño retardo para no recalcular en cada tecla).
