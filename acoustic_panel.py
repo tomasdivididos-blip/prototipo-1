@@ -4490,17 +4490,17 @@ class AcousticPanel(QWidget):
         self._TWI = _TWI
         grp_src = QGroupBox("Fuentes omnidireccionales")
         vs = QVBoxLayout(grp_src)
-        self.tbl_src = QTableWidget(0, 5)
-        self.tbl_src.setHorizontalHeaderLabels(["", "Fuente", "X", "Y", "Z"])
+        self.tbl_src = QTableWidget(0, 6)
+        self.tbl_src.setHorizontalHeaderLabels(["", "Fuente", "X", "Y", "Z", "👁"])
         self.tbl_src.setMaximumHeight(170)
         self.tbl_src.verticalHeader().setVisible(False)
         self.tbl_src.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tbl_src.setSelectionMode(QAbstractItemView.SingleSelection)
         self.tbl_src.setEditTriggers(QAbstractItemView.NoEditTriggers)
         _hh = self.tbl_src.horizontalHeader()
-        _hh.setSectionResizeMode(0, QHeaderView.ResizeToContents)   # check
+        _hh.setSectionResizeMode(0, QHeaderView.ResizeToContents)   # check activa
         _hh.setSectionResizeMode(1, QHeaderView.Stretch)            # nombre
-        for _c in (2, 3, 4):
+        for _c in (2, 3, 4, 5):
             _hh.setSectionResizeMode(_c, QHeaderView.ResizeToContents)
         self.tbl_src.itemSelectionChanged.connect(self._on_src_selection)
         self.tbl_src.itemChanged.connect(self._on_src_check_changed)
@@ -4534,15 +4534,30 @@ class AcousticPanel(QWidget):
         # --- Muebles (obstáculos en el modelo modal: carve + absorción + SBIR) ---
         grp_furn = QGroupBox("Muebles")
         vf = QVBoxLayout(grp_furn)
-        self.list_furn = QListWidget()
-        self.list_furn.setMaximumHeight(110)
-        self.list_furn.itemSelectionChanged.connect(self._on_furn_selection)
-        self.list_furn.setToolTip(
+        # Tabla estilo EASE (igual que fuentes/receptores): nombre + X/Y/Z
+        # editables + toggle de ícono 3D. El mueble SIEMPRE es obstáculo físico
+        # (no tiene mute); el check «👁» solo muestra/oculta su wireframe.
+        self.tbl_furn = QTableWidget(0, 5)
+        self.tbl_furn.setHorizontalHeaderLabels(["Mueble", "X", "Y", "Z", "👁"])
+        self.tbl_furn.setMaximumHeight(130)
+        self.tbl_furn.verticalHeader().setVisible(False)
+        self.tbl_furn.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.tbl_furn.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.tbl_furn.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        _hhf = self.tbl_furn.horizontalHeader()
+        _hhf.setSectionResizeMode(0, QHeaderView.Stretch)            # nombre
+        for _c in (1, 2, 3, 4):
+            _hhf.setSectionResizeMode(_c, QHeaderView.ResizeToContents)
+        self.tbl_furn.itemSelectionChanged.connect(self._on_furn_selection)
+        self.tbl_furn.itemChanged.connect(self._on_furn_check_changed)
+        self.tbl_furn.setToolTip(
             "Muebles como obstáculos en el modelo modal: la malla se talla\n"
             "(agujero rígido) y sus caras absorben según el material asignado.\n"
-            "Afecta modos, RT/ξ y SBIR. Edición numérica; se ven como wireframe\n"
-            "verde-azulado en el visor 3D. El efecto se aplica al recalcular FEM.")
-        vf.addWidget(self.list_furn)
+            "Afecta modos, RT/ξ y SBIR. Nombre + X/Y/Z editables (rueda o\n"
+            "escribir); el check «👁» muestra/oculta el wireframe 3D sin sacar el\n"
+            "mueble del modelo. El efecto físico se aplica al recalcular FEM.")
+        self._furn_coord_spins = []    # por fila: (sb_x, sb_y, sb_z)
+        vf.addWidget(self.tbl_furn)
         rowf = QHBoxLayout(); rowf.setSpacing(4)
         self.btn_add_furn = QPushButton("Añadir")
         self.btn_edit_furn = QPushButton("Editar")
@@ -4597,8 +4612,9 @@ class AcousticPanel(QWidget):
                                      QHeaderView as _QHV,
                                      QAbstractItemView as _QAIV)
         self._TWI = getattr(self, "_TWI", _TWI2)
-        self.tbl_pts = _QTW(0, 5)
-        self.tbl_pts.setHorizontalHeaderLabels(["", "Receptor", "X", "Y", "Z"])
+        self.tbl_pts = _QTW(0, 6)
+        self.tbl_pts.setHorizontalHeaderLabels(
+            ["", "Receptor", "X", "Y", "Z", "👁"])
         self.tbl_pts.setMaximumHeight(150)
         self.tbl_pts.verticalHeader().setVisible(False)
         self.tbl_pts.setSelectionBehavior(_QAIV.SelectRows)
@@ -4607,7 +4623,7 @@ class AcousticPanel(QWidget):
         _hp = self.tbl_pts.horizontalHeader()
         _hp.setSectionResizeMode(0, _QHV.ResizeToContents)
         _hp.setSectionResizeMode(1, _QHV.Stretch)
-        for _c in (2, 3, 4):
+        for _c in (2, 3, 4, 5):
             _hp.setSectionResizeMode(_c, _QHV.ResizeToContents)
         self.tbl_pts.setToolTip(
             "Receptores / puntos de escucha. El checkbox los ACTIVA para la\n"
@@ -5337,6 +5353,15 @@ class AcousticPanel(QWidget):
                 self.tbl_src.setCellWidget(i, c, sb)
                 spins.append(sb)
             self._src_coord_spins.append(tuple(spins))
+            # Col 5: ícono visible (toggle, INDEPENDIENTE de activa). Un item puede
+            # estar activo pero con el ícono 3D oculto.
+            ico = self._TWI()
+            ico.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled
+                         | Qt.ItemIsSelectable)
+            ico.setCheckState(Qt.Checked if getattr(s, "icon_visible", True)
+                              else Qt.Unchecked)
+            ico.setToolTip("Mostrar / ocultar el ícono 3D de esta fuente")
+            self.tbl_src.setItem(i, 5, ico)
         self.tbl_src.blockSignals(False)
         if 0 <= sel < self.tbl_src.rowCount():
             self.tbl_src.selectRow(sel)
@@ -5374,12 +5399,19 @@ class AcousticPanel(QWidget):
         procesando en este click). Se actualiza el nombre IN PLACE con señales
         bloqueadas.
         """
-        if item is None or item.column() != 0:
+        if item is None or item.column() not in (0, 5):
             return
         i = item.row()
         if not (0 <= i < len(self.sources)):
             return
         s = self.sources[i]
+        if item.column() == 5:
+            # Columna de ícono: mostrar/ocultar el bafle 3D (independiente de activa).
+            s.icon_visible = (item.checkState() == Qt.Checked)
+            self.src_markers.update(self.sources,
+                                    selected_idx=self._selected_src_idx())
+            self.viewer.update()
+            return
         s.active = (item.checkState() == Qt.Checked)
         self.tbl_src.blockSignals(True)
         nm = self.tbl_src.item(i, 1)
@@ -5485,7 +5517,7 @@ class AcousticPanel(QWidget):
     # _compute_xi_from_materials / _open_sbir, ya cableados)
     # -----------------------------------------------------------------------
     def _selected_furn_idx(self) -> int:
-        return self.list_furn.currentRow()
+        return self.tbl_furn.currentRow()
 
     def _furn_item_text(self, i, m) -> str:
         kind = getattr(m, "kind", "box")
@@ -5549,22 +5581,54 @@ class AcousticPanel(QWidget):
         self.furniture.append(furn)
         if mat:
             self._furniture_mat_names[len(self.furniture) - 1] = mat
-        self.list_furn.setCurrentRow(len(self.furniture) - 1)
         self._refresh_furniture_list()
+        self.tbl_furn.selectRow(len(self.furniture) - 1)
         self._log(f"Preset «{furn.label}» insertado"
                   f"{f' (material {mat})' if mat else ' (rígido)'}. "
                   f"Movelo/rotalo y recalculá los modos para aplicarlo.")
 
     def _refresh_furniture_list(self):
-        """Repuebla la lista de muebles y refresca el wireframe 3D."""
+        """Repuebla la tabla de muebles (nombre + X/Y/Z + ícono) y refresca el
+        wireframe 3D."""
         sel = self._selected_furn_idx()
-        self.list_furn.blockSignals(True)
-        self.list_furn.clear()
+        self.tbl_furn.blockSignals(True)
+        self.tbl_furn.setRowCount(0)
+        self._furn_coord_spins = []
+        self.tbl_furn.setRowCount(len(self.furniture))
         for i, m in enumerate(self.furniture):
-            self.list_furn.addItem(QListWidgetItem(self._furn_item_text(i, m)))
-        self.list_furn.blockSignals(False)
-        if 0 <= sel < self.list_furn.count():
-            self.list_furn.setCurrentRow(sel)
+            # Col 0: nombre descriptivo (no editable).
+            nm = self._TWI(self._furn_item_text(i, m))
+            nm.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            self.tbl_furn.setItem(i, 0, nm)
+            # Cols 1-3: coords X/Y/Z editables (rueda/teclado). setValue ANTES de
+            # conectar para no disparar el handler durante el armado.
+            spins = []
+            pos = tuple(getattr(m, "position", (0.0, 0.0, 0.0)))
+            for c, val in zip((1, 2, 3), pos):
+                sb = QDoubleSpinBox()
+                sb.setRange(-1e3, 1e3)
+                sb.setDecimals(3)
+                sb.setSingleStep(0.05)
+                sb.setValue(float(val))
+                sb.setButtonSymbols(QDoubleSpinBox.NoButtons)
+                sb.setMaximumWidth(78)
+                sb.valueChanged.connect(
+                    lambda _v, r=i: self._on_furn_coord_changed(r))
+                self.tbl_furn.setCellWidget(i, c, sb)
+                spins.append(sb)
+            self._furn_coord_spins.append(tuple(spins))
+            # Col 4: ícono visible (toggle, el mueble sigue en el modelo físico).
+            ico = self._TWI()
+            ico.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled
+                         | Qt.ItemIsSelectable)
+            ico.setCheckState(Qt.Checked if getattr(m, "icon_visible", True)
+                              else Qt.Unchecked)
+            ico.setToolTip("Mostrar / ocultar el wireframe 3D de este mueble\n"
+                           "(no lo saca del modelo acústico)")
+            self.tbl_furn.setItem(i, 4, ico)
+        self.tbl_furn.blockSignals(False)
+        if 0 <= sel < self.tbl_furn.rowCount():
+            self.tbl_furn.selectRow(sel)
         self.furn_markers.update(self.furniture,
                                  selected_idx=self._selected_furn_idx())
         self._sync_furniture_positions_to_viewer()
@@ -5574,6 +5638,34 @@ class AcousticPanel(QWidget):
         self.viewer.update()
 
     def _on_furn_selection(self):
+        self.furn_markers.update(self.furniture,
+                                 selected_idx=self._selected_furn_idx())
+        self.viewer.update()
+
+    def _on_furn_coord_changed(self, i):
+        """Una coord X/Y/Z de la fila i cambió: escribe la posicion real del
+        mueble y refresca wireframe + picking. NO reconstruye la tabla."""
+        if not (0 <= i < len(self.furniture)) or i >= len(self._furn_coord_spins):
+            return
+        sx, sy, sz = self._furn_coord_spins[i]
+        self.furniture[i].position = (float(sx.value()), float(sy.value()),
+                                      float(sz.value()))
+        self.furn_markers.update(self.furniture,
+                                 selected_idx=self._selected_furn_idx())
+        self._sync_furniture_positions_to_viewer()
+        if self._patches:
+            self._refresh_patches_summary()
+        self.viewer.update()
+
+    def _on_furn_check_changed(self, item):
+        """Check «👁» (col 4): muestra/oculta el wireframe del mueble sin sacarlo
+        del modelo. NO reconstruir la tabla aca (Qt esta procesando el click)."""
+        if item is None or item.column() != 4:
+            return
+        i = item.row()
+        if not (0 <= i < len(self.furniture)):
+            return
+        self.furniture[i].icon_visible = (item.checkState() == Qt.Checked)
         self.furn_markers.update(self.furniture,
                                  selected_idx=self._selected_furn_idx())
         self.viewer.update()
@@ -5818,8 +5910,8 @@ class AcousticPanel(QWidget):
         self.furniture.append(furn)
         if mat:
             self._furniture_mat_names[len(self.furniture) - 1] = mat
-        self.list_furn.setCurrentRow(len(self.furniture) - 1)
         self._refresh_furniture_list()
+        self.tbl_furn.selectRow(len(self.furniture) - 1)
         self._log(f"Mueble '{furn.label}' añadido"
                   f"{f' (material {mat})' if mat else ' (rígido)'}. "
                   f"Recalculá los modos para aplicarlo.")
@@ -5845,13 +5937,15 @@ class AcousticPanel(QWidget):
                 self, "No se puede colocar",
                 f"Ese cambio haría que «{furn.label}» {msg}. Ajustá posición o tamaño.")
             return
+        # Preservar el estado del ícono (el editor no lo conoce).
+        furn.icon_visible = getattr(self.furniture[i], "icon_visible", True)
         self.furniture[i] = furn
         if mat:
             self._furniture_mat_names[i] = mat
         else:
             self._furniture_mat_names.pop(i, None)
-        self.list_furn.setCurrentRow(i)
         self._refresh_furniture_list()
+        self.tbl_furn.selectRow(i)
         self._log(f"Mueble {i} editado. Recalculá los modos para aplicarlo.")
 
     def apply_furniture_move(self, idx: int, x: float, y: float, z: float):
@@ -6029,13 +6123,27 @@ class AcousticPanel(QWidget):
                 self.tbl_pts.setCellWidget(i, c, sb)
                 spins.append(sb)
             self._pt_coord_spins.append(tuple(spins))
+            # Col 5: ícono visible (toggle, independiente de activa).
+            ico = self._TWI()
+            ico.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled
+                         | Qt.ItemIsSelectable)
+            ico.setCheckState(Qt.Checked if p.get("icon_visible", True)
+                              else Qt.Unchecked)
+            ico.setToolTip("Mostrar / ocultar el ícono 3D de este receptor")
+            self.tbl_pts.setItem(i, 5, ico)
         self.tbl_pts.blockSignals(False)
         if 0 <= sel < self.tbl_pts.rowCount():
             self.tbl_pts.selectRow(sel)
+        self._repaint_listen_points()
+
+    def _visible_listen_points(self):
+        return [p["position"] for p in self.listen_points
+                if p.get("icon_visible", True)]
+
+    def _repaint_listen_points(self):
         if hasattr(self.viewer, "set_listen_points"):
             try:
-                self.viewer.set_listen_points(
-                    [p["position"] for p in self.listen_points])
+                self.viewer.set_listen_points(self._visible_listen_points())
             except Exception:
                 pass
 
@@ -6045,18 +6153,18 @@ class AcousticPanel(QWidget):
         sx, sy, sz = self._pt_coord_spins[i]
         self.listen_points[i]["position"] = (float(sx.value()),
                                              float(sy.value()), float(sz.value()))
-        if hasattr(self.viewer, "set_listen_points"):
-            try:
-                self.viewer.set_listen_points(
-                    [p["position"] for p in self.listen_points])
-            except Exception:
-                pass
+        self._repaint_listen_points()
 
     def _on_pt_check_changed(self, item):
-        if item is None or item.column() != 0:
+        if item is None or item.column() not in (0, 5):
             return
         i = item.row()
         if not (0 <= i < len(self.listen_points)):
+            return
+        if item.column() == 5:
+            self.listen_points[i]["icon_visible"] = (
+                item.checkState() == Qt.Checked)
+            self._repaint_listen_points()
             return
         self.listen_points[i]["active"] = (item.checkState() == Qt.Checked)
         self.tbl_pts.blockSignals(True)
@@ -6071,7 +6179,8 @@ class AcousticPanel(QWidget):
         name = ("Sweet Spot" if not self.listen_points
                 else f"Mic {len(self.listen_points) + 1}")
         pos = tuple(float(v) for v in self.receiver)
-        self.listen_points.append({"name": name, "position": pos, "active": True})
+        self.listen_points.append({"name": name, "position": pos,
+                                   "active": True, "icon_visible": True})
         self._refresh_listen_points()
         self._log(f"Receptor '{name}' agregado en "
                   f"({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f}).")

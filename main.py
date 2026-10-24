@@ -1388,6 +1388,9 @@ class MainWindow(QMainWindow):
                 "pitch": float(getattr(s, "pitch", 0.0) or 0.0),
                 "mounted": bool(getattr(s, "mounted", False)),
                 "active": bool(getattr(s, "active", True)),
+                # v2.82: visibilidad del ícono 3D (toggle por item, independiente
+                # de active). Aditivo: un .room viejo carga con True (visible).
+                "icon_visible": bool(getattr(s, "icon_visible", True)),
                 # v2.23: polaridad del cableado (+1 / -1). Aditivo, sin bump de
                 # version: un .room viejo carga con +1 = comportamiento previo.
                 "polarity": int(getattr(s, "polarity", 1) or 1),
@@ -1479,7 +1482,8 @@ class MainWindow(QMainWindow):
             "listen_points": [
                 {"name": str(p.get("name", "")),
                  "position": [float(x) for x in p.get("position", (0, 0, 0))],
-                 "active": bool(p.get("active", True))}
+                 "active": bool(p.get("active", True)),
+                 "icon_visible": bool(p.get("icon_visible", True))}   # v2.82
                 for p in getattr(ap, "listen_points", [])
             ],
             "face_materials": face_mat,
@@ -1827,7 +1831,8 @@ class MainWindow(QMainWindow):
         ap.listen_points = [
             {"name": str(p.get("name", f"Punto {i+1}")),
              "position": tuple(float(x) for x in p.get("position", (0, 0, 0))),
-             "active": bool(p.get("active", True))}      # .room viejos -> activo
+             "active": bool(p.get("active", True)),       # .room viejos -> activo
+             "icon_visible": bool(p.get("icon_visible", True))}   # v2.82
             for i, p in enumerate(ac.get("listen_points") or [])
             if len(p.get("position", [])) == 3
         ]
@@ -1897,6 +1902,8 @@ class MainWindow(QMainWindow):
             kwargs["filter_ripple_db"] = float(s.get("filter_ripple_db", 1.0) or 1.0)
             kwargs["filter_atten_db"] = float(s.get("filter_atten_db", 40.0) or 40.0)
             src = OmniSource(**kwargs)
+            # v2.82: visibilidad del ícono 3D (atributo libre, no kwarg del ctor).
+            src.icon_visible = bool(s.get("icon_visible", True))
             # v5: reconstruir la curva de respuesta Q(f) si el .room la trae.
             resp = s.get("response")
             if resp:

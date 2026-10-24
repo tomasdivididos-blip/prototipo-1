@@ -2956,6 +2956,14 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.82 (mostrar u ocultar el ícono 3D de cada fuente, receptor y mueble)
+
+**Cambios v2.82** (24 de octubre 2026): los tres paneles (Fuentes, Receptores y Muebles) comparten ahora la misma lógica de **tabla** con las coordenadas X/Y/Z editables (rueda del mouse o teclado) y una columna **«ojo»** para mostrar u ocultar el **ícono 3D** de cada elemento en el visor, de forma independiente de si está habilitado. Podés tener una fuente que igual radia, un receptor que igual cuenta en la optimización o un mueble que igual talla la malla, pero con su ícono oculto para despejar la escena. El estado de cada ícono se guarda en el `.room` (un proyecto viejo abre con todos los íconos visibles).
+
+Además se corrigió que, al colocar **varios receptores**, no se veía el ícono 3D de cada uno: ahora cada receptor se dibuja como una cruz en el visor. El panel de Muebles pasó de ser una lista de texto a una tabla con nombre, coordenadas editables y el «ojo»; el mueble sigue siendo siempre un obstáculo físico (el «ojo» solo oculta su dibujo, no lo saca del modelo acústico).
+
+*Manual actualizado al 24 de Octubre de 2026 — v2.82.*
+
 ## Cambios v2.81 (el selector de modo muestra el corrimiento al primer cálculo)
 
 **Cambios v2.81** (24 de octubre 2026): corrección del selector **«Modo»** (en «Visualización Modal»). Al asignar una impedancia con reactancia y calcular los modos, el combo ya muestra la frecuencia **corrida** (con el Δ, p.ej. «12.56 Hz (Δ+0.50)») en el **primer** cálculo, no recién después de recalcular los modos una segunda vez. Era un problema de orden: el selector se armaba antes de calcular el corrimiento; ahora se calcula el amortiguamiento y el corrimiento primero, y después se arma el selector.

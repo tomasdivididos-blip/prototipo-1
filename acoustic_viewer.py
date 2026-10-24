@@ -270,6 +270,8 @@ class SourceMarkers:
         self._ensure_items()
         normal_segs, sel_segs = [], []
         for i, s in enumerate(source_array or []):
+            if not getattr(s, "icon_visible", True):
+                continue                         # ícono oculto por item (toggle)
             size = getattr(s, "baffle_size", (0.30, 0.50, 0.40))
             if getattr(s, "render_kind", "baffle") == "sphere":
                 # esfera centrada en el punto; radio = 1/2 lado menor del bafle
@@ -449,6 +451,8 @@ class FurnitureMarkers:
         self._ensure_items()
         normal_segs, sel_segs = [], []
         for i, m in enumerate(muebles or []):
+            if not getattr(m, "icon_visible", True):
+                continue                         # ícono oculto por item (toggle)
             segs = _furniture_wireframe(m)
             (sel_segs if i == selected_idx else normal_segs).extend(segs)
         for item, segs in ((self._item_normal, normal_segs),

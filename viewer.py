@@ -1481,13 +1481,13 @@ class IsoViewer(gl.GLViewWidget):
         self._refresh_render()
 
     def set_listen_points(self, positions):
-        """Dibuja los puntos de escucha (mics del Comparar) como esferas chicas.
+        """Dibuja los receptores / puntos de escucha como CRUCES 3D.
         `positions`: iterable de (x,y,z); vacio/None = quitar.
 
-        Implementado con GLMeshItem (mismo patron que los markers de fuentes/
-        receptor, estable). La version scatter (GLScatterPlotItem persistente,
-        point sprites) se descarto: sospechosa de stalls del driver GL en
-        Windows al redimensionar la ventana."""
+        Se usa GLLinePlotItem (cruces), el patron que SI renderiza en esta escena
+        (igual que ReceiverMarker/SourceMarkers). La version con GLMeshItem opaco
+        (esferas) NO renderizaba en esta escena (mismo gotcha GL de v2.70),
+        por eso los iconos de los receptores no se veian."""
         for it in self._listen_pts_items:
             self.removeItem(it)
         self._listen_pts_items = []
@@ -1496,14 +1496,20 @@ class IsoViewer(gl.GLViewWidget):
         if pts.size == 0:
             self.update()
             return
+        h = 0.22
+        segs = []
         for p in pts:
-            md = gl.MeshData.sphere(rows=8, cols=10, radius=0.07)
-            item = gl.GLMeshItem(meshdata=md, smooth=True,
-                                 color=(0.58, 0.89, 0.84, 0.95),
-                                 shader="shaded", glOptions="opaque")
-            item.translate(float(p[0]), float(p[1]), float(p[2]))
-            self.addItem(item)
-            self._listen_pts_items.append(item)
+            x, y, z = float(p[0]), float(p[1]), float(p[2])
+            segs += [[x - h, y, z], [x + h, y, z],
+                     [x, y - h, z], [x, y + h, z],
+                     [x, y, z - h], [x, y, z + h]]
+        col = tuple(style.SCENE.get("receiver", (0.30, 0.95, 0.85, 1.0)))
+        item = gl.GLLinePlotItem(pos=np.asarray(segs, dtype=np.float32),
+                                 color=col, width=3.0, antialias=True,
+                                 mode="lines")
+        item.setDepthValue(2)
+        self.addItem(item)
+        self._listen_pts_items.append(item)
         self.update()
 
     def set_highlight_faces(self, tri_indices=None):

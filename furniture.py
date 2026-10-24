@@ -83,6 +83,7 @@ class Furniture:
     roll: float = 0.0
     label: str = "mueble"
     provenance: str = ""
+    icon_visible: bool = True     # v2.82: mostrar/ocultar wireframe 3D (toggle UI)
     parts: Optional[list] = None
     mesh_verts: Optional[np.ndarray] = None
     mesh_faces: Optional[np.ndarray] = None
@@ -231,7 +232,8 @@ class Furniture:
         d = {"kind": self.kind, "position": list(self.position),
              "size": list(self.size), "orientation": self.orientation,
              "pitch": self.pitch, "roll": self.roll,
-             "label": self.label, "provenance": self.provenance}
+             "label": self.label, "provenance": self.provenance,
+             "icon_visible": bool(self.icon_visible)}      # v2.82
         if self.kind == "compound" and self.parts:
             d["parts"] = [p.to_dict() for p in self.parts]
         if self.kind == "mesh" and self.mesh_verts is not None:
@@ -255,6 +257,7 @@ class Furniture:
                    roll=float(d.get("roll", 0.0)),   # aditivo: .room viejo -> 0
                    label=str(d.get("label", "mueble")),
                    provenance=str(d.get("provenance", "")),
+                   icon_visible=bool(d.get("icon_visible", True)),   # v2.82
                    parts=parts,
                    mesh_verts=(np.asarray(mv, float) if mv is not None else None),
                    mesh_faces=(np.asarray(mf, int) if mf is not None else None))
