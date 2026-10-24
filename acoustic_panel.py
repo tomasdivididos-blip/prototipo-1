@@ -6119,8 +6119,11 @@ class AcousticPanel(QWidget):
                 verts, tris, n_modes=self.sb_nmodes.value(),
                 n_per_meter=self.sb_density.value(), progress=self._log)
             self._clip_modes_to_mesh_validity()
-            self._refresh_modes_combo()
+            # ξ (y el corrimiento Δfₙ) PRIMERO, DESPUÉS el combo: así el readout del
+            # combo «Modo» muestra la f efectiva con Δfₙ ya en el 1er cálculo (antes
+            # el combo se armaba con las rígidas hasta recalcular FEM una 2da vez).
             self._xi_per_mode = self._compute_xi_from_materials()
+            self._refresh_modes_combo()
         except Exception as e:
             QMessageBox.critical(self, "Error FEM", str(e))
             return False
@@ -6683,8 +6686,10 @@ class AcousticPanel(QWidget):
                 f"{n_req - n_kept} excedían f_max_malla = {f_max_clip:.0f} Hz "
                 f"(descartados por dispersión numérica del esquema)."
             )
-        self._refresh_modes_combo()
+        # ξ + corrimiento PRIMERO, combo DESPUÉS (el readout del combo «Modo»
+        # muestra Δfₙ ya en el 1er cálculo, no recién tras recalcular FEM).
         self._xi_per_mode = self._compute_xi_from_materials()
+        self._refresh_modes_combo()
         # Label honesto Weyl-vs-validos: SIEMPRE post-solve, cualquiera sea el
         # modelo de amortiguamiento o si hay materiales asignados (el desajuste
         # Weyl>validos aparece igual sin materiales, con el f_S de fallback). Usa
@@ -8122,8 +8127,8 @@ class AcousticPanel(QWidget):
                         f"{n_req - n_kept} excedían f_max_malla = {f_max_clip:.0f} Hz "
                         f"(descartados)."
                     )
-                self._refresh_modes_combo()
                 self._xi_per_mode = self._compute_xi_from_materials()
+                self._refresh_modes_combo()   # ξ primero -> combo con Δfₙ al 1er cálculo
                 damping = self._xi_per_mode if self._xi_per_mode is not None else 0.03
             else:
                 # Corrección (punto 1): con los modos YA calculados, refrescar el
@@ -8133,6 +8138,7 @@ class AcousticPanel(QWidget):
                 # Las fuentes (`act`) ya son las actuales. El modal_result (modos) no
                 # depende ni de fuentes ni del amortiguamiento → no hace falta re-FEM.
                 self._xi_per_mode = self._compute_xi_from_materials()
+                self._refresh_modes_combo()   # combo «Modo» con el Δfₙ vigente
                 damping = self._xi_per_mode if self._xi_per_mode is not None else 0.03
             self._log("Calculando FRF (FEM)...")
             # Ganancia de sala / modo cero (opt-in): necesita el volumen del recinto.

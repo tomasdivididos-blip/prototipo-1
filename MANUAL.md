@@ -2956,6 +2956,12 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.81 (el selector de modo muestra el corrimiento al primer cálculo)
+
+**Cambios v2.81** (24 de octubre 2026): corrección del selector **«Modo»** (en «Visualización Modal»). Al asignar una impedancia con reactancia y calcular los modos, el combo ya muestra la frecuencia **corrida** (con el Δ, p.ej. «12.56 Hz (Δ+0.50)») en el **primer** cálculo, no recién después de recalcular los modos una segunda vez. Era un problema de orden: el selector se armaba antes de calcular el corrimiento; ahora se calcula el amortiguamiento y el corrimiento primero, y después se arma el selector.
+
+*Manual actualizado al 24 de Octubre de 2026 — v2.81.*
+
 ## Cambios v2.80 (barra de menú estilo Altium/Reaper)
 
 **Cambios v2.80** (23 de octubre 2026): la ventana principal ahora tiene una **barra de menú** arriba (Archivo, Edición, Insertar, Ver, Herramientas, Calcular, Configuración, Ventana, Ayuda) que reúne en un solo lugar las acciones que ya estaban repartidas en botones y pestañas: abrir/guardar el proyecto, importar CAD, deshacer/rehacer, insertar fuente/receptor/parche/mueble, configuración de render, materiales, impedancias, comparar, optimización de fuentes, calcular modos/FRF/SBIR/mapa de reflexiones/predicción, elegir tema y navegar entre pestañas. Es un acceso adicional: los paneles y botones de siempre siguen funcionando igual.
