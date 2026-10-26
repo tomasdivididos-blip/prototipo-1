@@ -213,6 +213,9 @@ class MainWindow(QMainWindow):
         # Shift+Click izquierdo arrastrado -> mover fuente o receptor
         self.viewer.sourceMoveRequested.connect(self._on_source_moved_from_viewer)
         self.viewer.receiverMoveRequested.connect(self._on_receiver_moved_from_viewer)
+        if hasattr(self.viewer, "listenPointMoveRequested"):
+            self.viewer.listenPointMoveRequested.connect(
+                self._on_listen_point_moved_from_viewer)
         # Alt+Ctrl: gestos de orientacion del bafle (rotar / inclinar) en vivo.
         self.viewer.sourceRotateRequested.connect(self._on_source_rotate_from_viewer)
         self.viewer.sourceTiltRequested.connect(self._on_source_tilt_from_viewer)
@@ -1014,6 +1017,19 @@ class MainWindow(QMainWindow):
                 ap.point_inside_furniture(*ap.receiver) < 0:
             return
         ap.move_receiver_to(x, y, z)
+        self._note_activity()
+
+    def _on_listen_point_moved_from_viewer(self, vis_idx: int,
+                                           x: float, y: float, z: float):
+        """Shift+drag sobre la cruz de un receptor renderizado (v2.83): clamp al
+        recinto + snap al dominio FEM (igual que el receptor cursor), sin dejarlo
+        entrar en un mueble, y actualizar ese punto de escucha."""
+        ap = self.acoustic
+        x, y, z = ap._clamp_to_room_bbox(x, y, z)
+        (x, y, z), _snapped = ap._snap_source_into_domain((x, y, z))
+        if ap.point_inside_furniture(x, y, z) >= 0:
+            return
+        ap.apply_listen_point_move(vis_idx, x, y, z)
         self._note_activity()
 
     def _on_furniture_moved_from_viewer(self, idx: int, x: float, y: float, z: float):
@@ -1837,6 +1853,9 @@ class MainWindow(QMainWindow):
             if len(p.get("position", [])) == 3
         ]
         ap._refresh_listen_points()
+        # v2.84: garantizar ≥1 receptor en la lista (los cómputos corren sobre ella).
+        if hasattr(ap, "_ensure_listen_points"):
+            ap._ensure_listen_points()
         # Mobiliario (v7). v4/v5/v6 sin "furniture" -> lista vacia (compat).
         try:
             from furniture import Furniture
@@ -1979,13 +1998,9 @@ class MainWindow(QMainWindow):
         # un archivo viejo. Con la clave presente se respeta lo guardado.
         try:
             dm = str(ac.get("damping_model", "a36")).lower()
+            # v2.83: el selector se movió al diálogo «Configuración de cálculo…»;
+            # el modelo vive en _damping_model (no hay combo que sincronizar).
             ap._damping_model = "perturbation" if dm == "perturbation" else "a36"
-            if hasattr(ap, "combo_damping"):
-                idx = ap.combo_damping.findData(ap._damping_model)
-                if idx >= 0:
-                    ap.combo_damping.blockSignals(True)
-                    ap.combo_damping.setCurrentIndex(idx)
-                    ap.combo_damping.blockSignals(False)
         except Exception:
             ap._damping_model = "a36"
 

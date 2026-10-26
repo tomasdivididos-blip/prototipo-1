@@ -172,6 +172,9 @@ class IsoViewer(gl.GLViewWidget):
     sourceEditRequested   = pyqtSignal(int)                      # idx fuente
     sourceMoveRequested   = pyqtSignal(int, float, float, float) # idx,x,y,z
     receiverMoveRequested = pyqtSignal(float, float, float)      # x,y,z
+    # Shift+drag sobre una cruz de receptor renderizado (listen point multi).
+    # idx = indice en la LISTA de puntos VISIBLES que se paso a set_listen_points.
+    listenPointMoveRequested = pyqtSignal(int, float, float, float)  # idx,x,y,z
     # Orientacion del bafle por gesto directo (Alt+Ctrl): delta en grados.
     sourceRotateRequested = pyqtSignal(int, float)   # idx, d_azimut (Alt+Ctrl+Left drag; +90° con Alt+Ctrl+click derecho)
     sourceTiltRequested   = pyqtSignal(int, float)   # idx, d_pitch  (Alt+Ctrl+rueda)
@@ -240,6 +243,8 @@ class IsoViewer(gl.GLViewWidget):
 
         # Puntos de escucha adicionales (v2.16: lista de mics para Comparar)
         self._listen_pts_items = []
+        self._listen_point_positions = []   # (x,y,z) de los puntos VISIBLES (picking)
+        self._dragging_listen_idx = -1      # >=0 listen point en arrastre, -1 ninguno
 
         # Posiciones de fuentes/receptor (para doble-click y arrastre)
         self._source_positions = []   # lista de (x,y,z)
@@ -1030,6 +1035,21 @@ class IsoViewer(gl.GLViewWidget):
                     best_d2, best_idx = d2, -2
         return best_idx
 
+    def _pick_listen_point(self, px, py, radius_px: int = 24) -> int:
+        """Indice del receptor renderizado (cruz) mas cercano al cursor, o -1.
+        El indice es en la lista VISIBLE pasada a set_listen_points."""
+        best_d2 = radius_px ** 2
+        best_idx = -1
+        for i, pos in enumerate(self._listen_point_positions):
+            sp = self._project(pos)
+            if sp is None:
+                continue
+            dx, dy = px - sp[0], py - sp[1]
+            d2 = dx * dx + dy * dy
+            if d2 < best_d2:
+                best_d2, best_idx = d2, i
+        return best_idx
+
     def _pick_furniture(self, px, py, radius_px: int = 28) -> int:
         """Indice del mueble bajo el cursor (>=0) o -1. Se llama SOLO cuando
         `_pick_source` no encontro nada (las fuentes tienen prioridad).
@@ -1090,6 +1110,7 @@ class IsoViewer(gl.GLViewWidget):
         if not is_shift_left:
             self._dragging_source_idx = -1
             self._dragging_furn_idx = -1
+            self._dragging_listen_idx = -1
         self._orient_source_idx = -1     # se re-setea abajo si es gesto de orientacion
         self._orient_furn_idx = -1
         self._rotate_view_drag = False
@@ -1117,6 +1138,7 @@ class IsoViewer(gl.GLViewWidget):
         if is_shift_left:
             self._dragging_source_idx = -1   # reset antes de detectar
             self._dragging_furn_idx = -1
+            self._dragging_listen_idx = -1
             idx = self._pick_source(ev.x(), ev.y())
             if idx >= 0:
                 self._dragging_source_idx = idx
@@ -1125,13 +1147,19 @@ class IsoViewer(gl.GLViewWidget):
                 self._dragging_source_idx = -2
                 x0, y0, z0 = self._receiver_position
             else:
-                # Ninguna fuente/receptor: probar muebles (menor prioridad).
-                fidx = self._pick_furniture(ev.x(), ev.y())
-                if fidx >= 0:
-                    self._dragging_furn_idx = fidx
-                    x0, y0, z0 = self._furniture_positions[fidx]
+                # Ningun marcador de fuente/receptor-cursor: probar los receptores
+                # renderizados (cruces, v2.82) y recien despues los muebles.
+                lidx = self._pick_listen_point(ev.x(), ev.y())
+                if lidx >= 0:
+                    self._dragging_listen_idx = lidx
+                    x0, y0, z0 = self._listen_point_positions[lidx]
                 else:
-                    return   # no hubo pick: no arrancamos drag
+                    fidx = self._pick_furniture(ev.x(), ev.y())
+                    if fidx >= 0:
+                        self._dragging_furn_idx = fidx
+                        x0, y0, z0 = self._furniture_positions[fidx]
+                    else:
+                        return   # no hubo pick: no arrancamos drag
             self._drag_source_z = float(z0)
             self._drag_anchor_x = float(x0)
             self._drag_anchor_y = float(y0)
@@ -1318,6 +1346,33 @@ class IsoViewer(gl.GLViewWidget):
                 )
             return
 
+        # Arrastre de un receptor renderizado (cruz, v2.82): misma mecanica que la
+        # fuente (XY sobre z=cte, solo Z con Ctrl, vplane en Lateral).
+        if self._dragging_listen_idx != -1 and (btns & Qt.LeftButton):
+            if self._drag_mode == "vplane":
+                pt = self._pick_vertical_plane(
+                    int(lpos.x()), int(lpos.y()),
+                    (self._drag_anchor_x, self._drag_anchor_y, self._drag_source_z))
+                if pt is None:
+                    return
+                new_x, new_y, new_z = pt
+            elif self._drag_mode == "z":
+                new_z = self._pick_vertical_line(
+                    int(lpos.x()), int(lpos.y()),
+                    self._drag_anchor_x, self._drag_anchor_y)
+                if new_z is None:
+                    return
+                new_x, new_y = self._drag_anchor_x, self._drag_anchor_y
+            else:
+                pt = self._pick_horizontal_plane(
+                    int(lpos.x()), int(lpos.y()), self._drag_source_z)
+                if pt is None:
+                    return
+                new_x, new_y, new_z = pt[0], pt[1], self._drag_source_z
+            self.listenPointMoveRequested.emit(
+                self._dragging_listen_idx, new_x, new_y, new_z)
+            return
+
         # Arrastre de mueble (Shift+LeftButton sostenido; misma mecanica que la
         # fuente: XY sobre el plano z=cte, o solo Z con Ctrl).
         if self._dragging_furn_idx != -1 and (btns & Qt.LeftButton):
@@ -1380,6 +1435,9 @@ class IsoViewer(gl.GLViewWidget):
             return
         if ev.button() == Qt.LeftButton and self._dragging_furn_idx != -1:
             self._dragging_furn_idx = -1
+            return
+        if ev.button() == Qt.LeftButton and self._dragging_listen_idx != -1:
+            self._dragging_listen_idx = -1
             return
         if ev.button() == Qt.RightButton and self._inclining_wall is not None:
             self._inclining_wall = None
@@ -1494,8 +1552,10 @@ class IsoViewer(gl.GLViewWidget):
         pts = np.atleast_2d(np.asarray(positions if positions is not None
                                        else [], dtype=float))
         if pts.size == 0:
+            self._listen_point_positions = []
             self.update()
             return
+        self._listen_point_positions = [tuple(float(v) for v in p) for p in pts]
         h = 0.22
         segs = []
         for p in pts:

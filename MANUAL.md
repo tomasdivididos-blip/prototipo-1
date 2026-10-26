@@ -2956,6 +2956,25 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.84 (los cálculos corren sobre tus receptores de la lista, con flechas por asiento)
+
+**Cambios v2.84** (25 de octubre 2026): ahora la respuesta en frecuencia (FRF), el SBIR, el decaimiento y el mapa de reflexiones se calculan sobre los **receptores de la lista** (los que elegiste), no sobre un receptor aparte. En cada una de esas ventanas aparece arriba del gráfico un selector **«Asiento: flecha izquierda  Receptor i/N: nombre  flecha derecha»**: con las flechas recorrés los receptores de la lista y la ventana se recalcula y redibuja para cada posición (el marcador grande del visor salta al asiento que estás viendo). Con un solo receptor las flechas quedan deshabilitadas. Si la lista está vacía, se crea un «Sweet Spot» en la posición del cursor.
+
+Las ventanas de FRF, SBIR y mapa de reflexiones pasaron a no bloquear (podés mirar y rotar el visor mientras están abiertas). En «Configuración de cálculo…» se sacó la palabra «barato» del RT60 y se agregó **SBIR** a la lista de lo que se recalcula automáticamente: con la ventana SBIR abierta y el modo Automático, cambiar una impedancia o un material la actualiza sola.
+
+*Manual actualizado al 25 de Octubre de 2026 — v2.84.*
+
+## Cambios v2.83 (RT60 al tocar impedancias, arrastrar receptores, configuración de cálculo, mapa sobre el recinto real)
+
+**Cambios v2.83** (24-25 de octubre 2026): varios ajustes de interfaz y flujo.
+
+- **RT60 al cambiar una impedancia:** antes el «RT60 medio» solo se refrescaba al cambiar un material; ahora también al aplicar una impedancia o un parche. (Los modos no se recalculan al tocar una impedancia: es correcto, la impedancia solo corre la frecuencia y el amortiguamiento de cada modo, no mueve los modos rígidos.)
+- **Arrastrar los receptores de la lista:** los receptores chicos (las cruces del visor) se mueven con **Shift + arrastrar** con el botón izquierdo, igual que las fuentes; con **Ctrl+Shift** se mueven solo en altura.
+- **Botón «Configuración de cálculo…»** (donde estaba «Actualización», en «Campo acústico 3D»): elegís **Automático o Manual**, qué recalcular solo (FRF, campo 3D, RT60) y el modelo de **amortiguamiento** (se movió acá desde Materiales). Por default se calcula todo automáticamente.
+- **Mapa de reflexiones sobre el recinto real:** ahora pinta la energía sobre las **caras reales del mallado**, no sobre una caja envolvente; cubre todas las bandas de octava (la variación por banda se ve de media frecuencia para arriba; debajo de la frecuencia de Schroeder el mapa es casi plano, porque las paredes reflejan casi todo por igual); la ventana no bloquea y se repinta al cambiar de banda; y al pasar el mouse por una fila de la tabla se ilumina esa pared en el visor.
+
+*Manual actualizado al 25 de Octubre de 2026 — v2.83.*
+
 ## Cambios v2.82 (mostrar u ocultar el ícono 3D de cada fuente, receptor y mueble)
 
 **Cambios v2.82** (24 de octubre 2026): los tres paneles (Fuentes, Receptores y Muebles) comparten ahora la misma lógica de **tabla** con las coordenadas X/Y/Z editables (rueda del mouse o teclado) y una columna **«ojo»** para mostrar u ocultar el **ícono 3D** de cada elemento en el visor, de forma independiente de si está habilitado. Podés tener una fuente que igual radia, un receptor que igual cuenta en la optimización o un mueble que igual talla la malla, pero con su ícono oculto para despejar la escena. El estado de cada ícono se guarda en el `.room` (un proyecto viejo abre con todos los íconos visibles).

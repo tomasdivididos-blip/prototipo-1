@@ -1465,6 +1465,42 @@ class FurnitureEditDialog(QDialog):
         return furn, mat
 
 
+def make_receiver_nav(names, idx, on_index):
+    """Barra «◀ Receptor i/N: nombre ▶» para navegar los receptores de la lista
+    en cada ventana de análisis (v2.84). `on_index(i)` recomputa+redibuja la
+    ventana para el receptor i. Devuelve el QWidget; con ≤1 receptor las flechas
+    quedan deshabilitadas."""
+    from PyQt5.QtWidgets import QWidget, QHBoxLayout, QPushButton
+    w = QWidget()
+    h = QHBoxLayout(w); h.setContentsMargins(0, 0, 0, 0); h.setSpacing(6)
+    st = {"i": int(idx)}
+    b_prev = QPushButton("◀"); b_next = QPushButton("▶")
+    for b in (b_prev, b_next):
+        b.setMaximumWidth(36)
+    lbl = QLabel("")
+
+    def _upd():
+        n = len(names)
+        st["i"] = max(0, min(st["i"], n - 1)) if n else 0
+        lbl.setText(f"Receptor {st['i']+1}/{n}: {names[st['i']]}" if n else "—")
+        b_prev.setEnabled(n > 1 and st["i"] > 0)
+        b_next.setEnabled(n > 1 and st["i"] < n - 1)
+
+    def _go(d):
+        st["i"] += d
+        _upd()
+        on_index(st["i"])
+
+    b_prev.clicked.connect(lambda: _go(-1))
+    b_next.clicked.connect(lambda: _go(+1))
+    h.addWidget(QLabel("Asiento:"))
+    h.addWidget(b_prev)
+    h.addWidget(lbl, 1)
+    h.addWidget(b_next)
+    _upd()
+    return w
+
+
 class DecayWaterfallDialog(QDialog):
     """Comparación del DECAIMIENTO del campo total en el receptor SIN vs CON los
     subwoofers (punto 3 del profesor). Muestra la EDC de Schroeder superpuesta y dos
@@ -1476,7 +1512,7 @@ class DecayWaterfallDialog(QDialog):
     ξ propio de cada modo (los polos del recinto no se tocan). Eso último (impedancia
     del cono como frontera → Δξₙ) es la versión rigurosa C2, pendiente."""
 
-    def __init__(self, data, parent=None):
+    def __init__(self, data, parent=None, receivers=None, idx=0, on_index=None):
         super().__init__(parent)
         apply_dialog_theme(self)
         self.setWindowTitle("Decaimiento del campo total — sin vs con subs")
@@ -1485,6 +1521,10 @@ class DecayWaterfallDialog(QDialog):
         self._data = data
         self._fig = None
         v = QVBoxLayout(self)
+        # Navegación por receptor (v2.84): re-corre el cómputo para el asiento
+        # elegido (el decaimiento es pesado → cierra y reabre, no redibujo).
+        if receivers and len(receivers) > 1 and on_index is not None:
+            v.addWidget(make_receiver_nav(receivers, idx, on_index))
         if not _HAS_MPL:
             v.addWidget(QLabel("matplotlib no disponible. pip install matplotlib"))
             return
@@ -1673,7 +1713,8 @@ class FRFDialog(QDialog):
 
     def __init__(self, frf_result, modal_freqs=None, parent=None,
                  fom=None, fom_band=None, eqc=None, eqc_band=None, f_valid=None,
-                 composed_spl=None, f_schroeder=None, composed_freq=None):
+                 composed_spl=None, f_schroeder=None, composed_freq=None,
+                 receivers=None, idx=0, recompute_fn=None):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle(f"FRF — {frf_result.method.upper()}")
@@ -1682,101 +1723,30 @@ class FRFDialog(QDialog):
         self._fig = None
         self._H   = frf_result.H              # guardar para audio
         self._f   = frf_result.freq_axis
+        # Parámetros FIJOS (no dependen del receptor): se guardan para el redibujo
+        # al navegar entre receptores (v2.84).
+        self._modal_freqs = modal_freqs
+        self._eqc = eqc
+        self._f_valid = f_valid
+        self._f_schroeder = f_schroeder
+        self._recompute_fn = recompute_fn
         v = QVBoxLayout(self)
 
         if not _HAS_MPL:
             v.addWidget(QLabel("matplotlib no disponible. pip install matplotlib"))
             return
 
-        _P_REF = 20e-6
-        H = frf_result.H
-        f = frf_result.freq_axis
-        db = 20.0 * np.log10(np.maximum(np.abs(H), 1e-30) / _P_REF)
+        # Barra de navegación por receptor (si hay más de uno y hay con qué recomputar).
+        if receivers and len(receivers) > 1 and recompute_fn is not None:
+            v.addWidget(make_receiver_nav(receivers, idx, self._on_nav))
 
-        self._fig, ax = plt.subplots(figsize=(9.5, 4.2), dpi=96)
+        self._fig, self._ax = plt.subplots(figsize=(9.5, 4.2), dpi=96)
         self._fig.patch.set_facecolor('#f0f0f0')
-        ax.set_facecolor('#ffffff')
-
-        # C1 (auditoria 2026-09-04): por encima de f_valid = min(f_max_malla,
-        # ultimo modo) la superposicion modal es cola-suma truncada y/o esta fuera
-        # de la validez numerica de la malla (hasta 27 dB de error). Se dibuja la
-        # curva VALIDA en solido y la INVALIDA en gris punteado, y se sombrea la banda.
-        fv = float(f_valid) if (f_valid is not None and f_valid > float(f[0])) else None
-        if fv is not None and fv < float(f[-1]):
-            mvalid = f <= fv
-            ax.plot(f[mvalid], db[mvalid], color='#1f6fbf', linewidth=1.8,
-                    label='FRF (FEM) · banda válida')
-            # incluir el punto de cruce para que la curva no quede cortada
-            minv = f >= fv
-            ax.plot(f[minv], db[minv], color='#9aa0a6', linewidth=1.3,
-                    linestyle=':', label='Fuera de banda válida (no confiable)')
-            ax.axvspan(fv, float(f[-1]), color='#9aa0a6', alpha=0.16, zorder=0)
-            ax.axvline(x=fv, color='#666666', linestyle='-.', linewidth=1.0,
-                       alpha=0.8)
-        else:
-            ax.plot(f, db, color='#1f6fbf', linewidth=1.8, label='FRF (FEM)')
-
-        # Fase 2 (grupo A): curva TOTAL = modal + SBIR (crossfade en f_S), en la
-        # misma escala SPL absoluta. Coincide con el modal debajo de f_S y toma el
-        # peine de imagenes por encima (donde el modal truncado ya no es confiable),
-        # asi la FRF "tiene en cuenta el SBIR" y coincide con la curva del SBIR.
-        if composed_spl is not None:
-            cs = np.asarray(composed_spl, dtype=float)
-            cf = np.asarray(composed_freq if composed_freq is not None else f,
-                            dtype=float)
-            if cs.shape == cf.shape:
-                ax.plot(cf, cs, color='#8a5cd1', linewidth=1.6,
-                        label='Total: modal + SBIR')
-                if f_schroeder and float(cf[0]) <= float(f_schroeder) <= float(cf[-1]):
-                    ax.axvline(x=float(f_schroeder), color='#8a5cd1', linestyle=':',
-                               linewidth=1.0, alpha=0.75,
-                               label=f'f_S ≈ {float(f_schroeder):.0f} Hz')
-
-        if modal_freqs is not None:
-            for i, fn in enumerate(modal_freqs):
-                if float(f[0]) <= fn <= float(f[-1]):
-                    ax.axvline(x=fn, color='#e07000', linestyle='--',
-                               linewidth=1.3, alpha=0.75,
-                               label='Modos FEM' if i == 0 else '_nolegend_')
-
-        # --- Overlay de corregibilidad EQ (C13/C21): sombrear lo NO ecualizable ---
-        _draw_correctability_overlay(ax, eqc)
-
-        ax.set_xlabel('Frecuencia (Hz)', fontsize=10)
-        ax.set_ylabel('Nivel SPL (dB re 20 µPa)', fontsize=10)
-        ax.set_title('Respuesta en Frecuencia (FRF)',
-                     fontweight='bold', fontsize=11, pad=8)
-
-        # Grilla de 1/3 de octava (ISO 266): xticks en los bordes de banda,
-        # eje log, look tipo REW. Permite leer en que banda cae cada modo.
-        from matplotlib.ticker import FixedLocator, NullLocator, FuncFormatter
-        from plot_utils import third_octave_edges
-        # Opción B: si la compuesta se extiende por encima del fmax de la FRF,
-        # el eje X llega hasta ahí (para ver el tramo SBIR).
-        x_hi = float(f[-1])
-        if composed_freq is not None and len(composed_freq):
-            x_hi = max(x_hi, float(np.asarray(composed_freq)[-1]))
-        edges = third_octave_edges(float(f[0]), x_hi)
-        if len(edges) >= 2:
-            ax.set_xscale('log')
-            ax.set_xlim(float(f[0]), x_hi)
-            ax.xaxis.set_major_locator(FixedLocator(edges))
-            ax.xaxis.set_major_formatter(
-                FuncFormatter(lambda x, _: f"{x:.0f}"))
-            ax.xaxis.set_minor_locator(NullLocator())
-        # Grilla vertical tenue en los bordes de banda; horizontal normal.
-        ax.grid(True, which='major', axis='x', linestyle='-',
-                linewidth=0.7, alpha=0.3, color='#bbbbbb')
-        ax.grid(True, which='major', axis='y', linestyle='-',
-                linewidth=0.7, alpha=0.6, color='#cccccc')
-        ax.legend(fontsize=9, framealpha=0.85, loc='upper right')
-        ax.tick_params(labelsize=9)
-        self._fig.tight_layout(pad=1.2)
-
-        canvas = FigureCanvas(self._fig)
-        toolbar = NavigationToolbar(canvas, self)
+        self._ax.set_facecolor('#ffffff')
+        self._canvas = FigureCanvas(self._fig)
+        toolbar = NavigationToolbar(self._canvas, self)
         v.addWidget(toolbar)
-        v.addWidget(canvas, 1)
+        v.addWidget(self._canvas, 1)
 
         # --- Figura de merito (2c §8), si el caller la calculo ---
         if fom is not None:
@@ -1850,11 +1820,9 @@ class FRFDialog(QDialog):
 
         # --- Fila de info + exportar ---
         brow = QHBoxLayout()
-        peaks = self._peak_indices(db, k=5)
-        lbl = QLabel("Picos: " + ", ".join(f"{f[i]:.1f} Hz" for i in peaks)
-                     + ("  ·  Naranja = modos FEM" if modal_freqs is not None else ""))
-        lbl.setStyleSheet("color:#555; font-size:8pt;")
-        brow.addWidget(lbl, 1)
+        self._peaks_lbl = QLabel("")
+        self._peaks_lbl.setStyleSheet("color:#555; font-size:8pt;")
+        brow.addWidget(self._peaks_lbl, 1)
         for fmt in ("PNG", "SVG", "PDF", "CSV", "TXT"):
             b = QPushButton(f"Exportar {fmt}")
             b.setMinimumWidth(140)       # texto "Exportar XXX" + padding QSS
@@ -1866,6 +1834,111 @@ class FRFDialog(QDialog):
         btns = QDialogButtonBox(QDialogButtonBox.Close)
         btns.button(QDialogButtonBox.Close).clicked.connect(self.accept)
         v.addWidget(btns)
+
+        # Dibujo inicial (y re-dibujo al navegar entre receptores).
+        self._render_plot(frf_result, composed_spl, composed_freq)
+
+    def _on_nav(self, i):
+        """Flecha de navegación: recomputa la FRF para el receptor i y redibuja."""
+        if self._recompute_fn is None:
+            return
+        data = self._recompute_fn(i)      # (frf_result, composed_spl, composed_freq) o None
+        if data is None:
+            return
+        self._render_plot(*data)
+
+    def update_data(self, frf_result, composed_spl=None, composed_freq=None):
+        """Re-dibuja con una FRF nueva (auto-cálculo). Las etiquetas FoM/EQ
+        (espaciales) no se tocan: se refrescan al recalcular la FRF a mano."""
+        if _HAS_MPL:
+            self._render_plot(frf_result, composed_spl, composed_freq)
+
+    def _render_plot(self, frf_result, composed_spl=None, composed_freq=None):
+        """Dibuja/redibuja la FRF del receptor actual sobre self._ax. Los
+        parámetros fijos (modos, f_valid, eqc, f_S) viven en self.* (v2.84)."""
+        _P_REF = 20e-6
+        self._H = frf_result.H
+        self._f = frf_result.freq_axis
+        H = frf_result.H
+        f = frf_result.freq_axis
+        db = 20.0 * np.log10(np.maximum(np.abs(H), 1e-30) / _P_REF)
+        modal_freqs = self._modal_freqs
+        f_valid = self._f_valid
+        f_schroeder = self._f_schroeder
+        eqc = self._eqc
+        ax = self._ax
+        ax.clear()
+        ax.set_facecolor('#ffffff')
+
+        # C1 (auditoria 2026-09-04): por encima de f_valid la superposicion modal
+        # es cola-suma truncada / fuera de validez de malla -> solido la valida,
+        # gris punteado la invalida, y sombreado.
+        fv = float(f_valid) if (f_valid is not None and f_valid > float(f[0])) else None
+        if fv is not None and fv < float(f[-1]):
+            mvalid = f <= fv
+            ax.plot(f[mvalid], db[mvalid], color='#1f6fbf', linewidth=1.8,
+                    label='FRF (FEM) · banda válida')
+            minv = f >= fv
+            ax.plot(f[minv], db[minv], color='#9aa0a6', linewidth=1.3,
+                    linestyle=':', label='Fuera de banda válida (no confiable)')
+            ax.axvspan(fv, float(f[-1]), color='#9aa0a6', alpha=0.16, zorder=0)
+            ax.axvline(x=fv, color='#666666', linestyle='-.', linewidth=1.0,
+                       alpha=0.8)
+        else:
+            ax.plot(f, db, color='#1f6fbf', linewidth=1.8, label='FRF (FEM)')
+
+        # Curva TOTAL = modal + SBIR (crossfade en f_S), misma escala SPL absoluta.
+        if composed_spl is not None:
+            cs = np.asarray(composed_spl, dtype=float)
+            cf = np.asarray(composed_freq if composed_freq is not None else f,
+                            dtype=float)
+            if cs.shape == cf.shape:
+                ax.plot(cf, cs, color='#8a5cd1', linewidth=1.6,
+                        label='Total: modal + SBIR')
+                if f_schroeder and float(cf[0]) <= float(f_schroeder) <= float(cf[-1]):
+                    ax.axvline(x=float(f_schroeder), color='#8a5cd1', linestyle=':',
+                               linewidth=1.0, alpha=0.75,
+                               label=f'f_S ≈ {float(f_schroeder):.0f} Hz')
+
+        if modal_freqs is not None:
+            for i, fn in enumerate(modal_freqs):
+                if float(f[0]) <= fn <= float(f[-1]):
+                    ax.axvline(x=fn, color='#e07000', linestyle='--',
+                               linewidth=1.3, alpha=0.75,
+                               label='Modos FEM' if i == 0 else '_nolegend_')
+
+        _draw_correctability_overlay(ax, eqc)
+
+        ax.set_xlabel('Frecuencia (Hz)', fontsize=10)
+        ax.set_ylabel('Nivel SPL (dB re 20 µPa)', fontsize=10)
+        ax.set_title('Respuesta en Frecuencia (FRF)',
+                     fontweight='bold', fontsize=11, pad=8)
+
+        from matplotlib.ticker import FixedLocator, NullLocator, FuncFormatter
+        from plot_utils import third_octave_edges
+        x_hi = float(f[-1])
+        if composed_freq is not None and len(composed_freq):
+            x_hi = max(x_hi, float(np.asarray(composed_freq)[-1]))
+        edges = third_octave_edges(float(f[0]), x_hi)
+        if len(edges) >= 2:
+            ax.set_xscale('log')
+            ax.set_xlim(float(f[0]), x_hi)
+            ax.xaxis.set_major_locator(FixedLocator(edges))
+            ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.0f}"))
+            ax.xaxis.set_minor_locator(NullLocator())
+        ax.grid(True, which='major', axis='x', linestyle='-',
+                linewidth=0.7, alpha=0.3, color='#bbbbbb')
+        ax.grid(True, which='major', axis='y', linestyle='-',
+                linewidth=0.7, alpha=0.6, color='#cccccc')
+        ax.legend(fontsize=9, framealpha=0.85, loc='upper right')
+        ax.tick_params(labelsize=9)
+        self._fig.tight_layout(pad=1.2)
+        self._canvas.draw()
+
+        peaks = self._peak_indices(db, k=5)
+        self._peaks_lbl.setText(
+            "Picos: " + ", ".join(f"{f[i]:.1f} Hz" for i in peaks)
+            + ("  ·  Naranja = modos FEM" if modal_freqs is not None else ""))
 
     # -----------------------------------------------------------------------
     def _play_audio(self):
@@ -1947,7 +2020,8 @@ class SBIRDialog(QDialog):
     _COLORS = ['#2a9d8f', '#e76f51', '#8a5cd1', '#577590', '#bc6c25', '#386641']
 
     def __init__(self, result, f_lo: float = 20.0, f_hi: float = 500.0,
-                 parent=None, modal_db=None, f_schroeder=None, eqc=None):
+                 parent=None, modal_db=None, f_schroeder=None, eqc=None,
+                 receivers=None, idx=0, recompute_fn=None):
         super().__init__(parent)
         apply_dialog_theme(self)  # tema claro (fondo blanco)
         self.setWindowTitle("SBIR — interferencia fuente-frontera")
@@ -1964,11 +2038,15 @@ class SBIRDialog(QDialog):
                           if modal_db is not None else None)
         self._f_s = float(f_schroeder) if f_schroeder else None
         self._chk_modal = None
+        self._recompute_fn = recompute_fn      # navegación por receptor (v2.84)
         v = QVBoxLayout(self)
 
         if not _HAS_MPL:
             v.addWidget(QLabel("matplotlib no disponible. pip install matplotlib"))
             return
+
+        if receivers and len(receivers) > 1 and recompute_fn is not None:
+            v.addWidget(make_receiver_nav(receivers, idx, self._on_nav))
 
         self._fig, self._ax = plt.subplots(figsize=(9.5, 4.4), dpi=96)
         self._fig.patch.set_facecolor('#f0f0f0')
@@ -1995,27 +2073,16 @@ class SBIRDialog(QDialog):
         v.addWidget(self._canvas, 1)
         self._rebuild_plot()
 
-        # --- Lectura: realce/atenuacion + distancias fuente-pared (estatico) ---
-        res = self._res
-        f_pk, realce, f_dip, aten = res.band_extremes(self._flo, self._fhi)
-        info = QLabel(
-            f"Realce máx: {realce:+.1f} dB @ {f_pk:.0f} Hz     ·     "
-            f"Atenuación máx: {aten:+.1f} dB @ {f_dip:.0f} Hz"
-        )
-        info.setStyleSheet("color:#333; font-size:9pt; font-weight:600;")
-        v.addWidget(info)
-
-        notches = res.first_notches(self._flo, self._fhi)
-        if notches:
-            parts = []
-            for n in notches[:8]:
-                tag = f"{n.source_label}/" if len(res.per_source) > 1 else ""
-                parts.append(f"{tag}{n.wall_label}: {n.distance:.2f} m → "
-                             f"{n.f_notch:.0f} Hz")
-            dist_lbl = QLabel("Notch por pared:  " + "   ·   ".join(parts))
-            dist_lbl.setWordWrap(True)
-            dist_lbl.setStyleSheet("color:#666; font-size:8pt;")
-            v.addWidget(dist_lbl)
+        # --- Lectura: realce/atenuacion + distancias fuente-pared ---
+        # Instance attrs: se refrescan al navegar entre receptores (v2.84).
+        self._info_lbl = QLabel("")
+        self._info_lbl.setStyleSheet("color:#333; font-size:9pt; font-weight:600;")
+        v.addWidget(self._info_lbl)
+        self._notch_lbl = QLabel("")
+        self._notch_lbl.setWordWrap(True)
+        self._notch_lbl.setStyleSheet("color:#666; font-size:8pt;")
+        v.addWidget(self._notch_lbl)
+        self._refresh_readout()
 
         # --- Fila exportar ---
         brow = QHBoxLayout()
@@ -2104,6 +2171,47 @@ class SBIRDialog(QDialog):
         ax.tick_params(labelsize=9)
         self._fig.tight_layout(pad=1.2)
         self._canvas.draw_idle()
+
+    def _refresh_readout(self):
+        """Actualiza los labels de realce/atenuación y notch desde self._res."""
+        res = self._res
+        try:
+            f_pk, realce, f_dip, aten = res.band_extremes(self._flo, self._fhi)
+            self._info_lbl.setText(
+                f"Realce máx: {realce:+.1f} dB @ {f_pk:.0f} Hz     ·     "
+                f"Atenuación máx: {aten:+.1f} dB @ {f_dip:.0f} Hz")
+        except Exception:
+            self._info_lbl.setText("")
+        try:
+            notches = res.first_notches(self._flo, self._fhi)
+            if notches:
+                parts = []
+                for n in notches[:8]:
+                    tag = f"{n.source_label}/" if len(res.per_source) > 1 else ""
+                    parts.append(f"{tag}{n.wall_label}: {n.distance:.2f} m → "
+                                 f"{n.f_notch:.0f} Hz")
+                self._notch_lbl.setText("Notch por pared:  " + "   ·   ".join(parts))
+            else:
+                self._notch_lbl.setText("")
+        except Exception:
+            self._notch_lbl.setText("")
+
+    def update_data(self, res, modal_db=None):
+        """Re-dibuja con un nuevo SBIR (navegación por receptor o auto-cálculo)."""
+        self._res = res
+        self._modal_db = (np.asarray(modal_db, dtype=float)
+                          if modal_db is not None else None)
+        if _HAS_MPL:
+            self._rebuild_plot()
+            self._refresh_readout()
+
+    def _on_nav(self, i):
+        if self._recompute_fn is None:
+            return
+        data = self._recompute_fn(i)      # (res, modal_db) o None
+        if data is None:
+            return
+        self.update_data(*data)
 
     def _export(self, fmt: str):
         from PyQt5.QtWidgets import QFileDialog
@@ -3221,6 +3329,94 @@ class RenderConfigDialog(QDialog):
         }
 
 
+class CalcConfigDialog(QDialog):
+    """«Configuración de cálculo»: modo Automático/Manual, qué se recalcula solo
+    (FRF / campo 3D / RT60 medio) y el modelo de amortiguamiento. Reemplaza al
+    combo «Actualización» del campo 3D y al checkbox de auto-cálculo (v2.83)."""
+
+    def __init__(self, state, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Configuración de cálculo")
+        try:
+            apply_dialog_theme(self)
+        except Exception:
+            pass
+        lay = QVBoxLayout(self)
+
+        # --- Modo global ---
+        gmode = QGroupBox("Modo de cálculo")
+        vmode = QVBoxLayout(gmode)
+        self.rb_auto = QRadioButton("Automático (recalcular al cambiar algo)")
+        self.rb_manual = QRadioButton("Manual (solo a demanda / Enter)")
+        grp = QButtonGroup(self)
+        grp.addButton(self.rb_auto); grp.addButton(self.rb_manual)
+        (self.rb_auto if state.get("mode", "auto") == "auto"
+         else self.rb_manual).setChecked(True)
+        vmode.addWidget(self.rb_auto)
+        vmode.addWidget(self.rb_manual)
+        lay.addWidget(gmode)
+
+        # --- Qué recalcular automáticamente ---
+        self.gwhat = QGroupBox("¿Qué recalcular automáticamente?")
+        vwhat = QVBoxLayout(self.gwhat)
+        self.chk_frf = QCheckBox("FRF (respuesta en frecuencia)")
+        self.chk_field = QCheckBox("Campo 3D (mapa de presión / forma modal)")
+        self.chk_rt60 = QCheckBox("RT60 medio (T30 de perturbación)")
+        self.chk_sbir = QCheckBox("SBIR (si la ventana está abierta)")
+        self.chk_frf.setChecked(bool(state.get("frf", True)))
+        self.chk_field.setChecked(bool(state.get("field", True)))
+        self.chk_rt60.setChecked(bool(state.get("rt60", True)))
+        self.chk_sbir.setChecked(bool(state.get("sbir", True)))
+        for c in (self.chk_frf, self.chk_field, self.chk_rt60, self.chk_sbir):
+            vwhat.addWidget(c)
+        note = QLabel("No recalcula los modos (una impedancia/α/posición no los "
+                      "mueve: solo el corrimiento Δfₙ y ξₙ por perturbación, sin "
+                      "re-FEM). Tampoco dispara la curva de decaimiento completa, "
+                      "la optimización ni la predicción (siguen a demanda). Solo "
+                      "un mueble/carve movería los modos → recalculá FEM a mano.")
+        note.setWordWrap(True)
+        note.setStyleSheet("color: #6c7086; font-size: 8pt;")
+        vwhat.addWidget(note)
+        lay.addWidget(self.gwhat)
+
+        # --- Amortiguamiento (movido desde Materiales) ---
+        gdamp = QGroupBox("Amortiguamiento")
+        fdamp = QFormLayout(gdamp)
+        self.combo_damp = QComboBox()
+        self.combo_damp.addItem("Perturbación de frontera", "perturbation")
+        self.combo_damp.addItem("Sabine por modo (A36)", "a36")
+        di = self.combo_damp.findData(state.get("damping", "perturbation"))
+        self.combo_damp.setCurrentIndex(di if di >= 0 else 0)
+        self.combo_damp.setToolTip(
+            "Perturbación de frontera: ξ y corrimiento Δfₙ desde la admitancia de "
+            "pared (Morse & Ingard / Kuttruff), el modelo exacto bajo Schroeder.\n"
+            "Sabine por modo (A36): ξ desde el RT60 de Sabine ponderado por la "
+            "forma modal (límite de campo difuso).")
+        fdamp.addRow("Modelo:", self.combo_damp)
+        lay.addWidget(gdamp)
+
+        # Habilitar el grupo "qué" solo en Automático.
+        def _sync(_=None):
+            self.gwhat.setEnabled(self.rb_auto.isChecked())
+        self.rb_auto.toggled.connect(_sync)
+        _sync()
+
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb.accepted.connect(self.accept)
+        bb.rejected.connect(self.reject)
+        lay.addWidget(bb)
+
+    def result_state(self):
+        return {
+            "mode": "auto" if self.rb_auto.isChecked() else "manual",
+            "frf": self.chk_frf.isChecked(),
+            "field": self.chk_field.isChecked(),
+            "rt60": self.chk_rt60.isChecked(),
+            "sbir": self.chk_sbir.isChecked(),
+            "damping": self.combo_damp.currentData(),
+        }
+
+
 class ReflectionMapDialog(QDialog):
     """Mapa de calor de reflexiones (item 1): energía reflejada hacia el receptor
     por cada pared (fuentes-imagen orden ≤3), por banda de octava. Tabla (dB rel)
@@ -3230,7 +3426,8 @@ class ReflectionMapDialog(QDialog):
                    "yL": "Pared Y+", "z0": "Piso (Z−)", "zL": "Techo (Z+)"}
     WALL_ORDER = ["x0", "xL", "y0", "yL", "z0", "zL"]
 
-    def __init__(self, panel, result, quads, bands, parent=None):
+    def __init__(self, panel, result, verts, wall_faces, bands,
+                 f_s=None, parent=None, receivers=None, idx=0, recompute_fn=None):
         super().__init__(parent)
         self.setWindowTitle("Mapa de reflexiones (energía por pared)")
         try:
@@ -3239,9 +3436,14 @@ class ReflectionMapDialog(QDialog):
             pass
         self._panel = panel
         self._r = result
-        self._quads = quads
+        self._verts = np.asarray(verts, float)   # vértices del mallado FEM
+        self._wall_faces = wall_faces            # {pared: (Nf,3) índices a _verts}
+        self._f_s = float(f_s) if f_s else None
         self._bands = np.asarray(bands, float)
+        self._recompute_fn = recompute_fn        # navegación por receptor (v2.84)
         lay = QVBoxLayout(self)
+        if receivers and len(receivers) > 1 and recompute_fn is not None:
+            lay.addWidget(make_receiver_nav(receivers, idx, self._on_nav))
         top = QHBoxLayout()
         top.addWidget(QLabel("Banda de octava:"))
         self.combo = QComboBox()
@@ -3264,6 +3466,11 @@ class ReflectionMapDialog(QDialog):
         self.tbl.verticalHeader().setVisible(False)
         self.tbl.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.tbl.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        # Hover sobre una fila -> iluminar esa pared en el 3D (glow ámbar, v2.83).
+        self._row_walls = []          # pared por fila (cambia con el orden de energía)
+        self.tbl.setMouseTracking(True)
+        self.tbl.itemEntered.connect(self._on_row_hover)
+        self.tbl.viewport().installEventFilter(self)   # Leave -> apagar glow
         lay.addWidget(self.tbl)
         self.lbl = QLabel("")
         self.lbl.setWordWrap(True)
@@ -3282,6 +3489,8 @@ class ReflectionMapDialog(QDialog):
         vals = {w: float(we[w][bi]) for w in self.WALL_ORDER}
         emax = max(vals.values()) or 1e-30
         order = sorted(self.WALL_ORDER, key=lambda w: -vals[w])
+        self._row_walls = list(order)     # fila -> pared (para el hover)
+        self._clear_highlight()           # el re-orden invalida el glow anterior
         self.tbl.blockSignals(True)
         self.tbl.setRowCount(6)
         for row, w in enumerate(order):
@@ -3296,20 +3505,26 @@ class ReflectionMapDialog(QDialog):
             self.tbl.setItem(row, 0, it0)
             self.tbl.setItem(row, 1, it1)
         self.tbl.blockSignals(False)
+        fs_txt = (f" f_S≈{self._f_s:.0f} Hz: debajo el mapa es casi plano en "
+                  "frecuencia (régimen modal); la variación por banda es arriba."
+                  if self._f_s else "")
         self.lbl.setText(
             f"La que más refleja hacia el receptor en esta banda: "
             f"<b>{self.WALL_LABELS[order[0]]}</b>. Valores relativos al máximo "
-            "(0 dB = la pared que más refleja). Especular, orden ≤3; exacto para "
-            "recinto rectangular.")
+            "(0 dB = la pared que más refleja). Especular, orden ≤3; energía "
+            "shoebox pintada sobre las caras del mallado FEM (exacto para recinto "
+            "rectangular; no-caja = aproximado hasta el motor de rayos)." + fs_txt)
         if self.chk_paint.isChecked():
             walls = []
             for w in self.WALL_ORDER:
+                faces = self._wall_faces.get(w)
+                if faces is None or len(faces) == 0:
+                    continue
                 t = float(vals[w] / emax)
                 rgb = av.colormap_lerp3(np.array([t]), (0.10, 0.20, 0.90),
                                         (0.20, 0.90, 0.20), (1.00, 0.10, 0.10))[0]
                 rgba = (float(rgb[0]), float(rgb[1]), float(rgb[2]), 0.55)
-                faces = np.array([[0, 1, 2], [0, 2, 3]])
-                walls.append((self._quads[w], faces, rgba))
+                walls.append((self._verts, faces, rgba))
             try:
                 self._panel.viewer.set_reflection_map(walls)
             except Exception:
@@ -3320,9 +3535,49 @@ class ReflectionMapDialog(QDialog):
             except Exception:
                 pass
 
+    def _on_nav(self, i):
+        """Flecha de navegación: recomputa el mapa para el receptor i y refresca."""
+        if self._recompute_fn is None:
+            return
+        r = self._recompute_fn(i)       # nuevo wall_energy o None
+        if r is None:
+            return
+        self._r = r
+        self._refresh()
+
+    def _on_row_hover(self, item):
+        """Hover sobre una fila: ilumina esa pared en el visor 3D (glow ámbar,
+        reusa set_highlight_patch, independiente del pintado del mapa)."""
+        try:
+            w = self._row_walls[item.row()]
+            faces = self._wall_faces.get(w)
+            if faces is None or len(faces) == 0:
+                self._clear_highlight()
+                return
+            self._panel.viewer.set_highlight_patch(self._verts, faces)
+        except Exception:
+            pass
+
+    def _clear_highlight(self):
+        try:
+            self._panel.viewer.set_highlight_patch(None, None)
+        except Exception:
+            pass
+
+    def eventFilter(self, obj, ev):
+        # El mouse salió de la tabla -> apagar el glow de la pared.
+        try:
+            from PyQt5.QtCore import QEvent
+            if ev.type() == QEvent.Leave:
+                self._clear_highlight()
+        except Exception:
+            pass
+        return super().eventFilter(obj, ev)
+
     def closeEvent(self, e):
         try:
             self._panel.viewer.set_reflection_map(None)
+            self._clear_highlight()
         except Exception:
             pass
         super().closeEvent(e)
@@ -3330,6 +3585,7 @@ class ReflectionMapDialog(QDialog):
     def reject(self):
         try:
             self._panel.viewer.set_reflection_map(None)
+            self._clear_highlight()
         except Exception:
             pass
         super().reject()
@@ -4355,6 +4611,15 @@ class AcousticPanel(QWidget):
         #                     de la perturbacion (caso oblicuo). Los .room viejos
         #                     sin la clave cargan como "a36" (reproducibilidad).
         self._damping_model = "perturbation"
+        # Configuración de cálculo (v2.83): modo global + qué recalcular solo.
+        # Default = todo automático (el pedido del usuario). «manual» = nada se
+        # recalcula solo (FRF/campo/RT60 a demanda). El amortiguamiento también
+        # se elige desde el diálogo «Configuración de cálculo…».
+        self._calc_mode = "auto"            # "auto" | "manual"
+        self._auto_frf = True               # recalcular FRF al cambiar algo
+        self._auto_field = True             # re-render campo 3D (antes combo_field3d)
+        self._auto_rt60 = True              # refrescar RT60 medio (T30 perturbación)
+        self._auto_sbir = True              # refrescar SBIR si su ventana está abierta
         self._slice_heatmap_dialog = None   # SliceHeatmapDialog (no-modal)
 
         # Timer debounce: actualiza el campo 300 ms despues del ultimo movimiento
@@ -4788,26 +5053,9 @@ class AcousticPanel(QWidget):
         fmat.addRow(btn_rt60_plot)
         fmat.addRow(btn_reload_mat)
 
-        # Modelo de amortiguamiento modal. Perturbación = perturbación de frontera
-        # de 1er orden (Morse&Ingard 9.4.14): capta el spread axial/oblicuo que
-        # Sabine no ve. DEFAULT desde v2.24 (Etapa 3), por eso va primero (índice 0).
-        # A36 = Sabine por modo, alterna (el límite de campo difuso de la perturbación).
-        self.combo_damping = QComboBox()
-        self.combo_damping.addItem("Perturbación de frontera", "perturbation")
-        self.combo_damping.addItem("Sabine por modo (A36)", "a36")
-        self.combo_damping.setToolTip(
-            "Cómo se convierte la absorción en amortiguamiento modal ξ.\n"
-            "• Perturbación (DEFAULT): usa la admitancia de la pared y la integral\n"
-            "  de superficie de cada modo (sin pasar por RT60). Da un ξ distinto\n"
-            "  para axiales/oblicuos aun con material uniforme; validado <1 %\n"
-            "  contra el problema de impedancia exacto hasta α≈0.3. Más exacto que\n"
-            "  Sabine bajo Schroeder.\n"
-            "• Sabine (A36): RT60 de Sabine ponderado por la forma modal. Con\n"
-            "  material uniforme da el mismo RT para todos los modos; es el límite\n"
-            "  de campo difuso de la perturbación (caso oblicuo).\n"
-            "Cambiar el modelo recalcula ξ si ya hay modos resueltos.")
-        self.combo_damping.currentIndexChanged.connect(self._on_damping_model_changed)
-        fmat.addRow("Amortiguamiento:", self.combo_damping)
+        # El selector de amortiguamiento modal se movió al diálogo «Configuración
+        # de cálculo…» (v2.83, botón en «Campo acústico 3D»). El modelo vive en
+        # self._damping_model; se aplica con _apply_damping_model().
         layout.addWidget(grp_mat)
 
         # --- Frecuencia de Schroeder (v2.16: movida arriba, entre Materiales
@@ -5166,19 +5414,9 @@ class AcousticPanel(QWidget):
         fg.addRow(self.btn_frf_fem)
         self.btn_frf_fem.clicked.connect(lambda: self._compute_frf("fem"))
 
-        # Auto-cálculo (item 2): en Automático, cada cambio (impedancia, material/α,
-        # posición de fuente/parche) recalcula la FRF + el campo solo (debounced,
-        # sin re-FEM: esos cambios no mueven los modos). NO toca decaimiento,
-        # optimización ni predicción (quedan a demanda). Requiere modos ya resueltos.
-        self.chk_auto = QCheckBox("Recalcular automáticamente (FRF + campo)")
-        self.chk_auto.setChecked(False)
-        self.chk_auto.setToolTip(
-            "Al cambiar impedancias, materiales/α o la posición de una fuente/parche,\n"
-            "recalcula la FRF y el campo 3D automáticamente (con un pequeño retardo),\n"
-            "sin re-calcular los modos (esos cambios no los mueven). NO dispara el\n"
-            "decaimiento, la optimización ni la predicción. Necesita los modos ya\n"
-            "calculados (calculá «Calcular modos (FEM)» una vez).")
-        fg.addRow(self.chk_auto)
+        # El auto-cálculo (qué se recalcula solo: FRF/campo/RT60) y el modo
+        # Automático/Manual se configuran desde «Configuración de cálculo…» (botón
+        # en «Campo acústico 3D», v2.83). Default = todo automático.
 
         self.btn_refl = QPushButton("Mapa de reflexiones…")
         self.btn_refl.setToolTip(
@@ -5236,19 +5474,16 @@ class AcousticPanel(QWidget):
         self.btn_field_3d.clicked.connect(self._update_field_3d)
         f3d.addRow(self.btn_field_3d)
 
-        # Modo de actualizacion del campo 3D. Automatico: cambiar de frecuencia
-        # (o mover una fuente) re-renderiza solo. Manual: solo se renderiza al
-        # apretar Enter / el boton (util con resoluciones altas, donde cada
-        # recalculo es caro y no se quiere disparar en cada cambio).
-        self.combo_field3d_mode = QComboBox()
-        self.combo_field3d_mode.addItems(["Automático", "Manual (Enter)"])
-        self.combo_field3d_mode.setCurrentIndex(0)
-        self.combo_field3d_mode.setToolTip(
-            "Automático: al cambiar la frecuencia/modo (o mover una fuente) el "
-            "campo 3D se re-renderiza solo.\n"
-            "Manual: el campo solo se re-renderiza al apretar Enter o el botón "
-            "«Actualizar campo 3D» (recomendado con resolución alta).")
-        f3d.addRow("Actualización:", self.combo_field3d_mode)
+        # Configuración de cálculo (v2.83): reemplaza al combo «Actualización».
+        # Elige Automático/Manual, qué se recalcula solo (FRF/campo/RT60) y el
+        # modelo de amortiguamiento. Default = todo automático.
+        btn_calc_cfg = QPushButton("Configuración de cálculo…")
+        btn_calc_cfg.setToolTip(
+            "Automático o Manual, qué recalcular solo al cambiar algo (FRF, campo "
+            "3D, RT60) y el modelo de amortiguamiento. Por default se calcula todo "
+            "automáticamente (sin re-FEM; los modos solo los mueve un mueble).")
+        btn_calc_cfg.clicked.connect(self._open_calc_config)
+        f3d.addRow(btn_calc_cfg)
 
         self.sb_field3d_res = QSpinBox()
         self.sb_field3d_res.setRange(10, 100)
@@ -6093,6 +6328,35 @@ class AcousticPanel(QWidget):
         return [tuple(p["position"]) for p in self.listen_points
                 if p.get("active", True)]
 
+    def _ensure_listen_points(self):
+        """Garantiza ≥1 receptor en la lista (v2.84): si está vacía, siembra
+        «Sweet Spot» desde el cursor actual. Así TODOS los cómputos de un punto
+        (FRF/SBIR/decaimiento/mapa) corren sobre la lista, no sobre un receptor
+        aparte. Devuelve True si agregó uno."""
+        if any(p.get("active", True) for p in self.listen_points):
+            return False
+        pos = tuple(float(v) for v in self.receiver)
+        self.listen_points.append({"name": "Sweet Spot", "position": pos,
+                                   "active": True, "icon_visible": True})
+        self._refresh_listen_points()
+        return True
+
+    def _active_listen_named(self):
+        """Receptores activos como [(name, position)], en orden de la lista. Para
+        la navegación por flechas en cada ventana de análisis (v2.84)."""
+        return [(str(p.get("name", f"Punto {i+1}")), tuple(p["position"]))
+                for i, p in enumerate(self.listen_points)
+                if p.get("active", True)]
+
+    def _nav_index_for_current(self, named):
+        """Índice en `named` del receptor activo más cercano al cursor actual
+        (para arrancar la navegación donde está el receptor grande)."""
+        if not named:
+            return 0
+        rc = np.asarray(self.receiver, dtype=float)
+        d = [float(np.sum((np.asarray(p, float) - rc) ** 2)) for _n, p in named]
+        return int(np.argmin(d))
+
     def _refresh_listen_points(self):
         sel = self.tbl_pts.currentRow()
         self.tbl_pts.blockSignals(True)
@@ -6141,11 +6405,40 @@ class AcousticPanel(QWidget):
                 if p.get("icon_visible", True)]
 
     def _repaint_listen_points(self):
+        # Mapeo lista-visible -> indice real: el viewer recibe solo los puntos con
+        # icono visible y emite indices en ESA lista; _visible_pt_indices traduce
+        # de vuelta al indice de self.listen_points (para el Shift+drag, v2.83).
+        self._visible_pt_indices = [i for i, p in enumerate(self.listen_points)
+                                    if p.get("icon_visible", True)]
         if hasattr(self.viewer, "set_listen_points"):
             try:
-                self.viewer.set_listen_points(self._visible_listen_points())
+                self.viewer.set_listen_points(
+                    [self.listen_points[i]["position"]
+                     for i in self._visible_pt_indices])
             except Exception:
                 pass
+
+    def apply_listen_point_move(self, vis_idx: int, x: float, y: float, z: float):
+        """Shift+drag sobre la cruz de un receptor (v2.83): mueve ese punto de
+        escucha. vis_idx es el indice en la lista VISIBLE que recibio el viewer;
+        se traduce al indice real por _visible_pt_indices. Actualiza la tabla sin
+        reconstruirla (solo los spinboxes de la fila) para no cortar el arrastre."""
+        idxs = getattr(self, "_visible_pt_indices", None)
+        if not idxs or not (0 <= vis_idx < len(idxs)):
+            return
+        i = idxs[vis_idx]
+        if not (0 <= i < len(self.listen_points)):
+            return
+        self.listen_points[i]["position"] = (float(x), float(y), float(z))
+        # Reflejar en los spinboxes de esa fila (sin reconstruir la tabla).
+        if i < len(getattr(self, "_pt_coord_spins", [])):
+            self.tbl_pts.blockSignals(True)
+            for sb, v in zip(self._pt_coord_spins[i], (x, y, z)):
+                sb.blockSignals(True)
+                sb.setValue(float(v))
+                sb.blockSignals(False)
+            self.tbl_pts.blockSignals(False)
+        self._repaint_listen_points()
 
     def _on_pt_coord_changed(self, i):
         if not (0 <= i < len(self.listen_points)) or i >= len(self._pt_coord_spins):
@@ -7250,6 +7543,65 @@ class AcousticPanel(QWidget):
                 muebles, self._furniture_mat_by_index(), freq))
         return walls, n_default, area_default
 
+    def _sbir_compute(self, pos):
+        """SBIR (res) + transferencia modal (modal_db) en `pos`, con el estado
+        actual de materiales/fuentes (v2.84). Rearma las paredes cada vez (refleja
+        cambios de material). Devuelve (res, modal_db) o None si no se puede."""
+        import sbir
+        act = self._active_sources()
+        if len(act) == 0:
+            return None
+        try:
+            groups, verts, tris = self._get_face_groups()
+        except Exception:
+            return None
+        if not groups:
+            return None
+        f_lo, f_hi = 20.0, 500.0
+        freq = np.linspace(f_lo, f_hi, 2000)
+        g2m = self._group_to_material_dict(groups)
+        walls, _nd, _ad = self._walls_from_groups(
+            groups, g2m, freq, getattr(self, "furniture", None))
+        try:
+            res = sbir.sbir_from_sources(act, walls, tuple(pos), freq)
+        except Exception as e:
+            self._log(f"SBIR: error ({e}).")
+            return None
+        modal_db = None
+        _decpl = self._decoupled_active_sources(act)
+        _all_decpl = bool(_decpl) and len(_decpl) == len(act)
+        if (not _all_decpl and self.modal_result is not None
+                and len(self.modal_result.freqs) > 0):
+            try:
+                if self._xi_per_mode is None:
+                    self._xi_per_mode = self._compute_xi_from_materials()
+                damping = (self._xi_per_mode
+                           if self._xi_per_mode is not None else 0.03)
+                frf = aa.run_fem_frf(
+                    self.modal_result, act, tuple(pos),
+                    f_min=f_lo, f_max=f_hi, n_freqs=len(freq), damping=damping,
+                    modal_freqs=self._effective_modal_freqs())
+                modal_db = 20.0 * np.log10(np.maximum(np.abs(frf.H), 1e-30) / 20e-6)
+            except Exception as e:
+                self._log(f"SBIR: sin transferencia modal ({e}).")
+                modal_db = None
+        return res, modal_db
+
+    def _refresh_open_sbir(self):
+        """Auto-cálculo (v2.84): si la ventana SBIR está abierta, la recalcula en
+        el receptor actual con el estado vigente. No-op si no hay ventana."""
+        dlg = getattr(self, "_sbir_dialog", None)
+        if dlg is None:
+            return
+        try:
+            if not dlg.isVisible():
+                return
+            bundle = self._sbir_compute(self.receiver)
+            if bundle is not None:
+                dlg.update_data(*bundle)
+        except Exception as e:
+            self._log(f"Auto SBIR: error ({e}).")
+
     def _open_sbir(self):
         """Calcula y muestra el SBIR (directo + reflexiones de 1er orden).
 
@@ -7295,29 +7647,13 @@ class AcousticPanel(QWidget):
                 f"Las reflexiones de esas caras salen más fuertes de lo real; "
                 f"asignales material en «Materiales…» para un SBIR fiel.")
 
-        try:
-            res = sbir.sbir_from_sources(act, walls, self.receiver, freq)
-        except Exception as e:
-            QMessageBox.critical(self, "Error SBIR", str(e))
-            return
-
         n_assigned = sum(1 for g in groups if g.signature in g2m)
         furn_str = f", {n_furn} mueble(s)" if n_furn else ""
-        self._log(f"SBIR: {len(act)} fuente(s) activa(s), {len(walls)} superficies "
-                  f"({n_assigned} con material){furn_str}, receptor {self.receiver}.")
 
-        # Transferencia MODAL de la sala (FEM) en el MISMO receptor y banda, para
-        # el hibrido modal+SBIR (pedido del profesor: ver el efecto de la sala
-        # ademas del comb de imagenes). En SPL ABSOLUTO (dBSPL re 20 uPa, decision
-        # D1), la MISMA escala que la FRF -> las curvas coinciden. Solo si hay modos.
-        modal_db = None
+        # Overlay modal: f_S y corregibilidad EQ son del RECINTO (no del receptor),
+        # se calculan una vez. El aviso de fuentes desacopladas, una vez.
         f_s = None
         eqc = None
-        # A3 (guarda anti-recta -500): la transferencia MODAL del overlay usa
-        # run_fem_frf; si una fuente activa quedo fuera de la malla (acople 0) el
-        # modal colapsa a la recta de piso. Se avisa y se OMITE el overlay modal
-        # (modal_db=None), pero el SBIR (campo libre + imagenes) es valido y se
-        # muestra igual. Cierra el punto 2 del profesor (SBIR mostraba la recta).
         _decpl_sb = self._decoupled_active_sources(act)
         _all_decpl = bool(_decpl_sb) and len(_decpl_sb) == len(act)
         if _decpl_sb:
@@ -7338,26 +7674,46 @@ class AcousticPanel(QWidget):
                     self._xi_per_mode = self._compute_xi_from_materials()
                 damping = (self._xi_per_mode
                            if self._xi_per_mode is not None else 0.03)
-                frf = aa.run_fem_frf(
-                    self.modal_result, act, self.receiver,
-                    f_min=f_lo, f_max=f_hi, n_freqs=len(freq), damping=damping,
-                    modal_freqs=self._effective_modal_freqs())
-                modal_db = 20.0 * np.log10(
-                    np.maximum(np.abs(frf.H), 1e-30) / 20e-6)   # SPL absoluto
                 ctx = self._schroeder_context()
                 f_s = float(ctx["fs"]) if ctx else None
-                self._log(
-                    f"SBIR: transferencia modal disponible (hibrido en "
-                    f"f_S={f_s:.0f} Hz)." if f_s else
-                    "SBIR: transferencia modal disponible.")
-                # Corregibilidad EQ (C13/C21) de la sala para el overlay (item i).
                 eqc = self._modal_fom_eqc(act, damping, freq)[2]
             except Exception as e:
-                self._log(f"SBIR: sin transferencia modal ({e}).")
-                modal_db = None
+                self._log(f"SBIR: sin overlay modal ({e}).")
+
+        # v2.84: SBIR sobre los receptores de la LISTA, navegable por flechas.
+        self._ensure_listen_points()
+        _named = self._active_listen_named()
+        _idx0 = self._nav_index_for_current(_named) if _named else 0
+        if _named:
+            self.move_receiver_to(*_named[_idx0][1])
+        _bundle = self._sbir_compute(self.receiver)
+        if _bundle is None:
+            QMessageBox.critical(self, "Error SBIR", "No se pudo calcular el SBIR.")
+            return
+        res, modal_db = _bundle
+        self._log(f"SBIR: {len(act)} fuente(s) activa(s), {len(walls)} superficies "
+                  f"({n_assigned} con material){furn_str}, receptor {self.receiver}.")
+
+        _rx_names = [n for n, _ in _named]
+
+        def _recompute(i):
+            if not (0 <= i < len(_named)):
+                return None
+            self.move_receiver_to(*_named[i][1])
+            return self._sbir_compute(self.receiver)
+
+        old = getattr(self, "_sbir_dialog", None)
+        if old is not None:
+            try:
+                old.close()
+            except Exception:
+                pass
         dlg = SBIRDialog(res, f_lo=f_lo, f_hi=f_hi, parent=self,
-                         modal_db=modal_db, f_schroeder=f_s, eqc=eqc)
-        dlg.exec_()
+                         modal_db=modal_db, f_schroeder=f_s, eqc=eqc,
+                         receivers=_rx_names, idx=_idx0, recompute_fn=_recompute)
+        self._sbir_dialog = dlg
+        dlg.show()
+        dlg.raise_()
 
     def _cone_delta_xi(self, subs):
         """C2 (punto 3 riguroso): Δξ_n por la CARGA PASIVA de los conos de los subs
@@ -7576,6 +7932,14 @@ class AcousticPanel(QWidget):
                 self, "Fuente fuera del dominio",
                 f"Estas fuentes quedaron fuera de la malla ({_names}) y no aportan al "
                 "decaimiento. Movelas adentro para incluirlas.")
+        # v2.84: el decaimiento corre sobre los receptores de la LISTA. Arrancar en
+        # el activo más cercano al cursor (las flechas de la ventana re-corren el
+        # cómputo para el asiento elegido).
+        self._ensure_listen_points()
+        _named = self._active_listen_named()
+        _idx0 = self._nav_index_for_current(_named) if _named else 0
+        if _named:
+            self.move_receiver_to(*_named[_idx0][1])
         # Pre-calentar caches en el HILO PRINCIPAL (evita carreras / toques GL en
         # el worker): grupos de caras, freqs efectivas, contexto de Schroeder.
         try:
@@ -7619,7 +7983,18 @@ class AcousticPanel(QWidget):
 
         def _on_ok(data):
             _cleanup(); self._log("Decaimiento listo.")
-            DecayWaterfallDialog(data, parent=self).exec_()
+            old = getattr(self, "_decay_dialog", None)
+            if old is not None:
+                try:
+                    old.close()
+                except Exception:
+                    pass
+            dlg = DecayWaterfallDialog(
+                data, parent=self, receivers=[n for n, _ in _named],
+                idx=_idx0, on_index=self._decay_nav)
+            self._decay_dialog = dlg
+            dlg.show()
+            dlg.raise_()
 
         def _on_fail(err):
             _cleanup()
@@ -7630,6 +8005,23 @@ class AcousticPanel(QWidget):
         worker.failed.connect(_on_fail)
         self.setEnabled(False)
         worker.start()
+
+    def _decay_nav(self, i):
+        """Flecha de la ventana de decaimiento (v2.84): mueve el receptor al
+        asiento i de la lista y re-corre el cómputo (es pesado/threadeado, por eso
+        cierra y reabre en vez de redibujar in-place)."""
+        named = self._active_listen_named()
+        if not (0 <= i < len(named)):
+            return
+        self.move_receiver_to(*named[i][1])
+        old = getattr(self, "_decay_dialog", None)
+        if old is not None:
+            try:
+                old.close()
+            except Exception:
+                pass
+            self._decay_dialog = None
+        self._open_decay_waterfall()
 
     def _compute_decay_data(self, mains, subs, log):
         """Cómputo del decaimiento (numpy/scipy puro; corre en `_DecayWorker`, en
@@ -8196,6 +8588,74 @@ class AcousticPanel(QWidget):
                 pass
         return out
 
+    def _frf_plot_bundle(self, pos):
+        """FRF + curva compuesta modal+SBIR en `pos`, con el estado ACTUAL
+        (materiales/fuentes); recomputa ξ (refleja cambios de impedancia/α). Asume
+        modos resueltos. Para la navegación por receptor y el auto-refresco (v2.84).
+        Devuelve (result, composed_spl, composed_freq) o None."""
+        if self.modal_result is None:
+            return None
+        act = self._active_sources()
+        if len(act) == 0:
+            return None
+        self._xi_per_mode = self._compute_xi_from_materials()
+        damping = self._xi_per_mode if self._xi_per_mode is not None else 0.03
+        _room_gain = bool(getattr(self, "chk_room_gain", None)
+                          and self.chk_room_gain.isChecked())
+        _vol = None
+        if _room_gain:
+            try:
+                _v, _t = self.get_surface()
+                _vol = aa.compute_mesh_volume(_v, _t)
+            except Exception:
+                _vol = None
+        try:
+            res = aa.run_fem_frf(
+                self.modal_result, act, tuple(pos),
+                f_min=self.sb_frf_fmin.value(), f_max=self.sb_frf_fmax.value(),
+                n_freqs=self.sb_frf_n.value(), damping=damping,
+                modal_freqs=self._effective_modal_freqs(),
+                include_room_gain=_room_gain, volume=_vol)
+        except Exception as e:
+            self._log(f"FRF: error ({e}).")
+            return None
+        cspl = cfreq = None
+        try:
+            import composed_response as cr
+            grp, _gv, _gt = self._get_face_groups()
+            ctx = self._schroeder_context()
+            fs = float(ctx["fs"]) if ctx else None
+            if grp and fs:
+                g2m = self._group_to_material_dict(grp)
+                fa0 = np.asarray(res.freq_axis, float)
+                fa = np.linspace(float(fa0[0]), max(float(fa0[-1]), 500.0), 2000)
+                walls, _n, _a = self._walls_from_groups(
+                    grp, g2m, fa, getattr(self, "furniture", None))
+                comp = cr.composed_response(
+                    act, tuple(pos), fa, modal_result=self.modal_result,
+                    walls=walls, f_schroeder=fs, damping=damping,
+                    modal_freqs=self._effective_modal_freqs())
+                cspl, cfreq = comp.composed_spl, fa
+        except Exception as e:
+            self._log(f"Aviso curva compuesta (modal+SBIR): {e}")
+        return res, cspl, cfreq
+
+    def _refresh_open_frf(self):
+        """Auto-cálculo (v2.84): si la ventana FRF está abierta, la recalcula en el
+        receptor actual con el estado vigente. No-op si no hay ventana (no abre una
+        nueva: evita el popup modal en cada cambio)."""
+        dlg = getattr(self, "_frf_dialog", None)
+        if dlg is None:
+            return
+        try:
+            if not dlg.isVisible():
+                return
+            bundle = self._frf_plot_bundle(self.receiver)
+            if bundle is not None:
+                dlg.update_data(*bundle)
+        except Exception as e:
+            self._log(f"Auto FRF: error ({e}).")
+
     def _compute_frf(self, method: str = "fem"):
         act = self._active_sources()
         if len(act) == 0:
@@ -8250,20 +8710,20 @@ class AcousticPanel(QWidget):
                 self._refresh_modes_combo()   # combo «Modo» con el Δfₙ vigente
                 damping = self._xi_per_mode if self._xi_per_mode is not None else 0.03
             self._log("Calculando FRF (FEM)...")
-            # Ganancia de sala / modo cero (opt-in): necesita el volumen del recinto.
-            _room_gain = bool(getattr(self, "chk_room_gain", None)
-                              and self.chk_room_gain.isChecked())
-            _vol = aa.compute_mesh_volume(verts, tris) if _room_gain else None
-            result = aa.run_fem_frf(
-                self.modal_result, act, self.receiver,
-                f_min=self.sb_frf_fmin.value(),
-                f_max=self.sb_frf_fmax.value(),
-                n_freqs=self.sb_frf_n.value(),
-                damping=damping,
-                # Capa 0 (Etapa 5): resonancias corridas por reactancia de pared.
-                modal_freqs=self._effective_modal_freqs(),
-                include_room_gain=_room_gain, volume=_vol,
-            )
+            # v2.84: los cómputos de un punto corren sobre los receptores de la
+            # LISTA (no un receptor aparte). Arrancar en el activo más cercano al
+            # cursor; el marcador grande lo sigue.
+            self._ensure_listen_points()
+            _named = self._active_listen_named()
+            _idx0 = self._nav_index_for_current(_named) if _named else 0
+            if _named:
+                self.move_receiver_to(*_named[_idx0][1])
+            _ctx = self._schroeder_context()
+            f_s_comp = float(_ctx["fs"]) if (_ctx and _ctx.get("fs")) else None
+            _bundle = self._frf_plot_bundle(self.receiver)
+            if _bundle is None:
+                raise RuntimeError("no se pudo calcular la FRF")
+            result, composed_spl, composed_freq = _bundle
         except Exception as e:
             QMessageBox.critical(self, "Error FRF", str(e))
             return
@@ -8315,39 +8775,24 @@ class AcousticPanel(QWidget):
             except Exception:
                 f_valid = None
 
-        # Fase 2 (grupo A): curva TOTAL = modal + SBIR (crossfade en f_S), en la
-        # MISMA escala SPL absoluta que la FRF (composed_response, P_REF=20 µPa).
-        # Aditiva: la FRF modal, el audio y el export NO se tocan. Best-effort.
-        composed_spl = None
-        composed_freq = None
-        f_s_comp = None
-        if self.modal_result is not None:
-            try:
-                import composed_response as cr
-                groups, _v, _t = self._get_face_groups()
-                ctx = self._schroeder_context()
-                f_s_comp = float(ctx["fs"]) if ctx else None
-                if groups and f_s_comp:
-                    g2m = self._group_to_material_dict(groups)
-                    fa0 = np.asarray(result.freq_axis, dtype=float)
-                    # Opción B: extender la compuesta por encima de f_S (hasta ~500
-                    # Hz o el fmax de la FRF, lo que sea mayor) para que se vea el
-                    # tramo SBIR, aunque el modal quede en la banda de la FRF.
-                    f_comp_hi = max(float(fa0[-1]), 500.0)
-                    fa = np.linspace(float(fa0[0]), f_comp_hi, 2000)
-                    walls, _nd, _ad = self._walls_from_groups(
-                        groups, g2m, fa, getattr(self, "furniture", None))
-                    comp = cr.composed_response(
-                        act, self.receiver, fa, modal_result=self.modal_result,
-                        walls=walls, f_schroeder=f_s_comp, damping=damping,
-                        modal_freqs=self._effective_modal_freqs())
-                    composed_spl = comp.composed_spl
-                    composed_freq = fa
-            except Exception as e:
-                self._log(f"Aviso curva compuesta (modal+SBIR): {e}")
-                composed_spl = None
-                composed_freq = None
+        # Navegación por receptor (v2.84): recomputa la FRF (y la compuesta) para
+        # el receptor i de la lista; el marcador grande lo sigue.
+        _rx_names = [n for n, _ in _named]
 
+        def _recompute(i):
+            if not (0 <= i < len(_named)):
+                return None
+            self.move_receiver_to(*_named[i][1])
+            return self._frf_plot_bundle(self.receiver)
+
+        # No-modal (v2.84): así el auto-cálculo puede refrescarla sin popups, y se
+        # navega por receptor en vivo. Cerrar la anterior si quedó abierta.
+        old = getattr(self, "_frf_dialog", None)
+        if old is not None:
+            try:
+                old.close()
+            except Exception:
+                pass
         dlg = FRFDialog(
             result,
             modal_freqs=(self._effective_modal_freqs()
@@ -8356,8 +8801,11 @@ class AcousticPanel(QWidget):
             fom=fom, fom_band=fom_band, eqc=eqc, eqc_band=eqc_band,
             f_valid=f_valid, composed_spl=composed_spl, f_schroeder=f_s_comp,
             composed_freq=composed_freq,
+            receivers=_rx_names, idx=_idx0, recompute_fn=_recompute,
         )
-        dlg.exec_()
+        self._frf_dialog = dlg
+        dlg.show()
+        dlg.raise_()
 
     # -----------------------------------------------------------------------
     # Hooks para que el main reaccione a cambios externos (e.g. reset geometria)
@@ -8553,10 +9001,10 @@ class AcousticPanel(QWidget):
         self.viewer.update()
 
     def _field3d_auto_on(self) -> bool:
-        """True si el campo 3D esta en modo Automatico (re-render solo al cambiar
-        frecuencia o mover una fuente). Manual = solo con Enter / el boton."""
-        c = getattr(self, "combo_field3d_mode", None)
-        return c is None or c.currentIndex() == 0   # 0 = Automatico
+        """True si el campo 3D se re-renderiza solo (modo Automático + «Campo 3D»
+        tildado en «Configuración de cálculo…»). Manual = solo con Enter / botón."""
+        return (getattr(self, "_calc_mode", "auto") == "auto"
+                and bool(getattr(self, "_auto_field", True)))
 
     def _maybe_auto_field3d(self, *args):
         """Cambio de frecuencia/modo: re-renderiza el campo 3D solo si esta en
@@ -8583,8 +9031,13 @@ class AcousticPanel(QWidget):
         self._schedule_auto_recompute()   # item 2: en Automático, FRF+campo
 
     def _auto_recompute_on(self) -> bool:
-        return bool(getattr(self, "chk_auto", None)
-                    and self.chk_auto.isChecked())
+        """True si hay algo que recalcular solo (modo Automático y al menos uno de
+        FRF/campo/RT60 tildado). El detalle por-ítem lo aplica _run_auto_recompute."""
+        return (getattr(self, "_calc_mode", "auto") == "auto"
+                and bool(getattr(self, "_auto_frf", True)
+                         or getattr(self, "_auto_field", True)
+                         or getattr(self, "_auto_rt60", True)
+                         or getattr(self, "_auto_sbir", True)))
 
     def _schedule_auto_recompute(self):
         """Item 2: reprograma el recompute automático (debounced) de FRF + campo.
@@ -8608,27 +9061,80 @@ class AcousticPanel(QWidget):
             return
         self._auto_busy = True
         try:
-            self._compute_frf("fem")          # recomputa ξ + FRF (sin re-FEM)
-            self._update_field_3d()           # campo 3D con la config vigente
+            # ξ + combo «Modo» con el estado vigente (sin re-FEM); alimenta RT60/FRF.
+            self._xi_per_mode = self._compute_xi_from_materials()
+            self._refresh_modes_combo()
+            if getattr(self, "_auto_frf", True):
+                self._refresh_open_frf()           # solo si la ventana está abierta
+            if getattr(self, "_auto_field", True):
+                self._update_field_3d()        # campo 3D con la config vigente
+            if getattr(self, "_auto_rt60", True):
+                self._refresh_materials_summary()  # RT60 medio (T30 perturbación)
+            if getattr(self, "_auto_sbir", True):
+                self._refresh_open_sbir()          # solo si la ventana está abierta
         except Exception as e:
             self._log(f"Auto-cálculo: error ({e}).")
         finally:
             self._auto_busy = False
 
+    def _open_calc_config(self):
+        """Diálogo «Configuración de cálculo»: modo Automático/Manual, qué se
+        recalcula solo (FRF/campo/RT60) y el modelo de amortiguamiento (v2.83)."""
+        state = {
+            "mode": getattr(self, "_calc_mode", "auto"),
+            "frf": getattr(self, "_auto_frf", True),
+            "field": getattr(self, "_auto_field", True),
+            "rt60": getattr(self, "_auto_rt60", True),
+            "sbir": getattr(self, "_auto_sbir", True),
+            "damping": getattr(self, "_damping_model", "perturbation"),
+        }
+        dlg = CalcConfigDialog(state, parent=self)
+        if dlg.exec_() != QDialog.Accepted:
+            return
+        r = dlg.result_state()
+        self._calc_mode = r["mode"]
+        self._auto_frf = bool(r["frf"])
+        self._auto_field = bool(r["field"])
+        self._auto_rt60 = bool(r["rt60"])
+        self._auto_sbir = bool(r["sbir"])
+        if r["damping"] != self._damping_model:
+            self._apply_damping_model(r["damping"])   # recalcula ξ si hay modos
+        modo = "Automático" if self._calc_mode == "auto" else "Manual"
+        self._log(f"Configuración de cálculo: modo {modo}; auto FRF="
+                  f"{self._auto_frf} campo={self._auto_field} RT60={self._auto_rt60} "
+                  f"SBIR={self._auto_sbir}.")
+        # Si quedó en Automático y hay modos, refrescar una vez con lo elegido.
+        if self._calc_mode == "auto":
+            self._schedule_auto_recompute()
+
     # -----------------------------------------------------------------------
     # Mapa de calor de reflexiones (item 1): fuentes-imagen (ISM) sobre la caja
     # -----------------------------------------------------------------------
-    def _box_wall_quads(self, vmin, vmax):
-        """Los 4 vértices (mundo) de cada una de las 6 paredes de la caja AABB."""
-        x0, y0, z0 = vmin; x1, y1, z1 = vmax
-        return {
-            "x0": np.array([[x0, y0, z0], [x0, y1, z0], [x0, y1, z1], [x0, y0, z1]]),
-            "xL": np.array([[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]]),
-            "y0": np.array([[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]]),
-            "yL": np.array([[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]]),
-            "z0": np.array([[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0]]),
-            "zL": np.array([[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]]),
-        }
+    def _mesh_wall_faces(self, verts, tris):
+        """Clasifica los triángulos del mallado FEM en las 6 paredes principales
+        (x0/xL/y0/yL/z0/zL) para pintar el mapa de reflexiones SOBRE las caras
+        reales (v2.83), no sobre los quads del AABB.
+
+        Pared = eje del normal dominante del triángulo (argmax|n|); el lado 0/L se
+        decide por la posición del centroide respecto del centro del recinto (más
+        robusto que el signo del normal, que un CAD no estanco trae invertido). Las
+        paredes inclinadas (recinto no-caja) caen en el eje más cercano."""
+        verts = np.asarray(verts, float)
+        tris = np.asarray(tris, int)
+        out = {w: [] for w in ("x0", "xL", "y0", "yL", "z0", "zL")}
+        if tris.size == 0:
+            return {w: np.empty((0, 3), int) for w in out}
+        p0 = verts[tris[:, 0]]; p1 = verts[tris[:, 1]]; p2 = verts[tris[:, 2]]
+        nrm = np.cross(p1 - p0, p2 - p0)             # normal por triángulo
+        cen = (p0 + p1 + p2) / 3.0                   # centroide por triángulo
+        mid = 0.5 * (verts.min(0) + verts.max(0))    # centro del recinto
+        axis = np.argmax(np.abs(nrm), axis=1)        # eje dominante (0/1/2)
+        for i in range(tris.shape[0]):
+            a = int(axis[i])
+            side = "0" if cen[i, a] < mid[a] else "L"
+            out[f"{'xyz'[a]}{side}"].append(tris[i])
+        return {w: (np.asarray(f, int) if f else np.empty((0, 3), int))
+                for w, f in out.items()}
 
     def _reflection_wall_alpha(self, vmin, vmax, bands):
         """α(bands) por pared (x0/xL/y0/yL/z0/zL) desde los materiales de cara.
@@ -8679,18 +9185,61 @@ class AcousticPanel(QWidget):
                                    "Agregá (o activá) al menos una fuente.")
             return
         src = np.asarray(act[0].position, dtype=float)
-        rec = np.asarray(self.receiver, dtype=float)
+        # Bandas: rango completo 31.5 Hz–8 kHz (v2.83). El mapa especular es una
+        # herramienta GEOMÉTRICA: su variación por banda vive ARRIBA de Schroeder
+        # (aire + α por frecuencia). Debajo de f_S es casi plano (régimen modal, lo
+        # cubre el FEM); f_S se marca en el diálogo como referencia.
         bands = ism.octave_bands()
+        ctx = self._schroeder_context()
+        f_s = float(ctx["fs"]) if (ctx and ctx.get("fs")) else None
         alpha_by_wall = self._reflection_wall_alpha(vmin, vmax, bands)
-        try:
-            r = ism.wall_reflection_energy(
-                tuple((src - vmin).tolist()), tuple((rec - vmin).tolist()),
+
+        def _energy_at(pos):
+            """Energía reflejada por pared hacia `pos` (coords mundo)."""
+            return ism.wall_reflection_energy(
+                tuple((src - vmin).tolist()),
+                tuple((np.asarray(pos, float) - vmin).tolist()),
                 dims, alpha_by_wall, bands=bands, max_order=3, air=True)
+
+        # v2.84: el mapa corre sobre los receptores de la LISTA, navegable por flechas.
+        self._ensure_listen_points()
+        _named = self._active_listen_named()
+        _idx0 = self._nav_index_for_current(_named) if _named else 0
+        if _named:
+            self.move_receiver_to(*_named[_idx0][1])
+        try:
+            r = _energy_at(self.receiver)
         except Exception as e:
             QMessageBox.critical(self, "Mapa de reflexiones", str(e))
             return
-        quads = self._box_wall_quads(vmin, vmax)
-        ReflectionMapDialog(self, r, quads, bands, parent=self).exec_()
+        # Pintar sobre las caras REALES del mallado FEM (v2.83), no los quads AABB.
+        wall_faces = self._mesh_wall_faces(verts, tris)
+
+        def _recompute(i):
+            if not (0 <= i < len(_named)):
+                return None
+            self.move_receiver_to(*_named[i][1])
+            try:
+                return _energy_at(self.receiver)
+            except Exception as e:
+                self._log(f"Mapa de reflexiones receptor: error ({e}).")
+                return None
+
+        # No-modal: el usuario rota el visor y cambia de banda/receptor viendo el 3D
+        # actualizarse en vivo. Cerrar uno anterior si quedó abierto.
+        old = getattr(self, "_reflection_dialog", None)
+        if old is not None:
+            try:
+                old.close()
+            except Exception:
+                pass
+        dlg = ReflectionMapDialog(self, r, verts, wall_faces, bands,
+                                  f_s=f_s, parent=self,
+                                  receivers=[n for n, _ in _named], idx=_idx0,
+                                  recompute_fn=_recompute)
+        self._reflection_dialog = dlg
+        dlg.show()
+        dlg.raise_()
 
     def _clear_field_3d(self):
         if hasattr(self, 'pressure_3d'):
@@ -9515,7 +10064,8 @@ class AcousticPanel(QWidget):
         self._refresh_abs_choice_label()   # los parches tambien mueven el RT
         if self.modal_result is not None:
             self._xi_per_mode = self._compute_xi_from_materials()
-            self._schedule_auto_recompute()   # item 2: Automático -> FRF+campo
+            self._refresh_materials_summary()   # RT60 medio (barato, siempre)
+            self._schedule_auto_recompute()   # item 2: Automático -> FRF+campo+RT60
         self._update_modal_crossover()
 
     # ------------------------------------------------------------------
@@ -9571,7 +10121,10 @@ class AcousticPanel(QWidget):
             # Etapa 5c: al cambiar el corrimiento, repintar el picker (marcador
             # Δfₙ) y el read-out del modo. Repuebla el combo (vuelve al modo 0).
             self._refresh_modes_combo()
-            self._schedule_auto_recompute()   # item 2: Automático -> FRF+campo
+            # RT60 medio (T30 perturbación) depende de la impedancia: refrescarlo
+            # SIEMPRE (barato), independiente del modo Automático.
+            self._refresh_materials_summary()
+            self._schedule_auto_recompute()   # item 2: Automático -> FRF+campo+RT60
         else:
             self._update_modal_crossover()
 
@@ -9795,15 +10348,11 @@ class AcousticPanel(QWidget):
                 d[i] = self._mat_lib[names.index(nm)]
         return d
 
-    def _on_damping_model_changed(self):
-        """Cambió el modelo de amortiguamiento (Sabine A36 <-> perturbación).
-
-        Recalcula ξ si ya hay modos y refresca lo que cuelga de él (FRF/FoM se
-        recomputan al reabrir; acá se rehace el ξ vivo). El cruce modal usa el
-        RT de Sabine, así que NO cambia con esto (eso es la Etapa 2: rutear los
-        consumidores escalares por el modelo elegido)."""
-        self._damping_model = (self.combo_damping.currentData()
-                               if hasattr(self, "combo_damping") else "a36")
+    def _apply_damping_model(self, key: str):
+        """Fija el modelo de amortiguamiento (Sabine A36 <-> perturbación) y
+        recalcula ξ si ya hay modos, refrescando lo que cuelga de él (RT60 medio,
+        picker de modos). El modelo se elige desde «Configuración de cálculo…»."""
+        self._damping_model = ("perturbation" if key == "perturbation" else "a36")
         self._warned_pert_patches = False
         if self.modal_result is not None:
             self._xi_per_mode = self._compute_xi_from_materials()

@@ -202,18 +202,19 @@ panel.modal_result = aa.run_fem_modal(vp, tp, n_modes=20, n_per_meter=3.0)
 # Etapa 3 (v2.24): el default es perturbación (antes a36).
 check("T7 default = perturbation (Etapa 3)",
       panel._damping_model == "perturbation")
-# A36 explícito para el baseline uniforme.
-panel.combo_damping.setCurrentIndex(panel.combo_damping.findData("a36"))
+# A36 explícito para el baseline uniforme (v2.83: el selector se movió al diálogo
+# «Configuración de cálculo…»; el modelo se aplica con _apply_damping_model).
+panel._apply_damping_model("a36")
 xi_a36 = panel._compute_xi_from_materials()
 d_a36 = xi_a36 * 2 * np.pi * np.asarray(panel.modal_result.freqs)
-panel.combo_damping.setCurrentIndex(panel.combo_damping.findData("perturbation"))
-check("T7b el combo cambió el modelo y recalculó ξ",
+panel._apply_damping_model("perturbation")
+check("T7b cambiar el modelo recalculó ξ",
       panel._damping_model == "perturbation" and panel._xi_per_mode is not None)
 d_pe = panel._xi_per_mode * 2 * np.pi * np.asarray(panel.modal_result.freqs)
 check("T7c A36 uniforme ≈ constante, perturbación con spread",
       d_a36.std() / d_a36.mean() < 0.03 and d_pe.std() / d_pe.mean() > 0.08,
       f"A36 CV={100*d_a36.std()/d_a36.mean():.1f}% pert CV={100*d_pe.std()/d_pe.mean():.1f}%")
-panel.combo_damping.setCurrentIndex(panel.combo_damping.findData("a36"))
+panel._apply_damping_model("a36")
 check("T7d reversible bit a bit",
       np.allclose(panel._compute_xi_from_materials(), xi_a36, rtol=1e-12))
 
