@@ -674,6 +674,11 @@ SCENE_DARK = {
     "patch_edge": (1.0, 1.0, 1.0, 0.95),       # contorno de los parches (blanco)
     "btn_bg": "#45475a", "btn_fg": "#cdd6f4", "btn_hover": "#585b70",
     "btn_accent": "#89b4fa", "btn_accent_fg": "#11111b",
+    # Texto de las etiquetas informativas de los paneles (RT60, f_S, conteo de
+    # modos, estado...). En oscuro van claros; en claro/clasico se recolorean
+    # oscuros para no perderse sobre fondo gris/blanco (ver refresh en el panel).
+    "info_accent": "#94e2d5", "info_muted": "#94a3b8",
+    "info_normal": "#cdd6f4", "info_warn": "#f9e2af",
 }
 SCENE_LIGHT = {
     "edge":       (0.52, 0.14, 0.40, 1.0),     # ciruela oscuro (contrasta en claro)
@@ -689,6 +694,10 @@ SCENE_LIGHT = {
     "patch_edge": (0.60, 0.05, 0.45, 0.95),
     "btn_bg": "#dce0e8", "btn_fg": "#11111b", "btn_hover": "#bcc0cc",
     "btn_accent": "#1e66f5", "btn_accent_fg": "#ffffff",
+    # Variantes OSCURAS de los textos informativos: legibles sobre el fondo gris
+    # del tema clasico y sobre el blanco del tema GitHub.
+    "info_accent": "#0a7d74", "info_muted": "#55606e",
+    "info_normal": "#1b1b2b", "info_warn": "#9a6b00",
 }
 SCENE = dict(SCENE_DARK)      # paleta de escena vigente (default oscuro)
 
@@ -817,3 +826,112 @@ def add_help_button(dialog, html, title="Cómo usar esta ventana", size=26,
     btn.show()
     btn.raise_()
     return btn
+
+
+# ---------------------------------------------------------------------------
+# CollapsibleGroupBox: QGroupBox plegable con "+/−" adelante del titulo (item 2
+# del plan UI, v2.85).
+#   - Drop-in de QGroupBox: mismo constructor `CollapsibleGroupBox("titulo")`.
+#   - Click en la franja del titulo pliega/despliega: cuando se pliega achica la
+#     altura a la del titulo y clipea el contenido (NO re-parenta ni toca el
+#     show/hide de los hijos, para no interferir con la logica condicional de
+#     los paneles).
+#   - Persiste el estado plegado/desplegado en QSettings si se pasa `settings_key`
+#     (por defecto el titulo). No cambia la fisica.
+#   - `registry`: lista opcional donde el box se auto-registra (para que el panel
+#     arme el submenu «Ir a …» y el scroll-a-seccion sin tocar cada call site).
+# ---------------------------------------------------------------------------
+from PyQt5.QtWidgets import QGroupBox as _QGroupBox
+from PyQt5.QtCore import Qt as _Qt, QSettings as _QSettings
+
+_QWIDGETSIZE_MAX = 16777215
+
+
+class CollapsibleGroupBox(_QGroupBox):
+    def __init__(self, title="", parent=None, settings_key=None, registry=None):
+        super().__init__(parent)
+        self._title_text = ""
+        self._collapsed = False
+        self._settings_key = settings_key if settings_key is not None else title
+        self.setTitle(title)                     # setea _title_text + prefijo
+        if registry is not None:
+            try:
+                registry.append(self)
+            except Exception:
+                pass
+        # Estado guardado (si hay clave): aplicar al construir.
+        if self._settings_key:
+            try:
+                v = _QSettings("Prototipo1", "Prototipo1").value(
+                    "collapsible/" + self._settings_key)
+            except Exception:
+                v = None
+            if v is not None and v in (True, "true", "True", 1, "1"):
+                self.setCollapsed(True)
+
+    # --- API publica ---
+    def isCollapsed(self):
+        return self._collapsed
+
+    def setCollapsed(self, collapsed):
+        self._collapsed = bool(collapsed)
+        _QGroupBox.setTitle(self, self._prefix() + self._title_text)
+        self.setMaximumHeight(self._title_h() if self._collapsed
+                              else _QWIDGETSIZE_MAX)
+        self.updateGeometry()
+        if self._settings_key:
+            try:
+                _QSettings("Prototipo1", "Prototipo1").setValue(
+                    "collapsible/" + self._settings_key, self._collapsed)
+            except Exception:
+                pass
+
+    def toggleCollapsed(self):
+        self.setCollapsed(not self._collapsed)
+
+    # --- overrides: title() devuelve el texto limpio (sin el prefijo +/−) ---
+    def setTitle(self, text):
+        self._title_text = text or ""
+        _QGroupBox.setTitle(self, self._prefix() + self._title_text)
+
+    def title(self):
+        return self._title_text
+
+    # --- interno ---
+    def _prefix(self):
+        # Expandido -> "−" (se puede plegar); plegado -> "+" (se puede expandir).
+        return "+  " if self._collapsed else "−  "
+
+    def _title_h(self):
+        return self.fontMetrics().height() + 10
+
+    def mousePressEvent(self, ev):
+        if ev.button() == _Qt.LeftButton and ev.y() <= self._title_h():
+            self.toggleCollapsed()
+            ev.accept()
+            return
+        super().mousePressEvent(ev)
+
+
+def goto_section(scroll_area, sections, label):
+    """Despliega la seccion `label` (un CollapsibleGroupBox de `sections`) y
+    hace scroll hasta ella dentro de `scroll_area`. Lo usa el submenu «Ir a …»
+    (item 1 del plan UI). Devuelve True si la encontro."""
+    for b in (sections or ()):
+        try:
+            same = (b.title() == label)
+        except Exception:
+            same = False
+        if same:
+            try:
+                if b.isCollapsed():
+                    b.setCollapsed(False)
+            except Exception:
+                pass
+            if scroll_area is not None:
+                try:
+                    scroll_area.ensureWidgetVisible(b)
+                except Exception:
+                    pass
+            return True
+    return False

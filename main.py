@@ -1091,12 +1091,11 @@ class MainWindow(QMainWindow):
 
     # ---------- Atajos ----------
     def _setup_shortcuts(self):
-        self._add_shortcut("Ctrl+Z", self.undo)
+        # Ctrl+Z / Ctrl+Y / Ctrl+S / Ctrl+Shift+S / Ctrl+O los registra la barra
+        # de menú (act() con contexto de aplicación). NO duplicarlos acá: dos
+        # bindings de la misma tecla = "Ambiguous shortcut overload" y no dispara
+        # ninguno. Ctrl+Shift+Z (rehacer alternativo) no está en el menú, queda acá.
         self._add_shortcut("Ctrl+Shift+Z", self.redo)
-        self._add_shortcut("Ctrl+Y", self.redo)
-        self._add_shortcut("Ctrl+S", self.save_file)
-        self._add_shortcut("Ctrl+Shift+S", self.save_file_as)
-        self._add_shortcut("Ctrl+O", self.load_file)
         self._add_shortcut("0", self.viewer.reset_camera)
         self._add_shortcut("Ctrl+I", self._quick_import_cad)
         # Fijar / liberar eje mundial para rotacion restringida (toggle).
@@ -1164,6 +1163,11 @@ class MainWindow(QMainWindow):
             a = menu.addAction(label)
             if shortcut:
                 a.setShortcut(shortcut)
+                # Contexto de aplicacion: dispara en toda la ventana (como los
+                # QShortcut historicos). La accion de menu es el UNICO dueño de
+                # la tecla; los QShortcut duplicados se sacaron de
+                # _setup_shortcuts para evitar "Ambiguous shortcut overload".
+                a.setShortcutContext(Qt.ApplicationShortcut)
             a.triggered.connect(
                 lambda _=False, o=obj, m=meth: getattr(o, m)())
             return a
@@ -1192,26 +1196,49 @@ class MainWindow(QMainWindow):
         act(m, "Mueble…", ac, "_add_furniture")
 
         m = mb.addMenu("&Ver")
-        act(m, "Configuración de render…", ac, "_open_render_config")
-        m.addSeparator()
-        for i, name in enumerate(("Geometría", "Acústica", "Predicción")):
-            a = m.addAction(f"Ir a {name}")
-            a.triggered.connect(go_tab(i))
+        # item 1: "Ir a X" es un submenu con las secciones del panel; al clickear
+        # va a la pestaña, despliega la sección y hace scroll hasta ella.
+        for i, name, panel in ((0, "Geometría", self.controls),
+                               (1, "Acústica", self.acoustic),
+                               (2, "Predicción", self.prediction)):
+            labels = (panel.section_labels()
+                      if hasattr(panel, "section_labels") else [])
+            if labels:
+                sub = m.addMenu(f"Ir a {name}")
+                atop = sub.addAction(f"{name} (arriba)")
+                atop.triggered.connect(go_tab(i))
+                sub.addSeparator()
+                for lab in labels:
+                    a = sub.addAction(lab)
+                    a.triggered.connect(self._make_goto_section(i, panel, lab))
+            else:
+                a = m.addAction(f"Ir a {name}")
+                a.triggered.connect(go_tab(i))
 
         m = mb.addMenu("&Herramientas")
         act(m, "Materiales…", ac, "_open_materials_dialog")
         act(m, "Impedancias…", ac, "_open_constructions_dialog")
         act(m, "Comparar puntos de escucha…", ac, "_open_compare_dialog")
+        m.addSeparator()
+        # item 5 (v2.85): las cuatro herramientas de análisis que antes eran botones
+        # en el panel Acústica viven ahora acá (se sacaron del panel).
+        act(m, "Mapa de reflexiones…", ac, "_open_reflection_map")
+        act(m, "Ver SBIR (fuente-frontera)…", ac, "_open_sbir")
         act(m, "Optimización de fuentes…", ac, "_open_dba")
+        act(m, "Decaimiento con subs (waterfall)…", ac, "_open_decay_waterfall")
 
         m = mb.addMenu("&Calcular")
         act(m, "Calcular modos (FEM)", ac, "trigger_compute")
         act(m, "Calcular FRF", ac, "_compute_frf")
-        act(m, "Ver SBIR…", ac, "_open_sbir")
-        act(m, "Mapa de reflexiones…", ac, "_open_reflection_map")
         act(m, "Predecir", pr, "trigger_predict")
 
         m = mb.addMenu("&Configuración")
+        # item 3: los cuatro diálogos de configuración juntos acá.
+        act(m, "Configuración de render…", ac, "_open_render_config")
+        act(m, "Configuración de FEM…", ac, "_open_fem_config")
+        act(m, "Configuración de cálculo…", ac, "_open_calc_config")
+        act(m, "Configuración de CAD…", self, "_open_cad_import")
+        m.addSeparator()
         if getattr(self, "_theme_menu", None) is not None:
             tm = m.addMenu("Tema")
             for a in self._theme_menu.actions():
@@ -1230,6 +1257,19 @@ class MainWindow(QMainWindow):
             "Optimizer.<br>Simulación acústica modal bajo Schroeder (núcleo "
             "numpy/scipy) + reflexiones especulares (ISM).<br>UNTREF, Ing. de "
             "Sonido."))
+
+    def _make_goto_section(self, ix, panel, label):
+        """Devuelve un slot que va a la pestaña `ix`, despliega la sección
+        `label` del panel y hace scroll hasta ella. El scroll se difiere con
+        QTimer(0) para que la pestaña ya esté laid-out antes de medir."""
+        from PyQt5.QtCore import QTimer
+
+        def _go(_=False):
+            self.tabs.setCurrentIndex(ix)
+            fn = getattr(panel, "scroll_to_section", None)
+            if fn is not None:
+                QTimer.singleShot(0, lambda: fn(label))
+        return _go
 
     # ---------- Aplicar sugerencia de la pestaña Predicción ----------
     def _on_prediction_apply_params(self, params: dict):

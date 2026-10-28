@@ -1002,48 +1002,108 @@ class PressureField3D:
 # Flechas de gradiente del campo acustico
 # ---------------------------------------------------------------------------
 class GradientArrows:
-    """Representa el gradiente del campo de presion como pequenas flechas blancas.
+    """Flechas del gradiente de presion ∇|p| (∝ velocidad de particula).
 
-    Las flechas apuntan en la direccion del gradiente de presion (proporcional
-    a la velocidad de particula). La longitud es proporcional a la magnitud.
+    RENDER (v2.85): dibujadas con UN GLLinePlotItem (lineas), NO con GLMeshItem.
+    Motivo duro de GL: en esta escena las mallas OPACAS dinamicas (shaded/opaque)
+    NO renderizan (confirmado: invisibles a cualquier grosor; ver nota v2.70 de los
+    markers), y la unica malla dinamica que anda es shader=None+ADDITIVE, que lava
+    el color y vuelve INVISIBLE el negro (additive suma al fondo). Las lineas, en
+    cambio, renderizan con COLOR FIEL (negro incluido), ancho constante en pantalla
+    (se ven a cualquier zoom) y nunca se tapan. Para que cada flecha sea 3D y tenga
+    PUNTA (no una linea plana) el cabezal es un CONO de alambre: un anillo de puntos
+    que convergen al apice + la base del anillo. Largo UNIFORME (el gradiente es casi
+    singular junto a la fuente; normalizar por el maximo aplastaba todo salvo una
+    flecha gigante -> campo de direccion, estandar para ∇|p|, Euler linealizado),
+    auto-escalado al paso de la grilla; color configurable.
     """
+
+    _N_HEAD = 7          # lineas del cono de alambre (anillo del cabezal)
 
     def __init__(self, viewer: gl.GLViewWidget):
         self.viewer = viewer
-        self._item = None
-        self._head_items = []
+        self._item = None               # GLLinePlotItem unico con todas las flechas
+        self._head_item = None          # (compat para clear())
+
+    @staticmethod
+    def _grid_step(origins):
+        """Paso de la grilla regular de flechas (mínima separación por eje). Los
+        puntos interiores siguen sobre la grilla, así que la diferencia mínima de
+        coordenadas únicas por eje da el paso. Fallback 0.1 m si no se puede medir."""
+        step = None
+        for ax in range(3):
+            u = np.unique(np.round(origins[:, ax], 6))
+            if len(u) > 1:
+                d = float(np.min(np.diff(u)))
+                step = d if step is None else min(step, d)
+        return step if step and step > 1e-6 else 0.1
 
     def update(self, origins: np.ndarray, gradients: np.ndarray,
-               scale: float = 1.5, color=(1.0, 1.0, 1.0, 0.85)):
-        """origins: (N,3), gradients: (N,3). Normaliza y escala las flechas."""
+               scale: float = 0.8, color=(1.0, 1.0, 1.0, 1.0), width: float = 2.0):
+        """origins: (N,3), gradients: (N,3). `scale` = largo de CADA flecha como
+        FACTOR de la separación de la grilla (auto-escala: 0.8 ≈ 80% del paso).
+        `color` RGBA (fiel, negro incluido); `width` = ancho de línea en píxeles.
+        """
         self.clear()
         if origins is None or len(origins) == 0:
             return
+        origins = np.asarray(origins, dtype=float)
+        gradients = np.asarray(gradients, dtype=float)
 
-        mags = np.linalg.norm(gradients, axis=1, keepdims=True)
-        mag_max = float(mags.max()) if mags.max() > 0 else 1.0
-        dirs = gradients / np.maximum(mags, 1e-12)
-        lengths = (mags / mag_max).ravel()              # 0..1
+        mags = np.linalg.norm(gradients, axis=1)
+        dirs = gradients / np.maximum(mags[:, None], 1e-12)
+        # Auto-escala al paso de la grilla: el largo en metros sale de la separación
+        # entre flechas, así nunca se salen del recinto (sin importar el tamaño).
+        L = max(0.02, float(scale)) * self._grid_step(origins)
+        head_len = 0.40 * L                              # punta ~40% del largo
+        head_r = 0.22 * L                                # radio del cono de alambre
+        if L < 1e-4:
+            return
 
-        # Segmentos (tail, head) intercalados para GLLinePlotItem mode='lines'
-        tails = origins
-        heads = origins + dirs * (lengths[:, None] * scale)
-        segs = np.empty((2 * len(origins), 3), dtype=np.float32)
-        segs[0::2] = tails.astype(np.float32)
-        segs[1::2] = heads.astype(np.float32)
+        nh = self._N_HEAD
+        angs = [2.0 * np.pi * k / nh for k in range(nh)]
+        cosv = [np.cos(a) for a in angs]
+        sinv = [np.sin(a) for a in angs]
+        segs = []                                        # pares de puntos (mode='lines')
+        for o, d, m in zip(origins, dirs, mags):
+            if m <= 0.0:                                 # sin dirección definida
+                continue
+            tip = o + d * L
+            shoulder = tip - d * head_len                # base del cabezal
+            # Base ortonormal perpendicular a la direccion (como viewer._make_cone).
+            if abs(d[2]) < 0.9:
+                u = np.cross(d, [0.0, 0.0, 1.0])
+            else:
+                u = np.cross(d, [1.0, 0.0, 0.0])
+            un = np.linalg.norm(u)
+            if un < 1e-9:
+                continue
+            u = u / un
+            v = np.cross(d, u)
+            ring = [shoulder + head_r * (cosv[k] * u + sinv[k] * v)
+                    for k in range(nh)]
+            segs.append(o); segs.append(tip)             # asta (cola -> punta)
+            for k in range(nh):                          # cono de alambre: lados + base
+                segs.append(ring[k]); segs.append(tip)
+                segs.append(ring[k]); segs.append(ring[(k + 1) % nh])
 
-        self._item = gl.GLLinePlotItem(
-            pos=segs,
-            color=color,
-            width=2.5,
-            antialias=True,
-            mode='lines',
-        )
-        self.viewer.addItem(self._item)
+        if segs:
+            r = float(color[0]); g = float(color[1]); b = float(color[2])
+            a = float(color[3]) if len(color) > 3 else 1.0
+            self._item = gl.GLLinePlotItem(
+                pos=np.asarray(segs, dtype=np.float32),
+                color=(r, g, b, a), width=float(width),
+                antialias=True, mode='lines')
+            self.viewer.addItem(self._item)
 
     def clear(self):
-        if self._item is not None:
-            self.viewer.removeItem(self._item)
-            self._item = None
+        for attr in ("_item", "_head_item"):
+            it = getattr(self, attr, None)
+            if it is not None:
+                try:
+                    self.viewer.removeItem(it)
+                except Exception:
+                    pass
+                setattr(self, attr, None)
 
 

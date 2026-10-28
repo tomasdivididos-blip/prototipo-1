@@ -2956,6 +2956,18 @@ El botón que antes decía «Importar CAD» ahora es **«Configuración de CAD�
 
 Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD curado…»**: guarda la malla ya reparada a un archivo `.obj`, `.stl` o `.ply` para reusarla o compartirla, sin depender de guardar un `.room`. Recomendado `.obj` (conserva un sólido cerrado al reabrir; el `.stl` duplica vértices y suele reabrirse como «no estanco» hasta re-soldar). Exportá recién cuando la malla sea estanca.
 
+## Cambios v2.85 (interfaz más legible, flechas de gradiente 3D con punta, y los subs del DBA quedan siempre dentro del recinto)
+
+**Cambios v2.85** (27 de octubre 2026): una tanda de ajustes de interfaz más dos arreglos de fondo.
+
+**Interfaz.** (1) El texto de información de los paneles (abajo de «Modo», resúmenes de materiales, RT60, etc.) ahora se lee bien en **todos los temas**, incluido «Windows clásico» de fondo gris, porque el color de esas etiquetas se elige según el tema. (2) El estado dejó de mostrar las posiciones de las fuentes (ensuciaba y dependía del tema). (3) La **resolución del campo 3D** quedó solo dentro de «Configuración de render…», ya no duplicada en el panel. (4) Los botones de herramientas (mapa de reflexiones, SBIR, optimización de fuentes, decaimiento con subs) se movieron al menú **«Herramientas»**.
+
+**Flechas de gradiente (∇|p|).** Ahora son configurables desde «Configuración de render…»: **resolución propia** (independiente de la densidad del campo de color), **largo** como factor de la separación entre flechas (así nunca se salen del recinto, sea cual sea el tamaño de la sala) y **color** elegible. Cada flecha es tridimensional y tiene **punta** (un cabezal cónico), y se dibujan con color fiel: elegí negro y se ven negras, elegí rojo y se ven rojas. Al tildar «Mostrar flechas» se dibujan al instante (antes había que recalcular el campo). Nota técnica: por una limitación del motor 3D de esta escena, las flechas se trazan con líneas de ancho constante (se ven a cualquier zoom) y un cabezal cónico de alambre, en vez de un cono relleno.
+
+**Los subs del DBA quedan siempre dentro del recinto.** Al **diseñar un array** DBA en una sala que no es una caja perfecta (una control room con derrames, techo inclinado o planta irregular), los subwoofers podían quedar fuera del volumen simulado y su aporte se perdía. Ahora el programa mete cada sub dentro del recinto. Además, como el parlante se dibuja con su **caja (bafle)** y el punto de sonido está en la cara delantera, la caja se tiene en cuenta como volumen: el sub se apoya al ras de la pared con **toda la caja adentro**, nunca con media caja atravesándola. Esto vale también cuando movés un parlante a mano (se traba contra la pared) y cuando optimizás posiciones.
+
+*Manual actualizado al 27 de Octubre de 2026 — v2.85.*
+
 ## Cambios v2.84 (los cálculos corren sobre tus receptores de la lista, con flechas por asiento)
 
 **Cambios v2.84** (25 de octubre 2026): ahora la respuesta en frecuencia (FRF), el SBIR, el decaimiento y el mapa de reflexiones se calculan sobre los **receptores de la lista** (los que elegiste), no sobre un receptor aparte. En cada una de esas ventanas aparece arriba del gráfico un selector **«Asiento: flecha izquierda  Receptor i/N: nombre  flecha derecha»**: con las flechas recorrés los receptores de la lista y la ventana se recalcula y redibuja para cada posición (el marcador grande del visor salta al asiento que estás viendo). Con un solo receptor las flechas quedan deshabilitadas. Si la lista está vacía, se crea un «Sweet Spot» en la posición del cursor.

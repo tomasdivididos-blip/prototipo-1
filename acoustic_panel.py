@@ -26,7 +26,7 @@ from typing import Callable, Optional
 import pyqtgraph as pg
 from PyQt5.QtCore import Qt, pyqtSignal, QThread, QTimer
 from PyQt5.QtGui import QDoubleValidator, QColor
-from style import apply_dialog_theme, add_help_button
+from style import apply_dialog_theme, add_help_button, CollapsibleGroupBox
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QLabel,
     QPushButton, QListWidget, QListWidgetItem, QDoubleSpinBox, QSpinBox,
@@ -3219,6 +3219,11 @@ class _ColorButton(QPushButton):
 
     def __init__(self, rgb01, parent=None):
         super().__init__(parent)
+        # objectName ÚNICO: la hoja de estilo del swatch se scope-a SOLO a este botón
+        # (QPushButton#...). Sin esto, una regla sin selector (`background:...`) puesta
+        # en el botón CASCADEA al QColorDialog (que se abre con este botón de parent) y
+        # teñía TODO el diálogo con el color elegido (rojo transparentón en la captura).
+        self.setObjectName(f"colorbtn_{id(self):x}")
         self.setFixedWidth(90)
         self._set(rgb01)
         self.clicked.connect(self._pick)
@@ -3229,7 +3234,9 @@ class _ColorButton(QPushButton):
         # Texto en blanco o negro según luminancia para que se lea.
         lum = 0.299 * self._rgb[0] + 0.587 * self._rgb[1] + 0.114 * self._rgb[2]
         fg = "#000" if lum > 0.55 else "#fff"
-        self.setStyleSheet(f"background:{qc.name()}; color:{fg}; min-height:20px;")
+        self.setStyleSheet(
+            f"QPushButton#{self.objectName()} "
+            f"{{ background:{qc.name()}; color:{fg}; min-height:20px; }}")
         self.setText(qc.name())
 
     def _pick(self):
@@ -3308,6 +3315,29 @@ class RenderConfigDialog(QDialog):
         _sync_field()
         lay.addWidget(gf)
 
+        # --- Flechas de gradiente ∇|p| (velocidad de partícula) ---
+        gc = cfg.get("grad", {}) or {}
+        gg = QGroupBox("Flechas de gradiente (∇|p|)")
+        fgg = QFormLayout(gg)
+        self.g_res = QSpinBox(); self.g_res.setRange(4, 40)
+        self.g_res.setValue(int(gc.get("resolution", 10)))
+        self.g_res.setToolTip(
+            "Puntos por eje SOLO para las flechas (independiente de la resolución\n"
+            "del campo de color). Más alto = más flechas, más densas.")
+        fgg.addRow("Resolución (4–40):", self.g_res)
+        self.g_len = QDoubleSpinBox(); self.g_len.setRange(0.1, 2.0)
+        self.g_len.setDecimals(2); self.g_len.setSingleStep(0.1)
+        self.g_len.setValue(float(gc.get("scale", 0.8)))
+        self.g_len.setSuffix(" ×")
+        self.g_len.setToolTip("Largo de cada flecha como FACTOR de la separación "
+                              "entre flechas (auto-escala). 0.8 ≈ 80% del paso de "
+                              "la grilla; 1.0 = llega hasta la flecha vecina. Así "
+                              "nunca se salen del recinto, sea cual sea el tamaño.")
+        fgg.addRow("Largo (× separación):", self.g_len)
+        self.g_color = _ColorButton(tuple(gc.get("color", (1.0, 1.0, 1.0))))
+        fgg.addRow("Color:", self.g_color)
+        lay.addWidget(gg)
+
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         bb.accepted.connect(self.accept)
         bb.rejected.connect(self.reject)
@@ -3326,6 +3356,9 @@ class RenderConfigDialog(QDialog):
                       "c_lo": self.f_lo.rgb01(), "c_mid": self.f_mid.rgb01(),
                       "c_hi": self.f_hi.rgb01(),
                       "zero_transparent": self.f_zt.isChecked()},
+            "grad": {"resolution": int(self.g_res.value()),
+                     "scale": float(self.g_len.value()),
+                     "color": self.g_color.rgb01()},
         }
 
 
@@ -4693,6 +4726,9 @@ class AcousticPanel(QWidget):
             self._refresh_patch_overlay()
         except Exception:
             pass
+        # item 1 (v2.85): recolorear las etiquetas informativas (RT60, f_S, conteo
+        # de modos, estado...) para que sean legibles tambien en los temas claros.
+        self._refresh_info_labels()
 
     def _compute_default_receiver(self) -> tuple:
         """Centro del AABB del recinto actual (o fallback a dims_hint/2)."""
@@ -4723,6 +4759,38 @@ class AcousticPanel(QWidget):
             # reentra: main._get_current_surface ya no llama de vuelta a aca).
         return self._get_param_surface_callable()
 
+    # ----------- Navegacion a secciones (item 1 del plan UI) -----------
+    def section_labels(self):
+        return [b.title() for b in getattr(self, "_sections", [])]
+
+    def scroll_to_section(self, label):
+        import style
+        return style.goto_section(getattr(self, "_scroll", None),
+                                  getattr(self, "_sections", []), label)
+
+    def _reg_info(self, label, role="accent", extra=""):
+        """Registra una etiqueta informativa (RT60, f_S, conteo de modos, estado...)
+        con su ROL de color (accent/muted/normal/warn) y la parte NO-color del CSS.
+        En cada cambio de tema `refresh_scene_colors` relee style.SCENE y recolorea:
+        asi los textos teal/claros dejan de ser ilegibles sobre el gris del tema
+        clasico o el blanco del tema GitHub (antes tenian el color hardcodeado)."""
+        import style
+        key = "info_" + role
+        self._info_labels.append((label, key, extra))
+        col = style.SCENE.get(key, "#94e2d5")
+        label.setStyleSheet(f"color: {col}; {extra}".strip())
+
+    def _refresh_info_labels(self):
+        """Recolorea las etiquetas registradas con `_reg_info` segun el tema vigente
+        (style.SCENE). La llama `refresh_scene_colors` al cambiar de tema."""
+        import style
+        for lab, key, extra in getattr(self, "_info_labels", ()):
+            try:
+                col = style.SCENE.get(key, "#94e2d5")
+                lab.setStyleSheet(f"color: {col}; {extra}".strip())
+            except Exception:
+                pass
+
     # -----------------------------------------------------------------------
     # UI
     # -----------------------------------------------------------------------
@@ -4736,6 +4804,15 @@ class AcousticPanel(QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setFrameShape(QFrame.NoFrame)
         outer.addWidget(scroll, 1)
+        self._scroll = scroll
+
+        # Secciones plegables (item 2 del plan UI): cada CollapsibleGroupBox se
+        # auto-registra aca para el submenu «Ir a Acústica» y el scroll-a-seccion.
+        self._sections = []
+
+        # Etiquetas informativas con color reactivo al tema (ver _reg_info): se
+        # recolorean en refresh_scene_colors para seguir siendo legibles en claro.
+        self._info_labels = []
 
         container = QWidget()
         layout = QVBoxLayout(container)
@@ -4753,7 +4830,7 @@ class AcousticPanel(QWidget):
         from PyQt5.QtWidgets import (QTableWidget, QTableWidgetItem as _TWI,
                                      QHeaderView, QAbstractItemView)
         self._TWI = _TWI
-        grp_src = QGroupBox("Fuentes omnidireccionales")
+        grp_src = CollapsibleGroupBox("Fuentes omnidireccionales", registry=self._sections)
         vs = QVBoxLayout(grp_src)
         self.tbl_src = QTableWidget(0, 6)
         self.tbl_src.setHorizontalHeaderLabels(["", "Fuente", "X", "Y", "Z", "👁"])
@@ -4797,7 +4874,7 @@ class AcousticPanel(QWidget):
         layout.addWidget(grp_src)
 
         # --- Muebles (obstáculos en el modelo modal: carve + absorción + SBIR) ---
-        grp_furn = QGroupBox("Muebles")
+        grp_furn = CollapsibleGroupBox("Muebles", registry=self._sections)
         vf = QVBoxLayout(grp_furn)
         # Tabla estilo EASE (igual que fuentes/receptores): nombre + X/Y/Z
         # editables + toggle de ícono 3D. El mueble SIEMPRE es obstáculo físico
@@ -4847,7 +4924,7 @@ class AcousticPanel(QWidget):
         layout.addWidget(grp_furn)
 
         # --- Receptor ---
-        grp_rcv = QGroupBox("Receptor")
+        grp_rcv = CollapsibleGroupBox("Receptor", registry=self._sections)
         fr = QFormLayout(grp_rcv)
         self.sb_rx = QDoubleSpinBox(); self.sb_rx.setRange(-1e3, 1e3); self.sb_rx.setDecimals(3); self.sb_rx.setValue(self.receiver[0])
         self.sb_ry = QDoubleSpinBox(); self.sb_ry.setRange(-1e3, 1e3); self.sb_ry.setDecimals(3); self.sb_ry.setValue(self.receiver[1])
@@ -4931,7 +5008,7 @@ class AcousticPanel(QWidget):
         # asignaciones se guardan en self._face_mat_map y sobreviven el cierre
         # del dialogo y los cambios menores de geometria (firma estable por
         # normal/centroide/area).
-        grp_mat = QGroupBox("Materiales de superficie")
+        grp_mat = CollapsibleGroupBox("Materiales de superficie", registry=self._sections)
         fmat = QFormLayout(grp_mat)
 
         # Default histórico explícito: antes era _names[0] (que daba
@@ -4990,12 +5067,12 @@ class AcousticPanel(QWidget):
         fmat.addRow(self.btn_open_materials)
 
         self.lbl_mat_summary = QLabel("Sin asignaciones (todos α=0.03 por defecto)")
-        self.lbl_mat_summary.setStyleSheet("color: #94a3b8; font-size: 9pt;")
+        self._reg_info(self.lbl_mat_summary, "muted", "font-size: 9pt;")
         self.lbl_mat_summary.setWordWrap(True)
         fmat.addRow(self.lbl_mat_summary)
 
         self.lbl_rt60 = QLabel("RT60 medio: — s")
-        self.lbl_rt60.setStyleSheet("color: #94e2d5; font-size: 9pt;")
+        self._reg_info(self.lbl_rt60, "accent", "font-size: 9pt;")
         self.lbl_rt60.setWordWrap(True)
         fmat.addRow(self.lbl_rt60)
 
@@ -5010,7 +5087,7 @@ class AcousticPanel(QWidget):
         fmat.addRow(self.btn_open_patches)
 
         self.lbl_patch_summary = QLabel("Sin parches")
-        self.lbl_patch_summary.setStyleSheet("color: #94a3b8; font-size: 9pt;")
+        self._reg_info(self.lbl_patch_summary, "muted", "font-size: 9pt;")
         self.lbl_patch_summary.setWordWrap(True)
         fmat.addRow(self.lbl_patch_summary)
 
@@ -5026,7 +5103,7 @@ class AcousticPanel(QWidget):
         self.btn_open_constructions.clicked.connect(self._open_constructions_dialog)
         fmat.addRow(self.btn_open_constructions)
         self.lbl_constr_summary = QLabel("Sin impedancias asignadas")
-        self.lbl_constr_summary.setStyleSheet("color: #94a3b8; font-size: 9pt;")
+        self._reg_info(self.lbl_constr_summary, "muted", "font-size: 9pt;")
         self.lbl_constr_summary.setWordWrap(True)
         fmat.addRow(self.lbl_constr_summary)
 
@@ -5060,17 +5137,17 @@ class AcousticPanel(QWidget):
 
         # --- Frecuencia de Schroeder (v2.16: movida arriba, entre Materiales
         # y FEM — es el primer numero que uno quiere ver antes de mallar) ---
-        grp_fs = QGroupBox("Frecuencia de Schroeder")
+        grp_fs = CollapsibleGroupBox("Frecuencia de Schroeder", registry=self._sections)
         ffs = QFormLayout(grp_fs)
 
         self.lbl_schroeder = QLabel("f_Schroeder: —")
-        self.lbl_schroeder.setStyleSheet("color: #94e2d5; font-weight: 600;")
+        self._reg_info(self.lbl_schroeder, "accent", "font-weight: 600;")
         ffs.addRow(self.lbl_schroeder)
 
         # Cruce por solapamiento modal NUMERICO (2c §9): ve la forma del recinto,
         # a diferencia del f_Schroeder analitico (solo V y RT60). Requiere modos.
         self.lbl_fcross = QLabel("f_cross (M≥3, numérico): calculá los modos")
-        self.lbl_fcross.setStyleSheet("color: #94e2d5; font-size: 9pt;")
+        self._reg_info(self.lbl_fcross, "accent", "font-size: 9pt;")
         self.lbl_fcross.setWordWrap(True)
         self.lbl_fcross.setToolTip(
             "Cruce por solapamiento modal M(f)=B_HP·n(f)≥3 con densidad modal "
@@ -5084,7 +5161,7 @@ class AcousticPanel(QWidget):
         # muestra cuando hay una eleccion guardada: si asignaste materiales
         # por cara, el gate no aparece y este label queda oculto.
         self.lbl_abs_choice = QLabel("")
-        self.lbl_abs_choice.setStyleSheet("color: #f9e2af; font-size: 9pt;")
+        self._reg_info(self.lbl_abs_choice, "warn", "font-size: 9pt;")
         self.lbl_abs_choice.setWordWrap(True)
         self.lbl_abs_choice.setVisible(False)
         ffs.addRow(self.lbl_abs_choice)
@@ -5095,7 +5172,7 @@ class AcousticPanel(QWidget):
         layout.addWidget(grp_fs)
 
         # --- FEM modal ---
-        grp_fem = QGroupBox("FEM modal")
+        grp_fem = CollapsibleGroupBox("FEM modal", registry=self._sections)
         ff = QFormLayout(grp_fem)
 
         # Los controles de mallado (Nº modos, densidad/npm, h gmsh, motor) viven
@@ -5137,7 +5214,7 @@ class AcousticPanel(QWidget):
         # numero es solo informativo (ley de Weyl, termino de volumen +
         # correccion de superficie).
         self.lbl_modes_weyl = QLabel("≈ ? modos hasta f_Schroeder (calculá f_S)")
-        self.lbl_modes_weyl.setStyleSheet("color: #94e2d5; font-size: 9pt;")
+        self._reg_info(self.lbl_modes_weyl, "accent", "font-size: 9pt;")
         self.lbl_modes_weyl.setWordWrap(True)
         dff.addRow("", self.lbl_modes_weyl)
 
@@ -5158,7 +5235,7 @@ class AcousticPanel(QWidget):
         # sugerencia al spinbox de un click. Se llena al apretar "Calcular
         # f_Schroeder". Al lado, "OK" confirma los valores actuales y calcula.
         self.lbl_npm_suggested = QLabel("npm sugerido: calculá f_Schroeder primero")
-        self.lbl_npm_suggested.setStyleSheet("color: #94e2d5; font-size: 9pt;")
+        self._reg_info(self.lbl_npm_suggested, "accent", "font-size: 9pt;")
         self.lbl_npm_suggested.setWordWrap(True)
         self.btn_apply_npm_suggested = QPushButton("Aplicar sugerencia")
         self.btn_apply_npm_suggested.setEnabled(False)
@@ -5252,7 +5329,7 @@ class AcousticPanel(QWidget):
         ff.addRow(self.btn_clear_cad)
 
         self.lbl_xi_info = QLabel("ξ se calcula desde materiales")
-        self.lbl_xi_info.setStyleSheet("color: #94a3b8; font-size: 8pt;")
+        self._reg_info(self.lbl_xi_info, "muted", "font-size: 8pt;")
         ff.addRow(self.lbl_xi_info)
         # Configuracion de FEM + Estado, JUSTO arriba de «Calcular modos (FEM)».
         ff.addRow(self.btn_fem_config)
@@ -5269,7 +5346,7 @@ class AcousticPanel(QWidget):
         self._refresh_badge_prediction()
 
         # --- Visualizacion de modo ---
-        grp_mode = QGroupBox("Visualización modal")
+        grp_mode = CollapsibleGroupBox("Visualización modal", registry=self._sections)
         # Nota: el nombre `fmode` (en vez de `fm`) evita sombrear al import
         # `import face_materials as fm` del modulo, que se usa antes en
         # esta misma funcion para construir el FaceMaterialMap.
@@ -5306,14 +5383,14 @@ class AcousticPanel(QWidget):
 
         # Leyenda con conteo total y filtrado (texto reactivo).
         self.lbl_modes_count = QLabel("— sin modos calculados —")
-        self.lbl_modes_count.setStyleSheet("color: #94e2d5; font-size: 10pt;")
+        self._reg_info(self.lbl_modes_count, "accent", "font-size: 10pt;")
         self.lbl_modes_count.setWordWrap(True)
         fmode.addRow("", self.lbl_modes_count)
 
         # Read-out por modo (Capa 0, Etapa 5c): corrimiento Δfₙ + ξₙ del modo
         # seleccionado. Vacio hasta que haya modos; se puebla al elegir uno.
         self.lbl_mode_shift = QLabel("")
-        self.lbl_mode_shift.setStyleSheet("color: #cdd6f4; font-size: 9pt;")
+        self._reg_info(self.lbl_mode_shift, "normal", "font-size: 9pt;")
         self.lbl_mode_shift.setWordWrap(True)
         self.lbl_mode_shift.setToolTip(
             "f efectiva = frecuencia de resonancia que usa la FRF/campo/FoM,\n"
@@ -5392,7 +5469,7 @@ class AcousticPanel(QWidget):
         layout.addWidget(grp_mode)
 
         # --- FRF ---
-        grp_frf = QGroupBox("FRF (Respuesta en frecuencia)")
+        grp_frf = CollapsibleGroupBox("FRF (Respuesta en frecuencia)", registry=self._sections)
         fg = QFormLayout(grp_frf)
         self.sb_frf_fmin = QDoubleSpinBox(); self.sb_frf_fmin.setRange(1.0, 1e4); self.sb_frf_fmin.setValue(20.0)
         self.sb_frf_fmax = QDoubleSpinBox(); self.sb_frf_fmax.setRange(1.0, 1e4); self.sb_frf_fmax.setValue(250.0)
@@ -5418,55 +5495,23 @@ class AcousticPanel(QWidget):
         # Automático/Manual se configuran desde «Configuración de cálculo…» (botón
         # en «Campo acústico 3D», v2.83). Default = todo automático.
 
-        self.btn_refl = QPushButton("Mapa de reflexiones…")
-        self.btn_refl.setToolTip(
-            "Mapa de calor de la energía reflejada hacia el receptor por cada "
-            "pared (fuentes-imagen, hasta orden 3, por banda de octava). Media/alta "
-            "frecuencia (especular, arriba de Schroeder). Exacto para recinto "
-            "rectangular; usa la caja envolvente si no lo es.")
-        self.btn_refl.clicked.connect(self._open_reflection_map)
-        fg.addRow(self.btn_refl)
-
-        self.btn_sbir = QPushButton("Ver SBIR (fuente-frontera)")
-        self.btn_sbir.setToolTip(
-            "Speaker-Boundary Interference Response: el peine de interferencia "
-            "entre el directo y las reflexiones de 1er orden en las superficies "
-            "cercanas, en el punto de escucha (20–500 Hz). Analitico, "
-            "complementario al FEM; usa el alpha de los materiales por cara."
-        )
-        fg.addRow(self.btn_sbir)
-        self.btn_sbir.clicked.connect(self._open_sbir)
-
-        self.btn_dba = QPushButton("Optimización de fuentes…")
-        self.btn_dba.setToolTip(
-            "Evalúa u optimiza las fuentes según un NORTE (criterio): transferencia "
-            "compuesta plana, uniformidad espacial, CABS o DBA. Minimiza planitud + "
-            "transferencia total (modos + SBIR) moviendo las variables libres de "
-            "cada fuente. Corre sobre el volumen real (FEM) si la sala no es caja.")
-        fg.addRow(self.btn_dba)
-        self.btn_dba.clicked.connect(self._open_dba)
-
-        self.btn_decay = QPushButton("Decaimiento con subs (waterfall)…")
-        self.btn_decay.setToolTip(
-            "Compara el DECAIMIENTO del campo total en el receptor SIN vs CON los "
-            "subwoofers (EDC de Schroeder + waterfall), por debajo de f_S. Muestra "
-            "cómo el array de subs (delay/polaridad) redistribuye la energía modal y "
-            "cambia el decaimiento efectivo. NO cambia el ξ propio de los modos (eso "
-            "es la impedancia del cono, pendiente).")
-        fg.addRow(self.btn_decay)
-        self.btn_decay.clicked.connect(self._open_decay_waterfall)
+        # item 5 (v2.85): los botones de herramientas (Mapa de reflexiones, SBIR,
+        # Optimización de fuentes, Decaimiento con subs) se SACARON del panel y
+        # viven en el menú «Herramientas». Los métodos (_open_reflection_map,
+        # _open_sbir, _open_dba, _open_decay_waterfall) siguen existiendo; el menú
+        # los cablea. Se descartan los QPushButton (no los referenciaba nadie más).
         layout.addWidget(grp_frf)
 
         # --- Estado / log ---
         self.status = QLabel("Listo.")
-        self.status.setStyleSheet("color: #94a3b8;")
+        self._reg_info(self.status, "muted", "")
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
 
         # --- Campo acústico 3D (mapa de calor + flechas de gradiente) ---
         # (el bloque de f_Schroeder vivia aca hasta v2.15; se movio arriba,
         # entre Materiales y FEM)
-        grp_3d = QGroupBox("Campo acústico 3D")
+        grp_3d = CollapsibleGroupBox("Campo acústico 3D", registry=self._sections)
         f3d = QFormLayout(grp_3d)
 
         self.btn_field_3d = QPushButton("Actualizar campo 3D  (Enter)")
@@ -5485,26 +5530,29 @@ class AcousticPanel(QWidget):
         btn_calc_cfg.clicked.connect(self._open_calc_config)
         f3d.addRow(btn_calc_cfg)
 
+        # item 4 (v2.85): la resolución del campo 3D YA NO está en el panel; vive
+        # solo dentro de «Configuración de render…» (que la lee/escribe por este
+        # spinbox). Lo dejamos como objeto-estado OCULTO (no se agrega al form)
+        # para no duplicar el control (antes estaba en el panel Y en el diálogo).
         self.sb_field3d_res = QSpinBox()
         self.sb_field3d_res.setRange(10, 100)
         self.sb_field3d_res.setValue(20)
-        self.sb_field3d_res.setToolTip(
-            "Puntos por eje para el campo 3D (rango 10–100).\n"
-            "20 → ~800-2000 pts (rápido)\n"
-            "40 → ~6000-8000 pts (medio)\n"
-            "60 → ~15000+ pts (lento, detallado)"
-        )
-        f3d.addRow("Resolución campo 3D (10–100):", self.sb_field3d_res)
+        self.sb_field3d_res.hide()
 
         btn_render_cfg = QPushButton("Configuración de render…")
         btn_render_cfg.setToolTip(
-            "Resolución, saturación (1–7) y colores (mínimo / cero / máximo) de la "
-            "forma modal y del campo de presión, con opción de cero transparente.")
+            "Resolución del campo, saturación y colores (mínimo / cero / máximo) de "
+            "la forma modal y del campo de presión, y la resolución / longitud / "
+            "color de las flechas de gradiente.")
         btn_render_cfg.clicked.connect(self._open_render_config)
         f3d.addRow(btn_render_cfg)
 
-        self.chk_grad = QCheckBox("Mostrar flechas de gradiente (blancas)")
+        self.chk_grad = QCheckBox("Mostrar flechas de gradiente (∇|p|)")
         self.chk_grad.setChecked(False)
+        self.chk_grad.setToolTip(
+            "Flechas 3D de la dirección del gradiente de presión (∝ velocidad de "
+            "partícula). Resolución propia, longitud y color se ajustan en "
+            "«Configuración de render…».")
         self.chk_grad.toggled.connect(self._on_grad_toggled)
         f3d.addRow(self.chk_grad)
 
@@ -5524,6 +5572,14 @@ class AcousticPanel(QWidget):
         if not checked and hasattr(self, 'grad_arrows'):
             self.grad_arrows.clear()
             self.viewer.update()
+            return
+        # Al TILDAR: dibujar las flechas ya (antes no pasaba nada hasta el próximo
+        # recálculo del campo, y «no se veían»). Si hay modos, recomputar el campo 3D
+        # (incluye las flechas); si no, avisar que hay que calcular modos primero.
+        if checked and getattr(self, "modal_result", None) is not None:
+            self._update_field_3d()
+        elif checked:
+            self._log("Flechas de gradiente: calculá los modos (FEM) para verlas.")
 
     def _clear_field_3d_and_update(self):
         self._clear_field_3d()
@@ -5983,17 +6039,27 @@ class AcousticPanel(QWidget):
         if srcs is None or not (0 <= idx < len(srcs.sources)):
             return self._clamp_to_room_bbox(x, y, z, eps)
         s = srcs.sources[idx]
-        if getattr(s, "render_kind", "baffle") == "sphere":
+        return self._clamp_baffle_into_bbox(s, (x, y, z), eps=eps)
+
+    def _clamp_baffle_into_bbox(self, src, pos, eps=1e-3):
+        """Clampe por-eje de `pos` al AABB del recinto respetando el BAFLE: ninguna
+        CARA de la caja cruza las paredes del bounding box. En 'sphere' el limite es
+        el CENTRO (la esfera puede asomar). Exacto y simetrico para una sala caja,
+        asi que no deriva en diagonal (a diferencia de la marcha al centroide, que es
+        solo el fallback no-caja de `_snap_source_into_domain`). Sin geometria ->
+        punto igual. Devuelve la tupla (x, y, z) clampeada."""
+        x, y, z = (float(v) for v in pos)
+        if getattr(src, "render_kind", "baffle") == "sphere":
             return self._clamp_to_room_bbox(x, y, z, eps)
         try:
             lo, hi = self._room_bbox()
         except Exception:
-            return (float(x), float(y), float(z))
+            return (x, y, z)
         import copy as _copy
-        sc = _copy.copy(s)
-        sc.position = (float(x), float(y), float(z))
+        sc = _copy.copy(src)
+        sc.position = (x, y, z)
         amin, amax = self._source_baffle_aabb(sc)   # prisma en la posicion candidata
-        p = np.array([float(x), float(y), float(z)])
+        p = np.array([x, y, z])
         lo_off = p - np.asarray(amin)               # cuanto sobresale la caja bajo p
         hi_off = np.asarray(amax) - p               # cuanto sobresale sobre p
         out = []
@@ -8165,7 +8231,8 @@ class AcousticPanel(QWidget):
                 # pico), que NO es el dominio acustico. Garantizar que el punto caiga
                 # en la malla FEM (tets) para que la fuente acople; si no, proyectar
                 # al interior mas cercano y avisar (evita la recta -500 tras aplicar).
-                real.position, _snapped = self._snap_source_into_domain(real.position)
+                real.position, _snapped = self._snap_source_into_domain(
+                    real.position, real)
                 if _snapped:
                     moved_out.append(str(getattr(real, "label", f"S{i+1}")))
             if "delay" in fv:
@@ -8396,6 +8463,8 @@ class AcousticPanel(QWidget):
         if mute_others:
             for s in self.sources.sources:
                 s.active = False
+        snapped_out = []     # reubicadas por el SNAP al dominio FEM (no-caja) -> popup
+        clamped_in = []      # solo metidas con el clampe de bafle a la caja -> log
         for sp in specs:
             pos = tuple((np.asarray(sp["pos"], dtype=float) + vmin).tolist())
             src = OmniSource(position=pos, label=sp["label"], Q=sp.get("Q", 1.0),
@@ -8405,12 +8474,42 @@ class AcousticPanel(QWidget):
                              orientation=sp.get("orientation"),
                              pitch=sp.get("pitch", 0.0),
                              mounted=True)
+            # El array DBA se DISEÑA sobre la caja rectangular (AABB) con la cara del
+            # sub pegada a la pared (~6 cm); pero el BAFLE se extiende ~40 cm hacia
+            # atrás, así que la caja atraviesa la pared (y en una sala NO-caja la
+            # pared del AABB cae fuera del volumen FEM). (a) CLAMPE por-eje al AABB
+            # respetando el bafle: entra exacto y simétrico en una caja, sin derivar
+            # (este es el caso rutinario: la cara a 6 cm no deja la caja de 40 cm
+            # adentro). (b) SNAP baffle-aware al dominio FEM: en una sala no-caja
+            # backea el sub por su normal hasta que el BAFLE ENTERO entra (el punto
+            # suelto acoplaría 0 fuera de la malla -> recta -500).
+            clamped = self._clamp_baffle_into_bbox(src, src.position)
+            if not np.allclose(clamped, src.position):
+                clamped_in.append(str(sp.get("label", "DBA")))
+            snapped_pos, _snap = self._snap_source_into_domain(clamped, src)
+            src.position = snapped_pos if _snap else tuple(clamped)
+            if _snap:
+                snapped_out.append(str(sp.get("label", "DBA")))
             src.response = sp.get("response")
             self.sources.add(src)
         self._refresh_sources_list()
         self.schedule_field_update()
         muted = "  (otras fuentes muteadas)" if mute_others else ""
         self._log(f"DBA aplicado: {len(specs)} fuentes creadas.{muted}")
+        if clamped_in:
+            self._log(f"Bafle: {len(clamped_in)} sub(s) despegado(s) de la pared "
+                      f"para que la caja entera quede adentro del recinto: "
+                      f"{', '.join(clamped_in)}.")
+        if snapped_out:
+            _n = ", ".join(snapped_out)
+            self._log(f"A2: {len(snapped_out)} sub(s) DBA caían fuera del volumen "
+                      f"FEM y se reubicaron al interior: {_n}.")
+            QMessageBox.information(
+                self, "Fuentes DBA reubicadas al interior",
+                "El array DBA se diseña sobre la caja rectangular (AABB) de la sala. "
+                "Esta sala no es una caja, así que algunas posiciones caían fuera del "
+                "volumen simulado y se movieron al interior más cercano (con el bafle "
+                f"entero adentro) para que acoplen a los modos:\n\n{_n}")
 
     def _apply_suggested_layout(self, positions):
         """Crea fuentes (subwoofer) en las posiciones MUNDO sugeridas por el panel
@@ -8506,33 +8605,56 @@ class AcousticPanel(QWidget):
             self._log(f"Aviso FoM/corregibilidad: {e}")
         return fom, fom_band, eqc, eqc_band
 
-    def _snap_source_into_domain(self, pos):
-        """A2: devuelve una posicion DENTRO del dominio FEM (tets) cercana a `pos`.
+    def _baffle_corner_offsets(self, src):
+        """Offsets (Nx3) de los puntos a testear respecto del PUNTO ACUSTICO de la
+        fuente, para que el BAFLE ENTERO (no solo el punto) deba caer en el dominio.
 
-        Si `pos` ya cae en un tet, la devuelve igual. Si no (caso tipico: el clamp
-        al AABB del render dejo la fuente sobre el cielorraso inclinado de un techo
-        NO-convexo, o el AABB es mas grande que la planta), la proyecta al nodo
-        INTERIOR mas cercano de la malla, empujado un epsilon hacia el centroide
-        para caer estrictamente adentro. Asi la fuente SIEMPRE acopla (evita la
-        recta -500). Sin malla FEM cae al poligono de superficie (frena escapes
-        groseros; no clampa la cascara del alero no-convexo, que necesita el FEM).
-        Devuelve (pos_nueva, movida:bool)."""
+        En modo 'baffle' devuelve las 8 esquinas del prisma (la caja se extiende
+        hacia ATRAS de la cara delantera, baffle_frame); como la orientación y el
+        tamaño son fijos, los offsets NO dependen de la posición: esquina(q) =
+        q + offset. En 'sphere' o sin fuente el límite es el centro -> [[0,0,0]]
+        (la esfera puede asomar, decisión 17 Sep 2026, [[source-render-baffle-sphere]])."""
+        if src is None or getattr(src, "render_kind", "baffle") == "sphere":
+            return np.zeros((1, 3), dtype=float)
+        try:
+            c, n, ey, ez, (hx, hy, hz) = src.baffle_frame()
+            p0 = np.asarray(src.as_array(), dtype=float)
+            corners = np.array([c + a * hx * n + b * hy * ey + e * hz * ez
+                                for a in (-1, 1) for b in (-1, 1) for e in (-1, 1)])
+            return corners - p0            # relativo al punto acustico
+        except Exception:
+            return np.zeros((1, 3), dtype=float)
+
+    def _snap_source_into_domain(self, pos, src=None):
+        """A2: devuelve una posicion tal que la fuente `src` cae DENTRO del dominio
+        FEM (tets), cercana a `pos`. Devuelve (pos_nueva, movida:bool).
+
+        Con `src` en modo 'baffle' el criterio es que el BAFLE ENTERO (sus 8
+        esquinas) quede adentro, no solo el punto acustico: la caja se extiende
+        hacia atras de la cara delantera, asi que un sub pegado a la pared (p.ej.
+        el preset DBA, con la cara a ~6 cm) mete la caja (prof. ~40 cm) a traves de
+        la pared. Se BACKEA la fuente a lo largo de su normal de apuntado (hacia
+        adentro de la sala) hasta que la caja entera entra, preservando la columna
+        del array (no deriva en transversal). Si asi no entra (violacion lateral en
+        una sala no-caja), cae a una marcha hacia el centroide. Sin `src` (o esfera)
+        testea solo el punto, como antes. Sin malla FEM usa el poligono de
+        superficie (frena escapes groseros; el alero no-convexo necesita el FEM)."""
         p = tuple(float(x) for x in pos)
+        off = self._baffle_corner_offsets(src)     # Nx3 (incluye [0,0,0] si punto)
         mr = getattr(self, "modal_result", None)
         loc = getattr(mr, "locator", None) if mr is not None else None
-        # Test de "adentro" y centroide interior. Preferir el DOMINIO FEM (tets):
-        # es el unico correcto en techo NO-convexo (el poligono por rayo da falsos
-        # "adentro" sobre el alero, la causa del -500). Sin modos, caer al poligono
-        # de superficie: no clampa la cascara del alero pero SI frena los escapes
-        # groseros (el objeto no se va lejos de la sala).
-        _in = None
+        # Test de "todas las esquinas adentro" y centroide interior. Preferir el
+        # DOMINIO FEM (tets): es el unico correcto en techo NO-convexo (el poligono
+        # por rayo da falsos "adentro" sobre el alero). Sin modos, caer al poligono.
+        _all_in = None
         centroid = None
         if loc is not None:
             ones = np.ones(np.asarray(mr.phis).shape[0], dtype=complex)
 
-            def _in(q, _loc=loc, _ones=ones):
-                v = _loc.evaluate_many(_ones, np.asarray(q, dtype=float).reshape(1, 3))
-                return bool(np.isfinite(np.real(np.asarray(v)[0])))
+            def _all_in(q, _loc=loc, _ones=ones, _off=off):
+                pts = np.asarray(q, dtype=float).reshape(1, 3) + _off
+                vv = _loc.evaluate_many(_ones, pts)
+                return bool(np.all(np.isfinite(np.real(np.asarray(vv)))))
             centroid = np.asarray(mr.nodes, dtype=float).mean(axis=0)
         else:
             try:
@@ -8543,21 +8665,36 @@ class AcousticPanel(QWidget):
                 if verts.size == 0 or tris.size == 0:
                     return p, False
 
-                def _in(q, _v=verts, _t=tris):
-                    return bool(_pis(np.asarray(q, float).reshape(1, 3), _v, _t)[0])
+                def _all_in(q, _v=verts, _t=tris, _off=off):
+                    pts = np.asarray(q, float).reshape(1, 3) + _off
+                    return bool(np.all(_pis(pts, _v, _t)))
                 centroid = verts.mean(axis=0)
             except Exception:
                 return p, False
         try:
-            if _in(p):
-                return p, False                      # ya esta adentro
-            # MARCHA hacia el centroide (interior): el primer punto del segmento
-            # pos->centroide que cae adentro queda lo mas cerca posible del pedido y
-            # estrictamente adentro. Robusto (no depende de nodos de frontera).
+            if _all_in(p):
+                return p, False                      # la caja ya entra
             pv = np.asarray(p, dtype=float)
+            # 1) BACKEO a lo largo de la normal de apuntado (hacia adentro): mueve el
+            #    sub perpendicular a su pared SIN sacarlo de su columna del array. El
+            #    recorrido cubre el diametro de la sala (basta para despegar la caja).
+            try:
+                n_face = src.baffle_axes()[0] if src is not None else None
+            except Exception:
+                n_face = None
+            if n_face is not None and float(np.linalg.norm(n_face)) > 1e-9:
+                n_face = np.asarray(n_face, dtype=float)
+                reach = float(np.ptp(np.asarray(centroid)) + np.linalg.norm(off, axis=1).max()
+                              ) if off.size else 1.0
+                reach = max(reach, float(np.max(np.abs(centroid - pv))) + 0.5, 0.5)
+                for t in np.linspace(0.0, 1.0, 41)[1:]:
+                    q = pv + t * reach * n_face
+                    if _all_in(q):
+                        return tuple(float(x) for x in q), True
+            # 2) FALLBACK: marcha hacia el centroide (violacion lateral, sala no-caja).
             for t in np.linspace(0.0, 1.0, 41)[1:]:
                 q = pv + t * (centroid - pv)
-                if _in(q):
+                if _all_in(q):
                     return tuple(float(x) for x in q), True
             return tuple(float(x) for x in centroid), True   # fallback: el centroide
         except Exception:
@@ -8901,6 +9038,13 @@ class AcousticPanel(QWidget):
                       "c_mid": (0.20, 0.90, 0.30),      # verde (medio)
                       "c_hi": (1.00, 0.15, 0.10),       # rojo (|p| máximo)
                       "zero_transparent": False},
+            # item 3 (v2.85): flechas de gradiente ∇|p| (velocidad de partícula).
+            # Resolución PROPIA (independiente de la resolución del campo de color),
+            # largo auto-escalado a la separación de la grilla (factor), cono 3D en
+            # la punta y color configurable.
+            "grad": {"resolution": 10,                  # puntos por eje (flechas)
+                     "scale": 0.8,                      # largo = factor × paso grilla
+                     "color": (1.00, 1.00, 1.00)},      # color de las flechas
         }
 
     def _get_render_cfg(self):
@@ -8908,6 +9052,10 @@ class AcousticPanel(QWidget):
         if cfg is None:
             cfg = self._default_render_cfg()
             self._render_cfg = cfg
+        # Compatibilidad: una cfg vieja (sin la sub-sección «grad») recibe los
+        # defaults de las flechas de gradiente.
+        if "grad" not in cfg:
+            cfg["grad"] = self._default_render_cfg()["grad"]
         return cfg
 
     def _open_render_config(self):
@@ -8985,15 +9133,23 @@ class AcousticPanel(QWidget):
                         zero_transparent=_fc["zero_transparent"])
 
                 if hasattr(self, 'chk_grad') and self.chk_grad.isChecked():
+                    # item 3 (v2.85): resolución PROPIA de las flechas (no atada a
+                    # la resolución del campo de color) + longitud y color de la cfg.
+                    _gc = rcfg.get("grad", {}) or {}
+                    g_res = int(_gc.get("resolution", 10))
+                    g_scale = float(_gc.get("scale", 0.35))
+                    g_col = _gc.get("color", (1.0, 1.0, 1.0))
                     origs, grads = aa_mod.pressure_gradient_3d(
                         self.modal_result, self.sources, f=f,
-                        resolution=max(6, res // 3), damping=damping)
-                    self.grad_arrows.update(origs, grads)
+                        resolution=max(4, g_res), damping=damping)
+                    self.grad_arrows.update(
+                        origs, grads, scale=g_scale,
+                        color=(float(g_col[0]), float(g_col[1]),
+                               float(g_col[2]), 0.95))
 
-                self._log(
-                    f"|p| 3D listo: {len(pts)} puntos, f={f:.1f} Hz. "
-                    f"Fuente en {[s.position for s in self.sources]}."
-                )
+                # item 2 (v2.85): NO volcar las posiciones de las fuentes al estado
+                # (ensuciaba el panel y se filtraba en cualquier tema).
+                self._log(f"|p| 3D listo: {len(pts)} puntos, f={f:.1f} Hz.")
 
         except Exception as e:
             self._log(f"Error campo 3D: {e}")

@@ -47,16 +47,15 @@ v, t, _, _ = make_room(width=W, length=L, height=H, n_walls=4)
 viewer = IsoViewer()
 panel = ap.AcousticPanel(viewer=viewer, get_surface=lambda: (v, t),
                          get_dims_hint=lambda: (W, L, H))
-ck(hasattr(panel, "btn_dba"), "el panel tiene el botón «Optimización de fuentes»")
-ck(panel.btn_dba.text().startswith("Optimización de fuentes"),
-   "el botón se llama «Optimización de fuentes…»")
+# v2.85: el botón «Optimización de fuentes» se movió del panel al menú
+# «Herramientas»; lo que importa es que el método siga siendo invocable.
 ck(callable(getattr(panel, "_open_dba", None)), "_open_dba es invocable")
 
 # Stub de DBADialog para no bloquear en exec_(); captura dims/receptor.
 captured = {}
 class _Stub:
     def __init__(self, dims, rec, parent=None, apply_callback=None,
-                 eval_context=None):
+                 eval_context=None, preset_criterion=None):
         captured["dims"] = dims
         captured["rec"] = rec
         captured["has_apply"] = apply_callback is not None
@@ -81,6 +80,9 @@ ck("rec" in captured and np.allclose(captured["rec"], exp_rec),
    "receptor relativo a la esquina mínima de la caja")
 
 # --- 3) aplicar el preset DBA a la sala ------------------------------------
+# El apply puede loguear/avisar que metió la caja del bafle adentro; mockeamos el
+# popup informativo para no bloquear offscreen.
+ap.QMessageBox.information = staticmethod(lambda *a, **k: None)
 from dba import build_dba_sources
 n0 = len(panel.sources)
 specs = build_dba_sources(exp_dims, axis=1, n_x=2, n_z=2, drive="naive", fmax=180)
