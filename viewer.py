@@ -276,6 +276,7 @@ class IsoViewer(gl.GLViewWidget):
 
         # Plano de corte interactivo
         self._slice_placement = False
+        self._slice_rpress    = None   # punto del press derecho (click puro vs pan)
         self._slice_axis      = 2
         self._slice_aabb_min  = np.zeros(3)
         self._slice_aabb_max  = np.ones(3)
@@ -556,6 +557,7 @@ class IsoViewer(gl.GLViewWidget):
     def stop_slice_placement(self):
         """Desactiva el modo de colocacion del plano."""
         self._slice_placement = False
+        self._slice_rpress = None
         # OJO: NO apagar el mouse tracking. El gizmo de rotacion necesita los
         # eventos de movimiento sin boton para resaltar el anillo bajo el cursor.
         self.setMouseTracking(True)
@@ -1126,8 +1128,12 @@ class IsoViewer(gl.GLViewWidget):
                     self.slicePlaneConfirmed.emit(self._slice_axis, offset)
                 return
             if ev.button() == Qt.RightButton:
-                # Click derecho → cancelar
-                self.stop_slice_placement()
+                # Click derecho: NO cancelar en el press. El derecho mueve la cámara
+                # (pan), y cancelar acá hacía desaparecer el plano apenas se empezaba
+                # a orbitar. Guardamos el punto del press: si el release es un click
+                # PURO (sin arrastre) => cancelar; si hubo arrastre (se movió la
+                # cámara) => mantener el plano activo. El pan lo hace mouseMoveEvent.
+                self._slice_rpress = (float(ev.x()), float(ev.y()))
                 return
             # Cualquier otro boton: dejar que procese normalmente (camara)
             return
@@ -1231,18 +1237,20 @@ class IsoViewer(gl.GLViewWidget):
         self.mousePos = lpos
         btns = ev.buttons()
 
-        # Preview del plano de corte (hover, sin necesidad de boton)
+        # Preview del plano de corte. Solo se RECALCULA en hover puro (sin botones):
+        # el plano sigue al cursor. Con un botón apretado se está moviendo la cámara
+        # (pan con derecho, orbit con central), así que NO tocamos el plano (queda
+        # congelado y VISIBLE) y dejamos caer a los branches de cámara de abajo.
         if self._slice_placement:
-            offset = self._compute_slice_offset(int(lpos.x()), int(lpos.y()))
-            if offset is not None and self._slice_preview is not None:
-                self._slice_preview.update(
-                    self._slice_axis, offset,
-                    self._slice_aabb_min, self._slice_aabb_max
-                )
-                self.slicePlaneHovered.emit(self._slice_axis, offset)
-                self.update()
-            # Dejar que continue para permitir orbitar con boton central
-            if not (btns & Qt.MidButton) and not (btns & Qt.RightButton):
+            if not (btns & (Qt.LeftButton | Qt.MidButton | Qt.RightButton)):
+                offset = self._compute_slice_offset(int(lpos.x()), int(lpos.y()))
+                if offset is not None and self._slice_preview is not None:
+                    self._slice_preview.update(
+                        self._slice_axis, offset,
+                        self._slice_aabb_min, self._slice_aabb_max
+                    )
+                    self.slicePlaneHovered.emit(self._slice_axis, offset)
+                    self.update()
                 return
 
         # Orientacion de bafle (Alt+Ctrl+Left sostenido): horizontal -> azimut,
@@ -1439,6 +1447,18 @@ class IsoViewer(gl.GLViewWidget):
         if ev.button() == Qt.LeftButton and self._dragging_listen_idx != -1:
             self._dragging_listen_idx = -1
             return
+        # Colocación de plano: el derecho cancela SOLO si fue un click puro (sin
+        # arrastre). Si se arrastró (se movió la cámara con el pan), se mantiene.
+        if ev.button() == Qt.RightButton and self._slice_placement:
+            rp = getattr(self, "_slice_rpress", None)
+            self._slice_rpress = None
+            if rp is not None:
+                dx = float(ev.x()) - rp[0]
+                dy = float(ev.y()) - rp[1]
+                if (dx * dx + dy * dy) <= 25.0:    # ≤5 px => click puro => cancelar
+                    self.stop_slice_placement()
+            return
+
         if ev.button() == Qt.RightButton and self._inclining_wall is not None:
             self._inclining_wall = None
             self._incline_press_y = None

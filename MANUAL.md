@@ -2982,6 +2982,18 @@ Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD cur
 
 *Manual actualizado al 28 de Octubre de 2026 — v2.86.*
 
+## Cambios v2.87 (el campo 3D se dibuja a la primera, «Campo» gobierna el render, y el plano interactivo no se va al mover la cámara)
+
+**Cambios v2.87** (28 de octubre 2026): mejoras del render del campo 3D y del plano de corte interactivo.
+
+**Al cambiar «Campo» se redibuja el render 3D.** El selector «Campo» (forma modal o presión) ahora gobierna lo que muestra el render 3D, no solo el corte 2D. Por eso se movió arriba, junto a «Actualizar campo 3D» y «Configuración de render…». Al cambiarlo, la nube 3D (y el corte, si está activo) se recalculan en el acto, sin tener que apretar «Actualizar campo 3D».
+
+**El campo 3D aparece a la primera, no a la segunda.** En modo Automático (el default), calcular los modos (FEM) ahora dibuja la nube de campo 3D de una, en el primer cálculo. Antes había que calcular dos veces (o apretar Enter) para que apareciera. En modo Manual se mantiene como estaba: el campo se dibuja con Enter o con «Actualizar campo 3D».
+
+**El plano interactivo no desaparece al mover la cámara.** Con el plano interactivo activo, ahora podés mantener el click derecho y arrastrar para mover la cámara sin que el plano se cancele: queda visible y vuelve a seguir el cursor al soltar. El plano se cancela solo con un click derecho corto (sin arrastrar) o con ESC, y se confirma con el click izquierdo.
+
+*Manual actualizado al 28 de Octubre de 2026 — v2.87.*
+
 ## Cambios v2.84 (los cálculos corren sobre tus receptores de la lista, con flechas por asiento)
 
 **Cambios v2.84** (25 de octubre 2026): ahora la respuesta en frecuencia (FRF), el SBIR, el decaimiento y el mapa de reflexiones se calculan sobre los **receptores de la lista** (los que elegiste), no sobre un receptor aparte. En cada una de esas ventanas aparece arriba del gráfico un selector **«Asiento: flecha izquierda  Receptor i/N: nombre  flecha derecha»**: con las flechas recorrés los receptores de la lista y la ventana se recalcula y redibuja para cada posición (el marcador grande del visor salta al asiento que estás viendo). Con un solo receptor las flechas quedan deshabilitadas. Si la lista está vacía, se crea un «Sweet Spot» en la posición del cursor.

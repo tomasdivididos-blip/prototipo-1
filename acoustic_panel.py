@@ -5493,6 +5493,18 @@ class AcousticPanel(QWidget):
         btn_render_cfg.clicked.connect(self._open_render_config)
         f3d.addRow(btn_render_cfg)
 
+        # «Campo»: qué muestra el render 3D (y el corte 2D). v2.87: movido acá arriba,
+        # junto a los botones de render, porque gobierna TODO el campo 3D, no solo el
+        # slice (antes vivía dentro del bloque del corte). Cambiarlo re-renderiza el
+        # slice Y la nube 3D en el acto si ya hay modos (pedido del usuario).
+        self.combo_field = QComboBox()
+        self.combo_field.addItems([
+            "Forma modal (independiente de fuente)",
+            "Presión |p| a frec. del modo  ← depende de fuente",
+        ])
+        self.combo_field.currentIndexChanged.connect(self._on_field_kind_changed)
+        f3d.addRow("Campo:", self.combo_field)
+
         self.chk_grad = QCheckBox("Mostrar flechas de gradiente (∇|p|)")
         self.chk_grad.setChecked(False)
         self.chk_grad.setToolTip(
@@ -5547,14 +5559,6 @@ class AcousticPanel(QWidget):
         self.sb_slice_res = QSpinBox(); self.sb_slice_res.setRange(20, 200); self.sb_slice_res.setValue(60)
         self.sb_slice_res.valueChanged.connect(self._update_slice)
         f3d.addRow("Resolución (px/eje):", self.sb_slice_res)
-
-        self.combo_field = QComboBox()
-        self.combo_field.addItems([
-            "Forma modal (independiente de fuente)",
-            "Presión |p| a frec. del modo  ← depende de fuente",
-        ])
-        self.combo_field.currentIndexChanged.connect(self._update_slice)
-        f3d.addRow("Campo:", self.combo_field)
 
         # v2.86 (fix ítem 3): el slice arranca APAGADO. Antes `setChecked(True)` hacía
         # que `_update_slice()` (post-FEM, línea ~7176) lo dibujara solo, y cualquier
@@ -7217,6 +7221,16 @@ class AcousticPanel(QWidget):
         self._fem_auto_resolved = False
         self._fem_needs_resolve = False
 
+        # Render de la nube de campo 3D al TERMINAR el solve. Antes `_solve_fem`
+        # solo actualizaba el slice, no `_update_field_3d()`, así que en Automático
+        # la nube 3D no se pintaba hasta un SEGUNDO disparo (trigger_compute/Enter la
+        # renderizaba en la rama else). Ahora, en Automático, se renderiza A LA
+        # PRIMERA vez (pedido del usuario). En Manual no (el usuario usa Enter/botón).
+        # Va DESPUÉS del guard de re-mallado (el intermedio retorna en 7215), así se
+        # pinta una sola vez, al final del ciclo.
+        if self._field3d_auto_on():
+            self._update_field_3d()
+
     def _refresh_modes_combo(self):
         """Repuebla el picker de modos, respetando el filtro [f_min, f_max].
 
@@ -7548,6 +7562,16 @@ class AcousticPanel(QWidget):
         except Exception:
             pass
         self._update_slice()
+
+    def _on_field_kind_changed(self, *args):
+        """Cambio del combo «Campo» (forma modal ↔ presión |p|): re-renderiza el
+        corte 2D y la nube de campo 3D. El combo gobierna el MODO del render 3D
+        (`_update_field_3d` lee `combo_field.currentIndex()`), así que al cambiarlo
+        se recalcula el render 3D en el acto si ya hay modos resueltos (pedido del
+        usuario). Si no hay modos, solo queda el slice (que se limpia solo)."""
+        self._update_slice()
+        if getattr(self, "modal_result", None) is not None:
+            self._update_field_3d()
 
     def _update_slice(self):
         if not self.chk_slice.isChecked() or self.modal_result is None:
