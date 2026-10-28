@@ -161,8 +161,16 @@ def main():
         if p:
             return p
         cands = [
+            # env conda `nsis_tool` (install sin admin: `conda create -n nsis_tool nsis`).
+            # El env vive en <prefix>\envs\nsis_tool (NO en <prefix>.parent\nsis_tool);
+            # NSIS deja makensis.exe en NSIS\ y en NSIS\Bin\.
+            Path(sys.prefix) / "envs" / "nsis_tool" / "NSIS" / "makensis.exe",
+            Path(sys.prefix) / "envs" / "nsis_tool" / "NSIS" / "Bin" / "makensis.exe",
+            Path(sys.prefix) / "envs" / "nsis_tool" / "Library" / "bin" / "makensis.exe",
+            # Legacy / otras ubicaciones.
             Path(sys.prefix).parent / "nsis_tool" / "NSIS" / "makensis.exe",
             Path(sys.prefix) / "NSIS" / "makensis.exe",
+            Path(sys.prefix) / "NSIS" / "Bin" / "makensis.exe",
             Path(r"C:\Program Files (x86)\NSIS\makensis.exe"),
             Path(r"C:\Program Files\NSIS\makensis.exe"),
         ]
