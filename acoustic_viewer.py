@@ -584,13 +584,30 @@ def _quad_mesh_from_grid(X, Y, Z, colors, mask):
 
 
 class FieldSliceItem:
-    """Render de un FieldSlice como mesh coloreado en el viewer."""
+    """Render de un FieldSlice como LAMINA RELLENA (quad mesh) + borde de lineas.
+
+    Dibuja el corte como `GLMeshItem(shader=None, glOptions='translucent')` con
+    faceColors -> superficie LISA y COLOR FIEL del heatmap (el look aprobado por el
+    usuario), mas un borde wireframe cian (`GLLinePlotItem`) que ubica el plano aun
+    si queda detras de una pared.
+
+    NOTA GL (v2.86): esta malla translucida NO pinta en el primer update de la escena
+    (mismo limite que invisibiliza mallas opacas/shaded dinamicas; ver v2.70/v2.85).
+    Lo que la hace aparecer es un repintado FORZADO del visor (reconstruir
+    aristas/grilla), exactamente lo que hace el cambio de tema. Por eso el panel llama
+    `viewer.refresh_scene_colors()` (debounced) justo despues de cada `_update_slice`:
+    sin ese empujon el corte solo se veia al cambiar de tema (el 'bug' que reporto el
+    usuario). El scatter de puntos renderiza siempre pero se ve grumoso, por eso se
+    descarto a favor de la malla + empujon."""
+
+    _EDGE_COLOR = (0.0, 0.95, 1.0, 0.9)   # cian: borde del plano
 
     def __init__(self, viewer):
         self.viewer = viewer
         self.item = None
+        self._edge = None
 
-    def update(self, field_slice, signed: bool = False, alpha: float = 0.75):
+    def update(self, field_slice, signed: bool = False, alpha: float = 0.9):
         """field_slice: acoustic_analysis.FieldSlice.
 
         Soporta los tres planos axis-alineados:
@@ -621,35 +638,60 @@ class FieldSliceItem:
             # Mapeo simetrico al maximo absoluto.
             m = float(np.nanmax(np.abs(P))) if np.isfinite(P).any() else 1.0
             m = max(m, 1e-12)
-            t = P / m
+            t = np.nan_to_num(P / m, nan=0.0)   # NaN (fuera de dominio) -> 0; se descarta por mask
             rgb = colormap_signed(t)
         else:
             m = float(np.nanmax(P)) if np.isfinite(P).any() else 1.0
             m = max(m, 1e-12)
-            t = P / m
+            t = np.nan_to_num(P / m, nan=0.0)
             rgb = colormap_plasma(t)
 
-        # alpha por punto (cero donde mask es False).
+        # alpha por punto (cero donde mask es False -> esos vertices quedan invisibles).
         alpha_arr = np.where(mask, alpha, 0.0) if mask is not None else \
                     np.full(X.shape, alpha)
         colors = np.concatenate([rgb, alpha_arr[..., None]], axis=-1)
 
+        # LAMINA RELLENA: GLMeshItem (quad mesh) translucido, shader=None + faceColors
+        # -> color FIEL del heatmap y superficie LISA (no discos). Es el look que el
+        # usuario aprobo. NOTA GL (v2.86): esta malla translucida no PINTA en el primer
+        # update de la escena; el panel fuerza el repintado (viewer.refresh_scene_colors,
+        # lo mismo que hace el cambio de tema) justo despues de _update_slice.
         built = _quad_mesh_from_grid(X, Y, Z, colors, mask)
         if built is None:
-            return
+            return          # plano fuera del dominio: nada que dibujar (ni borde)
         verts, faces, vert_colors, face_colors = built
-
         md = gl.MeshData(vertexes=verts, faces=faces, faceColors=face_colors)
         self.item = gl.GLMeshItem(
-            meshdata=md, smooth=False,
-            shader=None, glOptions="translucent",
-        )
+            meshdata=md, smooth=False, shader=None, glOptions="translucent")
         self.viewer.addItem(self.item)
 
+        # Borde wireframe del rectangulo del plano (lineas = visibilidad garantizada).
+        self._add_border(ax, cte, C1, C2)
+
+    def _add_border(self, ax, cte, C1, C2):
+        f1 = np.isfinite(C1); f2 = np.isfinite(C2)
+        if not (f1.any() and f2.any()):
+            return
+        a0, a1 = float(np.min(C1[f1])), float(np.max(C1[f1]))
+        b0, b1 = float(np.min(C2[f2])), float(np.max(C2[f2]))
+        corners12 = [(a0, b0), (a1, b0), (a1, b1), (a0, b1), (a0, b0)]
+        loop = []
+        for u, v in corners12:
+            if ax == 2:      loop.append((u, v, cte))
+            elif ax == 1:    loop.append((u, cte, v))
+            else:            loop.append((cte, u, v))
+        self._edge = gl.GLLinePlotItem(
+            pos=np.asarray(loop, dtype=np.float32),
+            color=self._EDGE_COLOR, width=2.0, antialias=True, mode="line_strip")
+        self._edge.setGLOptions("translucent")
+        self.viewer.addItem(self._edge)
+
     def clear(self):
-        if self.item is not None:
-            self.viewer.removeItem(self.item)
-        self.item = None
+        for attr in ("item", "_edge"):
+            it = getattr(self, attr, None)
+            if it is not None:
+                self.viewer.removeItem(it)
+            setattr(self, attr, None)
 
 
 # ---------------------------------------------------------------------------

@@ -5407,64 +5407,10 @@ class AcousticPanel(QWidget):
         self.btn_mode_table.clicked.connect(self._show_mode_table)
         fmode.addRow("", self.btn_mode_table)
 
-        # Selector de plano de corte
-        self.combo_plane = QComboBox()
-        self.combo_plane.addItems([
-            "Plano XY  (z = cte)",
-            "Plano XZ  (y = cte)",
-            "Plano YZ  (x = cte)",
-        ])
-        self.combo_plane.currentIndexChanged.connect(self._on_plane_changed)
-        fmode.addRow("Plano de corte:", self.combo_plane)
-
-        # Botón de activación interactiva
-        self.btn_activate_plane = QPushButton("⊕  Activar plano interactivo")
-        self.btn_activate_plane.setCheckable(True)
-        self.btn_activate_plane.setToolTip(
-            "Activa el cursor de plano:\n"
-            "• Mové el mouse sobre el recinto → el plano sigue al cursor\n"
-            "• Click izquierdo → confirma la posición\n"
-            "• Click derecho / ESC → cancela"
-        )
-        self.btn_activate_plane.toggled.connect(self._on_activate_plane_toggled)
-        fmode.addRow(self.btn_activate_plane)
-
-        # Offset del plano (etiqueta dinámica)
-        self.lbl_slice_offset = QLabel("Posición  z:")
-        self.sb_slice_z = QDoubleSpinBox()
-        self.sb_slice_z.setRange(-1e2, 1e2)
-        self.sb_slice_z.setDecimals(2)
-        self.sb_slice_z.setValue(float(self.receiver[2]))
-        self.sb_slice_z.setSingleStep(0.05)
-        self.sb_slice_z.valueChanged.connect(self._update_slice)
-        row_off = QHBoxLayout()
-        row_off.addWidget(self.lbl_slice_offset)
-        row_off.addWidget(self.sb_slice_z)
-        fmode.addRow(row_off)
-
-        self.sb_slice_res = QSpinBox(); self.sb_slice_res.setRange(20, 200); self.sb_slice_res.setValue(60)
-        self.sb_slice_res.valueChanged.connect(self._update_slice)
-        fmode.addRow("Resolución (px/eje):", self.sb_slice_res)
-
-        self.combo_field = QComboBox()
-        self.combo_field.addItems([
-            "Forma modal (independiente de fuente)",
-            "Presión |p| a frec. del modo  ← depende de fuente",
-        ])
-        self.combo_field.currentIndexChanged.connect(self._update_slice)
-        fmode.addRow("Campo:", self.combo_field)
-
-        self.chk_slice = QCheckBox("Mostrar slice")
-        self.chk_slice.setChecked(True)
-        self.chk_slice.toggled.connect(self._update_slice)
-        fmode.addRow(self.chk_slice)
-
-        btn_heatmap = QPushButton("Ver mapa de calor 2D")
-        btn_heatmap.setObjectName("PrimaryButton")
-        btn_heatmap.setToolTip("Abre una ventana matplotlib con el heatmap del\n"
-                               "plano de corte actual (con barra de color en dB SPL).")
-        btn_heatmap.clicked.connect(self._show_slice_heatmap)
-        fmode.addRow(btn_heatmap)
+        # v2.86: el bloque del CORTE 2D (plano de corte, plano interactivo, posición,
+        # resolución, Campo, mostrar slice y mapa de calor) se movió a «Campo acústico
+        # 3D» (pedido del usuario: el corte es parte de la visualización del campo, no
+        # de la selección modal). Los widgets se crean abajo en grp_3d.
 
         layout.addWidget(grp_mode)
 
@@ -5555,6 +5501,76 @@ class AcousticPanel(QWidget):
             "«Configuración de render…».")
         self.chk_grad.toggled.connect(self._on_grad_toggled)
         f3d.addRow(self.chk_grad)
+
+        # --- Corte 2D (slice) del campo ------------------------------------
+        # v2.86: movido acá desde «Visualización modal». El corte es una vista del
+        # campo (forma modal o |p|) sobre un plano; el modo a cortar sale del combo
+        # «Modo» de «Visualización modal».
+        _lbl_slice_sec = QLabel("Corte 2D (slice) del campo")
+        self._reg_info(_lbl_slice_sec, "accent", "font-weight:600;")
+        f3d.addRow(_lbl_slice_sec)
+
+        self.combo_plane = QComboBox()
+        self.combo_plane.addItems([
+            "Plano XY  (z = cte)",
+            "Plano XZ  (y = cte)",
+            "Plano YZ  (x = cte)",
+        ])
+        self.combo_plane.currentIndexChanged.connect(self._on_plane_changed)
+        f3d.addRow("Plano de corte:", self.combo_plane)
+
+        # Botón de activación interactiva
+        self.btn_activate_plane = QPushButton("⊕  Activar plano interactivo")
+        self.btn_activate_plane.setCheckable(True)
+        self.btn_activate_plane.setToolTip(
+            "Activa el cursor de plano:\n"
+            "• Mové el mouse sobre el recinto → el plano sigue al cursor\n"
+            "• Click izquierdo → confirma la posición\n"
+            "• Click derecho / ESC → cancela"
+        )
+        self.btn_activate_plane.toggled.connect(self._on_activate_plane_toggled)
+        f3d.addRow(self.btn_activate_plane)
+
+        # Offset del plano (etiqueta dinámica)
+        self.lbl_slice_offset = QLabel("Posición  z:")
+        self.sb_slice_z = QDoubleSpinBox()
+        self.sb_slice_z.setRange(-1e2, 1e2)
+        self.sb_slice_z.setDecimals(2)
+        self.sb_slice_z.setValue(float(self.receiver[2]))
+        self.sb_slice_z.setSingleStep(0.05)
+        self.sb_slice_z.valueChanged.connect(self._update_slice)
+        row_off = QHBoxLayout()
+        row_off.addWidget(self.lbl_slice_offset)
+        row_off.addWidget(self.sb_slice_z)
+        f3d.addRow(row_off)
+
+        self.sb_slice_res = QSpinBox(); self.sb_slice_res.setRange(20, 200); self.sb_slice_res.setValue(60)
+        self.sb_slice_res.valueChanged.connect(self._update_slice)
+        f3d.addRow("Resolución (px/eje):", self.sb_slice_res)
+
+        self.combo_field = QComboBox()
+        self.combo_field.addItems([
+            "Forma modal (independiente de fuente)",
+            "Presión |p| a frec. del modo  ← depende de fuente",
+        ])
+        self.combo_field.currentIndexChanged.connect(self._update_slice)
+        f3d.addRow("Campo:", self.combo_field)
+
+        # v2.86 (fix ítem 3): el slice arranca APAGADO. Antes `setChecked(True)` hacía
+        # que `_update_slice()` (post-FEM, línea ~7176) lo dibujara solo, y cualquier
+        # repintado (p.ej. cambiar de tema) lo mostraba «sin querer». Ahora solo se ve
+        # al tildarlo o al confirmar el plano interactivo (que lo tilda).
+        self.chk_slice = QCheckBox("Mostrar slice")
+        self.chk_slice.setChecked(False)
+        self.chk_slice.toggled.connect(self._update_slice)
+        f3d.addRow(self.chk_slice)
+
+        btn_heatmap = QPushButton("Ver mapa de calor 2D")
+        btn_heatmap.setObjectName("PrimaryButton")
+        btn_heatmap.setToolTip("Abre una ventana matplotlib con el heatmap del\n"
+                               "plano de corte actual (con barra de color en dB SPL).")
+        btn_heatmap.clicked.connect(self._show_slice_heatmap)
+        f3d.addRow(btn_heatmap)
 
         btn_clear_3d = QPushButton("Limpiar campo 3D")
         btn_clear_3d.clicked.connect(self._clear_field_3d_and_update)
@@ -7577,6 +7593,30 @@ class AcousticPanel(QWidget):
             self.slice_item.clear()
             self._log(f"Slice falló: {e}")
         self.viewer.update()
+        self._poke_slice_repaint()
+
+    def _poke_slice_repaint(self):
+        """Fuerza el repintado del visor que hace APARECER la malla translucida del
+        slice. Sin esto, el GLMeshItem del corte no pinta en el primer update (limite
+        GL v2.70/v2.85) y el plano solo se veia al cambiar de tema (el 'bug' que
+        reporto el usuario). Replicamos ese empujon: `viewer.refresh_scene_colors()`
+        (reconstruye aristas/grilla/planos), DEBOUNCED con un QTimer single-shot 0ms
+        para que arrastrar el slider de posicion no rebuildee la escena en cada tick
+        (se coalesce en un solo refresh cuando el event-loop queda libre)."""
+        t = getattr(self, "_slice_poke_timer", None)
+        if t is None:
+            from PyQt5 import QtCore
+            t = QtCore.QTimer(self)
+            t.setSingleShot(True)
+            t.timeout.connect(self._do_slice_poke)
+            self._slice_poke_timer = t
+        t.start(0)
+
+    def _do_slice_poke(self):
+        try:
+            self.viewer.refresh_scene_colors()
+        except Exception:
+            self.viewer.update()
 
     # -----------------------------------------------------------------------
     # SBIR (Speaker-Boundary Interference Response)
@@ -10076,10 +10116,16 @@ class AcousticPanel(QWidget):
         self.btn_activate_plane.setChecked(False)
         self.btn_activate_plane.setText("⊕  Activar plano interactivo")
         self.btn_activate_plane.blockSignals(False)
+        # v2.86: el slice arranca apagado; al confirmar el plano lo PRENDEMOS para que
+        # se vea en el render 3D (sin re-disparar _update_slice: lo llamamos abajo).
+        if not self.chk_slice.isChecked():
+            self.chk_slice.blockSignals(True)
+            self.chk_slice.setChecked(True)
+            self.chk_slice.blockSignals(False)
         names = ["XY", "XZ", "YZ"]
         self._log(f"Plano {names[plane_idx]} confirmado en {offset:.2f} m — calculando...")
-        self._update_slice()
-        self._show_slice_heatmap()
+        self._update_slice()        # dibuja el corte sobre el render 3D
+        self._show_slice_heatmap()  # y abre la ventana del mapa de calor 2D
 
     def _reload_materials(self):
         """Recarga los archivos JSON de la carpeta materials/."""

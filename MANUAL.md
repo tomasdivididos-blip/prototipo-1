@@ -2968,6 +2968,20 @@ Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD cur
 
 *Manual actualizado al 27 de Octubre de 2026 — v2.85.*
 
+## Cambios v2.86 (el corte 2D del campo vive en «Campo acústico 3D» y se ve como una lámina llena sobre el render)
+
+**Cambios v2.86** (28 de octubre 2026): ajustes del corte 2D (slice) del campo.
+
+**Reubicación.** Todo el bloque del corte (plano de corte, plano interactivo, posición, resolución, campo a cortar, «Mostrar slice» y «Ver mapa de calor 2D») se movió de «Visualización modal» a la sección **«Campo acústico 3D»**, que es a donde pertenece. En «Visualización modal» quedan el filtro de frecuencias, el selector de «Modo», el conteo y «Ver modos…».
+
+**El corte se ve como una lámina llena sobre el render 3D.** Al tildar **«Mostrar slice»** (o al confirmar el plano interactivo) ahora se superpone sobre el recinto una **lámina coloreada y llena** con el mapa del campo en ese plano (forma modal con signo, o presión según lo elegido), más un borde celeste que ubica el plano aunque quede detrás de una pared. Antes el corte no se dibujaba sobre el render.
+
+**El plano interactivo.** Con **«Activar plano interactivo»** se mueve el mouse sobre el recinto y el plano sigue al cursor; al hacer clic se abre la ventana del mapa de calor 2D y, a la vez, queda la lámina sobre el render 3D.
+
+**Arreglo: el corte aparecía solo.** Antes el corte podía aparecer sin pedirlo (por ejemplo al cambiar de tema). Eran dos cosas: arrancaba activado por defecto, y la lámina no se dibujaba hasta que un repintado la forzaba (lo disparaba el cambio de tema). Ahora arranca apagado (solo se ve si lo pedís) y se dibuja en el momento, sin depender del tema.
+
+*Manual actualizado al 28 de Octubre de 2026 — v2.86.*
+
 ## Cambios v2.84 (los cálculos corren sobre tus receptores de la lista, con flechas por asiento)
 
 **Cambios v2.84** (25 de octubre 2026): ahora la respuesta en frecuencia (FRF), el SBIR, el decaimiento y el mapa de reflexiones se calculan sobre los **receptores de la lista** (los que elegiste), no sobre un receptor aparte. En cada una de esas ventanas aparece arriba del gráfico un selector **«Asiento: flecha izquierda  Receptor i/N: nombre  flecha derecha»**: con las flechas recorrés los receptores de la lista y la ventana se recalcula y redibuja para cada posición (el marcador grande del visor salta al asiento que estás viendo). Con un solo receptor las flechas quedan deshabilitadas. Si la lista está vacía, se crea un «Sweet Spot» en la posición del cursor.
