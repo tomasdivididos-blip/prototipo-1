@@ -220,6 +220,105 @@ def t7_helmholtz():
               rel < 0.15, f"rel={rel:.3f}")
 
 
+def _rho_e_fd(f, w, P=1.0, n=4001):
+    """Densidad efectiva de la ranura por DIFERENCIAS FINITAS de la EDP de
+    Navier-Stokes (oraculo INDEPENDIENTE de la forma cerrada): resuelve
+    u'' - sigma^2 u = -P/eta en [-a,a], u(+-a)=0, sigma^2 = i w rho0/eta, y
+    rho_e = P/(i w <u>). Si la cerrada `slit_zface` es la solucion correcta de la
+    EDP, coinciden. a = w/2."""
+    a = 0.5 * w
+    wang = 2.0 * np.pi * f
+    sig2 = 1j * wang * imp.RHO0 / imp.ETA
+    y = np.linspace(-a, a, n)
+    h = y[1] - y[0]
+    # matriz tridiagonal de u'' - sig2 u = -P/eta (interiores), Dirichlet 0 en bordes
+    N = n - 2
+    main = np.full(N, -2.0 / h**2 - sig2, dtype=complex)
+    off = np.full(N - 1, 1.0 / h**2, dtype=complex)
+    A = np.diag(main) + np.diag(off, 1) + np.diag(off, -1)
+    b = np.full(N, -P / imp.ETA, dtype=complex)
+    u_in = np.linalg.solve(A, b)
+    u = np.concatenate([[0.0], u_in, [0.0]])
+    u_avg = np.trapz(u, y) / (2.0 * a)
+    return P / (1j * wang * u_avg)
+
+
+def t8_slit_crandall():
+    print("T8 - panel ranurado (Crandall 1ppios, Cox Ec 6.40-6.41)")
+    # (a) ORACULO NO CIRCULAR: la rho_e cerrada == solucion por diferencias finitas
+    #     de la EDP de Navier-Stokes entre placas. Valida que la forma cerrada ES la
+    #     solucion del problema fisico, no solo que se reproduce a si misma.
+    for f, w in [(200.0, 1.0e-3), (800.0, 0.5e-3), (1500.0, 0.3e-3)]:
+        wang = 2.0 * np.pi * f
+        kp = np.sqrt(-1j * wang * imp.RHO0 / imp.ETA)
+        rho_closed = imp.RHO0 / (1.0 - (2.0 / (kp * w)) * np.tan(kp * w / 2.0))
+        rho_fd = _rho_e_fd(f, w)
+        rel = abs(rho_closed - rho_fd) / abs(rho_fd)
+        check(f"rho_e cerrada == EDP por dif. finitas (f={f:.0f}Hz w={w*1e3:.1f}mm)",
+              rel < 2e-3, f"rel={rel:.2e}  rho_e={rho_closed:.1f}")
+    # (b) LIMITE DE POISEUILLE (continua): Re(z_face) -> 12 eta t/(eps w^2), la
+    #     resistencia de flujo DC de una ranura (resistividad 12 eta/w^2). 1ppios.
+    t, w, eps = 2e-3, 0.5e-3, 0.10
+    z_dc = imp.slit_zface(np.array([0.5]), t, w, eps)[0]
+    R_pois = 12.0 * imp.ETA * t / (eps * w * w)
+    rel_dc = abs(z_dc.real - R_pois) / R_pois
+    check(f"Re(z_face) en continua == 12 eta t/(eps w^2) = {R_pois:.1f}",
+          rel_dc < 0.02, f"Re={z_dc.real:.1f}  rel={rel_dc:.3f}")
+    # (c) LIMITE INERCIAL (agudos): m_eff = Im(z)/w CONVERGE a rho0(t+delta)/eps
+    #     (delta = -(2w/pi) ln[sin(pi eps/2)], Cox 6.40) DESDE ARRIBA al subir f: el
+    #     exceso es la masa VISCOSA arrastrada en la capa limite (Re(rho_e)>rho0),
+    #     que es fisica, no error, y se desvanece ~1/sqrt(f).
+    delta = -(2.0 * w / np.pi) * np.log(np.sin(0.5 * np.pi * eps))
+    m_th = imp.RHO0 * (t + delta) / eps
+    def m_eff_at(fq):
+        z = imp.slit_zface(np.array([fq]), t, w, eps)[0]
+        return z.imag / (2.0 * np.pi * fq)
+    m3, m9 = m_eff_at(3000.0), m_eff_at(9000.0)
+    check(f"masa inercial -> rho0(t+delta)/eps desde arriba (delta={delta*1e3:.2f}mm)",
+          m_th < m9 < m3 and abs(m9 - m_th) / m_th < 0.05,
+          f"m_th={m_th:.4f} < m(9k)={m9:.4f} < m(3k)={m3:.4f}  rel9k={abs(m9-m_th)/m_th:.3f}")
+    # (d) RESONANCIA sobre cavidad (compacta, k0D<~0.85 para que valga el lumped,
+    #     igual que T1 del perforado): pico de alpha == reactancia-cero; lumped aprox.
+    t, w, eps, D = 5e-3, 3e-3, 0.05, 0.10
+    s = imp.slit_panel(t, w, eps, D)
+    f_qw = imp.C0 / (4.0 * D)
+    fg = np.geomspace(40.0, 0.98 * f_qw, 2000)
+    f_res = _reactance_zero(s, fg)
+    fp = _peak_freq(s, fg)
+    delta = -(2.0 * w / np.pi) * np.log(np.sin(0.5 * np.pi * eps))
+    f0 = (imp.C0 / (2.0 * np.pi)) * np.sqrt(eps / ((t + delta) * D))
+    if f_res is None:
+        check("ranurado: reactancia-cero existe", False, "sin cruce Im(Z)")
+    else:
+        kD = 2.0 * np.pi * f_res / imp.C0 * D
+        check(f"ranurado: pico alpha {fp:.0f}Hz == reactancia-cero {f_res:.0f}Hz",
+              abs(fp - f_res) / f_res < 0.07, f"rel={abs(fp-f_res)/f_res:.3f}")
+        check(f"ranurado: f0 lumped {f0:.0f}Hz ~ f_res {f_res:.0f}Hz (k0D={kD:.2f})",
+              abs(f0 - f_res) / f_res < 0.22, f"rel={abs(f0-f_res)/f_res:.3f}")
+    # (e) MICROSLIT sin poroso: ranura angosta -> banda ancha por viscosidad.
+    fg2 = np.geomspace(200.0, 2000.0, 400)
+    sms = imp.slit_panel(0.8e-3, 0.2e-3, 0.01, 0.05)
+    a_ms = sms.alpha_random(fg2)
+    frac = float(np.mean(a_ms > 0.3))
+    check("microslit sin poroso: alpha_random>0.3 en gran parte de la banda",
+          frac > 0.4, f"fraccion={frac:.2f}, alpha_max={a_ms.max():.2f}")
+    # (f) PHYSICALIDAD/PASIVIDAD + relleno poroso sube graves.
+    fg3 = np.geomspace(30.0, 2000.0, 300)
+    ok_a = ok_r = True
+    for th in (0.0, np.pi / 6, np.pi / 3):
+        a = s.alpha(fg3, th); re = np.real(s.Z(fg3, th))
+        ok_a = ok_a and bool(np.all(a >= -1e-9) and np.all(a <= 1.0 + 1e-9))
+        ok_r = ok_r and bool(np.all(re >= -1e-6))
+    check("ranurado: alpha in [0,1] (0/30/60) y Re(Z)>=0 (pasivo)", ok_a and ok_r)
+    f_lo = np.array([0.4 * f0])
+    a_empty = imp.slit_panel(t, w, eps, D).alpha_random(f_lo)[0]
+    a_fill = imp.slit_panel(t, w, eps, D,
+                            porous_fill={"sigma": 15000.0, "thickness": 0.05}
+                            ).alpha_random(f_lo)[0]
+    check(f"relleno poroso sube graves: {a_fill:.3f} > vacia {a_empty:.3f}",
+          a_fill > a_empty, f"delta={a_fill - a_empty:+.3f}")
+
+
 if __name__ == "__main__":
     print("=" * 64)
     print(" bench_resonant_facings.py - Capa 0 Etapa 3 (resonantes)")
@@ -231,6 +330,7 @@ if __name__ == "__main__":
     t5_shift_sign_flip()
     t6_porous_fill()
     t7_helmholtz()
+    t8_slit_crandall()
     print("=" * 64)
     print(f" RESULTADO: {N_OK} OK, {N_FAIL} FAIL")
     print("=" * 64)

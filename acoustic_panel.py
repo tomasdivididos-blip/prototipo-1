@@ -3957,6 +3957,7 @@ class ConstructionEditorDialog(QDialog):
         ("Poroso + cámara", "porous"),
         ("Helmholtz (cuello+cavidad)", "helmholtz"),
         ("Multicapa (pila TMM)", "multilayer"),
+        ("Panel ranurado (slit)", "slit"),
     ]
 
     def __init__(self, spec=None, parent=None):
@@ -3997,6 +3998,19 @@ class ConstructionEditorDialog(QDialog):
         fp.addRow("Perforación:", self.p_ratio)
         fp.addRow("Cámara de aire D:", self.p_D)
         left.addWidget(self.grp_perf)
+
+        # Panel ranurado (slit, Crandall 1ppios)
+        self.grp_slit = QGroupBox("Panel ranurado (Crandall, Cox 6.40-6.41)")
+        fsl = QFormLayout(self.grp_slit)
+        self.s_t = _spin(0.1, 50.0, 3.0, 2, 0.1, "mm")
+        self.s_w = _spin(0.05, 20.0, 1.0, 2, 0.05, "mm")
+        self.s_ratio = _spin(0.1, 50.0, 5.0, 2, 0.1, "%")
+        self.s_D = _spin(1.0, 1000.0, 100.0, 0, 5.0, "mm")
+        fsl.addRow("Espesor t:", self.s_t)
+        fsl.addRow("Ancho de ranura w:", self.s_w)
+        fsl.addRow("Área abierta:", self.s_ratio)
+        fsl.addRow("Cámara de aire D:", self.s_D)
+        left.addWidget(self.grp_slit)
 
         # Membrana
         self.grp_memb = QGroupBox("Membrana / panel (masa-resorte)")
@@ -4111,7 +4125,8 @@ class ConstructionEditorDialog(QDialog):
         for w in (self.p_t, self.p_d, self.p_ratio, self.p_D, self.m_mass,
                   self.m_D, self.m_damp, self.po_sigma, self.po_th, self.po_gap,
                   self.po_phi, self.po_ainf, self.po_lam, self.po_lamp,
-                  self.h_S, self.h_l, self.h_V, self.h_A):
+                  self.h_S, self.h_l, self.h_V, self.h_A,
+                  self.s_t, self.s_w, self.s_ratio, self.s_D):
             w.valueChanged.connect(self._update_preview)
 
         if spec:
@@ -4127,6 +4142,7 @@ class ConstructionEditorDialog(QDialog):
         """Muestra el grupo de parametros del tipo elegido + JCA condicional."""
         kind = self._kind()
         self.grp_perf.setVisible(kind in ("Panel perforado", "Microperforado (MPP)"))
+        self.grp_slit.setVisible(kind == "Panel ranurado (slit)")
         self.grp_memb.setVisible(kind == "Membrana / panel")
         self.grp_por.setVisible(kind == "Poroso + cámara")
         self.grp_helm.setVisible(kind == "Helmholtz (cuello+cavidad)")
@@ -4194,6 +4210,12 @@ class ConstructionEditorDialog(QDialog):
                     "hole_diam": self.p_d.value() * 1e-3,
                     "ratio": self.p_ratio.value() / 100.0,
                     "cavity_depth": self.p_D.value() * 1e-3}
+        if kind == "Panel ranurado (slit)":
+            return {"type": "slit",
+                    "thickness": self.s_t.value() * 1e-3,
+                    "slit_width": self.s_w.value() * 1e-3,
+                    "ratio": self.s_ratio.value() / 100.0,
+                    "cavity_depth": self.s_D.value() * 1e-3}
         if kind == "Membrana / panel":
             return {"type": "membrane",
                     "mass_per_area": self.m_mass.value(),
@@ -4235,6 +4257,12 @@ class ConstructionEditorDialog(QDialog):
             t_eff = spec["thickness"] + 0.85 * spec["hole_diam"]
             f0 = (c / (2 * np.pi)) * np.sqrt(spec["ratio"] / (t_eff * spec["cavity_depth"]))
             return f"Resonancia (Helmholtz distribuida) ≈ {f0:.0f} Hz"
+        if t in ("slit", "slit_panel", "ranurado"):
+            w, eps = spec["slit_width"], spec["ratio"]
+            delta = -(2.0 * w / np.pi) * np.log(np.sin(0.5 * np.pi * max(eps, 1e-4)))
+            t_eff = spec["thickness"] + delta       # correccion de extremo del slit
+            f0 = (c / (2 * np.pi)) * np.sqrt(eps / (t_eff * spec["cavity_depth"]))
+            return f"Resonancia (ranura, Crandall) ≈ {f0:.0f} Hz"
         if t == "membrane":
             f0 = 60.0 / np.sqrt(max(spec["mass_per_area"] * spec["cavity_depth"], 1e-9))
             return f"Resonancia masa-resorte f₀ ≈ {f0:.0f} Hz"
@@ -4316,6 +4344,12 @@ class ConstructionEditorDialog(QDialog):
             self.combo_type.setCurrentIndex(5)
             self._ml_layers = [dict(ly) for ly in spec.get("layers", [])]
             self._ml_refresh()
+        elif t in ("slit", "slit_panel", "ranurado"):
+            self.combo_type.setCurrentIndex(6)
+            self.s_t.setValue(spec["thickness"] * 1e3)
+            self.s_w.setValue(spec["slit_width"] * 1e3)
+            self.s_ratio.setValue(spec["ratio"] * 100.0)
+            self.s_D.setValue(spec["cavity_depth"] * 1e3)
 
     def _on_accept(self):
         try:

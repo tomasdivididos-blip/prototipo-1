@@ -3016,6 +3016,18 @@ Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD cur
 
 *Manual actualizado al 29 de Octubre de 2026 — v2.89.*
 
+## Cambios v2.90 (nuevo absorbedor resonante: panel ranurado)
+
+**Cambios v2.90** (29 de octubre 2026): el editor de impedancias suma un tipo de absorbedor resonante más, el panel ranurado.
+
+**Qué es.** En el editor de impedancias, en el selector de tipo (que ya tenía panel perforado, microperforado, membrana, poroso, Helmholtz y multicapa), ahora aparece **Panel ranurado (slit)**. Es un panel con ranuras largas y angostas sobre una cámara de aire, pariente del perforado pero con ranuras en vez de orificios redondos. Se cargan cuatro datos: espesor del panel, ancho de la ranura, área abierta (porcentaje) y profundidad de la cámara. El preview muestra la curva de absorción y la frecuencia de resonancia estimada.
+
+**Cuándo conviene.** El panel ranurado da absorción de banda ancha gracias a la viscosidad en las ranuras angostas, muchas veces sin necesidad de material poroso; es fácil de fabricar (listones separados) y permite acabados estéticos. Con ranuras de menos de un milímetro funciona como microslit (banda ancha sin poroso); con ranuras más anchas y la cámara rellena de poroso, baja la resonancia hacia los graves.
+
+**Cómo está calculado.** La impedancia de la ranura sale de primeros principios (flujo viscoso oscilante entre placas paralelas, teoría de Crandall), con la corrección de extremo tomada de Cox y D'Antonio. El modelo quedó validado comparando contra la solución numérica de la ecuación de Navier-Stokes y contra el límite de flujo de Poiseuille.
+
+*Manual actualizado al 29 de Octubre de 2026 — v2.90.*
+
 ## Cambios v2.84 (los cálculos corren sobre tus receptores de la lista, con flechas por asiento)
 
 **Cambios v2.84** (25 de octubre 2026): ahora la respuesta en frecuencia (FRF), el SBIR, el decaimiento y el mapa de reflexiones se calculan sobre los **receptores de la lista** (los que elegiste), no sobre un receptor aparte. En cada una de esas ventanas aparece arriba del gráfico un selector **«Asiento: flecha izquierda  Receptor i/N: nombre  flecha derecha»**: con las flechas recorrés los receptores de la lista y la ventana se recalcula y redibuja para cada posición (el marcador grande del visor salta al asiento que estás viendo). Con un solo receptor las flechas quedan deshabilitadas. Si la lista está vacía, se crea un «Sweet Spot» en la posición del cursor.

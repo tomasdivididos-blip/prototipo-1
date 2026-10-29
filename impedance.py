@@ -16,6 +16,7 @@ Estado: ETAPAS 1a/1b/1c/2/3. Constructores:
   - multilayer(specs)             pila general de capas por TMM
   - measured_Zf / measured_Zft    Z(f) / Z(f,theta) medida
   - perforated / microperforated  facing (micro)perforado Maa 1998 + cavidad (E3)
+  - slit_panel(...)               facing RANURADO Crandall (1ppios) + cavidad (E3)
   - membrane(...)                 membrana masa-resorte + cavidad (E3)
   - helmholtz(...)                resonador cuello+cavidad distribuido (E3)
 
@@ -236,6 +237,60 @@ def membrane_zface(f, mass_per_area: float, damping: float = 0.0) -> np.ndarray:
     f = _as_f(f)
     w = 2.0 * np.pi * f
     return Z0 * float(damping) + 1j * w * float(mass_per_area)
+
+
+def slit_zface(f, thickness: float, slit_width: float, ratio: float) -> np.ndarray:
+    """Impedancia especifica (absoluta, Pa*s/m) de un panel RANURADO (ranuras
+    paralelas largas de ancho `slit_width`) a incidencia normal, por CRANDALL de
+    PRIMEROS PRINCIPIOS: flujo viscoso oscilante entre dos placas paralelas.
+
+    Parametros:
+        thickness  = espesor del panel t [m] (largo del canal de la ranura)
+        slit_width = ancho de la ranura w [m] (separacion entre caras del canal)
+        ratio      = fraccion de area abierta epsilon = w/D (D = paso) en (0,1)
+
+    DERIVACION (Navier-Stokes 1D entre placas rigidas en y=+-a, a=w/2, bajo
+    gradiente de presion armonico -dp/dx = P, convencion e^{+iwt} como el resto de
+    los facings del modulo):
+        i w rho0 u = P + eta u''  ->  u(y) = (P/(i w rho0)) [1 - cosh(sigma y)/cosh(sigma a)]
+        sigma = sqrt(i w rho0/eta)   (numero de onda viscoso)
+        <u> = (P/(i w rho0)) [1 - tanh(sigma a)/(sigma a)]
+    La densidad efectiva rho_e = P/(i w <u>) = rho0 / [1 - tanh(sigma a)/(sigma a)].
+
+    COINCIDE EXACTO con Cox & D'Antonio "Acoustic Absorbers and Diffusers" 2a ed,
+    Ec (6.41): rho_e = rho / [1 - (2/(k' w)) tan(k' w/2)], k' = sqrt(-i w rho/eta),
+    porque k' = i sigma y tan(i sigma a) = i tanh(sigma a) -> las dos formas son la
+    misma. Aca se usa la forma de Cox verbatim (k', tan) por fidelidad a la fuente.
+
+    La impedancia del FACING (Ec 6.40 SIN el termino de cavidad, que lo agrega el
+    TMM de atras igual que en perforated/membrane) es:
+        z_face = i w t rho_e / epsilon                         (canal viscoso+masa)
+                 - (2 i w rho0 w_slit)/(pi epsilon) ln[sin(pi epsilon/2)]   (extremo)
+    El 2do termino es la CORRECCION DE EXTREMO (reactancia de radiacion de la boca
+    de la ranura en arreglo periodico); sale SOURCEADA de Cox Ec 6.40 (refs Mao &
+    Wang 2000; Vigran 2005), NO de memoria. ln[sin(pi eps/2)]<0 -> suma masa (Im>0).
+
+    LIMITE DE POISEUILLE (oraculo, w->0 continua): tanh(sigma a)/(sigma a) ->
+    1 + (sigma a)^2/3, luego 1 - tanh/.. -> -(sigma a)^2/3 = i w rho0 w^2/(12 eta),
+    y z_face -> 12 eta t/(epsilon w^2): REAL, la resistencia de flujo DC de una
+    ranura, con resistividad 12 eta/w^2 (flujo de Poiseuille entre placas, exacto).
+    LIMITE INERCIAL (w grande): rho_e -> rho0, z_face -> i w rho0 (t+delta)/eps (masa).
+
+    Resonancia (con cavidad D detras): f0 ~ (c/2pi) sqrt(eps/((t+delta) D)),
+    delta = -(2 w/pi) ln[sin(pi eps/2)] (largo de la correccion de extremo).
+
+    Convencion de signo: igual que maa_zface y membrane_zface (masa -> +i w m); la
+    reconciliacion a e^{-iwt} de la perturbacion la hace el consumidor (gotcha
+    conj(beta)). Ref: Cox & D'Antonio 2a ed, Ec 6.40-6.41 (en referencias/04)."""
+    f = _as_f(f)
+    w_ang = 2.0 * np.pi * f
+    w, t = float(slit_width), float(thickness)
+    eps = min(max(float(ratio), 1e-4), 1.0 - 1e-6)   # 0<eps<1 (ln y division)
+    kp = np.sqrt(-1j * w_ang * RHO0 / ETA)            # k' = sqrt(-i w rho/eta), Cox 6.41
+    rho_e = RHO0 / (1.0 - (2.0 / (kp * w)) * np.tan(kp * w / 2.0))
+    z_channel = 1j * w_ang * t * rho_e / eps          # Cox 6.40, 1er termino
+    z_end = -(2j * w_ang * RHO0 * w) / (np.pi * eps) * np.log(np.sin(0.5 * np.pi * eps))
+    return z_channel + z_end                          # facing; cavidad la agrega el TMM
 
 
 _MODELS: Dict[str, Callable] = {
@@ -645,6 +700,25 @@ def membrane(mass_per_area: float, cavity_depth: float, porous_fill=None,
                             is_locally_reacting=False, label=lbl)
 
 
+def slit_panel(thickness: float, slit_width: float, ratio: float,
+               cavity_depth: float, porous_fill=None) -> SurfaceImpedance:
+    """Panel RANURADO (ranuras largas, Crandall de primeros principios, `slit_zface`)
+    sobre camara de aire `cavity_depth` [m], opcionalmente rellena de poroso
+    (`porous_fill` = dict como en multilayer). Resonador de Helmholtz distribuido,
+    primo del perforado pero con canal 2D (placas paralelas) en vez de orificio
+    circular; la perdida viscosa en la ranura angosta da absorcion de banda ancha
+    sin poroso (microslit). f0 ~ (c/2pi) sqrt(eps/((t+delta) D)), delta =
+    -(2 w/pi) ln[sin(pi eps/2)]. Ref: Cox & D'Antonio 2a ed, Ec 6.40-6.41."""
+    layers = _facing_backing(cavity_depth, porous_fill)
+    zface = lambda f: slit_zface(f, thickness, slit_width, ratio)
+    lbl = (f"ranurado t={thickness*1e3:.1f}mm w={slit_width*1e3:.2f}mm "
+           f"ratio={ratio*100:.1f}% +cav {cavity_depth*1e3:.0f}mm")
+    if porous_fill is not None:
+        lbl += " (relleno)"
+    return SurfaceImpedance(_facing_surface(zface, layers),
+                            is_locally_reacting=False, label=lbl)
+
+
 def helmholtz(neck_area: float, neck_length: float, cavity_volume: float,
               wall_area: float, end_correction: bool = True) -> SurfaceImpedance:
     """Resonador de Helmholtz de cuello+cavidad expresado como IMPEDANCIA DE
@@ -700,6 +774,10 @@ def build_surface(spec: Dict) -> SurfaceImpedance:
         return multilayer(list(spec["layers"]))
     if t in ("perforated", "microperforated"):
         return perforated(float(spec["thickness"]), float(spec["hole_diam"]),
+                          float(spec["ratio"]), float(spec["cavity_depth"]),
+                          porous_fill=pf)
+    if t in ("slit", "slit_panel", "ranurado"):
+        return slit_panel(float(spec["thickness"]), float(spec["slit_width"]),
                           float(spec["ratio"]), float(spec["cavity_depth"]),
                           porous_fill=pf)
     if t == "membrane":
