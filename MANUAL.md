@@ -3028,6 +3028,16 @@ Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD cur
 
 *Manual actualizado al 29 de Octubre de 2026 — v2.90.*
 
+## Cambios v2.91 (borde preciso del campo en columnas y muebles)
+
+**Cambios v2.91** (29 de octubre 2026): mejora la precisión del campo (corte 2D y render 3D) en la frontera de las columnas y los muebles.
+
+**Qué cambia.** Antes, el borde del hueco de una columna (o un mueble) en el corte 2D y en el campo 3D se veía escalonado, porque el campo se muestrea en una grilla regular y cada celda caía entera adentro o afuera. Ahora el corte 2D dibuja un **borde conformado** que sigue la curva real de la columna (sin escalones), y el campo 3D agrega puntos extra justo sobre el canto del hueco, así que el contorno se ve nítido.
+
+**Cómo funciona.** En las celdas de la grilla que quedan partidas por la frontera, el programa encuentra el cruce exacto con el borde del dominio (por bisección sobre la malla FEM) y dibuja el triángulo recortado a la curva real. No cambia la física ni los valores del campo (salen del mismo cálculo modal de siempre): es solo cómo se muestrea y se pinta la frontera. Para una sala rectangular sin columnas ni muebles no hay diferencia.
+
+*Manual actualizado al 29 de Octubre de 2026 — v2.91.*
+
 ## Cambios v2.84 (los cálculos corren sobre tus receptores de la lista, con flechas por asiento)
 
 **Cambios v2.84** (25 de octubre 2026): ahora la respuesta en frecuencia (FRF), el SBIR, el decaimiento y el mapa de reflexiones se calculan sobre los **receptores de la lista** (los que elegiste), no sobre un receptor aparte. En cada una de esas ventanas aparece arriba del gráfico un selector **«Asiento: flecha izquierda  Receptor i/N: nombre  flecha derecha»**: con las flechas recorrés los receptores de la lista y la ventana se recalcula y redibuja para cada posición (el marcador grande del visor salta al asiento que estás viendo). Con un solo receptor las flechas quedan deshabilitadas. Si la lista está vacía, se crea un «Sweet Spot» en la posición del cursor.

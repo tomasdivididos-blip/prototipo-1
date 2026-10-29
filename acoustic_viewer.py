@@ -657,9 +657,35 @@ class FieldSliceItem:
         # update de la escena; el panel fuerza el repintado (viewer.refresh_scene_colors,
         # lo mismo que hace el cambio de tema) justo despues de _update_slice.
         built = _quad_mesh_from_grid(X, Y, Z, colors, mask)
-        if built is None:
+        verts = faces = face_colors = None
+        if built is not None:
+            verts, faces, vert_colors, face_colors = built
+
+        # BORDE CONFORMADO (marching-squares): triangulos que siguen la curva real
+        # de la frontera (columna/mueble/CAD) en las celdas mixtas, en vez del
+        # escalon de la grilla. Se mapean (c1,c2)->3D igual que la grilla y se
+        # colorean con el MISMO m/colormap para empalmar con la lamina.
+        bp = getattr(field_slice, "bnd_pts", None)
+        if bp is not None and len(bp):
+            bf = field_slice.bnd_faces
+            bv = field_slice.bnd_vals
+            B3 = np.zeros((len(bp), 3), dtype=float)
+            if ax == 2:      B3[:, 0] = bp[:, 0]; B3[:, 1] = bp[:, 1]; B3[:, 2] = cte
+            elif ax == 1:    B3[:, 0] = bp[:, 0]; B3[:, 1] = cte;      B3[:, 2] = bp[:, 1]
+            else:            B3[:, 0] = cte;       B3[:, 1] = bp[:, 0]; B3[:, 2] = bp[:, 1]
+            fval = bv[bf].mean(axis=1)                       # valor por triangulo
+            tb = np.nan_to_num(fval / m, nan=0.0)
+            brgb = colormap_signed(tb) if signed else colormap_plasma(tb)
+            bfc = np.concatenate([brgb, np.full((len(bf), 1), alpha)], axis=-1)
+            if verts is None:
+                verts, faces, face_colors = B3, bf.copy(), bfc
+            else:
+                faces = np.vstack([faces, bf + len(verts)])
+                verts = np.vstack([verts, B3])
+                face_colors = np.vstack([face_colors, bfc])
+
+        if verts is None:
             return          # plano fuera del dominio: nada que dibujar (ni borde)
-        verts, faces, vert_colors, face_colors = built
         md = gl.MeshData(vertexes=verts, faces=faces, faceColors=face_colors)
         self.item = gl.GLMeshItem(
             meshdata=md, smooth=False, shader=None, glOptions="translucent")

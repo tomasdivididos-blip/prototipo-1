@@ -73,6 +73,12 @@ class FieldSlice:
     P_complex: Optional[np.ndarray] = None
     mask: Optional[np.ndarray] = None         # True = dentro del recinto
     axis: int = 2                             # eje fijo (0=x, 1=y, 2=z)
+    # Borde CONFORMADO (marching-squares + biseccion del locator): triangulos que
+    # siguen la curva real de la frontera (muebles/columnas/CAD) en vez del escalon
+    # de la grilla. Coords en el plano (c1,c2); el render los mapea a 3D segun axis.
+    bnd_pts: Optional[np.ndarray] = None       # (M,2) vertices del borde (c1,c2)
+    bnd_faces: Optional[np.ndarray] = None     # (K,3) indices de triangulos
+    bnd_vals: Optional[np.ndarray] = None      # (M,) valor del campo por vertice
 
 
 # ---------------------------------------------------------------------------
@@ -310,6 +316,88 @@ def slice_mode_shape(
 
 
 # ---------------------------------------------------------------------------
+# Borde CONFORMADO del dominio (marching-squares + biseccion del locator)
+# ---------------------------------------------------------------------------
+def _bisect_to_boundary(locator, probe, p_in, p_out, nsteps: int = 18):
+    """Biseccion VECTORIZADA de la frontera del dominio entre pares (p_in dentro,
+    p_out fuera). Devuelve el ultimo punto ADENTRO (~frontera, a 2^-nsteps del cel).
+    `probe` = campo nodal (complejo) solo para el test isfinite = dentro/fuera."""
+    A = np.asarray(p_in, dtype=float).reshape(-1, 3).copy()
+    B = np.asarray(p_out, dtype=float).reshape(-1, 3).copy()
+    if len(A) == 0:
+        return A
+    for _ in range(int(nsteps)):
+        Mi = 0.5 * (A + B)
+        inside = np.isfinite(locator.evaluate_many(probe, Mi))
+        A = np.where(inside[:, None], Mi, A)
+        B = np.where(inside[:, None], Mi, B)
+    return A
+
+
+def _conformal_slice_boundary(locator, field, c1, c2, cte, axis, mask, P,
+                              is_complex):
+    """Triangulos que conforman la FRONTERA real del dominio en el plano del corte
+    (marching-squares): en cada celda MIXTA (unos vertices dentro, otros fuera) se
+    corta el cuadrado por la curva real, hallando el cruce por biseccion del locator.
+    Reemplaza el escalon de la grilla por un borde que sigue la columna/mueble/CAD.
+
+    Devuelve (bnd_pts (M,2 en c1,c2), bnd_faces (K,3), bnd_vals (M,)) o None."""
+    n1, n2 = mask.shape
+    ax1, ax2 = [a for a in (0, 1, 2) if a != axis]
+    # Celdas MIXTAS: 0 < (vertices adentro) < 4.
+    m00 = mask[:-1, :-1]; m10 = mask[1:, :-1]
+    m11 = mask[1:, 1:];   m01 = mask[:-1, 1:]
+    s = (m00.astype(int) + m10.astype(int) + m11.astype(int) + m01.astype(int))
+    bc = np.argwhere((s > 0) & (s < 4))
+    if len(bc) == 0:
+        return None
+
+    def corner_3d(i, j):
+        p = np.empty(3); p[axis] = cte; p[ax1] = c1[i]; p[ax2] = c2[j]
+        return p
+
+    pin, pout, polys = [], [], []
+    for ci, cj in bc:
+        ci, cj = int(ci), int(cj)
+        corners = [(ci, cj), (ci + 1, cj), (ci + 1, cj + 1), (ci, cj + 1)]  # CCW
+        ins = [bool(mask[a, b]) for a, b in corners]
+        poly = []
+        for e in range(4):
+            a = corners[e]; b = corners[(e + 1) % 4]
+            if ins[e]:
+                poly.append(("c", a[0], a[1]))
+            if ins[e] != ins[(e + 1) % 4]:
+                p_in = a if ins[e] else b
+                p_out = b if ins[e] else a
+                poly.append(("x", len(pin)))
+                pin.append(corner_3d(*p_in)); pout.append(corner_3d(*p_out))
+        polys.append(poly)
+
+    cross3d = _bisect_to_boundary(locator, field, pin, pout)
+    craw = locator.evaluate_many(field, cross3d) if len(cross3d) else np.zeros(0)
+    cval = (np.abs(craw) if is_complex else craw.real)
+
+    pts, vals, faces = [], [], []
+    for poly in polys:
+        vidx = []
+        for tok in poly:
+            if tok[0] == "c":
+                i, j = tok[1], tok[2]
+                pts.append((c1[i], c2[j])); vals.append(float(P[i, j]))
+            else:
+                k = tok[1]
+                pts.append((cross3d[k, ax1], cross3d[k, ax2]))
+                vals.append(float(cval[k]))
+            vidx.append(len(pts) - 1)
+        for t in range(1, len(vidx) - 1):          # abanico
+            faces.append((vidx[0], vidx[t], vidx[t + 1]))
+    if not faces:
+        return None
+    return (np.asarray(pts, float), np.asarray(faces, int),
+            np.asarray(vals, float))
+
+
+# ---------------------------------------------------------------------------
 # Slices en plano arbitrario (XY, XZ, YZ)
 # ---------------------------------------------------------------------------
 def slice_field_fem_plane(
@@ -354,8 +442,22 @@ def slice_field_fem_plane(
 
     raw  = Pc if is_complex else Pf.reshape(C1.shape)
     mask = np.isfinite(raw if is_complex else raw)
+
+    # Borde CONFORMADO: triangulos que siguen la frontera real (columna/mueble/CAD)
+    # en las celdas mixtas, en vez del escalon de la grilla.
+    bnd_pts = bnd_faces = bnd_vals = None
+    try:
+        bnd = _conformal_slice_boundary(
+            modal.locator, nodal_field.astype(complex), c1, c2,
+            float(offset), axis, mask, P, is_complex)
+        if bnd is not None:
+            bnd_pts, bnd_faces, bnd_vals = bnd
+    except Exception:
+        pass           # el borde conformado es cosmetico: si falla, cae al escalon
+
     return FieldSlice(z=float(offset), X=C1, Y=C2, P=P,
-                      P_complex=Pc, mask=mask, axis=axis)
+                      P_complex=Pc, mask=mask, axis=axis,
+                      bnd_pts=bnd_pts, bnd_faces=bnd_faces, bnd_vals=bnd_vals)
 
 
 def slice_mode_shape_plane(
@@ -466,6 +568,39 @@ def air_absorption_alpha(freq, T: float = 20.0, RH: float = 50.0,
     return float(alpha_np) if np.ndim(freq) == 0 else alpha_np
 
 
+def _boundary_points_grid3d(locator, probe, pts, mask_flat, shape):
+    """Puntos EXTRA sobre la frontera del carve (columna/mueble) para el campo 3D:
+    en cada arista de la grilla 3D donde el dentro/fuera cambia, bisecta hasta la
+    frontera. Asi el borde del hueco se ve nitido y no a saltos del paso de grilla.
+    Devuelve (pts_borde (M,3), raw_borde (M,) complejo del campo). `probe` = campo
+    nodal complejo (para el test isfinite y para el valor)."""
+    ni, nj, nk = shape
+    m = mask_flat.reshape(ni, nj, nk)
+    P = pts.reshape(ni, nj, nk, 3)
+    pin, pout = [], []
+    slabs = [((slice(0, -1), slice(None), slice(None)),
+              (slice(1, None), slice(None), slice(None))),
+             ((slice(None), slice(0, -1), slice(None)),
+              (slice(None), slice(1, None), slice(None))),
+             ((slice(None), slice(None), slice(0, -1)),
+              (slice(None), slice(None), slice(1, None)))]
+    for sa, sb in slabs:
+        ma, mb = m[sa], m[sb]
+        diff = ma != mb
+        if not diff.any():
+            continue
+        Pa = P[sa][diff]; Pb = P[sb][diff]; ina = ma[diff]
+        pin.append(np.where(ina[:, None], Pa, Pb))
+        pout.append(np.where(ina[:, None], Pb, Pa))
+    if not pin:
+        return np.zeros((0, 3)), np.zeros(0, dtype=complex)
+    pin = np.vstack(pin); pout = np.vstack(pout)
+    bp = _bisect_to_boundary(locator, probe, pin, pout)
+    raw = locator.evaluate_many(probe, bp)
+    ok = np.isfinite(raw)
+    return bp[ok], raw[ok]
+
+
 def pressure_field_3d(modal: ModalSolution, sources: SourceArray,
                       f: float, resolution: int = 20,
                       damping: float = 0.03) -> tuple:
@@ -491,7 +626,17 @@ def pressure_field_3d(modal: ModalSolution, sources: SourceArray,
     p_pts = modal.locator.evaluate_many(p_nodes, pts)
     # Filtrar solo puntos dentro del recinto (evaluate_many devuelve NaN afuera)
     mask = np.isfinite(p_pts)
-    return pts[mask], np.abs(p_pts[mask]), p_pts[mask]
+    pin, pabs, pcx = pts[mask], np.abs(p_pts[mask]), p_pts[mask]
+    # Densificar la frontera del carve (columna/mueble) para un borde nitido.
+    try:
+        bp, braw = _boundary_points_grid3d(modal.locator, p_nodes, pts, mask, X.shape)
+        if len(bp):
+            pin = np.vstack([pin, bp])
+            pabs = np.concatenate([pabs, np.abs(braw)])
+            pcx = np.concatenate([pcx, braw])
+    except Exception:
+        pass
+    return pin, pabs, pcx
 
 
 def mode_shape_field_3d(modal: ModalSolution, mode_idx: int,
@@ -512,10 +657,19 @@ def mode_shape_field_3d(modal: ModalSolution, mode_idx: int,
     pts = np.stack([X.ravel(), Y.ravel(), Z.ravel()], axis=1)
 
     phi = acoustic_fem.mode_shape_field(modal.phis, mode_idx)
-    vals = modal.locator.evaluate_many(phi.astype(complex), pts)
+    probe = phi.astype(complex)
+    vals = modal.locator.evaluate_many(probe, pts)
     vals_real = vals.real
     mask = np.isfinite(vals_real)
-    return pts[mask], vals_real[mask], None
+    pin, vin = pts[mask], vals_real[mask]
+    # Densificar la frontera del carve (columna/mueble) para un borde nitido.
+    try:
+        bp, braw = _boundary_points_grid3d(modal.locator, probe, pts, mask, X.shape)
+        if len(bp):
+            pin = np.vstack([pin, bp]); vin = np.concatenate([vin, braw.real])
+    except Exception:
+        pass
+    return pin, vin, None
 
 
 def pressure_gradient_3d(modal: ModalSolution, sources: SourceArray,
