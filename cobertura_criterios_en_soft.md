@@ -25,7 +25,7 @@
 | A3 | Bonello | ✅ (2026-06-21) `bonello_monotonic`/`bonello_score` en `FemLiteResult` (densidad no-decreciente); cubo→False/40%, buenos→True/100% | ✅ |
 | A4 | Gilford (modos aislados) | Aproximado por bins de 5 Hz "hueco" (`prediction.py:497`); no el umbral exacto >20 Hz | 🟡 |
 | A5 | Cubo / ratios enteros | **Control negativo = cubo 1:1:1** (`_generate_negative_control`) | ✅ |
-| A6 | Rindel FSI ψ(25) | ✅ (2026-06-21) `modal_fsi(freqs)` en `modal_metrics.py`; cubo ψ=3.71, Rindel ψ=1.43. Falta solo wiring al scorer | ✅ |
+| A6 | Rindel FSI ψ(25) | ✅ CERRADO `modal_fsi(freqs)` en `modal_metrics.py`; cubo ψ=3.71, Rindel ψ=1.43. **Wired al scorer** (`prediction.py` `_score_fsi` → `modal_avg` con peso 0.15, presupuesto 0.45 compartido con Bolt/Bonello) + display en panel + `bench_modal_metrics` test 5 | ✅ |
 | A7 | Cox peor-caso fuente/receptor | `d_worst = √(L²+W²)/2` es un receptor de peor caso; la optimización |H| esquina↔esquina de Cox no | 🟡 |
 | A8 | Meissner suavidad |H| | ≈ `FoM_flat` (suavidad de |H|), aunque no el ajuste polinómico de Meissner | 🟡 |
 | A9 | Walker índice + región | La **región** (ratio) está en A33; el "mean-square quality index" como métrica no se computa | 🟡 |
@@ -164,7 +164,7 @@
 ## Resumen: estado de los gaps in-scope
 
 **✅ Cerrados (2026-06-21)** — Fase 1 + Fase 2 del `plan_gaps_criterios.md`:
-1. **A6 · FSI ψ(25)** — `modal_fsi` (`modal_metrics.py`). Falta solo wiring opcional al scorer.
+1. **A6 · FSI ψ(25)** — `modal_fsi` (`modal_metrics.py`), **wired al scorer** (`prediction.py` `_score_fsi` → `modal_avg` peso 0.15; `bench_modal_metrics` test 5). CERRADO sin caveats.
 2. **A3 · Bonello completo** — `bonello_monotonic`/`bonello_score` (`prediction.py`).
 3. **C8 · asimetría pico/nulo** — `FoM_flat_asym` (`modal_metrics.py`).
 4. **D5 · Bass Ratio real** — `bass_ratio` (`face_materials.py`) + display panel.
