@@ -123,7 +123,8 @@ def komatsu_zc_kc(f, sigma: float):
     (conclusiones del paper) cuando f/sigma < 0.01 o > 0.1 m^3/kg, justo donde
     db/miki se degradan; en la banda modal de una sala tratada (f<200 Hz, sigma
     10-50 kPa*s/m^2) f/sigma ~ 4e-4..2e-2 m^3/kg -> y>0 siempre. Ref: Komatsu 2008,
-    DOI 10.1250/ast.29.121 (open access, J-STAGE)."""
+    DOI 10.1250/ast.29.121; PDF en referencias/04_impedancia-materiales/ (ecs. 15-18
+    verificadas contra el original; oraculo no-circular vs Miki en bench_impedance T5b)."""
     f = _as_f(f)
     # y = 2 - log10(f/sigma). Se acota y>0 defensivamente: y<=0 pasa cuando
     # f/sigma >= 100 m^3/kg (fuera de todo poroso de audio) y volveria NaN la

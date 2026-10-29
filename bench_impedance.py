@@ -138,11 +138,27 @@ def t5b_komatsu():
     # (b) convencion e^{-iwt}: Im(Zc)<0, Im(kc)<0 (igual que Miki), Re(kc)>k0.
     check("T5b-c convencion: Im(Zc)<0, Im(kc)<0, Re(kc)>k0",
           zi < 0 and ki < 0 and kr > 1.0, f"Im Zc={zi:.2f}, Im kc={ki:.2f}, Re kc/k0={kr:.2f}")
-    # (c) acuerdo con Miki en |Zc| en la banda media (donde ambos valen).
-    zc_m, _ = imp.miki_zc_kc(f, sigma)
-    rel = abs(abs(zc[0]) - abs(zc_m[0])) / abs(zc_m[0])
-    check("T5b-d |Zc| Komatsu ~ Miki en banda media (<20%)", rel < 0.20,
-          f"rel={rel:.3f}  (|Zc| K={abs(zc[0]):.0f}, Miki={abs(zc_m[0]):.0f})")
+    # (c) ORACULO INDEPENDIENTE (no circular): el paper (sec 4.1, p.123) afirma que
+    #     Delany-Bazley, Miki y Komatsu "are very close to the actual values at
+    #     f/sigma ~ 0.05 m^3/kg". O sea, en ese punto Komatsu DEBE coincidir con Miki
+    #     (que esta validado aparte). f/sigma = 1000/20000 = 0.05.
+    f05 = np.array([1000.0])
+    zc_k, kc_k = imp.komatsu_zc_kc(f05, sigma)
+    zc_m, kc_m = imp.miki_zc_kc(f05, sigma)
+    rel_z = abs(abs(zc_k[0]) - abs(zc_m[0])) / abs(zc_m[0])
+    rel_k = abs(abs(kc_k[0]) - abs(kc_m[0])) / abs(kc_m[0])
+    check("T5b-d Komatsu==Miki en f/sigma=0.05 (paper sec 4.1): |Zc| <8%, |kc| <8%",
+          rel_z < 0.08 and rel_k < 0.08,
+          f"rel|Zc|={rel_z:.3f}  rel|kc|={rel_k:.3f}")
+    # (c2) DISCRIMINA: a f/sigma alto (>0.1, donde el paper dice que Komatsu es
+    #     "particularly effective" y las rectas DB/Miki se degradan) la absorcion de
+    #     Komatsu se separa de Miki. Prueba que NO es Miki renombrado.
+    fhi = np.geomspace(20.0, 500.0, 40)
+    a_k = imp.porous(2000, 0.05, "komatsu").alpha_random(fhi)   # sigma bajo -> f/sigma alto
+    a_m = imp.porous(2000, 0.05, "miki").alpha_random(fhi)
+    dmax = float(np.max(np.abs(a_k - a_m)))
+    check("T5b-d2 Komatsu DISCRIMINA de Miki a resistividad baja (max|dalpha|>0.02)",
+          dmax > 0.02, f"max|dalpha|={dmax:.3f}")
     # (d) fisico (alpha in [0,1]) en toda la banda, incl. graves donde DB falla.
     fg = np.geomspace(20.0, 500.0, 60)
     a_k = imp.porous(50000, 0.025, "komatsu").alpha_random(fg)

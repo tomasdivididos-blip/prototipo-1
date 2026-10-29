@@ -11,6 +11,33 @@ Leyenda: **T1** lectura completa · **T2** minar capítulos marcados ·
 
 ---
 
+## 📁 ESTRUCTURA DE CARPETAS (reorganizado 2026-10-26)
+
+Las referencias ya NO están planas en la raíz: viven en subcarpetas temáticas.
+`_indice.md` y `_scrape.py` quedan en la raíz como índices maestros.
+
+| Carpeta | Contenido | Triaje típico |
+|---|---|---|
+| `00_nucleo-qep-fem-numerica/` | QEP/NLEVP (Tisseur, Beyn, CORK, SLEPc…) + FEM (Ihlenburg, Desmet, Petrov-Galerkin) | T6 |
+| `01_acustica-salas-modos/` | Fundamentos y teoría modal (Kuttruff, Morse&Ingard, Rayleigh, Kinsler, Beranek, Möser, Long, Carrión, Everest, Vorländer) | T2/T3 |
+| `02_geometria-ratios-crossover/` | Dimensiones, Schroeder, densidad modal (Gunawan, Wang-MDCF, Rindel) | T1 |
+| `03_fuentes-subs-correccion/` | Subs, CABS, EQ modal, control activo (Celestinos, Santillán, Welti, Hill-Hawksford, Nelson&Elliott…) | T1 |
+| `04_impedancia-materiales/` | Poroso/impedancia/absorción (Miki, Komatsu 2008, Allard&Atalla, Cox&D'Antonio, Fuchs, ISO 354) | T2 |
+| `05_campo-reconstruccion-radiacion/` | Radiación y reconstrucción de campo (Sundström, Fourier Acoustics, Statistical Wave Field) | T4 |
+| `06_diseno-control-rooms/` | Diseño de control rooms (Newell, BBC-Rose, Toole) | T2 |
+| `07_salas-grandes-preferencia/` | Salas grandes/preferencia (Beranek-Concert, Ando, Barron, Meyer) | T3 |
+| `08_psicoacustica/` | Psicoacústica (Fazenda, Fastl, Zwicker, Howard&Angus, Spatial Hearing, Damaske) | T4 |
+| `09_tratados-handbooks/` | Tratados/handbooks generales (Fahy, Bruneau, Pohlmann, Oppenheim, Beranek-Transducers…) | T4 |
+| `10_catedra-slides/` | Material de cátedra (pptx numerados + Controles-mastering) | T2b/T4b |
+| `11_cursos-externos/` | Advanced Structural Dynamics and Acoustics Course (MIT) | T5 |
+| `12_otra-materia/` | Habla/fonética/audiología | T5 |
+
+> **Ambiguos ubicados por mejor encaje (revisar si molesta):** `AES137-000141.pdf`,
+> `JAES_V64_5_ALL.pdf` y `Special_Issue_on_Modelling_Simulation_an.pdf` (contenido no
+> confirmado); `The History of Sound and Audio Mesurament` (historia/metrología → `09`).
+
+---
+
 ## ⚡ CÓMO MINAR (workflow para sesión fresca — LEER PRIMERO)
 
 > Tras un `/clear`, arrancá acá. El objetivo es seguir poblando
@@ -20,6 +47,8 @@ Leyenda: **T1** lectura completa · **T2** minar capítulos marcados ·
 **Herramienta:** `referencias/_scrape.py` — usa `pdftotext` (Poppler, ya instalado)
 para sacar la capa de texto y mostrar SOLO las páginas que matchean keywords.
 ~10× más barato que el `Read` de PDF (que renderiza cada página como imagen).
+Desde 2026-10-26 `_scrape.py` recurre en subcarpetas: pasar el glob por **basename**
+(ej. `"Kuttruff*.pdf"`) y lo encuentra en su carpeta; las tablas de abajo siguen OK.
 
 ```bash
 cd "C:/Users/aceve/OneDrive/Escritorio/prototipo 1/referencias"
