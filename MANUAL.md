@@ -3006,6 +3006,16 @@ Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD cur
 
 *Manual actualizado al 29 de Octubre de 2026 — v2.88.*
 
+## Cambios v2.89 (nuevo modelo de material poroso: Komatsu)
+
+**Cambios v2.89** (29 de octubre 2026): el editor de impedancias suma un modelo de material poroso más, Komatsu.
+
+**Qué es.** En el editor de impedancias, donde elegís el modelo de un poroso (antes Miki, Delany-Bazley o JCA), ahora aparece también **Komatsu**, tanto en «Poroso + cámara» como en cada capa de una multicapa. Es un modelo empírico que, en vez de la ley de potencias de Delany-Bazley y Miki, usa el logaritmo de la relación entre frecuencia y resistividad al flujo, lo que sigue mejor la curva real del material fuera del rango donde Miki es preciso (resistividades al flujo muy bajas o muy altas). Se usa igual que los otros: cargás la resistividad y el espesor.
+
+**Cuándo conviene.** Miki sigue siendo el default y es bueno en la banda central. Komatsu ayuda cuando la relación frecuencia sobre resistividad cae fuera de ese rango (lanas muy densas o muy livianas). El modelo queda validado contra las ecuaciones originales del paper de Komatsu (2008).
+
+*Manual actualizado al 29 de Octubre de 2026 — v2.89.*
+
 ## Cambios v2.84 (los cálculos corren sobre tus receptores de la lista, con flechas por asiento)
 
 **Cambios v2.84** (25 de octubre 2026): ahora la respuesta en frecuencia (FRF), el SBIR, el decaimiento y el mapa de reflexiones se calculan sobre los **receptores de la lista** (los que elegiste), no sobre un receptor aparte. En cada una de esas ventanas aparece arriba del gráfico un selector **«Asiento: flecha izquierda  Receptor i/N: nombre  flecha derecha»**: con las flechas recorrés los receptores de la lista y la ventana se recalcula y redibuja para cada posición (el marcador grande del visor salta al asiento que estás viendo). Con un solo receptor las flechas quedan deshabilitadas. Si la lista está vacía, se crea un «Sweet Spot» en la posición del cursor.

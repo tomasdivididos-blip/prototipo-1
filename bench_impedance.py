@@ -118,6 +118,39 @@ def t5_db_vs_miki():
           a_mk.min() >= -1e-9, f"min alpha_Miki={a_mk.min():.3f}")
 
 
+def t5b_komatsu():
+    print("T5b - Komatsu 2008 (log comun de f/sigma; mejora DB/Miki)")
+    # (a) ANCLA exacta de coeficientes: en f/sigma = 0.01 m^3/kg -> y = 2-log10(0.01)
+    #     = 4. Eqs (15)-(18): R/Z0 = 1+0.00027*4^6.2 = 2.461; X/Z0 = -0.0047*4^4.1 =
+    #     -1.384; beta/k0 = 1+0.0004*4^6.2 = 3.164; alpha/k0 = 0.0069*4^4.1 = 2.031.
+    sigma = 20000.0
+    f = np.array([200.0])                       # f/sigma = 200/20000 = 0.01
+    zc, kc = imp.komatsu_zc_kc(f, sigma)
+    k0 = 2.0 * np.pi * f / imp.C0
+    zr, zi = zc[0].real / imp.Z0, zc[0].imag / imp.Z0
+    kr, ki = kc[0].real / k0[0], kc[0].imag / k0[0]
+    check("T5b-a Zc anclado a Eq(15,16): Re~2.461, Im~-1.384",
+          abs(zr - 2.461) < 0.02 and abs(zi + 1.384) < 0.02,
+          f"Zc/Z0 = {zr:.3f}{zi:+.3f}j")
+    check("T5b-b kc anclado a Eq(17,18): Re~3.164, Im~-2.031",
+          abs(kr - 3.164) < 0.02 and abs(ki + 2.031) < 0.02,
+          f"kc/k0 = {kr:.3f}{ki:+.3f}j")
+    # (b) convencion e^{-iwt}: Im(Zc)<0, Im(kc)<0 (igual que Miki), Re(kc)>k0.
+    check("T5b-c convencion: Im(Zc)<0, Im(kc)<0, Re(kc)>k0",
+          zi < 0 and ki < 0 and kr > 1.0, f"Im Zc={zi:.2f}, Im kc={ki:.2f}, Re kc/k0={kr:.2f}")
+    # (c) acuerdo con Miki en |Zc| en la banda media (donde ambos valen).
+    zc_m, _ = imp.miki_zc_kc(f, sigma)
+    rel = abs(abs(zc[0]) - abs(zc_m[0])) / abs(zc_m[0])
+    check("T5b-d |Zc| Komatsu ~ Miki en banda media (<20%)", rel < 0.20,
+          f"rel={rel:.3f}  (|Zc| K={abs(zc[0]):.0f}, Miki={abs(zc_m[0]):.0f})")
+    # (d) fisico (alpha in [0,1]) en toda la banda, incl. graves donde DB falla.
+    fg = np.geomspace(20.0, 500.0, 60)
+    a_k = imp.porous(50000, 0.025, "komatsu").alpha_random(fg)
+    check("T5b-e Komatsu alpha in [0,1] en toda la banda",
+          bool(np.all(a_k >= -1e-9) and np.all(a_k <= 1.0 + 1e-9)),
+          f"min={a_k.min():.3f} max={a_k.max():.3f}")
+
+
 def t6_measured_interp():
     print("T6 - measured_Zf interpola exacto en los nodos")
     fq = np.array([50.0, 100.0, 200.0, 400.0])
@@ -264,6 +297,7 @@ if __name__ == "__main__":
     t3_air_gap_quarter_wave()
     t4_air_gap_boosts_bass()
     t5_db_vs_miki()
+    t5b_komatsu()
     t6_measured_interp()
     t7_physicality()
     t8_jca()

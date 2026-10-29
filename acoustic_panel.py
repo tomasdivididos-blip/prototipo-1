@@ -4013,7 +4013,7 @@ class ConstructionEditorDialog(QDialog):
         self.grp_por = QGroupBox("Poroso + cámara")
         fpo = QFormLayout(self.grp_por)
         self.po_model = QComboBox()
-        self.po_model.addItems(["Miki", "Delany-Bazley", "JCA (5 parám.)"])
+        self.po_model.addItems(["Miki", "Delany-Bazley", "JCA (5 parám.)", "Komatsu"])
         self.po_sigma = _spin(1000.0, 200000.0, 15000.0, 0, 1000.0, "Pa·s/m²")
         self.po_th = _spin(5.0, 500.0, 50.0, 0, 5.0, "mm")
         self.po_gap = _spin(0.0, 1000.0, 100.0, 0, 5.0, "mm")
@@ -4061,7 +4061,7 @@ class ConstructionEditorDialog(QDialog):
         self.ml_th = _spin(1.0, 1000.0, 50.0, 0, 5.0, "mm")
         self.ml_sigma = _spin(1000.0, 200000.0, 15000.0, 0, 1000.0, "Pa·s/m²")
         self.ml_model = QComboBox()
-        self.ml_model.addItems(["Miki", "Delany-Bazley"])
+        self.ml_model.addItems(["Miki", "Delany-Bazley", "Komatsu"])
         edit_row.addRow("Capa:", self.ml_type)
         edit_row.addRow("Espesor:", self.ml_th)
         edit_row.addRow("Resistividad σ:", self.ml_sigma)
@@ -4148,7 +4148,7 @@ class ConstructionEditorDialog(QDialog):
     def _ml_layer_label(self, ly):
         if ly["type"] == "air":
             return f"Aire {ly['thickness']*1e3:.0f} mm"
-        mdl = "DB" if ly.get("model") == "db" else "Miki"
+        mdl = {"db": "DB", "komatsu": "Komatsu"}.get(ly.get("model"), "Miki")
         return (f"Poroso {mdl} σ={ly['sigma']:.0f} "
                 f"{ly['thickness']*1e3:.0f} mm")
 
@@ -4162,7 +4162,9 @@ class ConstructionEditorDialog(QDialog):
         if self.ml_type.currentText() == "Aire":
             ly = {"type": "air", "thickness": self.ml_th.value() * 1e-3}
         else:
-            model = "db" if self.ml_model.currentText().startswith("Delany") else "miki"
+            _mt = self.ml_model.currentText()
+            model = ("komatsu" if _mt.startswith("Komatsu")
+                     else "db" if _mt.startswith("Delany") else "miki")
             ly = {"type": "porous", "sigma": self.ml_sigma.value(),
                   "thickness": self.ml_th.value() * 1e-3, "model": model}
         self._ml_layers.append(ly)
@@ -4220,7 +4222,8 @@ class ConstructionEditorDialog(QDialog):
                     "Lambda_p": self.po_lamp.value() * 1e-6,
                     "thickness": self.po_th.value() * 1e-3,
                     "air_gap": gap}
-        model = "db" if model_txt.startswith("Delany") else "miki"
+        model = ("komatsu" if model_txt.startswith("Komatsu")
+                 else "db" if model_txt.startswith("Delany") else "miki")
         return {"type": "porous", "sigma": self.po_sigma.value(),
                 "thickness": self.po_th.value() * 1e-3,
                 "air_gap": gap, "model": model}
@@ -4302,7 +4305,7 @@ class ConstructionEditorDialog(QDialog):
                 self.po_lamp.setValue(spec.get("Lambda_p", 1.2e-4) * 1e6)
             else:
                 self.po_model.setCurrentIndex(
-                    1 if spec.get("model") == "db" else 0)
+                    {"db": 1, "komatsu": 3}.get(spec.get("model"), 0))
         elif t == "helmholtz":
             self.combo_type.setCurrentIndex(4)
             self.h_S.setValue(spec.get("neck_area", 20e-4) * 1e4)

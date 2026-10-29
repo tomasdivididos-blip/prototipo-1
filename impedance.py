@@ -104,6 +104,37 @@ def miki_zc_kc(f, sigma: float):
     return zc, kc
 
 
+def komatsu_zc_kc(f, sigma: float):
+    """Komatsu 2008 (Acoust. Sci. & Tech. 29(2), 121; mejora de Delany-Bazley y
+    Miki para materiales fibrosos). En vez de la ley de potencias en X=rho0*f/sigma,
+    usa el LOGARITMO COMUN de f/sigma, que sigue mejor la curva real (no una recta)
+    a resistividades bajas Y altas. Ecuaciones (15)-(18) del paper, con la variable
+
+        y = 2 - log10(f/sigma)     (f en Hz, sigma en Pa*s/m^2, f/sigma en m^3/kg)
+
+        R = rho0 c0 {1 + 0.00027 y^6.2}        (Ec 15, parte real de Z_c)
+        X = -rho0 c0 {0.0047 y^4.1}            (Ec 16, parte imaginaria de Z_c)
+        alpha = (w/c0) 0.0069 y^4.1            (Ec 17, atenuacion)
+        beta  = (w/c0){1 + 0.0004 y^6.2}       (Ec 18, fase)
+
+    Se escribe con la misma convencion de signo que db/miki (e^{-iwt}: Im(Z_c)<0,
+    Im(k_c)<0) para que la beta que consume la perturbacion sea coherente: Z_c =
+    R + i*X con X<0, y k_c = beta - i*alpha. Komatsu es "particularmente efectivo"
+    (conclusiones del paper) cuando f/sigma < 0.01 o > 0.1 m^3/kg, justo donde
+    db/miki se degradan; en la banda modal de una sala tratada (f<200 Hz, sigma
+    10-50 kPa*s/m^2) f/sigma ~ 4e-4..2e-2 m^3/kg -> y>0 siempre. Ref: Komatsu 2008,
+    DOI 10.1250/ast.29.121 (open access, J-STAGE)."""
+    f = _as_f(f)
+    # y = 2 - log10(f/sigma). Se acota y>0 defensivamente: y<=0 pasa cuando
+    # f/sigma >= 100 m^3/kg (fuera de todo poroso de audio) y volveria NaN la
+    # potencia fraccionaria y^6.2 de un negativo. En la banda valida y es ~4-5.
+    y = np.maximum(2.0 - np.log10(f / float(sigma)), 1e-6)
+    zc = Z0 * (1.0 + 0.00027 * y ** 6.2 - 1j * 0.0047 * y ** 4.1)
+    k0 = 2.0 * np.pi * f / C0
+    kc = k0 * (1.0 + 0.0004 * y ** 6.2 - 1j * 0.0069 * y ** 4.1)
+    return zc, kc
+
+
 def jca_zc_kc(f, phi: float, alpha_inf: float, sigma: float,
               Lambda: float, Lambda_p: float):
     """Johnson-Champoux-Allard (fluido equivalente, marco rigido). Devuelve
@@ -209,6 +240,7 @@ def membrane_zface(f, mass_per_area: float, damping: float = 0.0) -> np.ndarray:
 _MODELS: Dict[str, Callable] = {
     "db": db_zc_kc, "delany-bazley": db_zc_kc, "delany_bazley": db_zc_kc,
     "miki": miki_zc_kc,
+    "komatsu": komatsu_zc_kc,       # v2.88: log comun de f/sigma (Komatsu 2008)
 }
 
 
