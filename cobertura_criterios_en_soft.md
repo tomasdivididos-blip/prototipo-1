@@ -175,7 +175,7 @@ implementado y wired a `_score_modal_q` (⚠️ baja mucho ese sub-score — dec
 **⏳ Pendiente** (único gap in-scope sin cerrar):
 - **C13/C21 · corrigibilidad EQ (fase mín/no-mín)** — diagnóstico de qué exige acústica vs EQ. *Alto esfuerzo (análisis de fase de la respuesta de sala; reusar `frd.minimum_phase`).*
 
-Menores/discutibles: **A29** (flag de pressure zone), **A34** (tolerancias EBU + doble-pendiente),
+Menores/discutibles: **A29** (flag de pressure zone), **A34** (doble-pendiente: detector `modal_decay.double_slope` HECHO + `bench_double_slope` 6/6, v2.89; falta solo el readout GUI y las tolerancias EBU/BBC R22 por banda),
 **B19** (aviso de posición del oyente vs nulos), **B7/B29/B30** (constraints de layout más explícitos).
 
 **Fuera de alcance por construcción** (no son gaps): todo lo temporal/early-reflection

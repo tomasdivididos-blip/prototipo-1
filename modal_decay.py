@@ -136,6 +136,45 @@ def decay_time(ir: np.ndarray, fs: float) -> "rir.RTResult":
 
 
 # ---------------------------------------------------------------------------
+# Doble pendiente (A34: prohibicion de decay de doble pendiente, BBC/Rose §3.2)
+# ---------------------------------------------------------------------------
+def double_slope(ir: np.ndarray, fs: float, tol_rel: float = 0.15
+                 ) -> dict:
+    """Detecta decay de DOBLE PENDIENTE comparando el RT temprano vs el tardio.
+
+    Criterio A34 (Rose, BBC R&D, §3.2 p.89-90; refina A24/D2): en talks studios y
+    control rooms, el decaimiento NO debe tener doble pendiente: el RT medido en el
+    tramo TARDIO (−20…−35 dB) no debe diferir del TEMPRANO (−5…−20 dB) mas que una
+    tolerancia. Una doble pendiente delata volumenes acoplados o un amortiguamiento
+    modal muy desparejo (unos modos decaen rapido, otros lento → la cola se "quiebra").
+
+    Cada tramo se extrapola a T60 con la MISMA maquinaria de `rir._fit_rt` que usa
+    `decay_time` (pendiente de la EDC de Schroeder sobre la ventana de dB). El cociente
+    `ratio = T60_tardio / T60_temprano` es 1.0 para un decaimiento de una sola tasa.
+
+    Devuelve {T_early, T_late, ratio, is_double, r2_early, r2_late, dyn_db}. Si el
+    rango dinamico no llega a −35 dB, `is_double=None` (no evaluable).
+    """
+    t, edc = energy_decay_db(ir, fs)
+    finite = edc[np.isfinite(edc)]
+    dyn = float(-finite.min()) if len(finite) else 0.0
+    out = {"T_early": float("nan"), "T_late": float("nan"),
+           "ratio": float("nan"), "is_double": None,
+           "r2_early": 0.0, "r2_late": 0.0, "dyn_db": dyn}
+    if dyn < 35.0 + 2.0:                       # no llega a −35 dB con margen
+        return out
+    t_early, r2_e = rir._fit_rt(t, edc, -20.0, -5.0)    # tramo temprano −5..−20
+    t_late, r2_l = rir._fit_rt(t, edc, -35.0, -20.0)    # tramo tardio  −20..−35
+    out.update(T_early=float(t_early), T_late=float(t_late),
+               r2_early=float(r2_e), r2_late=float(r2_l))
+    if np.isfinite(t_early) and np.isfinite(t_late) and t_early > 0:
+        ratio = t_late / t_early
+        out["ratio"] = float(ratio)
+        out["is_double"] = bool(abs(ratio - 1.0) > tol_rel)
+    return out
+
+
+# ---------------------------------------------------------------------------
 # CSD / waterfall (cumulative spectral decay)
 # ---------------------------------------------------------------------------
 def cumulative_spectral_decay(
