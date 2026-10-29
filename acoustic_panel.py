@@ -4921,6 +4921,13 @@ class AcousticPanel(QWidget):
             "material sugerido. Después movelos/rotalos como cualquier mueble.")
         self.btn_preset_furn.clicked.connect(self._show_preset_menu)
         vf.addWidget(self.btn_preset_furn)
+        self.btn_col_furn = QPushButton("Columna ▾")
+        self.btn_col_furn.setToolTip(
+            "Columna piso-techo (circular o cuadrada) como obstáculo rígido.\n"
+            "Se inserta en el centro de la planta; la altura se ata sola al\n"
+            "alto de la sala. El carve es exacto (atraviesa el dominio).")
+        self.btn_col_furn.clicked.connect(self._show_column_menu)
+        vf.addWidget(self.btn_col_furn)
         layout.addWidget(grp_furn)
 
         # --- Receptor ---
@@ -5831,8 +5838,14 @@ class AcousticPanel(QWidget):
         return self.tbl_furn.currentRow()
 
     def _furn_item_text(self, i, m) -> str:
+        import furniture as fu
         kind = getattr(m, "kind", "box")
         mat = self._furniture_mat_names.get(i)
+        if fu.is_column(m):                         # v2.88: columna piso-techo
+            sx, sy, _sz = m.size
+            sec = (f"Ø{sx:.2f}" if kind == "cylinder"
+                   else f"{sx:.2f}×{sy:.2f}")
+            return f"{m.label}  [columna {sec} piso-techo · {mat or 'rígido'}]"
         if kind in ("compound", "mesh"):
             lo, hi = m.aabb(); d = hi - lo
             tag = "CAD" if kind == "mesh" else "preset"
@@ -5898,9 +5911,51 @@ class AcousticPanel(QWidget):
                   f"{f' (material {mat})' if mat else ' (rígido)'}. "
                   f"Movelo/rotalo y recalculá los modos para aplicarlo.")
 
+    def _show_column_menu(self):
+        """Menú de presets de columna (circular 20/30/40, cuadrada 30/40)."""
+        import furniture as fu
+        menu = QMenu(self)
+        for name in fu.COLUMN_PRESETS:
+            menu.addAction(name, lambda _c=False, n=name: self._insert_column(n))
+        menu.exec_(self.btn_col_furn.mapToGlobal(
+            self.btn_col_furn.rect().bottomLeft()))
+
+    def _insert_column(self, name: str):
+        """Inserta una columna piso-techo en el centro de la planta. La altura se
+        ata al alto de la sala (sync_column_height); material default = rígido."""
+        import furniture as fu
+        try:
+            lo_r, hi_r = self._room_bbox()
+            cx = float((lo_r[0] + hi_r[0]) / 2.0)
+            cy = float((lo_r[1] + hi_r[1]) / 2.0)
+            surface_v, _ = self.get_surface()
+        except Exception:
+            cx, cy, surface_v = 0.0, 0.0, None
+        col = fu.make_column_preset(name, position=(cx, cy, 0.0))
+        if surface_v is not None:
+            fu.sync_column_height(col, surface_v)
+        conflict = self._furniture_conflict(col)
+        if conflict:
+            QMessageBox.warning(
+                self, "No se puede colocar",
+                f"La columna «{col.label}» {conflict}. Movela o liberá el centro "
+                f"de la planta, y volvé a insertarla.")
+            return
+        self.furniture.append(col)
+        self._refresh_furniture_list()
+        self.tbl_furn.selectRow(len(self.furniture) - 1)
+        reg = fu.column_regime(col, 159.0)
+        aviso = ("" if reg["significativa"]
+                 else f" (Ø {reg['huella']:.2f} m < {reg['dim_min']:.2f} m: "
+                      f"poco significativa bajo Schroeder)")
+        self._log(f"Columna «{col.label}» insertada (piso-techo, rígida){aviso}. "
+                  f"Recalculá los modos para aplicarla.")
+
     def _refresh_furniture_list(self):
         """Repuebla la tabla de muebles (nombre + X/Y/Z + ícono) y refresca el
         wireframe 3D."""
+        import furniture as fu
+        self._resync_columns()           # v2.88: columnas piso-techo al alto actual
         sel = self._selected_furn_idx()
         self.tbl_furn.blockSignals(True)
         self.tbl_furn.setRowCount(0)
@@ -5923,6 +5978,9 @@ class AcousticPanel(QWidget):
                 sb.setValue(float(val))
                 sb.setButtonSymbols(QDoubleSpinBox.NoButtons)
                 sb.setMaximumWidth(78)
+                if c == 3 and fu.is_column(m):     # v2.88: Z de columna = automática
+                    sb.setEnabled(False)
+                    sb.setToolTip("Altura automática: la columna va de piso a techo")
                 sb.valueChanged.connect(
                     lambda _v, r=i: self._on_furn_coord_changed(r))
                 self.tbl_furn.setCellWidget(i, c, sb)
@@ -6034,6 +6092,27 @@ class AcousticPanel(QWidget):
         verts, _tris = self.get_surface()
         v = np.asarray(verts, dtype=float)
         return v.min(axis=0), v.max(axis=0)
+
+    def _resync_columns(self, surface_verts=None):
+        """Re-ata la altura de las columnas (role="column") al alto de la sala.
+
+        v2.88: una columna atraviesa de piso a techo; su altura NO es libre,
+        rastrea el rango z del recinto. Se llama JUSTO antes de mallar/tallar
+        (con los `surface_verts` reales que se van a solver) para que la columna
+        llegue al techo aunque la sala haya cambiado de alto desde que se insertó.
+        Barato y seguro con 0 columnas (no toca los muebles comunes)."""
+        import furniture as fu
+        cols = [m for m in getattr(self, "furniture", [])
+                if fu.is_column(m)]
+        if not cols:
+            return
+        if surface_verts is None:
+            try:
+                surface_verts, _ = self.get_surface()
+            except Exception:
+                return
+        for m in cols:
+            fu.sync_column_height(m, surface_verts)
 
     def _clamp_to_room_bbox(self, x, y, z, eps=1e-3):
         """Recorta (x,y,z) al bounding box del recinto (con un pequeño inset para
@@ -6258,8 +6337,9 @@ class AcousticPanel(QWidget):
                 self, "No se puede colocar",
                 f"Ese cambio haría que «{furn.label}» {msg}. Ajustá posición o tamaño.")
             return
-        # Preservar el estado del ícono (el editor no lo conoce).
+        # Preservar el estado del ícono y el rol (el editor no los conoce).
         furn.icon_visible = getattr(self.furniture[i], "icon_visible", True)
+        furn.role = getattr(self.furniture[i], "role", "furniture")   # v2.88
         self.furniture[i] = furn
         if mat:
             self._furniture_mat_names[i] = mat
@@ -7119,6 +7199,7 @@ class AcousticPanel(QWidget):
         try:
             self.setEnabled(False)
             self._log("FEM: comenzando...")
+            self._resync_columns(verts)   # v2.88: columnas piso-techo al alto real
             self.modal_result, decision = aa.run_fem_modal_routed(
                 verts, tris,
                 params=params_geom,
@@ -8882,6 +8963,7 @@ class AcousticPanel(QWidget):
             self.setEnabled(False)
             if self.modal_result is None:
                 self._log("FRF requiere modos. Calculando primero...")
+                self._resync_columns(verts)   # v2.88: columnas piso-techo
                 self.modal_result = aa.run_fem_modal(
                     verts, tris,
                     n_modes=self.sb_nmodes.value(),

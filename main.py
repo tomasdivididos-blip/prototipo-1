@@ -59,7 +59,7 @@ from prediction_panel import PredictionPanel
 
 
 FILE_FORMAT = "prototipo1.room"
-FILE_VERSION = 9  # v9: wall_constructions (Capa 0: Z de pared por cara). Las curvas de RT se guardan como CSV aparte, no en el .room. v8: absorption_patches; v7: furniture; v6: wall_profiles; v5: response Q(f); v4: face_materials
+FILE_VERSION = 10  # v10: columnas (Furniture.role="column", piso-techo; aditivo, v7-v9 cargan role="furniture"). v9: wall_constructions (Capa 0: Z de pared por cara). Las curvas de RT se guardan como CSV aparte, no en el .room. v8: absorption_patches; v7: furniture; v6: wall_profiles; v5: response Q(f); v4: face_materials
 FILE_FILTER = "Recinto Prototipo 1 (*.room *.json)"
 DEFAULT_DIR = str(Path.home() / "Desktop")
 UNDO_LIMIT = 10   # cantidad de acciones reversibles (ctrl+z / ctrl+y)

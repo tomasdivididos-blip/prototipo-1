@@ -1,8 +1,10 @@
 # Plan: columnas (cilíndricas y prismáticas)
 
-> Estado: **PLANIFICADO, sin implementar** (8 Sep 2026). No escribir código hasta
-> OK explícito del usuario sobre este plan. Decisión de arquitectura ya tomada:
-> **Opción C** (rol dentro de `Furniture`, no objeto nuevo).
+> Estado: **IMPLEMENTADO (v2.88, 29 Oct 2026)** por Opción C (rol dentro de
+> `Furniture`). Fases 1-3 hechas y validadas (`bench_columnas.py` 10/10, sin
+> regresión en `bench_furniture` 13/13); Fase 4 (absorción de la columna) diferida
+> (default rígido correcto). Detalle en `notas_para_claude.md` §v2.88. Este .md
+> queda como registro del plan original.
 
 ---
 

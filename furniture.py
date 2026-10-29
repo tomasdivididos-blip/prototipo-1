@@ -84,6 +84,10 @@ class Furniture:
     label: str = "mueble"
     provenance: str = ""
     icon_visible: bool = True     # v2.82: mostrar/ocultar wireframe 3D (toggle UI)
+    role: str = "furniture"       # v2.88: "furniture" | "column" (columna piso-techo).
+                                  # Opcion C: una columna es un mueble con este rol +
+                                  # altura atada al alto de sala (sync_column_height).
+                                  # El carve es el MISMO motor; el rol es semantica/UX.
     parts: Optional[list] = None
     mesh_verts: Optional[np.ndarray] = None
     mesh_faces: Optional[np.ndarray] = None
@@ -233,7 +237,8 @@ class Furniture:
              "size": list(self.size), "orientation": self.orientation,
              "pitch": self.pitch, "roll": self.roll,
              "label": self.label, "provenance": self.provenance,
-             "icon_visible": bool(self.icon_visible)}      # v2.82
+             "icon_visible": bool(self.icon_visible),      # v2.82
+             "role": self.role}                            # v2.88
         if self.kind == "compound" and self.parts:
             d["parts"] = [p.to_dict() for p in self.parts]
         if self.kind == "mesh" and self.mesh_verts is not None:
@@ -258,6 +263,7 @@ class Furniture:
                    label=str(d.get("label", "mueble")),
                    provenance=str(d.get("provenance", "")),
                    icon_visible=bool(d.get("icon_visible", True)),   # v2.82
+                   role=str(d.get("role", "furniture")),             # v2.88 (compat)
                    parts=parts,
                    mesh_verts=(np.asarray(mv, float) if mv is not None else None),
                    mesh_faces=(np.asarray(mf, int) if mf is not None else None))
@@ -274,6 +280,40 @@ def significance_threshold(f_valid: float, c: float = C0) -> float:
 
 def is_significant(furn: Furniture, f_valid: float, c: float = C0) -> bool:
     return furn.max_dim() >= significance_threshold(f_valid, c)
+
+
+# ---------------------------------------------------------------------------
+# Columnas (v2.88): un mueble con role="column" cuya altura rastrea el alto de
+# sala (pasa de piso a techo). El motor de carve es el MISMO: una columna es
+# un box/cylinder prismatico que atraviesa el dominio (tunel, genero 1).
+# ---------------------------------------------------------------------------
+def sync_column_height(furn: "Furniture", surface_verts: np.ndarray) -> "Furniture":
+    """Fija la altura de una columna al rango z del recinto (piso a techo).
+
+    `surface_verts` : (N,3) vertices de la SUPERFICIE de la sala (de donde se
+    leen el piso z_min y el techo z_max). La columna se extiende z_min..z_max:
+    `size[2] = z_max - z_min`, `position.z = (z_min + z_max)/2`. x,y de size y
+    position NO se tocan (la huella la fija el usuario).
+
+    Por que el rango GLOBAL y no el perfil local del techo: el carve remueve los
+    tets de aire cuyo centroide cae dentro del prisma; sobre un techo inclinado
+    no hay aire por encima del techo real, asi que un prisma mas alto que el
+    techo local tapa EXACTO hasta el aire que existe (floor-to-ceiling real en
+    toda la huella), sin tallar de mas. El unico efecto de usar z_max global es
+    visual (el wireframe puede sobresalir del techo bajo); el perfil por huella
+    (Fase 2) es un refinamiento de DIBUJO, no de fisica. Muta y devuelve furn.
+    """
+    v = np.asarray(surface_verts, float)
+    z0, z1 = float(v[:, 2].min()), float(v[:, 2].max())
+    px, py, _ = furn.position
+    sx, sy, _ = furn.size
+    furn.position = (float(px), float(py), 0.5 * (z0 + z1))
+    furn.size = (float(sx), float(sy), float(z1 - z0))
+    return furn
+
+
+def is_column(furn: "Furniture") -> bool:
+    return getattr(furn, "role", "furniture") == "column"
 
 
 # ---------------------------------------------------------------------------
@@ -903,6 +943,65 @@ def preset_placement(name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Presets de columna (v2.88). role="column"; la altura se ata al alto de sala
+# con sync_column_height al insertar/mover/redimensionar la sala. size[2] aca es
+# un placeholder (lo pisa la auto-altura). Material default = None = RIGIDO
+# (hormigon/revoque duro), lo correcto por defecto; se puede tratar luego
+# reusando la Fase B de muebles.
+# ---------------------------------------------------------------------------
+def make_column(kind: str = "cylinder", diameter: float = 0.30,
+                depth: Optional[float] = None, label: str = "Columna",
+                position=(0.0, 0.0, 0.0)) -> "Furniture":
+    """Crea una columna (role="column") piso-techo.
+
+    kind="cylinder": seccion circular de `diameter` (size=(d,d,h)).
+    kind="box"     : seccion rectangular `diameter` x `depth` (depth=diameter si
+                     no se pasa). La altura h es placeholder (la fija la sala).
+    """
+    if kind == "cylinder":
+        size = (float(diameter), float(diameter), 1.0)
+    else:
+        dep = float(depth if depth is not None else diameter)
+        size = (float(diameter), dep, 1.0)
+    return Furniture(kind=kind, position=tuple(float(x) for x in position),
+                     size=size, role="column", label=label)
+
+
+# nombre -> (kind, diametro/ancho [m], profundidad [m] o None=cuadrado).
+COLUMN_PRESETS = {
+    "Columna circular 20 cm": ("cylinder", 0.20, None),
+    "Columna circular 30 cm": ("cylinder", 0.30, None),
+    "Columna circular 40 cm": ("cylinder", 0.40, None),
+    "Columna cuadrada 30 cm": ("box", 0.30, 0.30),
+    "Columna cuadrada 40 cm": ("box", 0.40, 0.40),
+}
+
+
+def make_column_preset(name: str, position=(0.0, 0.0, 0.0)) -> "Furniture":
+    kind, diam, dep = COLUMN_PRESETS[name]
+    return make_column(kind=kind, diameter=diam, depth=dep, label=name,
+                       position=position)
+
+
+def column_regime(furn: "Furniture", f_valid: float, c: float = C0) -> dict:
+    """Reporte del regimen de una columna en la banda valida (coherente con §0).
+
+    Devuelve {ka_fS, significativa, dim_min, huella}: ka a f_valid (dispersion
+    de Rayleigh ka<<1, Morse & Ingard §8.2), si la huella supera el umbral de
+    significancia (c/(8 f_valid)), y la dimension minima que resuelve la banda.
+    """
+    sx, sy, _ = furn.size
+    a = (sx / 2.0 if furn.kind == "cylinder" else 0.5 * min(sx, sy))
+    k = 2.0 * np.pi * max(f_valid, 1.0) / c
+    return {
+        "ka_fS": float(k * a),
+        "significativa": bool(is_significant(furn, f_valid, c)),
+        "dim_min": float(significance_threshold(f_valid, c)),
+        "huella": float(2.0 * a),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Smoke test
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -926,4 +1025,17 @@ if __name__ == "__main__":
     assert is_significant(sofa, 159.0) and not is_significant(
         Furniture(size=(0.2, 0.2, 0.2)), 159.0)
     print(f"[OK] umbral significancia @159Hz = {thr:.3f} m")
+
+    # Columna (v2.88): rol, auto-altura piso-techo, roundtrip y compat.
+    col = make_column("cylinder", diameter=0.30, position=(0.5, 0.5, 0.0))
+    room_v = grid                                      # usa el grid 0..2 como "sala"
+    sync_column_height(col, room_v)
+    assert is_column(col) and col.role == "column"
+    assert abs(col.size[2] - 2.0) < 1e-9 and abs(col.position[2] - 1.0) < 1e-9
+    rt = Furniture.from_dict(col.to_dict())
+    assert rt.role == "column" and rt.kind == "cylinder"
+    assert Furniture.from_dict({"kind": "box"}).role == "furniture"   # compat .room viejo
+    reg = column_regime(col, 159.0)
+    print(f"[OK] columna d=0.30 h={col.size[2]:.2f} m, ka@fS={reg['ka_fS']:.3f}, "
+          f"significativa={reg['significativa']}")
     print("smoke furniture.py OK")

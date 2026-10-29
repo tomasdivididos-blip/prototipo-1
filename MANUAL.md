@@ -2994,6 +2994,18 @@ Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD cur
 
 *Manual actualizado al 28 de Octubre de 2026 — v2.87.*
 
+## Cambios v2.88 (columnas de piso a techo)
+
+**Cambios v2.88** (29 de octubre 2026): ahora podés agregar columnas interiores que atraviesan la sala de piso a techo, circulares o cuadradas.
+
+**Qué hace.** En el panel de Muebles hay un botón nuevo, «Columna», con cinco medidas listas: circular de 20, 30 o 40 cm, y cuadrada de 30 o 40 cm. La columna se inserta en el centro de la planta; movela en X e Y como cualquier mueble. La altura no se toca a mano: se ata sola al alto de la sala (la celda de Z queda deshabilitada), así la columna siempre llega del piso al techo, aunque cambies el alto de la sala después.
+
+**Cómo afecta los modos.** La columna es un obstáculo rígido: el cálculo le saca ese volumen de aire al recinto y resuelve los modos sobre lo que queda, igual que con un mueble, pero atravesando la sala de lado a lado. El efecto es exacto (no es una corrección aproximada). Una columna sobre un nodo de presión baja esa frecuencia modal; sobre un antinodo, la sube. Por defecto la columna es rígida (hormigón o revoque duro), que es lo correcto; tratarla con un material es un paso posterior.
+
+**Régimen.** Una columna pesa sobre todo en la parte alta de la banda modal. Si su sección es más fina que lo que la malla resuelve a la frecuencia de Schroeder (unos 27 cm a 159 Hz), el programa avisa que su efecto es poco significativo y conviene afinar la malla.
+
+*Manual actualizado al 29 de Octubre de 2026 — v2.88.*
+
 ## Cambios v2.84 (los cálculos corren sobre tus receptores de la lista, con flechas por asiento)
 
 **Cambios v2.84** (25 de octubre 2026): ahora la respuesta en frecuencia (FRF), el SBIR, el decaimiento y el mapa de reflexiones se calculan sobre los **receptores de la lista** (los que elegiste), no sobre un receptor aparte. En cada una de esas ventanas aparece arriba del gráfico un selector **«Asiento: flecha izquierda  Receptor i/N: nombre  flecha derecha»**: con las flechas recorrés los receptores de la lista y la ventana se recalcula y redibuja para cada posición (el marcador grande del visor salta al asiento que estás viendo). Con un solo receptor las flechas quedan deshabilitadas. Si la lista está vacía, se crea un «Sweet Spot» en la posición del cursor.
