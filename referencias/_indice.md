@@ -31,6 +31,7 @@ Las referencias ya NO están planas en la raíz: viven en subcarpetas temáticas
 | `10_catedra-slides/` | Material de cátedra (pptx numerados + Controles-mastering) | T2b/T4b |
 | `11_cursos-externos/` | Advanced Structural Dynamics and Acoustics Course (MIT) | T5 |
 | `12_otra-materia/` | Habla/fonética/audiología | T5 |
+| `13_acustica-geometrica/` | Motor de rayos (futuro): imágenes (Allen&Berkley 1979), BTM difracción de bordes (Calamia&Svensson 2007, Calamia 2009 tesis Princeton), borde de espesor finito (Chu/Stanton/Pierce 2007), radiosidad difusa (Nosal/Hodgson/Ashdown 2004), acople onda↔rayo (Aretz), decaimiento de energía en ISM, scattering/difusión (ISO 17497-1/-2). NUMÉRICA/AUDITOR: kernel rayo-triángulo (Möller&Trumbore 1997), validación sim vs medición (Rindel et al. 1999), algoritmos + incertidumbre de entradas (Vorländer 2011), forma del filtro de crossover (Butterworth 1930; LR = Butterworth², ver Douglas Self en ELECTROACUSTICA II), modelado de fuente por matrices de transmisión (texto UNTREF) | T1 |
 
 > **Ambiguos ubicados por mejor encaje (revisar si molesta):** `AES137-000141.pdf`,
 > `JAES_V64_5_ALL.pdf` y `Special_Issue_on_Modelling_Simulation_an.pdf` (contenido no
