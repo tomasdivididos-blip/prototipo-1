@@ -101,6 +101,21 @@ def face_geometry(nodes: np.ndarray, faces: np.ndarray):
     return centroid, nrm, area
 
 
+def _tet_volume(nodes: np.ndarray, tets: np.ndarray) -> float:
+    """Volumen total del tet-mesh = suma de |det| / 6 por tetraedro. Es el V del
+    dominio acustico YA TALLADO (descuenta columnas/muebles)."""
+    nodes = np.asarray(nodes, float)
+    tets = np.asarray(tets, int)
+    if tets.size == 0:
+        return 0.0
+    a = nodes[tets[:, 0]]
+    e1 = nodes[tets[:, 1]] - a
+    e2 = nodes[tets[:, 2]] - a
+    e3 = nodes[tets[:, 3]] - a
+    det = np.einsum("ij,ij->i", np.cross(e1, e2), e3)
+    return float(np.sum(np.abs(det)) / 6.0)
+
+
 # --------------------------------------------------------------------------
 # Contrato de I/O (dataclasses). El motor consume una Scene + fuente(s) +
 # receptor(es) y produce (en R5) un IR de presion / FRF / metricas.
@@ -154,6 +169,7 @@ class Scene:
     RH: float = 50.0
     P: float = 101325.0
     locator: Optional[object] = field(default=None, repr=False)
+    volume: Optional[float] = None       # V del dominio tallado (para Eyring/4V/S)
 
     @staticmethod
     def from_tet_mesh(nodes, tets, *, bands=None, alpha=0.1, scatter=None,
@@ -167,9 +183,10 @@ class Scene:
         centroid, normal, area = face_geometry(nodes, faces)
         a = _resolve_face_spec(alpha, centroid, bands)
         s = None if scatter is None else _resolve_face_spec(scatter, centroid, bands)
+        vol = _tet_volume(nodes, tets)
         return Scene(nodes=nodes, faces=faces, centroid=centroid, normal=normal,
                      area=area, bands=bands, alpha=a, scatter=s,
-                     c=c, T=T, RH=RH, P=P, locator=locator)
+                     c=c, T=T, RH=RH, P=P, locator=locator, volume=vol)
 
     @property
     def n_faces(self) -> int:
@@ -503,12 +520,154 @@ def early_reflections(scene: Scene, source: GeoSource, receiver: GeoReceiver,
 # --------------------------------------------------------------------------
 
 
-def diffuse_tail(scene: Scene, source: GeoSource, receiver: GeoReceiver,
-                 *, n_rays: int = 20000):
-    """R2: cola difusa (trazado estocastico de rayos Moller-Trumbore, histograma
-    de energia; scattering ISO 17497 reparte especular/difuso, Lambert).
-    Oraculo: radiosidad (Nosal) + Sabine/Eyring + conservacion de energia."""
-    raise NotImplementedError("R2: diffuse_tail (trazado de rayos)")
+def _nearest_face(O, D, V0, V1, V2, eps=1e-7, chunk=256):
+    """Para M rayos (O,D unitaria) la cara mas cercana entre K triangulos, via
+    Moller-Trumbore con t = distancia a lo largo de D (rayo, no segmento).
+    Devuelve (t (M,) dist al choque, inf si ninguno; fidx (M,) indice, -1)."""
+    O = np.asarray(O, float); D = np.asarray(D, float)
+    M, K = len(O), len(V0)
+    e1 = V1 - V0; e2 = V2 - V0                              # (K,3)
+    t_out = np.full(M, np.inf); f_out = np.full(M, -1, int)
+    for s0 in range(0, M, chunk):
+        Oc = O[s0:s0 + chunk]; Dc = D[s0:s0 + chunk]        # (m,3)
+        p = np.cross(Dc[:, None, :], e2[None, :, :])        # (m,K,3)
+        det = np.einsum("mkj,kj->mk", p, e1)                # (m,K)
+        ok = np.abs(det) > 1e-12
+        inv = np.where(ok, 1.0 / np.where(ok, det, 1.0), 0.0)
+        tvec = Oc[:, None, :] - V0[None, :, :]              # (m,K,3)
+        u = np.einsum("mkj,mkj->mk", tvec, p) * inv
+        q = np.cross(tvec, e1[None, :, :])                  # (m,K,3)
+        v = np.einsum("mj,mkj->mk", Dc, q) * inv
+        t = np.einsum("kj,mkj->mk", e2, q) * inv
+        hit = (ok & (u >= -1e-6) & (v >= -1e-6) & (u + v <= 1.0 + 1e-6) & (t > eps))
+        tt = np.where(hit, t, np.inf)
+        j = np.argmin(tt, axis=1)
+        tmin = tt[np.arange(len(j)), j]
+        got = np.isfinite(tmin)
+        sl = slice(s0, s0 + len(j))
+        t_out[sl][got] = tmin[got]
+        f_out[sl][got] = j[got]
+    return t_out, f_out
+
+
+def _lambert_dirs(normals, rng):
+    """Direcciones difusas por la ley del coseno de Lambert (Kuttruff ec 9.21-9.22):
+    cos(theta)=sqrt(z1) alrededor de la normal `n` (al aire), phi=2*pi*z2. Vectorizado."""
+    n = np.asarray(normals, float)
+    n = n / (np.linalg.norm(n, axis=1, keepdims=True) + 1e-18)
+    m = len(n)
+    z1 = rng.random(m); z2 = rng.random(m)
+    ct = np.sqrt(z1); st = np.sqrt(np.clip(1.0 - z1, 0.0, 1.0)); ph = 2 * np.pi * z2
+    a = np.tile(np.array([1.0, 0.0, 0.0]), (m, 1))
+    alt = np.abs(n[:, 0]) > 0.9
+    a[alt] = np.array([0.0, 1.0, 0.0])
+    t1 = np.cross(a, n); t1 /= (np.linalg.norm(t1, axis=1, keepdims=True) + 1e-18)
+    t2 = np.cross(n, t1)
+    return (st * np.cos(ph))[:, None] * t1 + (st * np.sin(ph))[:, None] * t2 \
+        + ct[:, None] * n
+
+
+def diffuse_tail(scene: Scene, source: GeoSource, receiver: GeoReceiver = None,
+                 *, n_rays: int = 3000, dt: float = 0.005, t_max: float = 1.5,
+                 seed: int = 0, max_refl: int = 400, e_min: float = 1e-7,
+                 bands=None, chunk: int = 256, air: bool = True):
+    """R2: cola difusa por TRAZADO ESTOCASTICO DE RAYOS (Kuttruff, Room Acoustics
+    5a ed, Cap. 9.8). N particulas de IGUAL energia emitidas isotropas desde la
+    fuente; en cada choque con una cara real del dominio (Moller-Trumbore 1997):
+
+      - reparto especular/difuso por el scattering s(f) (Q5): se sortea z3~U[0,1];
+        z3 <= s -> reflexion DIFUSA por Lambert (ec 9.21-9.22), si no ESPECULAR
+        (theta_r=theta_i, Fig 9.14). s=None -> todo especular.
+      - absorcion de pared: energia *= (1 - alpha(f))  (ec 9.24, rho=1-alpha).
+      - aire: energia *= exp(-m*d) por segmento, m = 2*alpha_aire (ISO 9613-1).
+
+    La energia que llega a cada reflexion se histograma por tiempo de vuelo ->
+    ENVOLVENTE DE ENERGIA por banda w[b, t] (respuesta impulsiva energetica,
+    Fig 9.15). En campo difuso la densidad de energia es uniforme en el espacio
+    (Kuttruff 5.1), por eso esta envolvente es la COLA en cualquier receptor; el
+    temprano dependiente de posicion lo da R1. `receiver` se acepta por uniformidad
+    de API (la cola difusa no depende de su posicion).
+
+    Oraculo (bench_geometric_r2): camino libre medio 4V/S (ec 5.12) + decaimiento
+    de Eyring T=-24V*ln10/(c*S*ln(1-alpha)) (ec 5.22/5.23) + conservacion (alpha=0).
+
+    Devuelve dict: t (n_bins,), bands (Bsel,), w (Bsel, n_bins) energia>=0,
+    mean_free_path (float, reflexiones>=1), dt, n_rays."""
+    V0, V1, V2 = _tri_verts(scene)
+    nrm = scene.normal
+    allbands = scene.bands
+    if bands is None:
+        band_idx = np.arange(len(allbands))
+    else:
+        band_idx = np.array([int(np.argmin(np.abs(allbands - b)))
+                             for b in np.atleast_1d(bands)], int)
+    c = scene.c
+    n_bins = int(np.ceil(t_max / dt))
+    tcent = (np.arange(n_bins) + 0.5) * dt
+    w = np.zeros((len(band_idx), n_bins))
+    seg_all = []
+    e0 = float(source.q) / n_rays
+
+    for bi, b in enumerate(band_idx):
+        rng = np.random.default_rng(int(seed) + 1000 * int(b))
+        a_b = scene.alpha[:, b]                               # (K,)
+        s_b = None if scene.scatter is None else scene.scatter[:, b]
+        m_b = (2.0 * float(_aa.air_absorption_alpha(
+            allbands[b], T=scene.T, RH=scene.RH, P=scene.P)) if air else 0.0)
+        # emision isotropa desde la fuente (uniforme en la esfera).
+        u = rng.random(n_rays); v = rng.random(n_rays)
+        ct = 1.0 - 2.0 * u; st = np.sqrt(np.clip(1.0 - ct * ct, 0.0, 1.0))
+        ph = 2.0 * np.pi * v
+        D = np.column_stack([st * np.cos(ph), st * np.sin(ph), ct])
+        O = np.tile(source.pos, (n_rays, 1)).astype(float)
+        e = np.full(n_rays, e0)
+        tof = np.zeros(n_rays)
+        alive = np.ones(n_rays, bool)
+
+        for it in range(max_refl):
+            if not alive.any():
+                break
+            idx = np.where(alive)[0]
+            tlen, fj = _nearest_face(O[idx], D[idx], V0, V1, V2, chunk=chunk)
+            good = fj >= 0
+            alive[idx[~good]] = False                        # sin choque (numerico)
+            idx = idx[good]; tlen = tlen[good]; fj = fj[good]
+            if len(idx) == 0:
+                continue
+            t1 = tof[idx] + tlen / c
+            e_arr = e[idx] * np.exp(-m_b * tlen)             # energia al llegar a la pared
+            # histograma de energia por tiempo de llegada (RIR energetica, Fig 9.15)
+            bins = (t1 / dt).astype(int)
+            okb = bins < n_bins
+            np.add.at(w[bi], bins[okb], e_arr[okb])
+            if it >= 1:                                      # camino libre pared-pared
+                seg_all.append(tlen)
+            # punto de choque y reflexion
+            P = O[idx] + tlen[:, None] * D[idx]
+            nf = nrm[fj]
+            z = rng.random(len(idx))
+            diffuse = np.zeros(len(idx), bool) if s_b is None else (z < s_b[fj])
+            Dnew = np.empty_like(P)
+            sp = ~diffuse
+            if sp.any():
+                d = D[idx][sp]; nn = nf[sp]
+                Dnew[sp] = d - 2.0 * np.einsum("ij,ij->i", d, nn)[:, None] * nn
+            if diffuse.any():
+                Dnew[diffuse] = _lambert_dirs(nf[diffuse], rng)
+            Dnew /= (np.linalg.norm(Dnew, axis=1, keepdims=True) + 1e-18)
+            # avanzar el estado de las particulas vivas
+            O[idx] = P + 1e-7 * nf                           # despegar de la cara
+            D[idx] = Dnew
+            e[idx] = e_arr * (1.0 - a_b[fj])
+            tof[idx] = t1
+            dead = (e[idx] < e_min) | (t1 >= t_max)
+            alive[idx[dead]] = False
+
+    out = {"t": tcent, "bands": allbands[band_idx], "w": w, "dt": dt,
+           "mean_free_path": (float(np.mean(np.concatenate(seg_all)))
+                              if seg_all else float("nan")),
+           "n_rays": int(n_rays)}
+    return out
 
 
 def edge_diffraction(scene: Scene, source: GeoSource, receiver: GeoReceiver,
