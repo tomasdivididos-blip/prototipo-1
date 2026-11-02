@@ -670,12 +670,194 @@ def diffuse_tail(scene: Scene, source: GeoSource, receiver: GeoReceiver = None,
     return out
 
 
+# --------------------------------------------------------------------------
+# R3: difraccion de bordes BTM (Biot-Tolstoy-Medwin), coherente, 1er orden.
+# Formulacion de linea-integral de Svensson et al. 1999, segun Calamia &
+# Svensson 2007 (ecs. 2-4) y Calamia 2009 tesis (ecs. 3.14, 3.15, 3.16).
+# Coords cilindricas al borde: r = distancia perpendicular, theta medido desde
+# una cara de la cuna (por el AIRE), z a lo largo del borde. nu = pi/theta_W.
+# --------------------------------------------------------------------------
+
+def _btm_beta_sum(nu, thS, thR, eta):
+    """Suma de los cuatro beta_i del BTM (Calamia&Svensson 2007 ec. 3):
+    beta_i = sin(nu*phi_i)/(cosh(nu*eta) - cos(nu*phi_i)), phi_i = pi +- thS +- thR.
+    `eta` escalar o array -> devuelve la suma con la misma forma."""
+    che = np.cosh(nu * np.asarray(eta, float))
+    out = np.zeros_like(che)
+    for s1 in (1.0, -1.0):
+        for s2 in (1.0, -1.0):
+            phi = np.pi + s1 * thS + s2 * thR
+            out = out + np.sin(nu * phi) / (che - np.cos(nu * phi))
+    return out
+
+
+def btm_edge_H_finite(rS, thS, zS, rR, thR, zR, thW, z1, z2, freqs,
+                      c=343.0, n_pts=2001):
+    """H_diffr(omega) de un borde FINITO por la linea-integral BTM en frecuencia
+    (Calamia 2009 ec. 3.14):
+        H = -(nu/4pi) sum_i int_{z1}^{z2} exp(-jk(m+l)) beta_i/(m l) dz,
+    con m=sqrt(rS^2+(z-zS)^2), l=sqrt(rR^2+(z-zR)^2),
+    eta(z)=arccosh{[m l+(z-zS)(z-zR)]/(rS rR)} (ec. 3.10). Convencion e^{-jkr}
+    (como R1). Integracion de Simpson sobre una grilla densa en z."""
+    freqs = np.atleast_1d(np.asarray(freqs, float))
+    k = 2.0 * np.pi * freqs / c
+    nu = np.pi / thW
+    z = np.linspace(z1, z2, int(n_pts))
+    m = np.sqrt(rS * rS + (z - zS) ** 2)
+    l = np.sqrt(rR * rR + (z - zR) ** 2)
+    arg = (m * l + (z - zS) * (z - zR)) / (rS * rR)
+    eta = np.arccosh(np.maximum(arg, 1.0))
+    beta = _btm_beta_sum(nu, thS, thR, eta)        # (n_pts,)
+    base = beta / (m * l)                           # (n_pts,)
+    phase = np.exp(-1j * np.outer(k, (m + l)))      # (nf, n_pts)
+    integ = phase * base[None, :]                   # (nf, n_pts)
+    from scipy.integrate import simpson
+    H = simpson(integ, x=z, axis=1)
+    return -(nu / (4.0 * np.pi)) * H
+
+
+def btm_edge_H_infinite(rS, thS, zS, rR, thR, zR, thW, freqs,
+                        c=343.0, eta_max=50.0, n_pts=16001):
+    """ORACULO EXACTO: H_diffr de un borde INFINITO por la integral de contorno
+    de Bowman & Senior / Pierce (Calamia 2009 ec. 3.15/3.16), derivacion
+    INDEPENDIENTE de la linea-integral:
+        H_ref = -2(nu/4pi) sum_i int_0^inf exp(-jk R_ref)/R_ref * beta_i d eta,
+        R_ref = sqrt(rS^2 + rR^2 + (zR-zS)^2 + 2 rS rR cosh(eta)).
+    El integrando decae ~ e^{-nu*eta}/R_ref -> se trunca en eta_max."""
+    freqs = np.atleast_1d(np.asarray(freqs, float))
+    k = 2.0 * np.pi * freqs / c
+    nu = np.pi / thW
+    eta = np.linspace(0.0, eta_max, int(n_pts))
+    Rref = np.sqrt(rS * rS + rR * rR + (zR - zS) ** 2 + 2.0 * rS * rR * np.cosh(eta))
+    beta = _btm_beta_sum(nu, thS, thR, eta)
+    base = beta / Rref
+    phase = np.exp(-1j * np.outer(k, Rref))
+    integ = phase * base[None, :]
+    from scipy.integrate import simpson
+    H = simpson(integ, x=eta, axis=1)
+    return -2.0 * (nu / (4.0 * np.pi)) * H
+
+
+def _perp(vec, axis):
+    """Componente de `vec` perpendicular a `axis` (unitaria), por fila si 2D."""
+    axis = np.asarray(axis, float)
+    axis = axis / (np.linalg.norm(axis) + 1e-18)
+    vec = np.asarray(vec, float)
+    return vec - np.dot(vec, axis) * axis
+
+
+def wedge_coords(edge_A, edge_B, face_a_cen, face_a_nrm, face_b_cen, P):
+    """Coords cilindricas (r, theta, z) de un punto P respecto de un borde recto
+    A->B, y el angulo de cuna theta_W (del AIRE). La cara A (centroide face_a_cen,
+    normal al aire face_a_nrm) fija theta=0; theta crece por el aire hacia la
+    cara B. Devuelve (r, theta, z, thW, L) con z,L sobre el eje del borde (z=0 en A)."""
+    A = np.asarray(edge_A, float); B = np.asarray(edge_B, float)
+    zhat = B - A
+    L = float(np.linalg.norm(zhat))
+    zhat = zhat / (L + 1e-18)
+    # base en el plano perpendicular: e1 = direccion de la cara A (hacia su centro),
+    # e2 = normal al aire de la cara A (ambas perp al borde).
+    e1 = _perp(np.asarray(face_a_cen, float) - A, zhat)
+    e1 = e1 / (np.linalg.norm(e1) + 1e-18)
+    e2 = _perp(np.asarray(face_a_nrm, float), zhat)
+    e2 = e2 / (np.linalg.norm(e2) + 1e-18)
+    # angulo de la cara B (hacia su centro) por el aire -> theta_W
+    ub = _perp(np.asarray(face_b_cen, float) - A, zhat)
+    ub = ub / (np.linalg.norm(ub) + 1e-18)
+    thW = np.arctan2(np.dot(ub, e2), np.dot(ub, e1))
+    if thW <= 1e-9:
+        thW += 2.0 * np.pi
+    # coords de P
+    d = np.asarray(P, float) - A
+    zc = float(np.dot(d, zhat))
+    dp = _perp(d, zhat)
+    r = float(np.linalg.norm(dp))
+    th = np.arctan2(np.dot(dp, e2), np.dot(dp, e1))
+    if th < 0:
+        th += 2.0 * np.pi
+    return r, th, zc, thW, L
+
+
+def build_edges(scene: Scene, round_dir=3, round_pos=3, min_len=1e-3):
+    """Bordes geometricos del dominio: aristas de la malla compartidas por DOS
+    caras de frontera NO coplanares, fusionadas por recta (direccion + punto).
+    Cada borde: {"A","B","dir","thW","nu","face_a","face_b"}. thW=pi (caras
+    coplanares, pared plana) se descarta (no hay borde). thW=pi/m entero no
+    difracta (Bowman); se marca via nu pero se conserva para inspeccion."""
+    f = scene.faces
+    cen, nrm = scene.centroid, scene.normal
+    # mapa arista(nodos ordenados) -> [caras]
+    emap = {}
+    for fi in range(len(f)):
+        a, b, c = f[fi]
+        for e in ((a, b), (b, c), (a, c)):
+            key = (int(min(e)), int(max(e)))
+            emap.setdefault(key, []).append(fi)
+    # agrupar aristas colineales (misma recta) con mismo par de caras-tipo
+    groups = {}
+    for (i, j), fl in emap.items():
+        if len(fl) != 2:
+            continue
+        pA, pB = scene.nodes[i], scene.nodes[j]
+        d = pB - pA
+        Ld = np.linalg.norm(d)
+        if Ld < min_len:
+            continue
+        d = d / Ld
+        # orientacion canonica de la direccion
+        if (d[0], d[1], d[2]) < (-d[0], -d[1], -d[2]):
+            d = -d
+        # ¿coplanares? normales casi paralelas -> no es borde
+        na, nb = nrm[fl[0]], nrm[fl[1]]
+        if abs(float(np.dot(na, nb))) > 0.9999:
+            continue
+        # punto de la recta (perp al origen) para la clave
+        foot = pA - np.dot(pA, d) * d
+        key = (tuple(np.round(d, round_dir)), tuple(np.round(foot, round_pos)))
+        groups.setdefault(key, {"pts": [], "faces": fl})
+        groups[key]["pts"] += [pA, pB]
+        groups[key]["faces"] = fl
+    edges = []
+    for (dk, _fk), g in groups.items():
+        pts = np.array(g["pts"])
+        d = np.array(dk, float); d = d / (np.linalg.norm(d) + 1e-18)
+        t = pts @ d
+        A = pts[np.argmin(t)]; B = pts[np.argmax(t)]
+        fa, fb = g["faces"]
+        r, th, z, thW, L = wedge_coords(A, B, cen[fa], nrm[fa], cen[fb], A + (B - A))
+        if abs(thW - np.pi) < 1e-3:
+            continue
+        edges.append({"A": A, "B": B, "dir": d, "thW": float(thW),
+                      "nu": float(np.pi / thW), "face_a": int(fa), "face_b": int(fb)})
+    return edges
+
+
 def edge_diffraction(scene: Scene, source: GeoSource, receiver: GeoReceiver,
-                     *, order: int = 1):
-    """R3: difraccion de bordes BTM (fuentes secundarias coherentes) de 1er
-    orden en bordes visibles (2do opcional). Oraculo: cuna exacta de Morse &
-    Ingard + casos de Calamia."""
-    raise NotImplementedError("R3: edge_diffraction (BTM)")
+                     *, freqs, order: int = 1, edges=None):
+    """R3: difraccion de bordes BTM de 1er orden (coherente, con fase). Suma
+    H_diffr(omega) sobre los bordes difractantes del dominio (Svensson et al.
+    1999; Calamia 2009 ec. 3.14). `order` reservado (2do orden futuro, Q4).
+    Devuelve dict: freqs, H (suma, compleja), per_edge [{thW, H}]."""
+    if int(order) != 1:
+        raise NotImplementedError("R3: por ahora solo 1er orden (Q4)")
+    if edges is None:
+        edges = build_edges(scene)
+    freqs = np.atleast_1d(np.asarray(freqs, float))
+    cen, nrm = scene.centroid, scene.normal
+    H = np.zeros(len(freqs), complex)
+    per = []
+    for ed in edges:
+        rS, thS, zS, thW, L = wedge_coords(ed["A"], ed["B"], cen[ed["face_a"]],
+                                           nrm[ed["face_a"]], cen[ed["face_b"]],
+                                           source.pos)
+        rR, thR, zR, _thW, _L = wedge_coords(ed["A"], ed["B"], cen[ed["face_a"]],
+                                             nrm[ed["face_a"]], cen[ed["face_b"]],
+                                             receiver.pos)
+        He = btm_edge_H_finite(rS, thS, zS, rR, thR, zR, thW, 0.0, L, freqs,
+                               c=scene.c)
+        H = H + He
+        per.append({"thW": thW, "H": He})
+    return {"freqs": freqs, "H": H, "per_edge": per, "n_edges": len(edges)}
 
 
 def hybrid_response(scene: Scene, source: GeoSource, receiver: GeoReceiver,
