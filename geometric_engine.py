@@ -35,6 +35,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Optional, Union
 
 import numpy as np
+from scipy.special import j1
 
 import acoustic_analysis as _aa
 import reflections_ism as _ism
@@ -142,6 +143,109 @@ class GeoReceiver:
 
     def __post_init__(self):
         self.pos = np.asarray(self.pos, dtype=float).reshape(3)
+
+
+# --------------------------------------------------------------------------
+# R4 — Directividad de la fuente geometrica (vale ARRIBA de f_S; abajo la fuente
+# es omni, como el nucleo modal). Interfaz comun: `gain(dirs, freqs) -> (M,B)`
+# devuelve la ganancia de PRESION lineal RELATIVA al eje (1.0 en eje). El motor
+# aplica la ganancia a la amplitud (coherente) y su cuadrado a la energia
+# (potencia). `axis` es el eje acustico (apunta "al frente").
+# --------------------------------------------------------------------------
+
+
+def _unit(v):
+    v = np.asarray(v, float).reshape(3)
+    return v / (np.linalg.norm(v) + 1e-18)
+
+
+@dataclass
+class PistonDirectivity:
+    """Directividad ANALITICA de un piston circular en bafle infinito:
+        D(theta) = 2 J1(k a sin theta) / (k a sin theta),   0 <= theta <= pi/2
+    con theta el angulo al eje acustico, k=2*pi*f/c, a el radio. El bafle no
+    radia hacia atras (hemisferio trasero = 0). Resultado EXACTO (integral de
+    Rayleigh del disco), sin coeficientes ajustados.
+
+    Ref.: Kinsler, Frey et al., *Fundamentals of Acoustics*, cap. 7 (piston
+    circular en bafle); Beranek, *Acustica*. Oraculo del bench: integral de
+    Rayleigh numerica sobre el disco (primeros principios)."""
+    a: float
+    axis: np.ndarray = (1.0, 0.0, 0.0)
+    c: float = 343.0
+
+    def __post_init__(self):
+        self.axis = _unit(self.axis)
+
+    def gain(self, dirs, freqs):
+        dirs = np.atleast_2d(np.asarray(dirs, float))
+        dirs = dirs / (np.linalg.norm(dirs, axis=1, keepdims=True) + 1e-18)
+        freqs = np.atleast_1d(np.asarray(freqs, float))
+        cos_t = np.clip(dirs @ self.axis, -1.0, 1.0)              # (M,)
+        sin_t = np.sqrt(np.clip(1.0 - cos_t ** 2, 0.0, 1.0))
+        k = 2.0 * np.pi * freqs / self.c                           # (B,)
+        x = np.outer(sin_t, k * self.a)                            # (M,B) = k a sinθ
+        D = np.where(x < 1e-9, 1.0, 2.0 * j1(x) / np.where(x < 1e-9, 1.0, x))
+        D = np.where(cos_t[:, None] >= 0.0, D, 0.0)                # bafle: nada atras
+        return D
+
+
+@dataclass
+class BalloonDirectivity:
+    """Directividad MEDIDA (globo) sobre una grilla esferica, interpolada. Acepta
+    cualquier balloon (export CLF/GLL, medicion polar propia, o un muestreo de un
+    modelo analitico): `gain_db[i,j,b]` en dB rel. al eje para la direccion
+    (theta[i], phi[j]) y la banda freqs[b]. theta = angulo polar al eje (0..pi),
+    phi = azimut en el plano (e1,e2) con e1 = proyeccion de `ref` perp. al eje.
+
+    Interpolacion bilineal en (theta, phi) y lineal en log-frecuencia. Es el
+    camino para 'tomar en cuenta el balloon' de una caja real sin reversear su
+    binario: se le pasa el globo ya decodificado. Override de la analitica."""
+    theta: np.ndarray                 # (nt,) rad, creciente
+    phi: np.ndarray                   # (nph,) rad, creciente [0, 2pi)
+    freqs: np.ndarray                 # (nf,) Hz, creciente
+    gain_db: np.ndarray               # (nt, nph, nf) dB rel eje
+    axis: np.ndarray = (1.0, 0.0, 0.0)
+    ref: np.ndarray = (0.0, 0.0, 1.0)
+
+    def __post_init__(self):
+        self.theta = np.asarray(self.theta, float)
+        self.phi = np.asarray(self.phi, float)
+        self.freqs = np.asarray(self.freqs, float)
+        self.gain_db = np.asarray(self.gain_db, float)
+        # se interpola en AMPLITUD lineal (no en dB): los nulos (dB -> -inf) son
+        # suaves en lineal y es lo correcto para la suma coherente de presion.
+        self.gain_lin = 10.0 ** (self.gain_db / 20.0)
+        self.axis = _unit(self.axis)
+        e1 = np.asarray(self.ref, float) - np.dot(self.ref, self.axis) * self.axis
+        self.e1 = _unit(e1)
+        self.e2 = np.cross(self.axis, self.e1)
+
+    def gain(self, dirs, freqs):
+        dirs = np.atleast_2d(np.asarray(dirs, float))
+        dirs = dirs / (np.linalg.norm(dirs, axis=1, keepdims=True) + 1e-18)
+        freqs = np.atleast_1d(np.asarray(freqs, float))
+        cos_t = np.clip(dirs @ self.axis, -1.0, 1.0)
+        th = np.arccos(cos_t)                                      # (M,)
+        ph = np.mod(np.arctan2(dirs @ self.e2, dirs @ self.e1), 2.0 * np.pi)
+        # indices/fracciones para interpolacion bilineal en (theta, phi)
+        ti = np.clip(np.searchsorted(self.theta, th) - 1, 0, len(self.theta) - 2)
+        fth = (th - self.theta[ti]) / (self.theta[ti + 1] - self.theta[ti] + 1e-18)
+        phw = np.concatenate([self.phi, [self.phi[0] + 2.0 * np.pi]])  # cierre ciclico
+        pj = np.clip(np.searchsorted(phw, ph) - 1, 0, len(self.phi) - 1)
+        pj1 = (pj + 1) % len(self.phi)
+        fph = (ph - phw[pj]) / (phw[pj + 1] - phw[pj] + 1e-18)
+        logf = np.log(np.clip(freqs, 1e-6, None))
+        lgf = np.log(np.clip(self.freqs, 1e-6, None))
+
+        def at(i, j):                                             # (M,B) amplitud lineal
+            return np.array([np.interp(logf, lgf, self.gain_lin[i[m], j[m], :])
+                             for m in range(len(i))])
+        g = ((1 - fth)[:, None] * ((1 - fph)[:, None] * at(ti, pj)
+                                   + fph[:, None] * at(ti, pj1))
+             + fth[:, None] * ((1 - fph)[:, None] * at(ti + 1, pj)
+                               + fph[:, None] * at(ti + 1, pj1)))
+        return g
 
 
 @dataclass
@@ -431,7 +535,46 @@ def _audible_path(scene, source, receiver, image, reflectors, V):
         if _segment_blocked(scene, a, b, V, exclude=exclude):
             return None
     r_total = float(np.linalg.norm(imgs[n] - receiver.pos))
-    return r_total, face_hit
+    return r_total, face_hit, pts[0]      # pts[0] = 1er punto de reflexion (emision)
+
+
+# --------------------------------------------------------------------------
+# R4 — scattering s(f) por defecto, densidad de reflexiones y mixing time.
+# --------------------------------------------------------------------------
+
+
+def default_scattering(bands, s_lf: float = 0.1, s_hf: float = 0.4,
+                       f_knee: float = 1000.0):
+    """Estimado por DEFECTO del coef. de scattering s(f) cuando no hay medicion
+    ISO 17497-1. Crece con la frecuencia (las irregularidades de pared son
+    grandes respecto a lambda a f alta): interpola de `s_lf` (graves) a `s_hf`
+    (agudos) en log-f, con la rodilla en `f_knee`. Es un valor de INGENIERIA
+    conservador, no una constante fisica: Vorlander (2011) remarca que los
+    defaults de scattering son inciertos, por eso se recomienda override medido
+    (ISO 17497-1) y reportar sensibilidad. Devuelve s en [0,1], shape de `bands`."""
+    b = np.asarray(bands, float)
+    w = np.clip(np.log(np.clip(b, 1e-6, None) / f_knee) / np.log(8.0) + 0.5, 0.0, 1.0)
+    return np.clip(s_lf + (s_hf - s_lf) * w, 0.0, 1.0)
+
+
+def reflection_density(V: float, t, c: float = 343.0):
+    """Densidad TEMPORAL de reflexiones recibidas en un punto (Kuttruff, Room
+    Acoustics 5a ed, ec. 4.6):
+        dN_r/dt = 4 pi c^3 t^2 / V       [reflexiones/s]
+    Crece con t^2: la respuesta pasa de reflexiones aisladas (temprano) a una
+    maraña densa (cola difusa)."""
+    return 4.0 * np.pi * c ** 3 * np.asarray(t, float) ** 2 / float(V)
+
+
+def mixing_time(V: float, c: float = 343.0, n_crit: float = 1000.0):
+    """Tiempo de mezcla (handoff imagenes->rayos): instante en que la densidad
+    temporal de reflexiones (Kuttruff ec. 4.6) alcanza `n_crit` reflexiones/s.
+    De 4 pi c^3 t^2 / V = n_crit:
+        t_mix = sqrt( n_crit * V / (4 pi c^3) )   [s]
+    Es la REGLA DE VOLUMEN (t_mix ~ sqrt(V)) derivada de primeros principios, no
+    una formula ajustada. `n_crit`=1000/s es el umbral usual de solapamiento de
+    reflexiones (convencion); la fisica robusta es el escalado con sqrt(V)."""
+    return float(np.sqrt(n_crit * float(V) / (4.0 * np.pi * c ** 3)))
 
 
 def early_reflections(scene: Scene, source: GeoSource, receiver: GeoReceiver,
@@ -452,6 +595,17 @@ def early_reflections(scene: Scene, source: GeoSource, receiver: GeoReceiver,
     c = scene.c
     a_air = _aa.air_absorption_alpha(bands, T=scene.T, RH=scene.RH, P=scene.P)
     V = _tri_verts(scene)
+    direc = getattr(source, "directivity", None)
+
+    def _dgain(p_from, p_to, fgrid):
+        """Ganancia de presion de la fuente en la direccion de emision p_from->p_to
+        evaluada en `fgrid` (1.0 si omni/degenerada)."""
+        if direc is None:
+            return np.ones(len(np.atleast_1d(fgrid)))
+        d = np.asarray(p_to, float) - np.asarray(p_from, float)
+        if np.linalg.norm(d) < 1e-12:
+            return np.ones(len(np.atleast_1d(fgrid)))
+        return direc.gain(d[None, :], fgrid)[0]
 
     # TODAS las secuencias (ordenaciones): una imagen de esquina solo es audible
     # en una ordenacion; se cuenta la imagen (posicion) UNA vez si alguna lo es.
@@ -464,7 +618,8 @@ def early_reflections(scene: Scene, source: GeoSource, receiver: GeoReceiver,
     e0 = np.zeros(nb)
     H = np.zeros(nb, complex)
     if not blocked0:
-        amp0 = source.q / (4.0 * np.pi * r0) * np.exp(-a_air * r0)
+        amp0 = source.q / (4.0 * np.pi * r0) * np.exp(-a_air * r0) \
+            * _dgain(source.pos, receiver.pos, bands)
         e0 = amp0 ** 2
         H = H + amp0 * np.exp(-1j * (2 * np.pi * bands / c) * r0)
 
@@ -478,20 +633,21 @@ def early_reflections(scene: Scene, source: GeoSource, receiver: GeoReceiver,
         res = _audible_path(scene, source, receiver, im, reflectors, V)
         if res is None:
             continue
-        r, face_hit = res
+        r, face_hit, emit = res
         if r < 1e-9:
             continue
         seen.add(key)
         refl = np.ones(nb)
         for fi in face_hit:
             refl = refl * np.sqrt(np.clip(1.0 - scene.alpha[fi], 0.0, 1.0))
-        amp = source.q / (4.0 * np.pi * r) * refl * np.exp(-a_air * r)
+        dgain = _dgain(source.pos, emit, bands)       # directividad en la emision
+        amp = source.q / (4.0 * np.pi * r) * refl * np.exp(-a_air * r) * dgain
         e = amp ** 2
         refl_energy = refl_energy + e
         H = H + amp * np.exp(-1j * (2 * np.pi * bands / c) * r)
         paths.append({"order": int(im["order"]), "r": r,
                       "faces": [int(f) for f in face_hit],
-                      "energy": e, "refl": refl})
+                      "energy": e, "refl": refl, "emit": emit})
 
     out = {"bands": bands, "direct": {"r": r0, "energy": e0},
            "paths": paths, "refl_energy": refl_energy, "H": H,
@@ -504,12 +660,13 @@ def early_reflections(scene: Scene, source: GeoSource, receiver: GeoReceiver,
         kf = 2 * np.pi * freqs / c
         if not blocked0:
             Hf += (source.q / (4 * np.pi * r0)) * np.exp(-a_air_f * r0) \
-                * np.exp(-1j * kf * r0)
+                * _dgain(source.pos, receiver.pos, freqs) * np.exp(-1j * kf * r0)
         for p in paths:
             # refl(f) interpolado de las bandas (alpha suave en f)
             rf = np.interp(freqs, bands, p["refl"])
             Hf += (source.q / (4 * np.pi * p["r"])) * rf \
-                * np.exp(-a_air_f * p["r"]) * np.exp(-1j * kf * p["r"])
+                * np.exp(-a_air_f * p["r"]) \
+                * _dgain(source.pos, p["emit"], freqs) * np.exp(-1j * kf * p["r"])
         out["freqs"] = freqs
         out["Hf"] = Hf
     return out
@@ -607,6 +764,8 @@ def diffuse_tail(scene: Scene, source: GeoSource, receiver: GeoReceiver = None,
     w = np.zeros((len(band_idx), n_bins))
     seg_all = []
     e0 = float(source.q) / n_rays
+    direc = getattr(source, "directivity", None)
+    n_spec = 0; n_diff = 0                       # conteo de reflexiones por tipo (Q5)
 
     for bi, b in enumerate(band_idx):
         rng = np.random.default_rng(int(seed) + 1000 * int(b))
@@ -620,7 +779,14 @@ def diffuse_tail(scene: Scene, source: GeoSource, receiver: GeoReceiver = None,
         ph = 2.0 * np.pi * v
         D = np.column_stack([st * np.cos(ph), st * np.sin(ph), ct])
         O = np.tile(source.pos, (n_rays, 1)).astype(float)
-        e = np.full(n_rays, e0)
+        if direc is None:
+            e = np.full(n_rays, e0)
+        else:
+            # pesar la energia emitida por la POTENCIA direccional D(dir)^2 y
+            # renormalizar: conserva la potencia total q, moldeando su reparto.
+            Gb = direc.gain(D, [allbands[b]])[:, 0] ** 2
+            Gb = Gb * (n_rays / max(float(Gb.sum()), 1e-30))
+            e = e0 * Gb
         tof = np.zeros(n_rays)
         alive = np.ones(n_rays, bool)
 
@@ -647,6 +813,7 @@ def diffuse_tail(scene: Scene, source: GeoSource, receiver: GeoReceiver = None,
             nf = nrm[fj]
             z = rng.random(len(idx))
             diffuse = np.zeros(len(idx), bool) if s_b is None else (z < s_b[fj])
+            n_diff += int(diffuse.sum()); n_spec += int((~diffuse).sum())
             Dnew = np.empty_like(P)
             sp = ~diffuse
             if sp.any():
@@ -666,7 +833,8 @@ def diffuse_tail(scene: Scene, source: GeoSource, receiver: GeoReceiver = None,
     out = {"t": tcent, "bands": allbands[band_idx], "w": w, "dt": dt,
            "mean_free_path": (float(np.mean(np.concatenate(seg_all)))
                               if seg_all else float("nan")),
-           "n_rays": int(n_rays)}
+           "n_rays": int(n_rays), "n_spec": n_spec, "n_diff": n_diff,
+           "diffuse_frac": (n_diff / max(n_spec + n_diff, 1))}
     return out
 
 

@@ -335,3 +335,61 @@ def load_clf(path: str) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
     spl = _find_clf_onaxis(data)
     freq = CLF_THIRD_OCTAVE_HZ.copy()
     return freq, spl, None
+
+
+def load_clf_balloon(path: str):
+    """DETECTOR EXPERIMENTAL del globo (balloon) de directividad de un CLF binario.
+
+    Localiza el bloque de atenuacion direccional (dB rel. al eje, 27 bandas) y lo
+    devuelve como (freq_hz(27,), balloon_db(n_dirs,27), info). NO decodifica la
+    grilla (azimut, elevacion) del formato CF2 (no publicado): devuelve el bloque
+    crudo. Por eso NO se arma directamente una directividad con el: la geometria
+    del globo NO esta validada (haria falta el spec o un cruce con el CLF Viewer).
+
+    Si que esta validado lo que SI se puede: el bloque contiene una direccion
+    cuyo nivel coincide con el on-axis ya validado (`load_clf`), lo que confirma
+    que el bloque hallado es efectivamente el globo. Para usar un globo MEDIDO en
+    el motor, pasarlo ya decodificado a `geometric_engine.BalloonDirectivity`.
+
+    Lanza ValueError si no encuentra un bloque de globo plausible.
+
+    Ref. formato: CLF Group (clfgroup.org); el layout del globo CF2 no es publico.
+    """
+    with open(path, "rb") as fh:
+        data = fh.read()
+    onaxis = _find_clf_onaxis(data)                    # (27,) validado vs viewer
+    with np.errstate(invalid="ignore"):               # bytes crudos -> float32 (NaN benignos)
+        f32 = np.frombuffer(data[:len(data) // 4 * 4], dtype="<f4").astype(float)
+    nb = _CLF_NBANDS
+    # El globo CF2 guarda ATENUACION en dB rel. al eje (<=0) por direccion y banda.
+    # Buscar la corrida contigua mas larga de valores en rango de atenuacion
+    # plausible [-90, +6] dB y de longitud multiplo de 27 (bandas).
+    atten = np.isfinite(f32) & (f32 > -90.0) & (f32 < 6.0)
+    best = None                                        # (start, length)
+    i = 0
+    n = len(f32)
+    while i < n:
+        if atten[i]:
+            j = i + 1
+            while j < n and atten[j]:
+                j += 1
+            if (j - i) >= 4 * nb and (best is None or (j - i) > best[1]):
+                best = (i, j - i)
+            i = j
+        else:
+            i += 1
+    if best is None:
+        raise ValueError(f"CLF '{path}': no se hallo un bloque de globo plausible.")
+    start, length = best
+    n_dirs = length // nb
+    block = f32[start:start + n_dirs * nb].reshape(n_dirs, nb)
+    # GATE de consistencia: alguna direccion del bloque debe reproducir el on-axis
+    # (en dB absolutos = on-axis + atenuacion~0) -> confirma que es el globo.
+    lvl = onaxis[None, :] + block                      # niveles absolutos por dir
+    err = np.max(np.abs(lvl - onaxis[None, :]), axis=1)
+    k = int(np.argmin(err))
+    info = {"n_dirs": int(n_dirs), "offset": int(start * 4),
+            "onaxis_db": onaxis, "onaxis_row": k, "onaxis_match_db": float(err[k]),
+            "status": ("experimental: bloque de globo hallado y gateado por "
+                       "on-axis; grilla (az,el) del CF2 NO decodificada")}
+    return CLF_THIRD_OCTAVE_HZ.copy(), block, info
