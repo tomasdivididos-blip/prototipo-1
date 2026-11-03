@@ -1028,10 +1028,76 @@ def edge_diffraction(scene: Scene, source: GeoSource, receiver: GeoReceiver,
     return {"freqs": freqs, "H": H, "per_edge": per, "n_edges": len(edges)}
 
 
+def lr_crossover(freqs, f_cross: float, order: int = 4):
+    """Pesos de crossover complementario Linkwitz-Riley en f_cross.
+
+    w_lo(f) = 1 / (1 + (f/f_cross)^order),  w_hi(f) = 1 - w_lo(f).
+
+    Para LR de orden par n (order=n), el modulo del pasa-bajos LR es
+    |LP| = 1/(1+u^order) y el del pasa-altos |HP| = u^order/(1+u^order) con
+    u=f/f_cross (LR = dos Butterworth de orden n/2 en cascada, |B|=1/sqrt(1+u^n)
+    al cuadrado). Por construccion w_lo+w_hi=1 EXACTO (particion de unidad): donde
+    FEM y geometrico coinciden, el hibrido los reproduce sin distorsion de modulo
+    ni de fase. En f_cross ambos valen 1/2 (-6 dB, cruce LR) y la pendiente
+    asintotica es 6*order dB/oct (order=4 -> 24 dB/oct).
+    Ref.: Linkwitz, JAES 1976 'Active Crossover Networks for Noncoincident
+    Drivers'; D'Appolito, 'Testing Loudspeakers'."""
+    freqs = np.atleast_1d(np.asarray(freqs, float))
+    if f_cross <= 0:
+        return np.ones_like(freqs), np.zeros_like(freqs)
+    u = freqs / float(f_cross)
+    w_lo = 1.0 / (1.0 + u ** int(order))
+    return w_lo, 1.0 - w_lo
+
+
+def geometric_frf(scene: Scene, source: GeoSource, receiver: GeoReceiver,
+                  *, freqs, max_order: int = 3, include_diffraction: bool = False,
+                  reflectors=None, edges=None):
+    """FRF geometrica COHERENTE (presion compleja, con fase) en `freqs`:
+    directo + reflexiones tempranas (R1) [+ difraccion de bordes BTM (R3) si
+    include_diffraction]. La cola difusa (R2) es energia con fase aleatoria y NO
+    se suma coherentemente aca (se maneja aparte en metricas de energia)."""
+    freqs = np.atleast_1d(np.asarray(freqs, float))
+    er = early_reflections(scene, source, receiver, max_order=max_order,
+                           freqs=freqs, reflectors=reflectors)
+    H = er["Hf"].copy()
+    if include_diffraction:
+        dif = edge_diffraction(scene, source, receiver, freqs=freqs, edges=edges)
+        H = H + dif["H"]
+    return H, er
+
+
 def hybrid_response(scene: Scene, source: GeoSource, receiver: GeoReceiver,
-                    *, fem_frf=None, f_schroeder: float = 0.0):
-    """R5: empalme hibrido en f_S (crossover complementario tipo Linkwitz-Riley)
-    del FEM (<f_S) con el geometrico (>f_S) -> IR de presion / FRF / metricas de
-    banda completa. Oraculo: continuidad de la FRF en f_S + end-to-end vs
-    medicion (JND)."""
-    raise NotImplementedError("R5: hybrid_response (empalme en f_S)")
+                    *, freqs=None, fem_frf=None, f_schroeder: float = 0.0,
+                    lr_order: int = 4, max_order: int = 3,
+                    include_diffraction: bool = False, h_geo=None):
+    """R5: empalme hibrido en f_S del FEM (<f_S) con el geometrico (>f_S) por
+    crossover complementario Linkwitz-Riley -> FRF de presion de banda completa.
+
+    H_hib(f) = w_lo(f) * H_FEM(f) + w_hi(f) * H_geo(f),  w_lo+w_hi=1.
+
+    `fem_frf` = FRF modal del nucleo (compleja, alineada a `freqs`); si None, el
+    peso bajo es 0 (sale el geometrico puro). `h_geo` permite inyectar una FRF
+    geometrica ya calculada (si None se arma con geometric_frf). Oraculo:
+    continuidad/transparencia de la FRF en f_S + limites (abajo->FEM, arriba->geo)
+    + end-to-end vs medicion (JND; Vorlander 2011, Rindel et al. 1999)."""
+    if freqs is None:
+        raise ValueError("hybrid_response requiere la grilla `freqs`")
+    freqs = np.atleast_1d(np.asarray(freqs, float))
+    if h_geo is None:
+        h_geo, er = geometric_frf(scene, source, receiver, freqs=freqs,
+                                  max_order=max_order,
+                                  include_diffraction=include_diffraction)
+    else:
+        h_geo, er = np.asarray(h_geo, complex), None
+    w_lo, w_hi = lr_crossover(freqs, f_schroeder, lr_order)
+    if fem_frf is None:
+        h_fem = np.zeros(len(freqs), complex)
+        w_lo = np.zeros_like(w_lo)
+        w_hi = np.ones_like(w_hi)
+    else:
+        h_fem = np.asarray(fem_frf, complex)
+    H = w_lo * h_fem + w_hi * h_geo
+    return {"freqs": freqs, "H": H, "H_fem": h_fem, "H_geo": h_geo,
+            "w_lo": w_lo, "w_hi": w_hi, "f_schroeder": float(f_schroeder),
+            "lr_order": int(lr_order), "early": er}
