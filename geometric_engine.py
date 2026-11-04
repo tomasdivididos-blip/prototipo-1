@@ -839,6 +839,137 @@ def diffuse_tail(scene: Scene, source: GeoSource, receiver: GeoReceiver = None,
 
 
 # --------------------------------------------------------------------------
+# R6: respuesta de ENERGIA compuesta (temprano por imagenes + cola difusa) con
+# CONTINUIDAD de densidad de energia en el mixing time (normalizacion del
+# detector). Habilita parametros ISO 3382-1 por energia (C80, D50, EDT, Ts).
+# --------------------------------------------------------------------------
+
+def _energy_params(g, tc, kd, dt):
+    """Parametros ISO 3382-1 desde la ENVOLVENTE DE ENERGIA g(t) (ya en unidades
+    de energia recibida por bin), con el directo en el bin kd:
+      EDT  tiempo de decaimiento inicial (EDC de Schroeder, 0..-10 dB x6).
+      C80  claridad 10 log10( E[0,80ms] / E[80ms,inf] ) desde el directo (ISO 3382-1).
+      D50  definicion E[0,50ms]/E[0,inf].
+      Ts   tiempo central sum((t-t0) g)/sum(g)."""
+    g = np.asarray(g, float)
+    n = len(g)
+    e_tot = g[kd:].sum()
+    if e_tot <= 0:
+        return dict(EDT=np.nan, C80=np.nan, D50=np.nan, Ts=np.nan, r2=0.0)
+    k80 = kd + int(round(0.080 / dt))
+    k50 = kd + int(round(0.050 / dt))
+    e_early80 = g[kd:k80].sum(); e_late80 = g[k80:].sum()
+    C80 = 10.0 * np.log10(e_early80 / e_late80) if e_late80 > 0 else np.inf
+    D50 = float(g[kd:k50].sum() / e_tot)
+    t0 = tc[kd]
+    Ts = float(((tc[kd:] - t0) * g[kd:]).sum() / e_tot)
+    # EDT por EDC de Schroeder (integral hacia atras), pendiente 0..-10 dB
+    edc = np.cumsum(g[kd:][::-1])[::-1]
+    edc = edc / max(edc[0], 1e-30)
+    L = 10.0 * np.log10(np.maximum(edc, 1e-12))
+    t = (np.arange(len(L))) * dt
+    sel = (L <= 0.0) & (L >= -10.0)
+    EDT = r2 = np.nan
+    if sel.sum() >= 3:
+        A = np.polyfit(t[sel], L[sel], 1)
+        EDT = -60.0 / A[0]
+        fit = np.polyval(A, t[sel]); ss = np.sum((L[sel] - L[sel].mean()) ** 2)
+        r2 = 1.0 - np.sum((L[sel] - fit) ** 2) / max(ss, 1e-30)
+    return dict(EDT=float(EDT), C80=float(C80), D50=D50, Ts=Ts, r2=float(r2))
+
+
+def composed_energy_response(scene: Scene, source: GeoSource, receiver: GeoReceiver,
+                             *, fc, n_rays: int = 8000, dt: float = 0.001,
+                             t_max: float = None, max_refl: int = 1200,
+                             air: bool = True, seed: int = 5, reflectors=None,
+                             early_specular: bool = False, max_order: int = 3,
+                             tail: dict = None):
+    """R6: envolvente de ENERGIA recibida en un receptor = DIRECTO (exacto,
+    posicion-dependiente) + COLA DIFUSA (trazado estocastico R2, que ya trae TODA
+    la energia reflejada desde el 1er rebote). De aqui salen los parametros ISO
+    3382-1 por energia (C80, D50, EDT, Ts).
+
+    ESCALA ABSOLUTA del detector (ANALITICA, no ajustada). El directo esta en
+    PRESION^2 en el punto, e_dir=[q/(4pi r)]^2. La cola w(t) es el FLUJO de energia
+    en pared (total q/alpha por conservacion exacta); su densidad de energia es
+    w_dens=4 w/(c S dt) por la irradiancia difusa I=c w/4 (Kuttruff, Room Acoustics
+    5a ed, cap. 9.8), y la presion^2 recibida es p^2=c^2 w_dens (campo difuso).
+    Reconciliando la ENERGIA RADIADA de la fuente puntual (q^2/4pi c) con la energia
+    q que emite la cola, la cola en unidades de p^2 recibido por bin es
+
+        g_tail[bin] = (q / (pi S)) * w[bin]
+
+    un factor GLOBAL (solo fuente y area S, no el receptor). No hay ajuste ni pin.
+
+    ORACULO de la escala (bench_geometric_r6): con esta normalizacion la DISTANCIA
+    CRITICA (directo=reverberante) sale r_c = sqrt(S alpha / 16 pi) = sqrt(A/16pi),
+    el radio clasico (Kuttruff ec. 4.9; Kinsler, Fundamentals of Acoustics). q y r
+    se cancelan: es una propiedad del recinto, no del ajuste.
+
+    `early_specular=True` ADEMAS inserta las reflexiones tempranas especulares
+    (imagenes, R1) hasta t_mix para la estructura posicion-dependiente (coloracion,
+    util para el FRF R5); por default False, porque para la ENERGIA la cola ya las
+    contiene (sumarlas duplicaria). Vorlander, Auralization (empalme hibrido).
+    `tail` reusa una diffuse_tail ya calculada (independiente del receptor) para
+    evaluar muchos mics con una sola corrida de la cola.
+
+    Devuelve dict: t (n_bins,), g (energia recibida por bin), g_direct, g_tail,
+    scale (q/pi S), t_mix, kd (bin del directo), bi, fc, y C80/D50/EDT/Ts/r2."""
+    bands = np.asarray(scene.bands, float)
+    bi = int(np.argmin(np.abs(bands - float(fc))))
+    c = scene.c; V = float(scene.volume); S = float(scene.total_area())
+    t_mix = mixing_time(V, c=c)
+
+    # --- cola (R2): flujo de pared -> p^2 recibido por bin (escala analitica).
+    # `tail` reusa una diffuse_tail ya calculada (es INDEPENDIENTE del receptor),
+    # util para evaluar muchos mics con una sola corrida de la cola. ---
+    if tail is None:
+        if t_max is None:
+            aw = float(np.clip(np.average(scene.alpha[:, bi], weights=scene.area),
+                               1e-3, 0.99))
+            rt = 24.0 * np.log(10.0) * V / (c * (-S * np.log(1.0 - aw)))
+            t_max = max(1.5 * rt, 4.0 * t_mix)
+        tail = diffuse_tail(scene, source, n_rays=n_rays, dt=dt, t_max=t_max,
+                            max_refl=max_refl, e_min=1e-12, bands=[float(fc)],
+                            air=air, seed=seed)
+    dt = float(tail["dt"]); w0 = tail["w"][0]; n_bins = len(w0)
+    tc = tail["t"]
+    s = float(source.q) / (np.pi * S)             # normalizacion del detector (global)
+    g_tail = s * w0
+
+    # --- directo (exacto, posicion-dependiente): e_dir=[q/4pi r]^2 con bloqueo ---
+    er = early_reflections(scene, source, receiver,
+                           max_order=(max_order if early_specular else 1),
+                           reflectors=reflectors)
+    g_dir = np.zeros(n_bins)
+    r_dir = float(er["direct"]["r"]); e_dir = float(er["direct"]["energy"][bi])
+    kd = int((r_dir / c) / dt)
+    if 0 <= kd < n_bins:
+        g_dir[kd] += e_dir
+
+    g = g_dir + g_tail
+    if early_specular:
+        # reemplazar la aproximacion difusa del tail en [0, t_mix] por las
+        # reflexiones especulares por imagenes (posicion-dependiente), crossfade.
+        hi = min(int(t_mix / dt), n_bins)
+        g_sp = np.zeros(n_bins)
+        for p in er["paths"]:
+            k = int((p["r"] / c) / dt)
+            if kd < k < hi:
+                g_sp[k] += float(p["energy"][bi])
+        if hi > kd + 1:
+            a = np.linspace(0.0, 1.0, hi - kd - 1)
+            g[kd + 1:hi] = (1.0 - a) * g_sp[kd + 1:hi] + a * g_tail[kd + 1:hi]
+
+    par = _energy_params(g, tc, kd, dt)
+    out = {"t": tc, "g": g, "g_direct": g_dir, "g_tail": g_tail, "scale": s,
+           "t_mix": float(t_mix), "kd": int(kd), "bi": bi, "fc": float(fc),
+           "mean_free_path": float(tail["mean_free_path"])}
+    out.update(par)
+    return out
+
+
+# --------------------------------------------------------------------------
 # R3: difraccion de bordes BTM (Biot-Tolstoy-Medwin), coherente, 1er orden.
 # Formulacion de linea-integral de Svensson et al. 1999, segun Calamia &
 # Svensson 2007 (ecs. 2-4) y Calamia 2009 tesis (ecs. 3.14, 3.15, 3.16).
