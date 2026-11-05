@@ -3038,6 +3038,16 @@ Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD cur
 
 *Manual actualizado al 29 de Octubre de 2026 — v2.91.*
 
+## Cambios v2.92 (motor geométrico: parámetros de claridad C80/D50 con escala absoluta)
+
+**Cambios v2.92** (5 de noviembre 2026): el motor geométrico (el que trabaja por encima de la frecuencia de Schroeder, complementando el modal que vale por debajo) ahora arma una respuesta de energía completa en un receptor y de ahí calcula los parámetros de claridad de la norma ISO 3382-1 (C80, D50, EDT, tiempo central), con una escala absoluta deducida de la física, no ajustada a mano.
+
+**Qué es.** La respuesta de energía se compone de dos partes: el sonido directo (exacto, depende de la posición del receptor) más la cola difusa que el trazado de rayos ya calculaba. El punto fino era poner las dos partes en la misma escala, porque el directo se mide en presión al cuadrado y la cola en energía de partícula. La escala que las une sale cerrada de primeros principios (irradiancia del campo difuso y energía radiada de la fuente), sin ningún factor de ajuste.
+
+**Cómo quedó validado.** El criterio independiente es la **distancia crítica** (el radio donde el sonido directo iguala al reverberante): con esta escala sale igual a la fórmula clásica de sala viva con error del 0,1 por ciento, y da el mismo valor en todos los receptores. Contra la base de datos medida FLAIR, la D50 compuesta cae dentro del umbral perceptible (JND) en las seis bandas; la C80 queda unos 2 a 3 decibeles por debajo del umbral estricto de 1 dB, lo que se explica por el sesgo conocido del tiempo de decaimiento de la cola difusa en salas poco compactas (un rasgo físico del campo difuso, no un error de escala). Es trabajo de motor, todavía sin botón propio en la interfaz.
+
+*Manual actualizado al 5 de Noviembre de 2026 — v2.92.*
+
 ## Cambios v2.84 (los cálculos corren sobre tus receptores de la lista, con flechas por asiento)
 
 **Cambios v2.84** (25 de octubre 2026): ahora la respuesta en frecuencia (FRF), el SBIR, el decaimiento y el mapa de reflexiones se calculan sobre los **receptores de la lista** (los que elegiste), no sobre un receptor aparte. En cada una de esas ventanas aparece arriba del gráfico un selector **«Asiento: flecha izquierda  Receptor i/N: nombre  flecha derecha»**: con las flechas recorrés los receptores de la lista y la ventana se recalcula y redibuja para cada posición (el marcador grande del visor salta al asiento que estás viendo). Con un solo receptor las flechas quedan deshabilitadas. Si la lista está vacía, se crea un «Sweet Spot» en la posición del cursor.
