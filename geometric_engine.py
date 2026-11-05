@@ -889,27 +889,40 @@ def composed_energy_response(scene: Scene, source: GeoSource, receiver: GeoRecei
     la energia reflejada desde el 1er rebote). De aqui salen los parametros ISO
     3382-1 por energia (C80, D50, EDT, Ts).
 
-    ESCALA ABSOLUTA del detector (ANALITICA, no ajustada). El directo esta en
-    PRESION^2 en el punto, e_dir=[q/(4pi r)]^2. La cola w(t) es el FLUJO de energia
-    en pared (total q/alpha por conservacion exacta); su densidad de energia es
-    w_dens=4 w/(c S dt) por la irradiancia difusa I=c w/4 (Kuttruff, Room Acoustics
-    5a ed, cap. 9.8), y la presion^2 recibida es p^2=c^2 w_dens (campo difuso).
-    Reconciliando la ENERGIA RADIADA de la fuente puntual (q^2/4pi c) con la energia
-    q que emite la cola, la cola en unidades de p^2 recibido por bin es
+    ESCALA ABSOLUTA del detector: un factor GLOBAL (solo fuente y area S, NO el
+    receptor):
 
         g_tail[bin] = (q / (pi S)) * w[bin]
 
-    un factor GLOBAL (solo fuente y area S, no el receptor). No hay ajuste ni pin.
+    donde el directo esta en PRESION^2, e_dir=[q/(4pi r)]^2, y w(t) es el FLUJO de
+    energia en pared (total q/alpha por conservacion exacta).
+    ATENCION (auditoria R6, MAYOR-2): este factor NO esta DERIVADO de primeros
+    principios de la irradiancia, es una CALIBRACION. La cadena fisica (irradiancia
+    I=c w/4, Kuttruff, Room Acoustics 5a ed, ec. 5.3; p^2=c^2 w_dens en campo
+    difuso) fija la FORMA de la cola, pero la constante q/(pi S) se elige para que
+    el COCIENTE directo/reverberante iguale el clasico e_dir/E_rev = A/(16 pi r^2)
+    (Kuttruff ec. 5.44-5.48, con g=1). Es legitima (el ancla es el campo
+    reverberante estacionario de Kuttruff) pero es una constante CALIBRADA al
+    resultado clasico, no una derivacion independiente. El resultado reproduce el
+    campo reverberante correcto, asi que los C80/D50/EDT NO son numeros erroneos; lo
+    sobredimensionado era el rotulo "analitica, no ajustada".
 
-    ORACULO de la escala (bench_geometric_r6): con esta normalizacion la DISTANCIA
-    CRITICA (directo=reverberante) sale r_c = sqrt(S alpha / 16 pi) = sqrt(A/16pi),
-    el radio clasico (Kuttruff ec. 4.9; Kinsler, Fundamentals of Acoustics). q y r
-    se cancelan: es una propiedad del recinto, no del ajuste.
+    AUTOCONSISTENCIA (bench_geometric_r6), NO oraculo independiente de la escala:
+    con esta normalizacion la DISTANCIA CRITICA sale r_c = sqrt(S alpha/16 pi) =
+    sqrt(A/16 pi), el radio clasico (Kuttruff ec. 5.48). OJO (auditoria, MAYOR-1):
+    r_c = r*sqrt(e_dir/E_rev) da el valor clasico SOLO porque la escala se fijo para
+    eso (q y r se cancelan POR CONSTRUCCION); no es evidencia independiente de la
+    magnitud, es una verificacion de autoconsistencia. Los unicos checks NO
+    circulares validan la ENERGIA de la cola (conservacion Sum w = q/alpha, densidad
+    w_dens -> q/V), no la conversion a p^2 recibido.
 
-    `early_specular=True` ADEMAS inserta las reflexiones tempranas especulares
-    (imagenes, R1) hasta t_mix para la estructura posicion-dependiente (coloracion,
-    util para el FRF R5); por default False, porque para la ENERGIA la cola ya las
-    contiene (sumarlas duplicaria). Vorlander, Auralization (empalme hibrido).
+    `early_specular=True` ADEMAS reemplaza (crossfade CONVEXO, NO suma) la cola
+    difusa en [0, t_mix] por las reflexiones tempranas especulares (imagenes, R1),
+    para la estructura posicion-dependiente (coloracion, util para el FRF R5); por
+    default False. No duplica energia (es un reemplazo ponderado), pero mezcla dos
+    convenciones de escala (g_sp = p^2 especular exacto vs g_tail difusa calibrada),
+    que pueden ser discontinuas en el empalme: valido para coloracion, NO validado
+    para energia. Vorlander, Auralization (empalme hibrido).
     `tail` reusa una diffuse_tail ya calculada (independiente del receptor) para
     evaluar muchos mics con una sola corrida de la cola.
 

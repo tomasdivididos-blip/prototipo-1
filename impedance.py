@@ -313,6 +313,61 @@ def _porous_zk(sigma: float, model: str) -> Callable:
     return lambda f: zk(f, sigma)
 
 
+# ---------------------------------------------------------------------------
+# Gates de validez de rango de los modelos empiricos (v2.93)
+# ---------------------------------------------------------------------------
+# Rango del parametro adimensional en el que cada modelo poroso EMPIRICO esta
+# calibrado/medido. Fuera de el, el modelo EXTRAPOLA (puede errar alpha). NO es
+# un bloqueo: se avisa y se deja seguir (misma decision que el dominio no-estanco
+# de v2.72). Fuentes: Delany-Bazley 1970 / Miki 1990 declaran 0.01<X<1 con
+# X=rho0 f/sigma; Komatsu 2008 midio f/sigma ~ 0.002..0.83 m^3/kg (Figs 6-7).
+_POROUS_RANGE = {
+    "db":            ("X=rho0*f/sigma", 0.01, 1.0),
+    "delany-bazley": ("X=rho0*f/sigma", 0.01, 1.0),
+    "delany_bazley": ("X=rho0*f/sigma", 0.01, 1.0),
+    "miki":          ("X=rho0*f/sigma", 0.01, 1.0),
+    "komatsu":       ("f/sigma [m^3/kg]", 0.002, 0.83),
+}
+
+
+def porous_range_warning(model: str, f, sigma: float):
+    """Mensaje (str) si una fraccion de las frecuencias `f` cae FUERA del rango
+    validado del modelo poroso empirico `model`; None si todo esta en rango o el
+    modelo no es empirico (jca es fisico, no tiene este gate). Puro y testeable."""
+    key = str(model).lower()
+    if key not in _POROUS_RANGE or not np.isfinite(sigma) or sigma <= 0:
+        return None
+    label, lo, hi = _POROUS_RANGE[key]
+    f = _as_f(f)
+    X = (RHO0 * f / float(sigma)) if label.startswith("X=") else (f / float(sigma))
+    out = (X < lo) | (X > hi)
+    frac = float(np.mean(out))
+    if frac <= 0.0:
+        return None
+    side = "por debajo" if np.median(X) < lo else ("por encima" if np.median(X) > hi else "fuera")
+    return (f"modelo poroso '{key}': {frac*100:.0f}% de las frecuencias caen {side} "
+            f"del rango validado {label} in [{lo:g}, {hi:g}] (sigma={sigma:.0f}); "
+            f"EXTRAPOLACION, alpha puede ser inexacto (suele ser alpha~0 en graves, "
+            f"impacto bajo en el amortiguamiento)")
+
+
+def facing_range_warning(kind: str, f, pitch: float):
+    """Aviso de PERIODICIDAD de un facing resonante (perforado/ranurado): el modelo
+    lumped (correccion de extremo concentrada, Cox 6.33/6.40) asume lambda >> paso
+    del array; arriba de f ~ c/(2*paso) aparecen lobulos de rejilla que NO modela.
+    `pitch` = separacion entre centros de agujeros/ranuras [m]. None/<=0 -> None."""
+    if pitch is None or not np.isfinite(pitch) or pitch <= 0:
+        return None
+    f = _as_f(f)
+    f_lim = C0 / (2.0 * float(pitch))
+    frac = float(np.mean(f > f_lim))
+    if frac <= 0.0:
+        return None
+    return (f"facing '{kind}': {frac*100:.0f}% de las frecuencias > c/(2*paso)="
+            f"{f_lim:.0f} Hz (paso={pitch*1e3:.0f} mm); el modelo lumped ignora "
+            f"lobulos de rejilla ahi (valido para graves/banda modal)")
+
+
 def _jca_zk(phi, alpha_inf, sigma, Lambda, Lambda_p) -> Callable:
     return lambda f: jca_zc_kc(f, phi, alpha_inf, sigma, Lambda, Lambda_p)
 
@@ -367,6 +422,23 @@ class SurfaceImpedance:
         self._z = zfunc
         self.is_locally_reacting = is_locally_reacting
         self.label = label
+        # Metadata para el gate de validez de rango (v2.93). Cada entrada es
+        # ("porous", model, sigma) o ("facing", kind, pitch). La llenan los
+        # constructores; range_warning(f) la consume. Vacio = sin gate.
+        self.range_meta: list = []
+
+    def range_warning(self, f):
+        """Lista de avisos (str) si el/los modelo(s) empirico(s) de esta superficie
+        se evaluan fuera de su rango validado en las frecuencias `f`. [] si todo OK.
+        El consumidor (GUI) lo loguea; no bloquea (igual que el dominio de v2.72)."""
+        msgs = []
+        for kind, name, param in self.range_meta:
+            w = (porous_range_warning(name, f, param) if kind == "porous"
+                 else facing_range_warning(name, f, param) if kind == "facing"
+                 else None)
+            if w:
+                msgs.append(w)
+        return msgs
 
     def Z(self, f, theta: float = 0.0) -> np.ndarray:
         """Impedancia de superficie compleja [Pa*s/m] a incidencia theta."""
@@ -442,9 +514,11 @@ def porous(sigma: float, thickness: float, model: str = "miki",
     lbl = f"poroso {model} sigma={sigma:.0f} d={thickness*1e3:.0f}mm"
     if air_gap > 0:
         lbl += f" +aire {air_gap*1e3:.0f}mm"
-    return SurfaceImpedance(
+    si = SurfaceImpedance(
         lambda f, theta=0.0: _surface_Z_tmm(layers, f, theta),
         is_locally_reacting=False, label=lbl)
+    si.range_meta.append(("porous", model.lower(), float(sigma)))
+    return si
 
 
 def porous_halfspace(sigma: float, model: str = "miki") -> SurfaceImpedance:
@@ -466,8 +540,10 @@ def porous_halfspace(sigma: float, model: str = "miki") -> SurfaceImpedance:
         kz = np.sqrt(kc ** 2 - kt ** 2)
         return zc * kc / kz
 
-    return SurfaceImpedance(zf, is_locally_reacting=False,
-                            label=f"poroso semi-inf {model} sigma={sigma:.0f}")
+    si = SurfaceImpedance(zf, is_locally_reacting=False,
+                          label=f"poroso semi-inf {model} sigma={sigma:.0f}")
+    si.range_meta.append(("porous", model.lower(), float(sigma)))
+    return si
 
 
 def _alpha_random_halfspace(sigma: float, freqs, model: str = "miki",
@@ -673,8 +749,13 @@ def perforated(thickness: float, hole_diam: float, ratio: float,
            f"ratio={ratio*100:.1f}% +cav {cavity_depth*1e3:.0f}mm")
     if porous_fill is not None:
         lbl += " (relleno)"
-    return SurfaceImpedance(_facing_surface(zface, layers),
-                            is_locally_reacting=False, label=lbl)
+    si = SurfaceImpedance(_facing_surface(zface, layers),
+                          is_locally_reacting=False, label=lbl)
+    # Paso del array (red cuadrada de agujeros circulares): ratio = (pi/4)(d/paso)^2.
+    if ratio and ratio > 0:
+        pitch = float(hole_diam) * np.sqrt(np.pi / (4.0 * float(ratio)))
+        si.range_meta.append(("facing", "perforado", pitch))
+    return si
 
 
 def microperforated(thickness: float, hole_diam: float, ratio: float,
@@ -715,8 +796,12 @@ def slit_panel(thickness: float, slit_width: float, ratio: float,
            f"ratio={ratio*100:.1f}% +cav {cavity_depth*1e3:.0f}mm")
     if porous_fill is not None:
         lbl += " (relleno)"
-    return SurfaceImpedance(_facing_surface(zface, layers),
-                            is_locally_reacting=False, label=lbl)
+    si = SurfaceImpedance(_facing_surface(zface, layers),
+                          is_locally_reacting=False, label=lbl)
+    # Paso del array de ranuras (red 1D): ratio = w/paso -> paso = w/ratio.
+    if ratio and ratio > 0:
+        si.range_meta.append(("facing", "ranurado", float(slit_width) / float(ratio)))
+    return si
 
 
 def helmholtz(neck_area: float, neck_length: float, cavity_volume: float,

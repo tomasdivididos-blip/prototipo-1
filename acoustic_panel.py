@@ -11405,6 +11405,20 @@ class AcousticPanel(QWidget):
                 # vuelve rigida. Sin esto, default_surf=None la hacia beta=0 y el
                 # f_S explotaba (bug-material-no-resuelto-rigido).
                 self._warn_unresolved_materials()
+                # Gate de validez de rango (v2.93): avisar (no bloquear) si algun
+                # modelo empirico (db/miki/komatsu) o facing se evalua fuera de su
+                # rango validado en la banda modal. Deduplicado por mensaje.
+                try:
+                    band = np.asarray(self.modal_result.freqs, float)
+                    seen = set()
+                    for si in list(surf_g.values()) + list(surf_p.values()):
+                        rw = getattr(si, "range_warning", None)
+                        for m in (rw(band) if rw else []):
+                            if m not in seen:
+                                seen.add(m)
+                                self._log(f"⚠ Rango de validez: {m}")
+                except Exception:
+                    pass
                 res = ap.compute_xi_shift_with_impedance(
                     self.modal_result.freqs, self.modal_result.phis,
                     self.modal_result.locator, verts, tris, groups, surf_g,

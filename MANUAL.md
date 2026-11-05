@@ -3038,6 +3038,18 @@ Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD cur
 
 *Manual actualizado al 29 de Octubre de 2026 — v2.91.*
 
+## Cambios v2.93 (auditoría del núcleo nuevo: columnas, honestidad del motor geométrico, rangos de validez)
+
+**Cambios v2.93** (5 de noviembre 2026): se auditó de forma independiente el núcleo físico incorporado en las últimas versiones (el motor geométrico, las columnas de piso a techo, el panel ranurado y el modelo poroso de Komatsu) y se cerraron los hallazgos. El panel ranurado y el modelo de Komatsu salieron sin observaciones de fondo (verificados contra la página real de cada fuente). Los otros dos dieron trabajo.
+
+**Columnas que tabican la sala.** Si una columna (o un mueble) cruza de pared a pared, parte el aire de la sala en dos recintos separados. Antes el programa seguía adelante en silencio y dejaba un modo de frecuencia cero espurio que contaminaba las métricas modales. Ahora detecta la situación (cuenta las piezas de aire conectadas) y avisa, y el solver descarta todos los modos nulos que eso genera, no solo el primero. Una columna interior normal no cambia en nada.
+
+**Honestidad del motor geométrico.** La escala de los parámetros de claridad del motor geométrico (introducida en v2.92) se presentaba como deducida de primeros principios. La auditoría mostró que en rigor es una calibración al cociente directo/reverberante clásico de sala viva: produce los números correctos, pero es una constante ajustada a ese resultado, no una derivación independiente. La distancia crítica es una verificación de consistencia, no una prueba externa de la escala. Y el déficit de claridad C80 frente a la medición es en parte un límite de forma del modelo (la energía temprana se representa solo con la cola difusa), no solo el sesgo del tiempo de decaimiento. Se corrigió la documentación para decirlo así; los números no cambian.
+
+**Rangos de validez.** Los modelos empíricos de material poroso (Delany-Bazley, Miki, Komatsu) y los paneles perforado y ranurado ahora avisan cuando se los evalúa fuera del rango de frecuencia y resistividad en el que fueron medidos, sin bloquear el cálculo. El impacto suele ser nulo en graves, donde la absorción es casi cero, pero el aviso cumple la regla de no mostrar resultados fuera de régimen en silencio.
+
+*Manual actualizado al 5 de Noviembre de 2026 — v2.93.*
+
 ## Cambios v2.92 (motor geométrico: parámetros de claridad C80/D50 con escala absoluta)
 
 **Cambios v2.92** (5 de noviembre 2026): el motor geométrico (el que trabaja por encima de la frecuencia de Schroeder, complementando el modal que vale por debajo) ahora arma una respuesta de energía completa en un receptor y de ahí calcula los parámetros de claridad de la norma ISO 3382-1 (C80, D50, EDT, tiempo central), con una escala absoluta deducida de la física, no ajustada a mano.
@@ -3045,6 +3057,8 @@ Dentro del panel de «Configuración de CAD» hay un botón **«Exportar CAD cur
 **Qué es.** La respuesta de energía se compone de dos partes: el sonido directo (exacto, depende de la posición del receptor) más la cola difusa que el trazado de rayos ya calculaba. El punto fino era poner las dos partes en la misma escala, porque el directo se mide en presión al cuadrado y la cola en energía de partícula. La escala que las une sale cerrada de primeros principios (irradiancia del campo difuso y energía radiada de la fuente), sin ningún factor de ajuste.
 
 **Cómo quedó validado.** El criterio independiente es la **distancia crítica** (el radio donde el sonido directo iguala al reverberante): con esta escala sale igual a la fórmula clásica de sala viva con error del 0,1 por ciento, y da el mismo valor en todos los receptores. Contra la base de datos medida FLAIR, la D50 compuesta cae dentro del umbral perceptible (JND) en las seis bandas; la C80 queda unos 2 a 3 decibeles por debajo del umbral estricto de 1 dB, lo que se explica por el sesgo conocido del tiempo de decaimiento de la cola difusa en salas poco compactas (un rasgo físico del campo difuso, no un error de escala). Es trabajo de motor, todavía sin botón propio en la interfaz.
+
+**Nota v2.93 (corrección de la auditoría):** las frases de arriba sobre "escala deducida de primeros principios, sin factor de ajuste" y "criterio independiente" se matizaron en la auditoría: la escala es una calibración al resultado clásico de sala viva y la distancia crítica es una verificación de consistencia, no una prueba externa. Ver Cambios v2.93. Los números no cambian.
 
 *Manual actualizado al 5 de Noviembre de 2026 — v2.92.*
 

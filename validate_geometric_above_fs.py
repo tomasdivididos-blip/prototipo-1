@@ -248,9 +248,12 @@ def main():
     print("-" * 76)
     print(f"G3 (claridad compuesta R6 vs MEDIDO): C80 dentro del JND 1 dB: {nC}/{len(clar_rows)}"
           f" | D50 dentro del JND 0.05: {nD}/{len(clar_rows)}")
-    print(f"   escala absoluta del detector g_tail=q/(pi S) (bench_geometric_r6, r_c=sqrt(Sa/16pi)).")
-    print(f"   D50 matchea; el deficit de C80 (~2-3 dB) HEREDA el sesgo +10% del EDT de la cola")
-    print(f"   (mas energia tardia -> C80 algo menor), no un error de escala (D50, <50ms, pasa).")
+    print(f"   escala del detector g_tail=q/(pi S) CALIBRADA al cociente directo/reverberante")
+    print(f"   clasico (Kuttruff 5.44-5.48); r_c=sqrt(Sa/16pi) es autoconsistencia, NO oraculo indep.")
+    print(f"   D50 matchea (escala global OK). El deficit de C80 (~2-3 dB) es MIXTO: ~1 dB del sesgo")
+    print(f"   +10% del EDT de la cola, y ~1-2 dB ESTRUCTURAL (con early_specular=False el temprano")
+    print(f"   [0,80ms] se representa SOLO con la cola difusa -> sub-representa reflexiones tempranas")
+    print(f"   discretas; Kuttruff p.119 lo advierte). Falla la FORMA del temprano, no la escala.")
 
     # --- figura (2 paneles: EDT y C80) ---
     bb = [row[0] for row in rows]

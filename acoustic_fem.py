@@ -121,8 +121,13 @@ def solve_modes(K, M, n_modes: int = 20, c: float = C0,
     """
     from scipy.sparse.linalg import ArpackNoConvergence  # local re-import por claridad
     n_modes = max(2, int(n_modes))
-    # Pedimos uno extra para descartar el modo cero si hace falta.
-    n_request = n_modes + (1 if drop_zero_mode else 0)
+    # Pedimos DOS extra para descartar modos cero si hace falta. Un dominio de
+    # aire CONEXO tiene un unico modo trivial p=const; uno PARTIDO en k
+    # componentes (p.ej. una columna que cruza de pared a pared) tiene k modos
+    # cero. Pedimos 2 de margen para no quedar cortos con un cero inesperado
+    # (en dominio conexo no cambia los n_modes devueltos: solo computa un
+    # autopar extra que luego se descarta en el slice).
+    n_request = n_modes + (2 if drop_zero_mode else 0)
     # maxiter explicito: el default (10*N) puede ser corto si la malla
     # tiene autovalores muy juntos. 20*n_request con minimo 300 es generoso
     # sin volverse irrazonable.
@@ -165,9 +170,16 @@ def solve_modes(K, M, n_modes: int = 20, c: float = C0,
     eigvals = eigvals[order]
     eigvecs = eigvecs[:, order]
 
-    if drop_zero_mode and eigvals[0] < 1e-6:
-        eigvals = eigvals[1:]
-        eigvecs = eigvecs[:, 1:]
+    if drop_zero_mode:
+        # Descartar TODOS los modos triviales ~0, no solo el primero. Con el
+        # dominio conexo hay uno; con el dominio partido en k componentes hay k
+        # (cada sub-sala aporta su propio p=const). El 1er modo acustico real
+        # tiene lambda = (omega/c)^2 >> 1e-6 para cualquier sala fisica (f1 de
+        # decenas de Hz => lambda ~ 0.1), asi que el umbral no come modos reales.
+        n_zero = int(np.count_nonzero(eigvals < 1e-6))
+        if n_zero:
+            eigvals = eigvals[n_zero:]
+            eigvecs = eigvecs[:, n_zero:]
 
     eigvals = eigvals[:n_modes]
     eigvecs = eigvecs[:, :n_modes]

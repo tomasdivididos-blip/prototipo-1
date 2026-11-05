@@ -140,24 +140,51 @@ check("Df(2,0,0) estable en npm (spread < 0.1%): convergido",
 
 # ---------------------------------------------------------------------------
 print("\nO3: simetria — columna centrada en base cuadrada no parte la degeneracion")
-vq, nq, tq = room_mesh(4, 4, 3, npm=4.0)
-fe_q = solve(nq, tq, n_modes=15)
-# Par degenerado (1,0,0)/(0,1,0): f = 343/8 = 42.875 Hz (los dos iguales).
+# ROBUSTECIDO (auditoria MAYOR-2): el split del par (1,0,0)/(0,1,0) con la columna
+# CENTRADA NO es cero exacto ni converge monotono a cero; es un ARTEFACTO acotado de
+# la voxelizacion Freudenthal (la diagonal de Kuhn rompe la simetria x<->y en la
+# frontera escalonada de la columna). El oraculo honesto: (a) ese split se mantiene
+# PEQUENO y acotado barriendo npm (no un solo valor afortunado), y (b) es MUY MENOR
+# que el split FISICO de una columna DESCENTRADA (la discriminacion cualitativa que
+# importa). f del par = 343/8 = 42.875 Hz.
 fdeg = 343 / 8.0
-pair_empty = np.sort(np.abs(fe_q - fdeg))[:2]           # dos modos mas cercanos
-idx_e = np.argsort(np.abs(fe_q - fdeg))[:2]
-split_empty = abs(fe_q[idx_e[0]] - fe_q[idx_e[1]])
-nc, tc, _, _ = carve_column(vq, nq, tq, kind="box", side=0.5)   # centrada (0,0)
-fc_q = solve(nc, tc, n_modes=15)
-idx_c = np.argsort(np.abs(fc_q - fdeg))[:2]
-split_col = abs(fc_q[idx_c[0]] - fc_q[idx_c[1]])
-f_pair_col = fc_q[idx_c].mean()
-f_pair_emp = fe_q[idx_e].mean()
-shift_pair = (f_pair_col - f_pair_emp) / f_pair_emp * 100
-check("la columna simetrica NO parte el par (split se mantiene chico)",
-      split_col < 0.5 and abs(split_col - split_empty) < 0.5,
-      f"split vacia={split_empty:.3f} Hz, con columna={split_col:.3f} Hz")
-check("el par SI se corre (la columna actua)", abs(shift_pair) > 0.1,
+
+
+def pair_split(freqs):
+    idx = np.argsort(np.abs(np.asarray(freqs) - fdeg))[:2]
+    fr = np.asarray(freqs)
+    return abs(fr[idx[0]] - fr[idx[1]]), fr[idx].mean()
+
+
+splits_centered = []
+split_desc = shift_pair = f_pair_emp = f_pair_col = None
+for npm in (4.0, 5.0, 6.0):
+    vq, nq, tq = room_mesh(4, 4, 3, npm=npm)
+    fe_q = solve(nq, tq, n_modes=15)
+    s_empty, f_emp = pair_split(fe_q)
+    ncc, tcc, _, _ = carve_column(vq, nq, tq, kind="box", side=0.5)      # centrada
+    s_cent, f_col = pair_split(solve(ncc, tcc, n_modes=15))
+    splits_centered.append(s_cent)
+    print(f"    npm {npm:.0f} -> split centrado = {s_cent:.4f} Hz ({s_cent/fdeg*100:.4f}%)"
+          f" | split sala vacia = {s_empty:.4f} Hz")
+    if npm == 4.0:
+        # Contraprueba fisica al mismo npm: columna DESCENTRADA parte el par.
+        nd, td, _, _ = carve_column(vq, nq, tq, kind="box", side=0.5, center=(0.5, 0.0))
+        split_desc, _ = pair_split(solve(nd, td, n_modes=15))
+        f_pair_emp, f_pair_col = f_emp, f_col
+        shift_pair = (f_col - f_emp) / f_emp * 100
+
+max_split = max(splits_centered)
+# Cota de artefacto: la auditoria midio <=0.06% del par (~0.026 Hz) a npm 4-7; 0.2%
+# (~0.086 Hz) deja margen sin dejar pasar un split fisico (la descentrada da ~1.6%).
+check("split CENTRADO acotado como artefacto (<0.2% del par) en todo npm 4/5/6",
+      max_split < 0.002 * fdeg,
+      f"max {max_split:.4f} Hz = {max_split/fdeg*100:.4f}% sobre npm 4/5/6")
+check("la columna DESCENTRADA SI parte el par (split fisico >> artefacto)",
+      split_desc > 10.0 * max_split,
+      f"descentrada {split_desc:.3f} Hz ({split_desc/fdeg*100:.2f}%) vs artefacto "
+      f"{max_split:.4f} Hz")
+check("el par SI se corre (la columna centrada actua)", abs(shift_pair) > 0.1,
       f"{f_pair_emp:.2f} -> {f_pair_col:.2f} Hz  ({shift_pair:+.3f}%)")
 
 # ---------------------------------------------------------------------------
@@ -185,6 +212,80 @@ check("ambos corrimientos negativos (nodo de presion: baja)",
       d_small < 0 and d_big < 0, f"{d_small:+.3f}% , {d_big:+.3f}%")
 check("escala con el area (~4x; descarta lineal ~2x)", 2.5 <= ratio <= 6.0,
       f"ratio {ratio:.2f} (esperado ~4 por Dw~a^2, M&I §9.2)")
+
+# ---------------------------------------------------------------------------
+print("\nO5: guarda de conectividad (tabique parte el aire -> aviso, sin 0 Hz espurio)")
+# Una columna que cruza de pared a pared parte el dominio de aire en 2
+# componentes. Antes (bug MAYOR-1 del auditor): el solver descartaba UN solo
+# modo cero y quedaba un 0 Hz espurio contaminando Bonello/FSI/Fazenda/FRF.
+# Fix: carve_mesh cuenta componentes y avisa; solve_modes descarta TODOS los ~0.
+vt, nt, tt = room_mesh(4, 3, 2.6, npm=5.0)
+col_wall = fu.make_column("box", diameter=0.3, depth=3.2, position=(0.0, 0.0, 0.0))
+fu.sync_column_height(col_wall, vt)
+n2w, t2w, info_w = fu.carve_mesh(nt, tt, [col_wall])
+Kw, Mw, _ = acoustic_fem.build_KM(n2w, t2w)
+f_raw, _ = acoustic_fem.solve_modes(Kw, Mw, n_modes=15, drop_zero_mode=False)
+f_kept, _ = acoustic_fem.solve_modes(Kw, Mw, n_modes=15, drop_zero_mode=True)
+n_zero_raw = int(np.count_nonzero(np.asarray(f_raw) < 1.0))
+n_zero_kept = int(np.count_nonzero(np.asarray(f_kept) < 1.0))
+check("tabique detectado como 2 componentes de aire",
+      info_w["n_air_components"] == 2, f"n_air_components={info_w['n_air_components']}")
+check("avisa del tabique (warning PARTIDO)",
+      any("PARTIDO" in w for w in info_w["warnings"]),
+      f"{len(info_w['warnings'])} warnings")
+check("el dominio partido genera 2 modos cero crudos",
+      n_zero_raw == 2, f"{n_zero_raw} modos < 1 Hz sin drop")
+check("solve_modes descarta TODOS los ceros (sin 0 Hz espurio)",
+      n_zero_kept == 0, f"{n_zero_kept} modos < 1 Hz tras drop")
+# Contraprueba: columna interior sigue conexa, 1 solo cero, sin aviso.
+col_in = fu.make_column("box", diameter=0.4, depth=0.4, position=(0.0, 0.0, 0.0))
+fu.sync_column_height(col_in, v0)
+_ni, _ti, info_in = fu.carve_mesh(nodes0, tets0, [col_in])
+check("contraprueba: columna interior -> 1 componente, sin aviso de tabique",
+      info_in["n_air_components"] == 1
+      and not any("PARTIDO" in w for w in info_in["warnings"]),
+      f"n_air_components={info_in['n_air_components']}, "
+      f"warnings={info_in['warnings']}")
+
+# ---------------------------------------------------------------------------
+print("\nO6: techo inclinado — prisma a z_max GLOBAL talla solo el aire que existe")
+# Afirmacion titular del feature, antes SIN bench en el repo (la auditoria la
+# verifico por fuera). Sala cuna: piso z=0, techo de z=2 (x=0) a z=4 (x=5). Una
+# columna sincronizada al z_max GLOBAL (4) NO debe tallar aire POR ENCIMA del techo
+# LOCAL en su huella -> un perfil por huella tallaria los MISMOS tets (refinamiento
+# de dibujo, no de fisica; de acuerdo con el autor para techos monotonos).
+def _ceiling_z(x):
+    return 2.0 + (2.0 / 5.0) * np.asarray(x, float)
+
+_corners = np.array([
+    [0, 0, 0], [5, 0, 0], [5, 4, 0], [0, 4, 0],
+    [0, 0, 2], [5, 0, 4], [5, 4, 4], [0, 4, 2],
+], float)
+_quads = [(0, 1, 2, 3), (4, 5, 6, 7), (0, 1, 5, 4), (2, 3, 7, 6), (1, 2, 6, 5), (0, 3, 7, 4)]
+_wtris = []
+for a, b, c, d in _quads:
+    _wtris.append([a, b, c]); _wtris.append([a, c, d])
+_wtris = np.array(_wtris, int)
+wn, wt = acoustic_mesh.build_volume_mesh(_corners, _wtris, n_per_meter=6.0)
+col_w = fu.make_column("box", diameter=0.5, depth=0.5, position=(2.5, 2.0, 0.0))
+fu.sync_column_height(col_w, _corners)                 # usa z GLOBAL: span 0..4
+cen = wn[wt].mean(axis=1)
+occ = fu.occupancy(cen, [col_w])
+above = int(np.count_nonzero(cen[occ][:, 2] > _ceiling_z(cen[occ][:, 0]) + 1e-9))
+n2w, t2w, infow = fu.carve_mesh(wn, wt, [col_w])
+V_rem = infow["V_removed_mesh"]
+V_real = 0.5 * 0.5 * float(_ceiling_z(2.5))   # aire real en huella (techo local 3.0)
+V_global = 0.5 * 0.5 * 4.0                     # si tallara hasta z_max global
+print(f"    size_z columna = {col_w.size[2]:.2f} m (span sala 0..4)")
+print(f"    tets removidos por ENCIMA del techo local = {above} de {int(occ.sum())}")
+print(f"    V_removido = {V_rem:.3f}  |  aire real huella = {V_real:.3f}  |  prisma global = {V_global:.3f}")
+check("columna sincronizada cubre toda la altura de sala (size_z = z_max global)",
+      abs(col_w.size[2] - 4.0) < 1e-6, f"size_z={col_w.size[2]:.3f}")
+check("NINGUN tet removido por encima del techo local (no talla aire inexistente)",
+      above == 0, f"{above} de {int(occ.sum())} tets removidos por encima")
+check("V removido ~ aire real en huella (NO el prisma global): es dibujo, no fisica",
+      V_rem < 0.98 * V_global and 0.8 <= V_rem / V_real <= 1.35,
+      f"V_rem={V_rem:.3f} (ratio real {V_rem/V_real:.3f}, global {V_rem/V_global:.3f})")
 
 # ---------------------------------------------------------------------------
 n_ok = sum(1 for _n, c, _d in results if c)

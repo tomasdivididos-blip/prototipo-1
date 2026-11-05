@@ -406,6 +406,43 @@ def tet_volumes(nodes: np.ndarray, tets: np.ndarray) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
+# Conectividad del dominio de aire (guarda de la talla)
+# ---------------------------------------------------------------------------
+# Caras locales de un tetraedro (indices a sus 4 vertices). Se usa aca y en
+# furniture_boundary_faces; se redeclara abajo por cercania a ese uso.
+_TET_FACES_IDX = np.array([[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]])
+
+
+def air_components(tets: np.ndarray) -> int:
+    """Nº de componentes CONEXAS del dominio de aire.
+
+    Adyacencia tet-tet por CARA compartida (dos tets que comparten un
+    triangulo estan conectados). Un dominio de aire fisico es UNA pieza; si
+    un obstaculo (columna/mueble) cruza de pared a pared parte el aire en >1
+    componente, y cada una aporta un modo trivial p=const (f~0) espurio.
+    """
+    tets = np.asarray(tets, dtype=int)
+    n = len(tets)
+    if n <= 1:
+        return int(n)
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    faces = np.sort(tets[:, _TET_FACES_IDX].reshape(-1, 3), axis=1)  # (4n,3)
+    tet_of_face = np.repeat(np.arange(n), 4)
+    order = np.lexsort(faces.T[::-1])
+    faces_s = faces[order]
+    tet_s = tet_of_face[order]
+    # Caras internas = pares consecutivos identicos tras el orden.
+    same = np.all(faces_s[1:] == faces_s[:-1], axis=1)
+    i = tet_s[:-1][same]
+    j = tet_s[1:][same]
+    adj = coo_matrix((np.ones(len(i)), (i, j)), shape=(n, n))
+    ncomp, _ = connected_components(adj, directed=False)
+    return int(ncomp)
+
+
+# ---------------------------------------------------------------------------
 # Talla de la malla (el corazon de la Fase A)
 # ---------------------------------------------------------------------------
 def carve_mesh(nodes: np.ndarray, tets: np.ndarray,
@@ -430,7 +467,8 @@ def carve_mesh(nodes: np.ndarray, tets: np.ndarray,
         return nodes, tets, {
             "n_tets_removed": 0, "n_nodes_pruned": 0,
             "V_removed_mesh": 0.0, "V_furniture_geom": 0.0,
-            "V_error_frac": 0.0, "warnings": [],
+            "V_error_frac": 0.0, "n_air_components": air_components(tets),
+            "warnings": [],
         }
 
     centroids = nodes[tets].mean(axis=1)          # (Ne, 3)
@@ -462,12 +500,25 @@ def carve_mesh(nodes: np.ndarray, tets: np.ndarray,
         warnings.append("ningun tet removido: mueble mas chico que la malla "
                         "(no resuelto) o fuera del dominio")
 
+    # Guarda de conectividad: un obstaculo que cruza de pared a pared parte el
+    # aire en >1 componente. El solver descarta los k modos cero resultantes,
+    # pero son SUB-SALAS distintas presentadas como una; hay que avisar.
+    n_comp = air_components(tets2)
+    if n_comp > 1:
+        warnings.append(
+            f"el dominio de aire quedo PARTIDO en {n_comp} componentes "
+            f"inconexas (p.ej. una columna/mueble que cruza de pared a pared): "
+            f"cada una es una SUB-SALA distinta y aporta un modo 0 Hz que el "
+            f"solver descarta. Si no es intencional, revisa la geometria "
+            f"(mover/afinar el obstaculo para no tabicar la sala)")
+
     info = {
         "n_tets_removed": int(occ.sum()),
         "n_nodes_pruned": int(len(nodes) - len(used)),
         "V_removed_mesh": V_removed,
         "V_furniture_geom": V_geom,
         "V_error_frac": float(err),
+        "n_air_components": int(n_comp),
         "warnings": warnings,
     }
     return nodes2, tets2, info
