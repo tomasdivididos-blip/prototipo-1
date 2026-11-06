@@ -3412,7 +3412,7 @@ bien.
      (vii) **mejorar la UI del panel CABS/DBA: discriminar por criterio** — DBA = subs atrás+adelante;
      CABS = puede ser solo atrás; elegir un criterio con un botón y evaluar la config del usuario sobre
      los puntos objetivo de ESE criterio.
-  5. **BUG confirmado (delay 2× del optimizador vs evaluar), liga con el ítem (vii).** `dba_evaluate`
+  5. **BUG del delay 2× del optimizador vs evaluar — [CERRADO en v2.38, re-verificado 5 Nov 2026].** Diagnóstico original (se deja como registro): `dba_evaluate`
      (`_make_checklist`, `tau_ideal = L/c`) y `dba.build_dba_sources` (`delay = L/c`) usan **L/c con L =
      dimensión completa del eje de enfrentamiento** (drive DBA canónico, físicamente correcto:
      Santillán/Celestinos). El optimizador (`cabs_optimize`, cota de delay `(0, 1.5·max(dims)/c)`, así
@@ -3420,10 +3420,14 @@ bien.
      puntos objetivo y converge a ~L/(2c) → `_check_rear_drive` (tol 0.35) lo rechaza; duplicar el delay
      a L/c hace pasar la evaluación. Son **dos criterios distintos** (planitud listener-óptima vs drive
      DBA canónico); el 2× es consistente con una referencia de distancia media-sala vs sala completa
-     (la intuición del usuario, "punto de medición de la distancia"). Fix pendiente (sesión aparte):
-     unificar la convención de distancia y decidir si el optimizador se restringe al drive DBA o si
-     evaluar acepta el delay listener-óptimo. Esto es exactamente lo que resuelve el ítem (vii)
-     (discriminar por criterio).
+     (la intuición del usuario, "punto de medición de la distancia"). **CÓMO SE CERRÓ (v2.38, ítem vii):**
+     el selector de criterio unificó optimizar y evaluar bajo UN solo `criterion`; bajo "dba" (default) el
+     drive trasero se fija canónico a L/c y sale de los DOFs (`cabs_optimize._apply_dba_drive`), así que
+     el optimizador ya no converge a L/2c; bajo "cabs" el delay queda libre y el chequeo `rear_drive` es
+     informativo, no falla. Optimizar y evaluar concuerdan por construcción. Re-verificado el 5 Nov 2026
+     contra el código: `bench_cabs_criterion` 14/14 (G1 delay=L/c=18.1 ms no L/2c=9.0; G2 evaluar PASA sin
+     duplicar; G3 contraste L/2c falla dba/pasa cabs) + la GUI (`dba_dialog`) pasa el MISMO `self._criterion()`
+     a `optimize_cabs` y `evaluate_cabs`. Detalle del fix en la entrada «9 Sep — grupo A, paso 2» abajo.
 
 - **9 Sep 2026 — grupo A, ejecución Fase 1 + paso 2 (headless, sin exponer a UI todavía).**
   Plan cerrado en `plan_respuesta_compuesta.md` (D1 = SPL absoluto dBSPL; D2 = selector de
